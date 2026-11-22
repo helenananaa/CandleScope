@@ -61,6 +61,11 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   docked?: boolean;
   /** The chart shows this panel's runs (the dock's other strategy may be shown instead); only then does it follow live bars. */
   shownOnChart?: boolean;
+  /**
+   * ADR-BACKTEST-015 P4c: this is one strategy in the chart's strategy list. Its language is fixed (Python strategies
+   * are their own list entries), and CandleScope matching is a fills-and-account setting, not an engine.
+   */
+  strategyList?: boolean;
   onSelectPython?(): void;
   /** Supplied by the chart dock, which shows the strategy list in its header. */
   strategies?: NativeStrategyController;
@@ -349,6 +354,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       setFollowed({ endMs: pending.base.coveredEndMs, failed: false });
     }
   }, [follow, run]);
+  const strategyList = props.strategyList ?? (CHART_STRATEGY_FOLLOW_ENABLED && !!props.docked);
   const followWindow = CHART_STRATEGY_FOLLOW_ENABLED && props.docked && props.shownOnChart !== false
     ? props.continuousMarketWindow ?? null : null;
   const followIntervalMs = fixedIntervalMs(props.session.interval);
@@ -655,7 +661,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         </Suspense>}
       </div>
       <aside className="native-code-side">
-        <SegmentedControl size="sm" label={t("native.language")} value={language}
+        {!strategyList && <SegmentedControl size="sm" label={t("native.language")} value={language}
           options={[
             { value: "pine", label: t("chartTester.language.pine"), disabled: busy },
             ...(props.onSelectPython ? [{ value: "python", label: strategyLanguageLabel("python"), disabled: busy }] : []),
@@ -663,7 +669,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           onChange={(value) => {
             if (value === "python") props.onSelectPython?.();
             else props.onInstanceChange(props.instance.id, { language: "pine" });
-          }} />
+          }} />}
         <Field label={t("native.parameters")}>
           <Textarea className="native-parameters" value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} />
         </Field>
@@ -671,11 +677,12 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     </div>
     <div hidden={props.docked && tab !== "settings"} className="native-dock-settings">
       <section className="strategy-settings-section">
-        <h3>{t("native.mode")}</h3>
-        <div className="strategy-engine-options" role="radiogroup" aria-label={t("native.mode")}>
+        <h3>{t(strategyList ? "strategyExecution.title" : "native.mode")}</h3>
+        <div className="strategy-engine-options" role="radiogroup" aria-label={t(strategyList ? "strategyExecution.title" : "native.mode")}>
           {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" className="strategy-engine-option" role="radio" aria-checked={mode === engine} disabled={busy || (!!props.signalChart && engine === "NATIVE")}
             onClick={() => { if (mode !== engine) props.onExecutionModeChange(engine); }}>
-            <strong>{t(engine === "NATIVE" ? "native.title" : "native.external.title")}</strong>
+            <strong>{t(strategyList ? (engine === "NATIVE" ? "strategyExecution.script" : "strategyExecution.candleScope")
+              : engine === "NATIVE" ? "native.title" : "native.external.title")}</strong>
             <span>{t(engine === "NATIVE" ? "native.description" : "native.external.description")}</span>
           </button>)}
         </div>

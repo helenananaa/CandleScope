@@ -270,19 +270,27 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     props.onStrategyTesterModeChange?.(next);
     setVisited((items) => new Set([...items, mode, next]));
   };
-  // The host-matching tester is one more strategy on this chart, not a separate mode to learn.
+  // ADR-BACKTEST-015 P4c: one list of the chart's strategies, each named by its language; the engine follows from it.
+  const strategyList = props.liveFollow ?? CHART_STRATEGY_FOLLOW_ENABLED;
   const items: StrategySwitcherItem[] = [
     ...nativeStrategySwitcherItems(strategies),
     {
       id: HOST_STRATEGY_ID,
-      name: props.attachment?.displayName ?? t("native.hostMode"),
-      meta: props.attachment ? t("native.hostMode") : "",
+      ...(strategyList ? {
+        name: props.attachment?.displayName ?? t("strategyList.python"),
+        meta: props.attachment ? strategyLanguageLabel(props.attachment.language) : "",
+      } : {
+        // The host-matching tester is one more strategy on this chart, not a separate mode to learn.
+        name: props.attachment?.displayName ?? t("native.hostMode"),
+        meta: props.attachment ? t("native.hostMode") : "",
+      }),
       running: ["RESOLVING", "QUEUED", "RUNNING"].includes(props.runState.status),
     },
   ];
   const actions = nativeStrategySwitcherActions(strategies)
     .filter((action) => mode === "NATIVE" || action.id === "add" || action.id === "compare")
-    .map((action) => ({ ...action, onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
+    .map((action) => ({ ...action, ...(strategyList && action.id === "add" ? { label: t("strategyList.addPine") } : {}),
+      onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
   const identity = <StrategySwitcher items={items} actions={actions}
     activeId={mode === "NATIVE" ? strategies.collection.activeId : HOST_STRATEGY_ID}
     onSelect={(id) => {
@@ -295,12 +303,13 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     {(mode === "NATIVE" || visited.has("NATIVE")) && <StrategyDockPane hidden={mode !== "NATIVE"}>
       <Suspense fallback={<p className="strategy-dock-empty">{t("native.loading")}</p>}>
         <NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props}
-          onSelectPython={() => {
+          strategyList={strategyList}
+          {...(strategyList ? {} : { onSelectPython: () => {
             void openPythonStrategyDraft(props.draftStore, props.attachment?.strategyDraftId ?? null).then((record) => {
               props.onAttachmentChange(attachmentForDraft(record, props.session));
               switchMode("CANDLESCOPE");
             });
-          }}
+          } })}
           strategies={strategies} active={props.active !== false && mode === "NATIVE"} shownOnChart={mode === "NATIVE"} docked
           {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange } : {})} />
       </Suspense>
@@ -505,8 +514,10 @@ export function CandleScopeStrategyTesterPanel({
   }, [currentAttachment, onEntryStateChange, runReady, runState.status, saveState, visibleIssues.length]);
 
   const refreshRecent = useCallback(() => {
-    void draftStore.recent(8).then(setRecentDrafts).catch(() => setRecentDrafts([]));
-  }, [draftStore]);
+    // In the strategy list this is the Python strategy: Pine strategies are their own list entries (P4c).
+    void draftStore.recent(8).then((records) => setRecentDrafts(liveFollow ? records.filter((record) => record.language === "python") : records))
+      .catch(() => setRecentDrafts([]));
+  }, [draftStore, liveFollow]);
 
   useEffect(() => {
     refreshRecent();
@@ -980,7 +991,7 @@ export function CandleScopeStrategyTesterPanel({
               </Suspense>
             </section>
             <aside className="chart-strategy-problems" aria-label={t("chartTester.problemsAria")}>
-              <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+              <StrategyLanguageControls language={activeDraft.language} languageFixed={liveFollow} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
                 setPythonApproval(null);
                 void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
               }} />
@@ -1179,7 +1190,7 @@ export function CandleScopeStrategyTesterPanel({
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}
           editor={(initialize) => activeDraft ? <>
-            <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+            <StrategyLanguageControls language={activeDraft.language} languageFixed={liveFollow} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
               setPythonApproval(null); void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
             }} />
             <StrategyScriptWorkspace source={source} language={activeDraft.language} cursor={cursor} issues={visibleIssues} focusIssue={focusIssue}

@@ -3,7 +3,9 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { CandleScopeStrategyTesterPanel as ChartStrategyTesterPanel } from "../ChartStrategyTesterPanel.js";
+import ChartStrategyDock, { CandleScopeStrategyTesterPanel as ChartStrategyTesterPanel } from "../ChartStrategyTesterPanel.js";
+import { StrategyLanguageControls } from "../StrategyLanguageControls.js";
+import { strategyLanguageLabel } from "../strategyLanguageLabel.js";
 import {
   loadChartStrategyPanelPreferences,
   loadDetachedChartStrategy,
@@ -302,5 +304,29 @@ test("the forward start a chart last used is remembered with its panel", () => {
   assert.equal(loadChartStrategyPanelPreferences("workspace\u0000cell-3", storage).forwardStart, "LIVE_ONLY");
   values.set([...values.keys()][0]!, JSON.stringify({ height: 400, activeTab: "overview", forwardStart: "HISTORY" }));
   assert.equal(loadChartStrategyPanelPreferences("workspace\u0000cell-3", storage).forwardStart, undefined, "only a forward start is kept");
+});
+
+test("the strategy list names the Python strategy by its language, never by the engine that runs it", () => {
+  withStorage(() => {
+    const python = { ...attachment, language: "python" as const, displayName: "SMA Cross" };
+    const listed = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-4", python)} strategyTesterMode="CANDLESCOPE" liveFollow />);
+    assert.ok(listed.includes("SMA Cross"));
+    assert.ok(listed.includes(strategyLanguageLabel("python")));
+    assert.ok(!listed.includes(t("native.hostMode")), "no engine name in the list");
+    const empty = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-5", null)} strategyTesterMode="CANDLESCOPE" liveFollow />);
+    assert.ok(empty.includes(t("strategyList.python")), "an empty Python entry is still named for what it holds");
+    const before = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-6", python)} strategyTesterMode="CANDLESCOPE" />);
+    assert.ok(before.includes(t("native.hostMode")), "flag off keeps the previous list");
+  });
+});
+
+test("a strategy in the list keeps its language: no language switch, only the Python confirmation", () => {
+  const fixed = renderToStaticMarkup(<StrategyLanguageControls language="python" languageFixed confirmed={false}
+    onConfirm={() => undefined} onLanguage={() => undefined} />);
+  assert.doesNotMatch(fixed, /data-testid="strategy-language"/);
+  assert.match(fixed, /data-testid="strategy-python-confirm"/);
+  const free = renderToStaticMarkup(<StrategyLanguageControls language="python" confirmed={false}
+    onConfirm={() => undefined} onLanguage={() => undefined} />);
+  assert.match(free, /data-testid="strategy-language"/, "the research page still chooses a language");
 });
 
