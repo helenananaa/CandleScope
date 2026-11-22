@@ -37,6 +37,9 @@ COMMON = {
     "maker_fee_bps": "1",
 }
 BAR = {**COMMON, "fidelity_mode": "BAR_APPROX", "source_event_kind": "BAR"}
+# P6e3: the same BAR run on the practice account model, at a practice account's default leverage.
+PRACTICE = {**BAR, "account_rules": "PRACTICE_V1", "leverage": "10"}
+RULES = {"bar": BAR, "practice": PRACTICE}
 DUAL_CLOCK = {
     **COMMON,
     "fidelity_mode": "AGG_TRADE_EXECUTION",
@@ -75,15 +78,15 @@ def python_revision(service) -> str:
     return str(service.create_python_strategy_revision(bundle["bundle_id"], now_ms=3)["revision_id"])
 
 
-def fixed_run(service, provider_name: str):
+def fixed_run(service, provider_name: str, rules: str = "bar"):
     """One fixed-history BAR run. Returns the created row and the completed run."""
     revision = BUILTIN_SMA_REVISION if provider_name == "builtin" else python_revision(service)
-    payload = {**BAR, "strategy_revision_id": revision}
+    payload = {**RULES[rules], "strategy_revision_id": revision}
     if provider_name == "python":
         payload.update(python_runtime_mode="TRUSTED_LOCAL", python_trusted_confirmed=True)
         # Registered Python revisions must pass the bounded smoke for the snapshot first.
         service.smoke_strategy_revision(revision, payload, now_ms=4)
-    row = service.create_run(payload, idempotency_key=f"oracle-bar-{provider_name}", now_ms=4)
+    row = service.create_run(payload, idempotency_key=f"oracle-{rules}-{provider_name}", now_ms=4)
     provider = builtin_provider() if provider_name == "builtin" else python_provider()
     completed = service.execute_bar_run(str(row["run_id"]), events=oracles.bars(), provider=provider, now_ms=5)
     assert completed["state"] == "COMPLETED"
@@ -94,6 +97,15 @@ def fixed_run(service, provider_name: str):
 def test_fixed_host_bar_oracle(service, provider_name):
     _, completed = fixed_run(service, provider_name)
     oracles.assert_oracle(oracles.host_oracle(f"host-bar-{provider_name}", completed["result"]))
+
+
+@pytest.mark.parametrize("provider_name", ["builtin", "python"])
+def test_fixed_host_practice_oracle(service, provider_name):
+    row, completed = fixed_run(service, provider_name, "practice")
+    config = json.loads(str(row["config_json"]))
+    assert (config["account_rules"], config["leverage"]) == ("PRACTICE_V1", "10")
+    assert completed["report"]["fill_model"]["name"] == "PRACTICE_CANDLE_PATH_V1"
+    oracles.assert_oracle(oracles.host_oracle(f"host-practice-{provider_name}", completed["result"]))
 
 
 def test_fixed_host_aggtrade_dual_clock_oracle(service):
@@ -115,10 +127,11 @@ SPLITS = {
 
 
 @pytest.mark.parametrize("split", sorted(SPLITS))
+@pytest.mark.parametrize("rules", sorted(RULES))
 @pytest.mark.parametrize("provider_name", ["builtin", "python"])
-def test_forward_continuous_run_reproduces_the_fixed_oracle(service, tmp_path, provider_name, split):
+def test_forward_continuous_run_reproduces_the_fixed_oracle(service, tmp_path, provider_name, rules, split):
     """The FOLLOW/FORWARD premise: batching and restarts never change closed-bar results."""
-    row, _ = fixed_run(service, provider_name)
+    row, _ = fixed_run(service, provider_name, rules)
     config = json.loads(str(row["config_json"]))
     definition = {"engine_version": ENGINE_VERSION, "configuration": config,
                   "input_plan": {"roles": ["BARS"], "parameters": config["parameters"]},
@@ -147,7 +160,7 @@ def test_forward_continuous_run_reproduces_the_fixed_oracle(service, tmp_path, p
         actual = asdict(host.kernel.run((), host._observe, finalize=True))
     finally:
         host.close(); store.close()
-    path = f"host-bar-{provider_name}"
+    path = f"host-{rules}-{provider_name}"
     oracle = oracles.host_oracle(path, actual)
     golden = oracles.load_golden(path)
     assert oracle["digests"] == golden["digests"], f"{split}: FORWARD diverged from the FIXED {path} golden"

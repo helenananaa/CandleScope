@@ -230,6 +230,8 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
         )
     kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
     from .ohlc_path import CHART_CLOCKS
+    if kernel.bar_clock == "PRACTICE":
+        common.update(bar_clock="PRACTICE", leverage=kernel.leverage)
     if kernel.bar_clock in CHART_CLOCKS:
         # Chart clocks replay on their own path; the OHLC path clock replays as BAR, as before.
         kind = SimulationKernel

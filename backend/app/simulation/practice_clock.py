@@ -23,6 +23,8 @@ from .practice_account import (
 from .spot_cash_account import SpotCashAccount, reject_spot_fill
 
 PRACTICE = "PRACTICE"
+# The run setting that selects the practice account model (fixed, follow and forward runs).
+PRACTICE_ACCOUNT_RULES = "PRACTICE_V1"
 PRACTICE_CONTRACT = "candlescope.practice-path/1"
 PRACTICE_FILL_POLICY = "PRACTICE_CANDLE_PATH_V1"
 PRACTICE_ACCOUNT_MODELS = {"LINEAR_PERP_ONE_WAY_V1", "SPOT_CASH_V1"}

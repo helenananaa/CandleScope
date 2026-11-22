@@ -43,6 +43,9 @@ PATHS = {
     "host-pine-engine": "Host BAR_APPROX kernel, Pine engine provider (pine-engine-chart-v1)",
     "external-pine-feedback": "Pine engine decisions, CandleScope matching with account feedback (/backtests/external)",
     "native-pine": "Native Pine engine with its own account authority (/backtests/native)",
+    # ADR-BACKTEST-015 P6e3: the practice account model, shared by forward runs and practice accounts.
+    "host-practice-builtin": "Host PRACTICE clock (practice account model, 10x), builtin SMA cross provider",
+    "host-practice-python": "Host PRACTICE clock (practice account model, 10x), SDK Python sma_cross template (TRUSTED_LOCAL)",
 }
 
 SMA_PARAMETERS = {"fast": 3, "slow": 5}

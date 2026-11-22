@@ -17,7 +17,8 @@ from .service import _base_execution_contract, _config_decimal, _config_optional
 
 BASE_FIELDS = {"account_model","gap_policy","contract_data_mode","funding_mode","leverage",
     "initial_balance","slippage_bps","taker_fee_bps","maker_fee_bps","funding_rate","funding_interval_hours",
-    "signal_chart","price_tick","qty_step","min_notional","quick_preset_id","quick_preset_revision","fee_source"}
+    "signal_chart","price_tick","qty_step","min_notional","quick_preset_id","quick_preset_revision","fee_source",
+    "account_rules"}
 POLICY_FIELDS = {"sizing_policy","fixed_qty","fixed_notional","equity_percent","risk_per_stop_percent",
     "stop_distance","max_abs_position_qty","max_notional","max_leverage","max_order_risk","max_active_orders",
     "max_cumulative_fees","max_drawdown_percent","daily_loss_limit","cooldown_events"}
@@ -62,8 +63,14 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
         raise BacktestError(failure.code,str(failure)) from failure
     except (TypeError,ValueError,OverflowError) as failure:
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Invalid continuing execution value") from failure
+    from app.simulation.practice_clock import PRACTICE_ACCOUNT_RULES
+    practice = "account_rules" in execution
+    if practice and (execution["account_rules"]!=PRACTICE_ACCOUNT_RULES or realism.enabled):
+        raise BacktestError("FIDELITY_UNSUPPORTED","Practice account rules run without execution realism")
+    # The practice account model (ADR-BACKTEST-015 P6e3) holds margin at the account's leverage;
+    # the qualified V1 contract account keeps leverage 1.
     if (account_model not in {"LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1"}
-            or contract_mode!="LEGACY_FIXED_V1" or funding_mode!="OFF" or funding_rate!=0 or leverage!=1):
+            or contract_mode!="LEGACY_FIXED_V1" or funding_mode!="OFF" or funding_rate!=0 or (leverage!=1 and not practice)):
         raise BacktestError("FIDELITY_UNSUPPORTED","This continuation requires its qualified V1 account, leverage 1 and funding OFF")
     if (key.market_type=="spot") != (account_model=="SPOT_CASH_V1"):
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Account model must match the owned market product")
@@ -89,6 +96,7 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
         from app.data_engine.synthetic_series.signals import normalize_signal_chart
         try:config["signal_chart"] = normalize_signal_chart(payload["signal_chart"])
         except ValueError as exc:raise BacktestError("CONTINUOUS_INPUT_INVALID",str(exc)) from exc
+    if practice:config.update(account_rules=PRACTICE_ACCOUNT_RULES,leverage=str(leverage))
     if policy:config.update(policy.identity())
     if preset:config.update(quick_preset_id=preset,quick_preset_revision=preset_revision,fee_source=fee_source)
     config.update(realism.identity(fidelity_mode="BAR_APPROX"))

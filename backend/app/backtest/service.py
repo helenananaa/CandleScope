@@ -981,6 +981,7 @@ class BacktestService:
         "latency_ms", "latency_events", "participation_rate", "order_end_policy", "cost_sensitivity_mode",
         "max_leverage", "max_notional", "max_abs_position_qty", "max_active_orders", "max_drawdown_percent",
         "daily_loss_limit", "max_cumulative_fees", "max_order_risk", "risk_per_stop_percent", "stop_distance",
+        "account_rules",
     })
 
     def derive_run(
@@ -3218,10 +3219,13 @@ class BacktestService:
                 | kernel.account.coverage(),
                 "fill_model": {
                     "name": (
-                        kernel.fill_policy if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
+                        kernel.fill_policy if config.get("pine_bar_path_contract") or config.get("account_rules") else BAR_FILL_POLICY_V2
                         if kernel.execution_model_revision == EXECUTION_REALISM_V2
                         else "BAR_NEXT_BAR_WORST_CASE_V1"
                     ),
+                    **({"account_rules": config["account_rules"], "leverage": str(config.get("leverage") or "1"),
+                        "path": "PREVIOUS_CLOSE_THEN_OPEN_LOW_HIGH_CLOSE_IF_UP",
+                        "market_orders": "AT_DECISION_CLOSE"} if config.get("account_rules") else {}),
                     "slippage_bps": str(kernel.slippage_bps),
                     "taker_fee_bps": str(kernel.taker_fee_bps),
                     "maker_fee_bps": str(kernel.maker_fee_bps),
@@ -4923,6 +4927,12 @@ class BacktestService:
                     "leverage": str(leverage),
                 }
             )
+        if payload.get("account_rules") is not None:
+            execution_config.update(_practice_account_rules(
+                payload, fidelity=fidelity, account_model=account_model, contract_data_mode=contract_data_mode,
+                funding_mode=funding_mode, funding_rate=funding_rate, leverage=leverage,
+                realism=execution_realism.enabled, execution_config=execution_config,
+                pine=persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION))
         if host_policy is not None:
             execution_config.update(host_policy.identity())
         if fidelity in DUAL_MODES:
@@ -5710,6 +5720,29 @@ def _execution_kernel_kwargs(config: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _practice_account_rules(payload, *, fidelity, account_model, contract_data_mode, funding_mode, funding_rate,
+                            leverage, realism, execution_config, pine) -> dict[str, str]:
+    """ADR-BACKTEST-015 P6e3: the practice account model, shared with practice accounts.
+
+    It matches bars on a one-way perpetual or spot account at the account's leverage,
+    without funding, execution realism, historical contract events, Pine bar paths or
+    closing ticks (``app/simulation/practice_clock``).
+    """
+    from app.simulation.practice_clock import PRACTICE_ACCOUNT_RULES
+
+    if payload.get("account_rules") != PRACTICE_ACCOUNT_RULES:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"account_rules must be {PRACTICE_ACCOUNT_RULES}")
+    if (fidelity != "BAR_APPROX" or account_model not in {"LINEAR_PERP_ONE_WAY_V1", "SPOT_CASH_V1"}
+            or contract_data_mode != "LEGACY_FIXED_V1" or funding_mode != "OFF" or funding_rate != 0 or realism or pine
+            or any(execution_config.get(name) for name in (
+                "pine_bar_path_contract", "pine_process_on_close", "pine_fill_callbacks", "pine_history_ticks"))):
+        raise BacktestError(
+            "FIDELITY_UNSUPPORTED",
+            "practice account rules match bars for built-in and Python strategies on a one-way perpetual or "
+            "spot account, without funding, execution realism or historical contract events")
+    return {"account_rules": PRACTICE_ACCOUNT_RULES, "leverage": str(leverage)}
+
+
 def _execution_fill_model(config: Mapping[str, object]) -> dict[str, object]:
     if config.get("execution_model_revision") != EXECUTION_REALISM_V2:
         return {}
@@ -5900,7 +5933,10 @@ def _build_bar_kernel(config, execution_reporter):
     its V2 path clock when the V2 contract is frozen too (ADR-BACKTEST-015 P6).
     """
     from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_V2
+    from app.simulation.practice_clock import PRACTICE, PRACTICE_ACCOUNT_RULES
     bar_clock = (PINE_V2 if config.get("pine_v2_bar_contract") else PINE_CHART) if config.get("pine_bar_path_contract") else BAR_CLOCK
+    if config.get("account_rules") == PRACTICE_ACCOUNT_RULES:
+        bar_clock = PRACTICE
     kernel = SimulationKernel(
         bar_clock=bar_clock,
         process_orders_on_close=bool(config.get("pine_process_on_close")),
