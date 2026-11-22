@@ -24,7 +24,9 @@ async function check(offline) {
       try {
         const body = await response.json()
         if (body.state === 'FAILED') console.error('Preparation failed:', body.error)
-      } catch {}
+      } catch {
+        // Not a JSON answer, or the page has gone: nothing to report.
+      }
     })
     // Start replay prepares its own history. It must not submit a library
     // download or CSV import; listing the downloadable markets is a read.

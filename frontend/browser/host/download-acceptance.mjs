@@ -68,7 +68,7 @@ try {
       }
       saved.push(manifest.dataset_id)
       const ready = await page.evaluate(
-        async ({ kind, id, start, end }) => {
+        async ({ kind, id, start }) => {
           const api = async (path, body) => {
             const response = await fetch(
               '/api/v1/' + path,
@@ -119,7 +119,7 @@ try {
           })
           return selected.run.last_symbol
         },
-        { kind, id: manifest.dataset_id, start, end }
+        { kind, id: manifest.dataset_id, start }
       )
       assert.equal(ready, 'BTCUSDT')
       console.log(kind, 'downloaded and started a BTCUSDT replay:', manifest.rows, 'bars')
