@@ -1,6 +1,6 @@
 # ADR-BACKTEST-015：统一策略运行模型——一种 Run，模式拆成字段，界面按用途划分
 
-- 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”；2026-11-22 用户确认 O1）
+- 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”；2026-11-22 用户确认 O1、O4）
 - 日期：2026-11-21
 - 基线：`main@aae80d98`
 - 修订：[ADR-BACKTEST-002](ADR-BACKTEST-002-host-owned-execution.md)（补充 `authority=SCRIPT` 例外）、[ADR-BACKTEST-013](ADR-BACKTEST-013-CHART-FIRST-STRATEGY-TESTER.md)（图表层不再暴露引擎和模式切换）
@@ -274,6 +274,10 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
   - `HOST` 的 `FOLLOW` 用增量 `step`，窗口上限 20,000 根。
 - **O3** `FORWARD` 账户与练习账户（`trading_accounts`，#500 刚加入对冲模式）是同一对象还是互相引用。
 - **O4** Pine 的宿主撮合（`pine-engine-chart-v1`、外部反馈）作为执行选项保留在图表层，还是只在研究工作区出现。
+  **已确认（2026-11-22）：图表层保留一个执行选项。** 图表上的 Pine 策略在“成交与账户”设置中选择“按脚本设置”
+  （`SCRIPT`，默认）或“CandleScope 撮合”（外部反馈路径，`HOST`）。图表的 Python 策略位不再切换为 Pine，
+  因此 `pine-engine-chart-v1` 不再作为新的图表入口；已保存在该位置的 Pine 草稿仍可打开和运行，不迁移、不删除。
+  研究工作区的执行选项在 P5 决定。
 - **O5** P2 只建统一索引与适配；是否最终合并 `backtest.db`、`native-backtests.db`、`continuous-strategy.sqlite3`。
 
 ## 10. 后果
