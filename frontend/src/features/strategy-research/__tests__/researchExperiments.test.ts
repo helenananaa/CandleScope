@@ -64,7 +64,7 @@ test("one strategy revision serves every member: exchange history prepares, impo
 function experiment(id: string, terminal: boolean, createdAtMs = 1): StrategyExperiment {
   return { experimentId: id, name: "SMA", kind: "INPUTS", strategy: {}, createdAtMs, cancelledAtMs: null,
     state: terminal ? "COMPLETED" : "RUNNING", terminal, counts: { total: 1, completed: terminal ? 1 : 0, failed: 0, cancelled: 0, active: terminal ? 0 : 1 },
-    members: [] };
+    members: [], study: null };
 }
 
 test("the page lists experiments, follows the running ones, and builds inputs from its sources", async () => {

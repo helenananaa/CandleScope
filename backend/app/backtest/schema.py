@@ -368,6 +368,20 @@ CREATE TABLE IF NOT EXISTS backtest_strategy_experiment_members (
     error_json TEXT,
     PRIMARY KEY (experiment_id, ordinal)
 );
+
+-- ADR-BACKTEST-015 P5c3: a robustness experiment is a Study V2; its runs are the study's.
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiment_studies (
+    experiment_id TEXT PRIMARY KEY REFERENCES backtest_strategy_experiments(experiment_id),
+    study_id TEXT NOT NULL UNIQUE REFERENCES backtest_studies(study_id)
+);
+
+-- Why a study failed (a smoke, a run or a selection), as the worker saw it.
+CREATE TABLE IF NOT EXISTS backtest_study_failures (
+    study_id TEXT PRIMARY KEY REFERENCES backtest_studies(study_id),
+    code TEXT NOT NULL,
+    message TEXT NOT NULL,
+    failed_at_ms INTEGER NOT NULL
+);
 """
 
 

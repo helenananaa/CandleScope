@@ -9,6 +9,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
 
+from app.core.committed_updates import committed_updates_for
+
 from .schema import apply_schema
 from .run_updates import run_updates_for
 
@@ -33,12 +35,30 @@ def _locked(method: F) -> F:
     return cast(F, wrapped)
 
 
+def _study_change(method: F) -> F:
+    """Wake a study's watchers after the method commits (ADR-BACKTEST-015 P5c3).
+
+    The first argument names the study: its id, a fold or trial id under it
+    (``st_x:fold:1:candidate:2``), or a row carrying ``study_id``. A wakeup carries no
+    data and may be spurious; watchers read the committed study.
+    """
+    @wraps(method)
+    def wrapped(self: BacktestRepository, key: Any, *args: Any, **kwargs: Any) -> Any:
+        result = method(self, key, *args, **kwargs)
+        self.study_updates.notify(str(key["study_id"]) if isinstance(key, dict) else str(key).split(":fold:", 1)[0])
+        return result
+
+    return cast(F, wrapped)
+
+
 class BacktestRepository:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
         self.run_updates = run_updates_for(self.path)
+        # Study changes, written by the worker's reconcile loop, wake robustness experiment streams.
+        self.study_updates = committed_updates_for(self.path, "backtest-studies")
 
     @_locked
     def open(self, *, now_ms: int) -> None:
@@ -120,7 +140,8 @@ class BacktestRepository:
     # -- strategy experiments (ADR-BACKTEST-015 P5b) -----------------------------
 
     @_locked
-    def insert_strategy_experiment(self, row: dict[str, Any], members: list[dict[str, Any]]) -> None:
+    def insert_strategy_experiment(self, row: dict[str, Any], members: list[dict[str, Any]],
+                                   study_id: str | None = None) -> None:
         try:
             self.connection.execute(
                 "INSERT INTO backtest_strategy_experiments(experiment_id, idempotency_key, request_hash, name, kind, "
@@ -129,6 +150,10 @@ class BacktestRepository:
             self.connection.executemany(
                 "INSERT INTO backtest_strategy_experiment_members(experiment_id, ordinal, input_json, kind, request_json) "
                 "VALUES (:experiment_id, :ordinal, :input_json, :kind, :request_json)", members)
+            if study_id is not None:
+                self.connection.execute(
+                    "INSERT INTO backtest_strategy_experiment_studies(experiment_id, study_id) VALUES (?, ?)",
+                    (row["experiment_id"], study_id))
             self.connection.commit()
         except BaseException:
             self.connection.rollback()
@@ -144,7 +169,9 @@ class BacktestRepository:
     @_locked
     def get_strategy_experiment(self, experiment_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
         row = self.connection.execute(
-            "SELECT * FROM backtest_strategy_experiments WHERE experiment_id = ?", (experiment_id,)).fetchone()
+            "SELECT e.*, s.study_id FROM backtest_strategy_experiments e "
+            "LEFT JOIN backtest_strategy_experiment_studies s ON s.experiment_id = e.experiment_id "
+            "WHERE e.experiment_id = ?", (experiment_id,)).fetchone()
         if row is None:
             return None
         members = self.connection.execute(
@@ -842,6 +869,7 @@ class BacktestRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def claim_study_start(self, study_id: str, *, max_running: int) -> str:
         connection = self.connection
@@ -1107,6 +1135,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def insert_study_fold(self, payload: dict[str, Any]) -> None:
         self.connection.execute(
@@ -1133,6 +1162,7 @@ class BacktestRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def update_study_fold_state(self, fold_id: str, state: str) -> None:
         self.connection.execute(
@@ -1177,6 +1207,7 @@ class BacktestRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def attach_train_run(self, train_trial_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -1223,6 +1254,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def insert_selection_receipt(
         self,
@@ -1315,6 +1347,7 @@ class BacktestRepository:
             ).fetchone()
         return None if row is None else dict(row)
 
+    @_study_change
     @_locked
     def attach_fold_test_run(self, fold_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -1327,6 +1360,7 @@ class BacktestRepository:
         self.connection.commit()
         return cursor.rowcount == 1
 
+    @_study_change
     @_locked
     def insert_holdout(self, payload: dict[str, Any]) -> None:
         self.connection.execute(
@@ -1348,6 +1382,7 @@ class BacktestRepository:
         ).fetchone()
         return None if row is None else dict(row)
 
+    @_study_change
     @_locked
     def reveal_holdout(
         self,
@@ -1388,6 +1423,7 @@ class BacktestRepository:
             connection.rollback()
             raise
 
+    @_study_change
     @_locked
     def attach_holdout_run(self, study_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -1400,6 +1436,7 @@ class BacktestRepository:
         self.connection.commit()
         return cursor.rowcount == 1
 
+    @_study_change
     @_locked
     def update_holdout_state(self, study_id: str, state: str) -> None:
         self.connection.execute(
@@ -1408,6 +1445,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def save_oos_report(
         self,
@@ -1477,6 +1515,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def finish_study_if_terminal(self, study_id: str) -> None:
         row = self.connection.execute(
@@ -1509,6 +1548,7 @@ class BacktestRepository:
             )
             self.connection.commit()
 
+    @_study_change
     @_locked
     def update_study_state(self, study_id: str, state: str) -> None:
         self.connection.execute(
@@ -1516,6 +1556,27 @@ class BacktestRepository:
             (state, study_id),
         )
         self.connection.commit()
+
+    @_study_change
+    @_locked
+    def fail_study(self, study_id: str, *, code: str, message: str, now_ms: int) -> None:
+        """Mark a study FAILED and keep why, for the experiment that shows it."""
+        try:
+            self.connection.execute("UPDATE backtest_studies SET state = 'FAILED' WHERE study_id = ?", (study_id,))
+            self.connection.execute(
+                "INSERT INTO backtest_study_failures(study_id, code, message, failed_at_ms) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(study_id) DO UPDATE SET code = excluded.code, message = excluded.message, "
+                "failed_at_ms = excluded.failed_at_ms", (study_id, code[:64], message[:512], now_ms))
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+
+    @_locked
+    def study_failure(self, study_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT code, message, failed_at_ms FROM backtest_study_failures WHERE study_id = ?", (study_id,)).fetchone()
+        return dict(row) if row is not None else None
 
     @_locked
     def save_report(

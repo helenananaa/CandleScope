@@ -1,0 +1,248 @@
+{
+  "cancelled_at_ms": null,
+  "counts": {
+    "active": 0,
+    "cancelled": 0,
+    "completed": 6,
+    "failed": 0,
+    "total": 7
+  },
+  "created_at_ms": 1763600000000,
+  "experiment_id": "ex_fixture",
+  "kind": "ROBUSTNESS",
+  "members": [
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "candidate": 1,
+        "end_ms": 9504000000,
+        "fold": 1,
+        "parameters": {
+          "fast": 2
+        },
+        "role": "TRAIN",
+        "start_ms": 0
+      },
+      "kind": "RUN",
+      "ordinal": 0,
+      "preparation": null,
+      "run_id": "bt_a",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "candidate": 2,
+        "end_ms": 9504000000,
+        "fold": 1,
+        "parameters": {
+          "fast": 3
+        },
+        "role": "TRAIN",
+        "start_ms": 0
+      },
+      "kind": "RUN",
+      "ordinal": 1,
+      "preparation": null,
+      "run_id": "bt_b",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "end_ms": 12960000000,
+        "fold": 1,
+        "parameters": {
+          "fast": 3
+        },
+        "role": "TEST",
+        "start_ms": 9504000000
+      },
+      "kind": "RUN",
+      "ordinal": 2,
+      "preparation": null,
+      "run_id": "bt_t",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "candidate": 1,
+        "end_ms": 12960000000,
+        "fold": 2,
+        "parameters": {
+          "fast": 2
+        },
+        "role": "TRAIN",
+        "start_ms": 3456000000
+      },
+      "kind": "RUN",
+      "ordinal": 3,
+      "preparation": null,
+      "run_id": "bt_c",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "candidate": 2,
+        "end_ms": 12960000000,
+        "fold": 2,
+        "parameters": {
+          "fast": 3
+        },
+        "role": "TRAIN",
+        "start_ms": 3456000000
+      },
+      "kind": "RUN",
+      "ordinal": 4,
+      "preparation": null,
+      "run_id": "bt_d",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "end_ms": 16416000000,
+        "fold": 2,
+        "parameters": {
+          "fast": 3
+        },
+        "role": "TEST",
+        "start_ms": 12960000000
+      },
+      "kind": "RUN",
+      "ordinal": 5,
+      "preparation": null,
+      "run_id": "bt_u",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "end_ms": 17280000000,
+        "parameters": null,
+        "role": "HOLDOUT",
+        "start_ms": 16416000000
+      },
+      "kind": "RUN",
+      "ordinal": 6,
+      "preparation": null,
+      "run_id": null,
+      "state": "PENDING"
+    }
+  ],
+  "name": "SMA · robustness",
+  "schema": "candlescope.strategy-experiment/1",
+  "state": "AWAITING_HOLDOUT",
+  "strategy": {
+    "draft_id": "draft-1",
+    "language": "python"
+  },
+  "study": {
+    "candidates": 2,
+    "error": null,
+    "folds": [
+      {
+        "ordinal": 1,
+        "selected": {
+          "fast": 3
+        },
+        "state": "COMPLETED",
+        "test": {
+          "end_ms": 12960000000,
+          "start_ms": 9504000000
+        },
+        "train": {
+          "end_ms": 9504000000,
+          "start_ms": 0
+        }
+      },
+      {
+        "ordinal": 2,
+        "selected": {
+          "fast": 3
+        },
+        "state": "COMPLETED",
+        "test": {
+          "end_ms": 16416000000,
+          "start_ms": 12960000000
+        },
+        "train": {
+          "end_ms": 12960000000,
+          "start_ms": 3456000000
+        }
+      }
+    ],
+    "holdout": {
+      "end_ms": 17280000000,
+      "parameters": null,
+      "start_ms": 16416000000,
+      "state": "SEALED"
+    },
+    "hypothesis": "fast SMA survives OOS",
+    "objective": "NET_RETURN",
+    "oos": {
+      "folds": [
+        {
+          "benchmark_return": "0.01",
+          "ordinal": 1,
+          "selected_params": {
+            "fast": 3
+          },
+          "test_objective": "0.03",
+          "test_run_id": "bt_t",
+          "train_objective": "0.08",
+          "train_test_gap": "0.05"
+        },
+        {
+          "benchmark_return": "-0.02",
+          "ordinal": 2,
+          "selected_params": {
+            "fast": 3
+          },
+          "test_objective": "0.012",
+          "test_run_id": "bt_u",
+          "train_objective": "0.06",
+          "train_test_gap": "0.048"
+        }
+      ],
+      "robustness": {
+        "selection_bias_warning": "MULTIPLE_TRIALS_REQUIRE_HUMAN_REVIEW",
+        "trade_order_bootstrap": {
+          "p05": "-0.01",
+          "p50": "0.04",
+          "p95": "0.09",
+          "samples": 200
+        }
+      },
+      "summary": {
+        "final_equity": "1.042",
+        "fold_count": 2,
+        "initial_equity": "1",
+        "total_return": "0.042"
+      }
+    },
+    "parameter_space": {
+      "fast": [
+        2,
+        3
+      ]
+    },
+    "sampler": "grid",
+    "state": "AWAITING_HOLDOUT",
+    "study_id": "st_0",
+    "window": {
+      "end_ms": 17280000000,
+      "start_ms": 0
+    }
+  },
+  "terminal": true
+}

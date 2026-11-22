@@ -1,8 +1,9 @@
-"""Experiments: one strategy run over several inputs (ADR-BACKTEST-015 P5b).
+"""Experiments: one strategy run by a rule (ADR-BACKTEST-015 P5b, P5c3).
 
 Members are submitted through the same functions as the strategy-preparation and run routes,
 with this request: validation, idempotency and the trusted-origin rule for local Python are
-exactly those of a direct submission.
+exactly those of a direct submission. A robustness experiment's study is created as the study
+route creates one, and its local Python trust is decided by this request's origin.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/strategy-experiments", tags=["strategy-experiments"]
 WIRE_ERRORS = (BacktestError, ExecutorBusyError)
 MAX_BYTES = 4 * 1024 * 1024
 UNAVAILABLE = {"FLAG_DISABLED", "STRATEGY_MANAGER_CLOSED", "EXECUTOR_BUSY"}
-CONFLICT = {"IDEMPOTENCY_CONFLICT", "EXPERIMENT_MEMBER_ACTIVE", "EXPERIMENT_CANCELLED"}
+CONFLICT = {"IDEMPOTENCY_CONFLICT", "EXPERIMENT_MEMBER_ACTIVE", "EXPERIMENT_CANCELLED", "EXPERIMENT_RULE_UNSUPPORTED"}
 
 
 def _strategy(request: Request):
@@ -138,6 +139,42 @@ class ServicesPort:
     def listen_run(self, run_id: str, wake: Callable[[], None]) -> Callable[[], None]:
         return self.strategy.service.repository.run_updates.listen_commits(run_id, wake)
 
+    async def create_study(self, body: dict[str, Any]) -> dict[str, Any]:
+        from app.backtest.request_contracts import StudyCreateRequest
+        from app.core.operator_origin import is_trusted_operator_origin, origin_from
+        python = {name: body.pop(name) for name in ("python_runtime_mode", "python_trusted_confirmed") if name in body}
+        try:
+            payload = StudyCreateRequest.model_validate(body).model_dump()
+        except ValidationError as exc:
+            error = exc.errors()[0]
+            where = ".".join(str(part) for part in error.get("loc", ()))
+            raise BacktestError("EXPERIMENT_INVALID", f"the study is invalid: {where} {error['msg']}".strip()) from exc
+        trusted = is_trusted_operator_origin(origin_from(self.request.headers))
+        return await asyncio.to_thread(self.strategy.service.create_study, {**payload, **python}, trusted=trusted)
+
+    async def start_study(self, study_id: str) -> None:
+        await asyncio.to_thread(self.strategy.service.start_study, study_id)
+
+    async def study(self, study_id: str) -> dict[str, Any] | None:
+        service = self.strategy.service
+
+        def read() -> dict[str, Any] | None:
+            try:
+                study = service.get_study(study_id)
+            except BacktestError:
+                return None
+            return {**study, "failure": service.repository.study_failure(study_id)}
+        return await asyncio.to_thread(read)
+
+    async def cancel_study(self, study_id: str) -> None:
+        await asyncio.to_thread(self.strategy.service.cancel_study, study_id)
+
+    async def reveal_holdout(self, study_id: str) -> None:
+        await asyncio.to_thread(self.strategy.service.reveal_study_holdout, study_id)
+
+    def listen_study(self, study_id: str, wake: Callable[[], None]) -> Callable[[], None]:
+        return self.strategy.service.repository.study_updates.listen_commits(study_id, wake)
+
 
 @router.post("")
 async def create(request: Request):
@@ -193,6 +230,16 @@ async def cancel(request: Request, experiment_id: str):
     try:
         port = ServicesPort(request)
         return _reply(await port.strategy.experiments().cancel(experiment_id, port))
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+
+@router.post("/{experiment_id}/reveal-holdout")
+async def reveal_holdout(request: Request, experiment_id: str):
+    """Open a robustness study's sealed holdout, once all its folds have selected a candidate."""
+    try:
+        port = ServicesPort(request)
+        return _reply(await port.strategy.experiments().reveal_holdout(experiment_id, port))
     except WIRE_ERRORS as failure:
         return _error(failure)
 

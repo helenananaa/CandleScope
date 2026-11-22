@@ -1689,8 +1689,9 @@ class BacktestService:
         return self.get_run(run_id)
 
     def create_study(
-        self, payload: Mapping[str, object], *, now_ms: int | None = None
+        self, payload: Mapping[str, object], *, now_ms: int | None = None, trusted: bool = False
     ) -> dict[str, object]:
+        """Create a Study. ``trusted`` is whether the caller's origin may run local Python trusted."""
         if not self.settings.enabled or not self.settings.study_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_STUDY_ENABLED is 0")
         requested_protocol = str(payload.get("study_protocol_revision") or "")
@@ -1698,7 +1699,7 @@ class BacktestService:
             raise BacktestError("FIDELITY_UNSUPPORTED", "unknown Study protocol")
         is_v2 = requested_protocol == STUDY_PROTOCOL_V2
         if is_v2:
-            payload = self._normalize_study_v2(payload)
+            payload = self._normalize_study_v2(payload, trusted=trusted)
         required = ("start_ms", "end_ms", "train_ms", "test_ms")
         missing = [name for name in required if payload.get(name) is None]
         if missing:
@@ -1765,8 +1766,57 @@ class BacktestService:
             return self.ensure_study_v2_plan(study_id)
         return self.ensure_study_trials(study_id)
 
-    def _normalize_study_v2(self, payload: Mapping[str, object]) -> dict[str, object]:
+    def _study_v2_strategy(self, payload: Mapping[str, object], candidates: list[dict[str, Any]], *,
+                           trusted: bool) -> dict[str, object]:
+        """What a Study V2 runs (ADR-BACKTEST-015 P5c3): a builtin that outputs SIGNAL, or a frozen
+        Python strategy that does.
+
+        Python runs every candidate in the runtime decided here, with the caller's trust, and frozen in
+        the study: its runs, created later by the worker, never decide it again. Returns those fields.
+        """
+        revision_id = str(payload["strategy_revision_id"])
+        persisted = self.repository.get_strategy_revision(revision_id)
+        if persisted is not None and persisted["base_revision_id"] == "python-source-v1":
+            if persisted["archived_at_ms"] is not None:
+                raise BacktestError("IDENTITY_MUTATION", "archived strategy revision cannot create a new Study")
+            capabilities = json.loads(str(persisted["capabilities_json"]))
+            if "SIGNAL" not in (capabilities.get("output_modes") or ()):
+                raise BacktestError("PROVIDER_PROTOCOL_VIOLATION", "Study V2 runs strategies that output SIGNAL")
+            from app.core.operator_origin import effective_python_runtime_mode
+            mode, confirmed = effective_python_runtime_mode(
+                payload.get("python_runtime_mode"), bool(payload.get("python_trusted_confirmed")), trusted=trusted)
+            if mode == "TRUSTED_LOCAL" and not confirmed:
+                raise BacktestError("PYTHON_TRUST_REQUIRED", "confirm running this Python strategy on this computer")
+            return {"python_runtime_mode": mode, "python_trusted_confirmed": confirmed}
+        if self.enforce_registered_revisions:
+            try:
+                descriptor = self.strategy_registry.require(revision_id)
+            except StrategyProviderError as exc:
+                raise BacktestError(exc.code, str(exc)) from exc
+            for candidate in candidates:
+                probe = descriptor.factory()
+                try:
+                    probe.prepare(
+                        {
+                            "roles": ["BARS"],
+                            "parameters": {
+                                **dict(payload.get("parameters") or {}),
+                                **candidate,
+                            },
+                            "outputMode": "SIGNAL",
+                        }
+                    )
+                except StrategyProviderError as exc:
+                    raise BacktestError(exc.code, str(exc)) from exc
+                finally:
+                    probe.close()
+        return {}
+
+    def _normalize_study_v2(self, payload: Mapping[str, object], *, trusted: bool = False) -> dict[str, object]:
         normalized = dict(payload)
+        # Python runtime fields are decided below, never taken as sent.
+        normalized.pop("python_runtime_mode", None)
+        normalized.pop("python_trusted_confirmed", None)
         hypothesis = str(payload.get("hypothesis") or "").strip()
         if not hypothesis:
             raise BacktestError(
@@ -1836,30 +1886,7 @@ class BacktestService:
         candidates = sample_candidates_v2(
             space, sampler=sampler, seed=seed, candidate_budget=candidate_budget
         )
-        if self.enforce_registered_revisions:
-            try:
-                descriptor = self.strategy_registry.require(
-                    str(payload["strategy_revision_id"])
-                )
-            except StrategyProviderError as exc:
-                raise BacktestError(exc.code, str(exc)) from exc
-            for candidate in candidates:
-                probe = descriptor.factory()
-                try:
-                    probe.prepare(
-                        {
-                            "roles": ["BARS"],
-                            "parameters": {
-                                **dict(payload.get("parameters") or {}),
-                                **candidate,
-                            },
-                            "outputMode": "SIGNAL",
-                        }
-                    )
-                except StrategyProviderError as exc:
-                    raise BacktestError(exc.code, str(exc)) from exc
-                finally:
-                    probe.close()
+        python_runtime = self._study_v2_strategy(payload, candidates, trusted=trusted)
         total_run_budget = len(folds) * (len(candidates) + 1) + int(holdout_ms > 0)
         requested_total = int(payload.get("total_run_budget") or total_run_budget)
         if requested_total != total_run_budget:
@@ -1965,6 +1992,7 @@ class BacktestService:
             "benchmark_model": BENCHMARK_MODEL,
             "output_mode": "SIGNAL",
             "gap_policy": "REJECT",
+            **python_runtime,
         }
         for name, expected in (
             ("account_model", "LINEAR_PERP_ONE_WAY_V2"),
@@ -2538,11 +2566,30 @@ class BacktestService:
             "max_cumulative_fees": config.get("max_cumulative_fees", "10000"),
             "max_drawdown_stop_pct": config.get("max_drawdown_stop_pct", "50"),
         }
+        if config.get("python_runtime_mode"):
+            payload["python_runtime_mode"] = str(config["python_runtime_mode"])
+            payload["python_trusted_confirmed"] = bool(config.get("python_trusted_confirmed"))
+            self._smoke_study_window(payload)
         return self.create_run(
             payload,
             idempotency_key=idempotency_key,
             enforce_active_budget=False,
         )
+
+    def _smoke_study_window(self, run: Mapping[str, Any]) -> None:
+        """A Python run needs a smoke of its revision on its snapshot, in its runtime mode; each
+        study window is its own snapshot, so the study smokes it once before its first run there."""
+        mode = str(run["python_runtime_mode"])
+        smoke = self.repository.strategy_smoke_for_snapshot(
+            str(run["strategy_revision_id"]), str(run["dataset_id"]), str(run["snapshot_hash"]))
+        if smoke is not None and json.loads(str(smoke["details_json"])).get("runtimeMode") == mode:
+            return
+        start = int(run["start_time_ms"])
+        self.smoke_strategy_revision(str(run["strategy_revision_id"]), {
+            "dataset_id": run["dataset_id"], "snapshot_hash": run["snapshot_hash"], "start_time_ms": start,
+            "end_time_ms": min(int(run["end_time_ms"]), start + 7 * 86_400_000), "parameters": dict(run["parameters"]),
+            "python_runtime_mode": mode, "python_trusted_confirmed": bool(run["python_trusted_confirmed"]),
+        })
 
     def _seal_study_v2_oos(
         self,

@@ -1,12 +1,16 @@
 /**
- * Experiments (ADR-BACKTEST-015 §3.6, step P5b): one strategy run over several inputs, held by the
- * backend. Each member is a strategy data preparation that starts its run when its exchange
- * history is ready, or a run over a frozen snapshot; its state is read from that preparation or run.
+ * Experiments (ADR-BACKTEST-015 §3.6, steps P5b and P5c3): one strategy run by a rule, held by the
+ * backend. INPUTS runs it over several inputs: each member is a strategy data preparation that starts
+ * its run when its exchange history is ready, or a run over a frozen snapshot. ROBUSTNESS is a Study
+ * V2: its members are the runs the study planned (candidates on training windows, the selected one
+ * out of sample, the holdout). A member's state is read from its preparation or run.
  */
 export const STRATEGY_EXPERIMENT_SCHEMA = "candlescope.strategy-experiment/1";
 export const STRATEGY_EXPERIMENT_STREAM_SCHEMA = "candlescope.strategy-experiment-stream/1";
 
-export type ExperimentState = "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+/** AWAITING_HOLDOUT: a robustness study finished its folds and waits for the user to open its holdout. */
+export type ExperimentState = "RUNNING" | "AWAITING_HOLDOUT" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type ExperimentKind = "INPUTS" | "ROBUSTNESS";
 export type ExperimentMemberState = "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 export interface ExperimentError { code: string; message: string }
@@ -34,10 +38,29 @@ export interface ExperimentMember {
   error: ExperimentError | null;
 }
 
+export interface StudyWindow { startMs: number; endMs: number }
+
+/** A robustness experiment's study: its rule, each fold's selection, the holdout and the out-of-sample verdict. */
+export interface ExperimentStudy {
+  studyId: string;
+  state: string;
+  hypothesis: string;
+  objective: string | null;
+  sampler: string | null;
+  candidates: number | null;
+  parameterSpace: Record<string, unknown>;
+  window: StudyWindow | null;
+  folds: Array<{ ordinal: number; state: string; train: StudyWindow; test: StudyWindow; selected: Record<string, unknown> | null }>;
+  holdout: { state: string; window: StudyWindow; parameters: Record<string, unknown> | null } | null;
+  /** The out-of-sample report: summary, per-fold rows and the robustness checks, as served. */
+  oos: { summary: Record<string, unknown> | null; folds: Array<Record<string, unknown>>; robustness: Record<string, unknown> | null } | null;
+  error: ExperimentError | null;
+}
+
 export interface StrategyExperiment {
   experimentId: string;
   name: string;
-  kind: "INPUTS";
+  kind: ExperimentKind;
   strategy: Record<string, unknown>;
   createdAtMs: number;
   cancelledAtMs: number | null;
@@ -45,6 +68,8 @@ export interface StrategyExperiment {
   terminal: boolean;
   counts: { total: number; completed: number; failed: number; cancelled: number; active: number };
   members: ExperimentMember[];
+  /** ROBUSTNESS only. */
+  study: ExperimentStudy | null;
 }
 
 export class StrategyExperimentContractError extends Error {
@@ -54,7 +79,8 @@ export class StrategyExperimentContractError extends Error {
   }
 }
 
-const EXPERIMENT_STATES: readonly ExperimentState[] = ["RUNNING", "COMPLETED", "FAILED", "CANCELLED"];
+const EXPERIMENT_STATES: readonly ExperimentState[] = ["RUNNING", "AWAITING_HOLDOUT", "COMPLETED", "FAILED", "CANCELLED"];
+const KINDS: readonly ExperimentKind[] = ["INPUTS", "ROBUSTNESS"];
 const MEMBER_STATES: readonly ExperimentMemberState[] = ["PENDING", "PREPARING", "QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"];
 
 function record(value: unknown, at: string): Record<string, unknown> {
@@ -97,6 +123,42 @@ function preparation(value: unknown, at: string): ExperimentPreparation | null {
   };
 }
 
+function optionalRecord(value: unknown, at: string): Record<string, unknown> | null {
+  return value === null || value === undefined ? null : record(value, at);
+}
+
+function window(value: unknown, at: string): StudyWindow {
+  const body = record(value, at);
+  return { startMs: count(body.start_ms, `${at}.start_ms`), endMs: count(body.end_ms, `${at}.end_ms`) };
+}
+
+function study(value: unknown, at: string): ExperimentStudy {
+  const body = record(value, at);
+  const holdout = optionalRecord(body.holdout, `${at}.holdout`);
+  const oos = optionalRecord(body.oos, `${at}.oos`);
+  return {
+    studyId: text(body.study_id, `${at}.study_id`), state: text(body.state, `${at}.state`),
+    hypothesis: typeof body.hypothesis === "string" ? body.hypothesis : "",
+    objective: typeof body.objective === "string" ? body.objective : null,
+    sampler: typeof body.sampler === "string" ? body.sampler : null,
+    candidates: body.candidates === null || body.candidates === undefined ? null : count(body.candidates, `${at}.candidates`),
+    parameterSpace: optionalRecord(body.parameter_space, `${at}.parameter_space`) ?? {},
+    window: body.window === null || body.window === undefined ? null : window(body.window, `${at}.window`),
+    folds: (Array.isArray(body.folds) ? body.folds : []).map((item, index) => {
+      const fold = record(item, `${at}.folds[${index}]`);
+      return { ordinal: count(fold.ordinal, `${at}.folds[${index}].ordinal`), state: text(fold.state, `${at}.folds[${index}].state`),
+        train: window(fold.train, `${at}.folds[${index}].train`), test: window(fold.test, `${at}.folds[${index}].test`),
+        selected: optionalRecord(fold.selected, `${at}.folds[${index}].selected`) };
+    }),
+    holdout: holdout && { state: text(holdout.state, `${at}.holdout.state`), window: window(holdout, `${at}.holdout`),
+      parameters: optionalRecord(holdout.parameters, `${at}.holdout.parameters`) },
+    oos: oos && { summary: optionalRecord(oos.summary, `${at}.oos.summary`),
+      folds: (Array.isArray(oos.folds) ? oos.folds : []).map((item, index) => record(item, `${at}.oos.folds[${index}]`)),
+      robustness: optionalRecord(oos.robustness, `${at}.oos.robustness`) },
+    error: error(body.error, `${at}.error`),
+  };
+}
+
 /** Validate a served experiment. */
 export function parseStrategyExperiment(value: unknown): StrategyExperiment {
   const body = record(value, "experiment");
@@ -107,7 +169,7 @@ export function parseStrategyExperiment(value: unknown): StrategyExperiment {
   const counts = record(body.counts, "counts");
   const state = oneOf(body.state, EXPERIMENT_STATES, "state");
   return {
-    experimentId, name: text(body.name, "name"), kind: oneOf(body.kind, ["INPUTS"] as const, "kind"),
+    experimentId, name: text(body.name, "name"), kind: oneOf(body.kind, KINDS, "kind"),
     strategy: record(body.strategy, "strategy"), createdAtMs: count(body.created_at_ms, "created_at_ms"),
     cancelledAtMs: body.cancelled_at_ms === null || body.cancelled_at_ms === undefined ? null : count(body.cancelled_at_ms, "cancelled_at_ms"),
     state, terminal: state !== "RUNNING",
@@ -125,6 +187,7 @@ export function parseStrategyExperiment(value: unknown): StrategyExperiment {
         runId, error: error(member.error, `${at}.error`),
       };
     }),
+    study: body.study === null || body.study === undefined ? null : study(body.study, "study"),
   };
 }
 

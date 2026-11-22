@@ -27,6 +27,27 @@ test("the experiment the backend serves parses with each member's own state", ()
   }
 });
 
+test("a robustness experiment parses as its study: folds, selections, sealed holdout and the out-of-sample verdict", () => {
+  const robust = JSON.parse(readFileSync(path.resolve(here,
+    "../../../../../tests/fixtures/strategy-experiment/robustness.strategy-experiment.json"), "utf8")) as Record<string, unknown>;
+  const experiment = parseStrategyExperiment(robust);
+  assert.equal(experiment.kind, "ROBUSTNESS");
+  assert.equal(experiment.state, "AWAITING_HOLDOUT");
+  assert.equal(experiment.terminal, true, "a study waiting for its holdout is not followed until it is opened");
+  assert.deepEqual(experiment.members.map((member) => [member.input.role, member.state]), [
+    ["TRAIN", "COMPLETED"], ["TRAIN", "COMPLETED"], ["TEST", "COMPLETED"],
+    ["TRAIN", "COMPLETED"], ["TRAIN", "COMPLETED"], ["TEST", "COMPLETED"], ["HOLDOUT", "PENDING"]]);
+  const study = experiment.study!;
+  assert.deepEqual(study.folds.map((fold) => fold.selected), [{ fast: 3 }, { fast: 3 }]);
+  assert.equal(study.holdout?.state, "SEALED");
+  assert.equal(study.oos?.summary?.total_return, "0.042");
+  assert.equal(study.oos?.folds.length, 2);
+  assert.equal(parseStrategyExperiment(served).study, null, "an inputs experiment has no study");
+  assert.throws(() => parseStrategyExperiment({ ...robust, kind: "GRID" }), StrategyExperimentContractError);
+  assert.throws(() => parseStrategyExperiment({ ...robust, study: { ...(robust.study as object), folds: [{ ordinal: 1 }] } }),
+    StrategyExperimentContractError);
+});
+
 function ndjson(frames: unknown[]): Response {
   const body = frames.map((frame) => JSON.stringify(frame)).join("\n") + "\n";
   return new Response(body, { headers: { "content-type": "application/x-ndjson" } });

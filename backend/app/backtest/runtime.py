@@ -770,13 +770,14 @@ class BacktestWorker:
                 logger.warning(
                     "Backtest Study %s failed to materialize: %s", study_id, exc
                 )
-                service.repository.update_study_state(study_id, "FAILED")
+                service.repository.fail_study(study_id, code=exc.code, message=exc.message, now_ms=_now_ms())
             except Exception:
                 logger.exception(
                     "Backtest Study %s crashed during materialization",
                     study_id,
                 )
-                service.repository.update_study_state(study_id, "FAILED")
+                service.repository.fail_study(study_id, code="STUDY_CRASHED",
+                                              message="the study failed while planning its runs", now_ms=_now_ms())
 
     def _preview_snapshot(self, **values: object) -> dict[str, Any]:
         try:

@@ -1,11 +1,17 @@
-"""Experiments: one strategy, run over several inputs (ADR-BACKTEST-015 §3.6, step P5b).
+"""Experiments: one strategy, run by a rule (ADR-BACKTEST-015 §3.6, steps P5b and P5c3).
 
-An experiment is a set of FIXED runs plus the rule that generated them. Here the rule is a list of
-inputs (batch and multi-market research): each member is submitted once, either as a strategy data
-preparation that launches its run when the exchange history is ready, or directly as a run over a
-frozen snapshot. The backend's own queues schedule them; the experiment owns only which members
-exist and how they were submitted. A member's state is read from its preparation or run, so a
-restart, a closed page or a switched chart never loses or cancels a member.
+An experiment is a set of FIXED runs plus the rule that generated them.
+
+- INPUTS (batch and multi-market research): a list of inputs. Each member is submitted once, either
+  as a strategy data preparation that launches its run when the exchange history is ready, or
+  directly as a run over a frozen snapshot. The experiment owns only which members exist and how
+  they were submitted.
+- ROBUSTNESS: a Study V2 (ADR-011): parameter candidates trained on walk-forward folds, one selected
+  per fold and tested out of sample, then an optional sealed holdout. The study plans and creates
+  its runs in the worker; the experiment shows them as its members and the study's verdict.
+
+A member's state is read from its preparation or run, so a restart, a closed page or a switched
+chart never loses or cancels a member.
 """
 from __future__ import annotations
 
@@ -20,11 +26,17 @@ from app.core.committed_updates import committed_updates_for
 
 from .errors import BacktestError
 from .strategy.protocol import canonical_hash
+from .study_v2 import STUDY_PROTOCOL_V2
 
 SCHEMA = "candlescope.strategy-experiment/1"
 STREAM_SCHEMA = "candlescope.strategy-experiment-stream/1"
 ID_PREFIX = "ex_"
-KINDS = ("INPUTS",)
+KINDS = ("INPUTS", "ROBUSTNESS")
+STUDY_PROTOCOL = STUDY_PROTOCOL_V2
+MAX_STUDY_BYTES = 64 * 1024
+# A study's own states, as an experiment reads them. AWAITING_HOLDOUT waits for the user to reveal it.
+STUDY_STATES = {"CREATED": "RUNNING", "RUNNING": "RUNNING", "AWAITING_HOLDOUT": "AWAITING_HOLDOUT",
+                "COMPLETED": "COMPLETED", "FAILED": "FAILED", "CANCELLED": "CANCELLED"}
 MAX_MEMBERS = 8
 MAX_LIST = 50
 MAX_BODY_BYTES = 4 * 1024 * 1024
@@ -50,6 +62,13 @@ class ExperimentPort(Protocol):
     async def cancel_run(self, run_id: str) -> None: ...
     def listen_preparation(self, job_id: str, wake: Callable[[], None]) -> Callable[[], None]: ...
     def listen_run(self, run_id: str, wake: Callable[[], None]) -> Callable[[], None]: ...
+    # A robustness experiment's study (ROBUSTNESS).
+    async def create_study(self, body: dict[str, Any]) -> dict[str, Any]: ...
+    async def start_study(self, study_id: str) -> None: ...
+    async def study(self, study_id: str) -> dict[str, Any] | None: ...
+    async def cancel_study(self, study_id: str) -> None: ...
+    async def reveal_holdout(self, study_id: str) -> None: ...
+    def listen_study(self, study_id: str, wake: Callable[[], None]) -> Callable[[], None]: ...
 
 
 def _invalid(message: str) -> BacktestError:
@@ -76,12 +95,27 @@ def parse_create(body: Any) -> dict[str, Any]:
         raise _invalid("an experiment is an object")
     if len(json.dumps(body, ensure_ascii=False, separators=(",", ":"))) > MAX_BODY_BYTES:
         raise BacktestError("REQUEST_TOO_LARGE", "the experiment request is too large")
-    unknown = set(body) - {"idempotency_key", "name", "kind", "strategy", "members"}
+    unknown = set(body) - {"idempotency_key", "name", "kind", "strategy", "members", "study"}
     if unknown:
         raise _invalid(f"unknown fields: {', '.join(sorted(unknown))}")
     kind = body.get("kind", "INPUTS")
     if kind not in KINDS:
-        raise _invalid("kind must be INPUTS")
+        raise _invalid("kind must be INPUTS or ROBUSTNESS")
+    common = {
+        "idempotency_key": _text(body.get("idempotency_key"), "idempotency_key", 128, 8),
+        "name": _text(body.get("name"), "name", 120),
+        "kind": kind,
+        "strategy": _object(body.get("strategy"), "strategy", 16_384),
+    }
+    if kind == "ROBUSTNESS":
+        if "members" in body:
+            raise _invalid("a robustness experiment's runs are planned by its study")
+        study = _object(body.get("study"), "study", MAX_STUDY_BYTES)
+        if {"name", "study_protocol_revision"} & set(study):
+            raise _invalid("the study's name and protocol are the experiment's")
+        return {**common, "study": study, "members": []}
+    if "study" in body:
+        raise _invalid("an inputs experiment has members, not a study")
     members = body.get("members")
     if not isinstance(members, list) or not 1 <= len(members) <= MAX_MEMBERS:
         raise _invalid(f"an experiment has 1–{MAX_MEMBERS} members")
@@ -98,13 +132,7 @@ def parse_create(body: Any) -> dict[str, Any]:
             raise _invalid(f"member {index} keys are assigned by the experiment")
         parsed.append({"input": _object(member.get("input"), f"member {index} input", 4096),
                        "kind": "PREPARATION" if submission == "preparation" else "RUN", "request": request})
-    return {
-        "idempotency_key": _text(body.get("idempotency_key"), "idempotency_key", 128, 8),
-        "name": _text(body.get("name"), "name", 120),
-        "kind": kind,
-        "strategy": _object(body.get("strategy"), "strategy", 16_384),
-        "members": parsed,
-    }
+    return {**common, "members": parsed}
 
 
 def _error(value: Any) -> dict[str, str] | None:
@@ -177,6 +205,108 @@ def experiment_view(row: Mapping[str, Any], members: list[dict[str, Any]]) -> di
             "counts": counts, "members": members}
 
 
+def _window(start_ms: Any, end_ms: Any) -> dict[str, int]:
+    """A study window, start inclusive and end exclusive."""
+    return {"start_ms": int(start_ms), "end_ms": int(end_ms)}
+
+
+def _run_member(ordinal: int, input_: dict[str, Any], run_id: Any, run: Mapping[str, Any] | None,
+                planned_state: str) -> dict[str, Any]:
+    """A study run as an experiment member; a run not created yet is PENDING or, once the study has
+    stopped, CANCELLED."""
+    error = None
+    if run_id and run is not None:
+        source = str(run.get("state"))
+        state = RUN_STATES.get(source, "FAILED")
+        if state == "FAILED":
+            error = {"code": str(run.get("failure_code") or source), "message": f"the run ended {source.lower()}"}
+    elif run_id:
+        state, error = "FAILED", {"code": "MEMBER_NOT_FOUND", "message": "the study's run is gone"}
+    else:
+        state = planned_state
+    return {"ordinal": ordinal, "input": input_, "kind": "RUN", "attempt": 0, "state": state, "preparation": None,
+            "run_id": str(run_id) if run_id else None, "error": error}
+
+
+def study_members(study: Mapping[str, Any], runs: Mapping[str, Mapping[str, Any] | None]) -> list[dict[str, Any]]:
+    """Every run a Study V2 planned, in order: each fold's candidates on its training window, its
+    selected candidate on its test window, then the holdout. ``runs`` holds the created runs by id."""
+    stopped = STUDY_STATES.get(str(study["state"])) in ("FAILED", "CANCELLED")
+    planned = "CANCELLED" if stopped else "PENDING"
+    members: list[dict[str, Any]] = []
+    for fold in study.get("folds") or []:
+        number = int(fold["ordinal"])
+        for trial in fold.get("train_trials") or []:
+            run_id = trial.get("run_id")
+            trial_planned = "CANCELLED" if str(trial.get("state")) == "CANCELLED" else planned
+            members.append(_run_member(len(members), {
+                "role": "TRAIN", "fold": number, "candidate": int(trial["candidate_ordinal"]),
+                "parameters": json.loads(str(trial["params_json"])),
+                **_window(fold["train_start_ms"], fold["train_end_ms"])}, run_id, runs.get(str(run_id)), trial_planned))
+        receipt = fold.get("selection_receipt") or {}
+        selected = (receipt.get("selected") or {}).get("params") if isinstance(receipt, Mapping) else None
+        run_id = fold.get("test_run_id")
+        members.append(_run_member(len(members), {
+            "role": "TEST", "fold": number, "parameters": selected,
+            **_window(fold["test_start_ms"], fold["test_end_ms"])}, run_id, runs.get(str(run_id)), planned))
+    holdout = study.get("holdout")
+    if isinstance(holdout, Mapping):
+        parameters = json.loads(str(holdout["params_json"])) if holdout.get("params_json") else None
+        run_id = holdout.get("run_id")
+        members.append(_run_member(len(members), {
+            "role": "HOLDOUT", "parameters": parameters, **_window(holdout["start_ms"], holdout["end_ms"])},
+            run_id, runs.get(str(run_id)), planned))
+    return members
+
+
+def study_view(study: Mapping[str, Any]) -> dict[str, Any]:
+    """What a robustness experiment shows of its study: the rule, each fold's selection, the holdout
+    and the out-of-sample verdict (its equity curve stays with the test runs)."""
+    config = json.loads(str(study["config_json"]))
+    holdout = study.get("holdout")
+    oos = study.get("oos_report")
+    return {
+        "study_id": study["study_id"], "state": study["state"], "hypothesis": config.get("hypothesis"),
+        "objective": config.get("objective"), "sampler": config.get("sampler"),
+        "candidates": config.get("candidate_budget"), "parameter_space": config.get("parameter_space"),
+        "window": _window(config["start_ms"], config["end_ms"]),
+        "folds": [{"ordinal": int(fold["ordinal"]), "state": fold["state"],
+                   "train": _window(fold["train_start_ms"], fold["train_end_ms"]),
+                   "test": _window(fold["test_start_ms"], fold["test_end_ms"]),
+                   "selected": ((fold.get("selection_receipt") or {}).get("selected") or {}).get("params")}
+                  for fold in study.get("folds") or []],
+        "holdout": None if not isinstance(holdout, Mapping) else {
+            "state": holdout["state"], **_window(holdout["start_ms"], holdout["end_ms"]),
+            "parameters": json.loads(str(holdout["params_json"])) if holdout.get("params_json") else None},
+        "oos": None if not isinstance(oos, Mapping) else {
+            "summary": oos.get("summary"), "folds": oos.get("folds"), "robustness": oos.get("robustness")},
+        "error": study.get("failure"),
+    }
+
+
+def _study_run_ids(study: Mapping[str, Any]) -> list[str]:
+    ids = [trial.get("run_id") for fold in study.get("folds") or [] for trial in fold.get("train_trials") or []]
+    ids += [fold.get("test_run_id") for fold in study.get("folds") or []]
+    holdout = study.get("holdout")
+    if isinstance(holdout, Mapping):
+        ids.append(holdout.get("run_id"))
+    return [str(run_id) for run_id in ids if run_id]
+
+
+def robustness_view(row: Mapping[str, Any], study: Mapping[str, Any] | None,
+                    runs: Mapping[str, Mapping[str, Any] | None]) -> dict[str, Any]:
+    if study is None:
+        members: list[dict[str, Any]] = []
+        state, detail = "FAILED", {"study_id": row.get("study_id"), "state": "MISSING", "error": {
+            "code": "STUDY_NOT_FOUND", "message": "the experiment's study is gone"}}
+    else:
+        members, state, detail = study_members(study, runs), STUDY_STATES.get(str(study["state"]), "FAILED"), study_view(study)
+    view = experiment_view(row, members)
+    counts = view["counts"]
+    return {**view, "state": state, "terminal": state != "RUNNING", "study": detail,
+            "counts": {**counts, "active": counts["active"] if state == "RUNNING" else 0}}
+
+
 def _not_found(experiment_id: str) -> BacktestError:
     return BacktestError("EXPERIMENT_NOT_FOUND", f"unknown experiment {experiment_id}")
 
@@ -205,12 +335,15 @@ class StrategyExperiments:
         if existing is not None:
             if existing["request_hash"] != request_hash:
                 raise BacktestError("IDEMPOTENCY_CONFLICT", "this key belongs to a different experiment")
-            await self._submit_pending(existing["experiment_id"], port)
+            if spec["kind"] == "INPUTS":
+                await self._submit_pending(existing["experiment_id"], port)
             return await self.view(existing["experiment_id"], port)
         experiment_id = f"{ID_PREFIX}{uuid.uuid4().hex}"
         row = {"experiment_id": experiment_id, "idempotency_key": spec["idempotency_key"], "request_hash": request_hash,
                "name": spec["name"], "kind": spec["kind"], "created_at_ms": self.clock_ms(),
                "strategy_json": json.dumps(spec["strategy"], ensure_ascii=False, separators=(",", ":"))}
+        if spec["kind"] == "ROBUSTNESS":
+            return await self._create_robustness(row, spec["study"], port)
         members = [{"experiment_id": experiment_id, "ordinal": index, "kind": member["kind"],
                     "input_json": json.dumps(member["input"], ensure_ascii=False, separators=(",", ":")),
                     "request_json": json.dumps(member["request"], ensure_ascii=False, separators=(",", ":"))}
@@ -218,6 +351,28 @@ class StrategyExperiments:
         await asyncio.to_thread(self.repository.insert_strategy_experiment, row, members)
         await self._submit_pending(experiment_id, port)
         return await self.view(experiment_id, port)
+
+    async def _create_robustness(self, row: dict[str, Any], study: dict[str, Any], port: ExperimentPort) -> dict[str, Any]:
+        """Create and start the study, then keep it as the experiment. The study validates the rule;
+        a refused study or start leaves no experiment, and a started study is never left unowned."""
+        created = await port.create_study({**study, "name": row["name"], "study_protocol_revision": STUDY_PROTOCOL})
+        study_id = str(created["study_id"])
+        try:
+            await port.start_study(study_id)
+            await asyncio.to_thread(self.repository.insert_strategy_experiment, row, [], study_id)
+        except BaseException as failure:
+            try:
+                await port.cancel_study(study_id)
+            except BacktestError:
+                pass
+            existing = await asyncio.to_thread(self.repository.strategy_experiment_by_key, row["idempotency_key"])
+            if isinstance(failure, Exception) and existing is not None:  # the same key won a race
+                if existing["request_hash"] != row["request_hash"]:
+                    raise BacktestError("IDEMPOTENCY_CONFLICT", "this key belongs to a different experiment") from None
+                return await self.view(existing["experiment_id"], port)
+            raise
+        self.updates.notify(row["experiment_id"])
+        return await self.view(row["experiment_id"], port)
 
     async def _submit_pending(self, experiment_id: str, port: ExperimentPort) -> None:
         row, members = await self._record(experiment_id)
@@ -253,6 +408,11 @@ class StrategyExperiments:
 
     async def view(self, experiment_id: str, port: ExperimentPort) -> dict[str, Any]:
         row, members = await self._record(experiment_id)
+        if row["kind"] == "ROBUSTNESS":
+            study = await port.study(str(row["study_id"])) if row.get("study_id") else None
+            runs = {} if study is None else {
+                str(run_id): await port.run(str(run_id)) for run_id in _study_run_ids(study)}
+            return robustness_view(row, study, runs)
         return experiment_view(row, [await self._member(member, port) for member in members])
 
     async def list(self, port: ExperimentPort, limit: int = 20) -> dict[str, Any]:
@@ -263,8 +423,16 @@ class StrategyExperiments:
 
     async def cancel(self, experiment_id: str, port: ExperimentPort) -> dict[str, Any]:
         """Stop the experiment: members still preparing or running are cancelled; finished ones stay."""
-        await self._record(experiment_id)
+        row, _ = await self._record(experiment_id)
         await asyncio.to_thread(self.repository.cancel_strategy_experiment, experiment_id, self.clock_ms())
+        if row["kind"] == "ROBUSTNESS":
+            if row.get("study_id"):
+                try:
+                    await port.cancel_study(str(row["study_id"]))  # stops its active runs; finished ones stay
+                except BacktestError:
+                    pass  # a study that already finished keeps its outcome
+            self.updates.notify(experiment_id)
+            return await self.view(experiment_id, port)
         current = await self.view(experiment_id, port)
         for member in current["members"]:
             if member["state"] not in ACTIVE:
@@ -282,6 +450,9 @@ class StrategyExperiments:
     async def retry(self, experiment_id: str, ordinal: int, port: ExperimentPort) -> dict[str, Any]:
         """Submit a failed or cancelled member again, as a new attempt with the same request."""
         row, members = await self._record(experiment_id)
+        if row["kind"] == "ROBUSTNESS":
+            raise BacktestError("EXPERIMENT_RULE_UNSUPPORTED",
+                                "a robustness study is not retried run by run; start the study again")
         if row["cancelled_at_ms"] is not None:
             raise BacktestError("EXPERIMENT_CANCELLED", "a cancelled experiment is not resumed")
         member = next((item for item in members if int(item["ordinal"]) == ordinal), None)
@@ -290,6 +461,15 @@ class StrategyExperiments:
         if (await self._member(member, port))["state"] not in ("FAILED", "CANCELLED"):
             raise BacktestError("EXPERIMENT_MEMBER_ACTIVE", "only a failed or cancelled member is retried")
         await self._submit(experiment_id, {**member, "attempt": int(member["attempt"]) + 1}, port)
+        return await self.view(experiment_id, port)
+
+    async def reveal_holdout(self, experiment_id: str, port: ExperimentPort) -> dict[str, Any]:
+        """Open a robustness study's sealed holdout: its most selected candidate runs once on it."""
+        row, _ = await self._record(experiment_id)
+        if row["kind"] != "ROBUSTNESS" or not row.get("study_id"):
+            raise BacktestError("EXPERIMENT_RULE_UNSUPPORTED", "only a robustness experiment has a holdout")
+        await port.reveal_holdout(str(row["study_id"]))
+        self.updates.notify(experiment_id)
         return await self.view(experiment_id, port)
 
     async def watch(self, experiment_id: str, port: ExperimentPort) -> ExperimentWatch:
@@ -313,7 +493,10 @@ class ExperimentWatch:
         self.owner.updates.notify(self.experiment_id)
 
     def _bridge(self, view: Mapping[str, Any]) -> None:
-        """Follow every member's preparation and run as they appear."""
+        """Follow every member's preparation and run as they appear, and a robustness study's own changes."""
+        study = view.get("study")
+        if isinstance(study, Mapping) and study.get("study_id") and ("study", study["study_id"]) not in self._bridges:
+            self._bridges[("study", str(study["study_id"]))] = self.port.listen_study(str(study["study_id"]), self._wake)
         for member in view["members"]:
             pairs = []
             if member["preparation"] is not None:
