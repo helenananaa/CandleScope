@@ -162,6 +162,18 @@ export class StrategyDataManager {
     };
   }
 
+  /**
+   * A Python bundle revision the studio froze earlier, found by id, so a reloaded page can offer it again.
+   * Null when the backend no longer lists it (archived, or another database).
+   */
+  savedPythonRevision(revisionId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord | null> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.listStrategyRevisions) unavailable();
+      const revisions = await this.api.listStrategyRevisions(owned);
+      return revisions.find((revision) => revision.revision_id === revisionId && revision.provider_kind === "PYTHON_SOURCE") ?? null;
+    });
+  }
+
   /** The bar snapshot of imported research data, for a saved strategy's coverage and smoke. */
   previewImportedBars(source: Parameters<typeof previewImportedBars>[1], signal?: AbortSignal): Promise<BacktestSnapshot> {
     return this.operation(signal, (owned) => previewImportedBars(this.api, source, owned));

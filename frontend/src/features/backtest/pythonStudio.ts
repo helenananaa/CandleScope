@@ -53,6 +53,17 @@ export interface PythonStudioPersisted {
   smokePassed: boolean;
   runtimeMode: PythonRuntimeMode;
   trustedConfirmed: boolean;
+  /** The data the smoke passed on ({@link pythonStudioScope}); a smoke never carries to other data. */
+  scope?: string | null;
+}
+
+/** The imported data and range a studio smoke ran on. */
+export interface PythonStudioScopeSource {
+  datasetId: string;
+  dataEpoch: string;
+  interval: string;
+  startTimeMs: number;
+  endTimeMs: number;
 }
 
 export interface StudioFailure {
@@ -582,10 +593,44 @@ export function restorePythonStudioState(
       smokePassed: Boolean(parsed.smokePassed),
       runtimeMode: parsed.runtimeMode === "TRUSTED_LOCAL" ? "TRUSTED_LOCAL" : "SANDBOXED_LOCAL",
       trustedConfirmed: Boolean(parsed.trustedConfirmed),
+      scope: typeof parsed.scope === "string" ? parsed.scope : null,
     };
   } catch {
     return null;
   }
+}
+
+/** One key for a dataset, its data epoch, interval and range: a smoke on one never stands for another. */
+export function pythonStudioScope(source: PythonStudioScopeSource): string {
+  return JSON.stringify([source.datasetId, source.dataEpoch, source.interval, source.startTimeMs, source.endTimeMs]);
+}
+
+/** The studio gate as saved for a reload: the frozen revision, its bundle, the trust choice and the smoke with its data. */
+export function pythonStudioPersisted(gate: PythonStudioGate, scope: string): PythonStudioPersisted {
+  return {
+    revisionId: gate.revisionId,
+    runId: null,
+    studyId: null,
+    bundleId: gate.bundleIdentity?.bundle_id ?? null,
+    bundleIdentity: gate.bundleIdentity,
+    smokePassed: gate.smokePassed,
+    runtimeMode: gate.runtimeMode,
+    trustedConfirmed: gate.trustedConfirmed,
+    scope,
+  };
+}
+
+/**
+ * The saved studio for this data after a reload. The frozen revision, bundle and trust choice come back as
+ * they were; the smoke counts only when it passed on this same data and range.
+ */
+export function restorePythonStudioStateFor(
+  scope: string,
+  storage: Pick<Storage, "getItem"> | null = typeof sessionStorage === "undefined" ? null : sessionStorage,
+): PythonStudioPersisted | null {
+  const restored = restorePythonStudioState(true, storage);
+  if (!restored?.revisionId) return null;
+  return { ...restored, smokePassed: restored.smokePassed && restored.scope === scope };
 }
 
 export function composePythonExport(input: {
