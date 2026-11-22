@@ -301,10 +301,6 @@ export interface BacktestApiClient {
   getPythonBundle(bundleId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   createPythonRevision(bundleId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   getPythonRuntimeReceipt(revisionId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
-  createResearchLaunchContext(
-    body: BacktestResearchLaunchContextInput,
-    signal?: AbortSignal,
-  ): Promise<BacktestResearchLaunchContext>;
   getResearchLaunchContext(
     contextId: string,
     signal?: AbortSignal,
@@ -897,13 +893,7 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
         requestOptions({}, signal),
       ));
     },
-    async createResearchLaunchContext(body, signal) {
-      return readJson(await fetch(`${base}/research/contexts`, requestOptions({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }, signal)));
-    },
+
     async getResearchLaunchContext(contextId, signal) {
       return readJson(await fetch(
         `${base}/research/contexts/${encodeURIComponent(contextId)}`,

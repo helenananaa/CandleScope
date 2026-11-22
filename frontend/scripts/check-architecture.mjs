@@ -137,10 +137,6 @@ const strategyRunTransportOwners = [
   "src/features/backtest/backtestRunClient.ts",
   "src/features/backtest/continuous/continuousApi.ts",
   "src/features/backtest/native/nativeBacktestApi.ts",
-  // The legacy research page (backtest.html) keeps its own client until ADR-BACKTEST-015 P5
-  // replaces it with the shared research workspace; delete these two entries with it.
-  "src/features/backtest/research/useBacktestResearchRuntime.ts",
-  "src/features/backtest/research/ResearchStrategyPanel.tsx",
 ];
 const strategyRunTransports = new Map([
   ["src/features/backtest/backtestApi", new Set(["defaultBacktestApi", "createBacktestApi"])],

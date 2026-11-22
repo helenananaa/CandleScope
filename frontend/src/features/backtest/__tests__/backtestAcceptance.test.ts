@@ -106,9 +106,6 @@ function fakeApi(run: BacktestRunRecord, exported: Record<string, unknown>): Bac
     async getStudy() {
       throw new Error("unused");
     },
-    async createResearchLaunchContext() {
-      throw new Error("unused");
-    },
     async getResearchLaunchContext() {
       throw new Error("unused");
     },

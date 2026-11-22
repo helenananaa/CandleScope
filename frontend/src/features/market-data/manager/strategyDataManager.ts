@@ -38,7 +38,7 @@ type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
     | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
-    | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
+    | "compareRecentRun" | "getSelectedVersion"
     | "getStrategyVersion" | "getStrategyVersionDraft" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
@@ -562,13 +562,6 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => {
       if (!this.api.getSelectedVersion) unavailable();
       return this.api.getSelectedVersion(runId, owned);
-    });
-  }
-
-  createResearchLaunchContext(payload: Parameters<BacktestApiClient["createResearchLaunchContext"]>[0]) {
-    return this.operation(undefined, () => {
-      if (!this.api.createResearchLaunchContext) unavailable();
-      return this.api.createResearchLaunchContext(payload);
     });
   }
 

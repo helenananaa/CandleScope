@@ -55,13 +55,11 @@ test("legacy-to-unified map covers migrated orchestration and names deferred M9 
 test("import polling, dataset selection, and Run polling are not reimplemented in page apps", () => {
   const app = source("../StrategyResearchApp.tsx");
   const library = source("../../research-data/useResearchDataLibrary.ts");
-  const researchRuntime = source("../../backtest/research/useBacktestResearchRuntime.ts");
   const runClient = source("../../backtest/backtestRunClient.ts");
   assert.match(library, /export async function pollResearchImportJob/);
   assert.doesNotMatch(app, /pollResearchImportJob|setInterval\(|pollBacktestRunToTerminal/);
   assert.match(app, /useResearchDataLibrary/);
   assert.doesNotMatch(app, /BacktestResearchApp/, "the research tool is no longer hosted (ADR-BACKTEST-015 P5d)");
-  assert.match(researchRuntime, /window\.setInterval/);
   assert.match(runClient, /export async function pollBacktestRunToTerminal/);
   assert.equal((library.match(/export async function pollResearchImportJob/g) ?? []).length, 1);
   assert.equal((runClient.match(/export async function pollBacktestRunToTerminal/g) ?? []).length, 1);

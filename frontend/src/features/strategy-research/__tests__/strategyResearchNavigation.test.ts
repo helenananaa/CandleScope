@@ -12,7 +12,6 @@ import {
   strategyResearchDeepLinkSearch,
 } from "../strategyResearchLaunch.js";
 import { researchWorkspaceFocus } from "../strategyResearchMode.js";
-import { researchReturnHref } from "../../backtest/research/backtestResearchModel.js";
 import { StrategyResearchScriptPanel } from "../StrategyResearchScriptPanel.js";
 import {
   createMemoryStrategyDraftAdapter,
@@ -77,29 +76,6 @@ test("invalid deep link shows an actionable error and does not select a dataset"
   assert.match(html, /strategy-research-deep-link-error/);
   assert.doesNotMatch(html, /research-dataset-/);
   assert.doesNotMatch(html.toLowerCase(), /dataset id/);
-});
-
-test("the research tool's return link stays on strategy.html without reusing live runtime query", () => {
-  assert.equal(
-    researchReturnHref({
-      schema_version: "candlescope.backtest-research-launch-context/1",
-      context_id: "brc_context_12345678",
-      context_hash: "sha256:context",
-      source_workspace_id: "strategy-research",
-      source_cell_id: "imported",
-      strategy_draft_id: "draft-12345678",
-      strategy_revision_id: null,
-      parameters: {},
-      quick_preset_id: "CRYPTO_SPOT_STANDARD_V1",
-      chart_session: { exchange: "local", market_type: "spot", symbol: "BTC-USDT", interval: "15m" },
-      range: { mode: "ALL_AVAILABLE", start_time_ms: null, end_time_ms: null },
-      dataset_identity: null,
-      latest_run_id: null,
-      baseline_run_id: null,
-      created_at_ms: 1,
-    }),
-    "/strategy.html?source=imported",
-  );
 });
 
 test("ordinary script panel exposes advanced research without internal identity copy", () => {
