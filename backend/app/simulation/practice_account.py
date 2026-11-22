@@ -1,4 +1,10 @@
-"""Pure order matching for local practice accounts.
+"""The practice account model: the account rules forward runs and practice accounts share.
+
+ADR-BACKTEST-015 P6e (O3): forward strategy runs and practice accounts use one account
+model and keep separate ledgers; the practice rules are that model. This module holds it
+as pure functions and a matching session: the candle fill path, order triggers, fees and
+slippage, one-way or hedge positions, and margin on gross notional. Practice accounts
+(``app.trading_accounts``) call it with their ledger; the Host kernel follows it in P6e3.
 
 The practice simulator is a lightweight real-time candle replay: it walks the
 live 1m candles of an instrument, in order, from its cursor to the present and
@@ -157,6 +163,16 @@ def advance_cursor(
         closes_only=False,
     )
     return nxt, PathChunk(_dedupe(points), bar_start_ms, nxt.observed_ms)
+
+
+def market_leverage(leverage: Decimal, market_type: str) -> Decimal:
+    """Futures positions use the account's leverage; spot positions are fully paid."""
+    return leverage if market_type == "futures" else ONE
+
+
+def initial_margin(qty: Decimal, price: Decimal, leverage: Decimal) -> Decimal:
+    """Margin held for ``qty`` at ``price``: notional over the market's leverage."""
+    return qty * price / leverage
 
 
 def fee_for(qty: Decimal, price: Decimal, rate: Decimal) -> Decimal:
