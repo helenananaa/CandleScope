@@ -579,6 +579,17 @@ test("market chart platform permits source-neutral chart and market-data contrac
 });
 
 
+test("research charts render through the shared chart surface", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/features/strategy-research/BadChart.tsx": 'import SingleChartPanes from "../../components/SingleChartPanes.js"; export const bad = SingleChartPanes;',
+    "src/features/strategy-research/goodProps.ts": 'import type { SingleChartPanesProps } from "../../components/SingleChartPanes.js"; export type Good = SingleChartPanesProps;',
+    "src/features/strategy-research/GoodChart.tsx": 'import MarketChartSurface from "../market-chart-platform/MarketChartSurface.js"; export const good = MarketChartSurface;',
+  });
+
+  assert.deepEqual(result.violations.map(({ rule, filePath }) => [rule, filePath]),
+    [["research-chart-via-surface", "src/features/strategy-research/BadChart.tsx"]]);
+});
+
 test("live chart consumers cannot import mutable stores or the window commit authority", (t) => {
   const result = runArchitectureFixture(t, {
     "src/components/BadChart.tsx": 'import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";',

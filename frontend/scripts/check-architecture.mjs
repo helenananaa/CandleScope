@@ -38,6 +38,7 @@ const RULES = {
   replayAppNoPrivateTradingImport: "replay-app-no-private-trading-import",
   marketChartPlatformNoProductUiImport: "market-chart-platform-no-product-ui-import",
   strategyRunViaManager: "strategy-run-via-manager",
+  researchChartViaSurface: "research-chart-via-surface",
 };
 
 const allowlist = [];
@@ -548,6 +549,18 @@ function checkImports(absPath, filePath, content, projectDirectory) {
         line,
         target: normalizedTarget,
         message: `market chart platform imports product composition ${specifier}; pass product UI and workspace state as explicit inputs`,
+      });
+    }
+
+    // ADR-BACKTEST-015 P5d3: the research workspace draws its charts through the shared chart surface.
+    if (filePath.startsWith("src/features/strategy-research/") && !isTestSourcePath(filePath)
+      && !typeOnly && normalizedTarget === "src/components/SingleChartPanes") {
+      addViolation({
+        rule: RULES.researchChartViaSurface,
+        filePath,
+        line,
+        target: normalizedTarget,
+        message: "research charts render through MarketChartSurface; pass markers, layers and panes as its inputs",
       });
     }
 

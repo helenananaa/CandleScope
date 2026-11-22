@@ -5,14 +5,15 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { useMarketDataRuntime } from "../market-data/useMarketDataRuntime.js";
 import { useLiveReferenceMarketChartSource } from "../market-chart-platform/useLiveReferenceMarketChartSource.js";
 import { createRunResultSource } from "../market-chart-platform/marketChartSourceRuntime.js";
-import { backendSyntheticSourceFor } from "../market-chart-platform/marketChartSurfaceModel.js";
-import SingleChartPanes from "../../components/SingleChartPanes.js";
+import MarketChartSurface from "../market-chart-platform/MarketChartSurface.js";
+import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { useChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
 import type { LocalAnalysisFocusRequest } from "../local-data/localAnalysisTypes.js";
 import { EmptyState, InlineAlert } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import type { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
+import { researchChartAppearance } from "./researchChartAppearance.js";
 
 export default function StrategyResearchLiveChart({ session, result, focusRequest, overlaySource = null, anchorTimeMs = null }: {
   session: ChartSession; result: ChartStrategyResultBundle | null; focusRequest: LocalAnalysisFocusRequest | null;
@@ -62,27 +63,18 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
     onVisibleRangeChange(range);
     overlaySource?.setVisibleRange(range as Parameters<StrategyOverlaySource["setVisibleRange"]>[0]);
   }, [onVisibleRangeChange, overlaySource]);
+  const markerSources = useMemo(() => [overlaySource?.markers], [overlaySource]);
   if (!source.marketData.status.activeChartReady || !source.marketData.view.seriesStore) {
     return <EmptyState className="local-chart-empty" compact role={source.marketData.view.error ? "alert" : "status"}
       tone={source.marketData.view.error ? "danger" : "neutral"}
       title={source.marketData.view.error ? String(source.marketData.view.error) : t("research.loading")} />;
   }
-  return <div className="strategy-research-imported-chart" role="region"
-    aria-label={t(frozen ? "research.source.frozen" : "research.source.currentChart")}>
-    {source.marketData.view.error ? <InlineAlert tone="danger">{String(source.marketData.view.error)}</InlineAlert> : <SingleChartPanes ref={surface.ref}
-      symbol={source.session.symbol} interval={source.session.interval} datasetKey={source.datasetKey}
-      seriesStore={source.marketData.view.seriesStore} loading={source.marketData.view.loading} dataMeta={source.marketData.view.meta}
-      backendSyntheticSource={backendSyntheticSourceFor(source)}
-      onNeedMoreLeft={source.marketData.actions.loadMoreLeft} onVisibleRangeChange={handleVisibleRange}
-      externalMarkerSource={overlaySource?.markers ?? null} pluginChartLayerSource={overlaySource?.layer ?? null}
-      onCrosshairMove={source.marketData.actions.onCrosshairMove}
-      renkoBoxSizeMode={appearance.settings.renkoBoxSizeMode} renkoAtrLength={appearance.settings.renkoAtrLength} renkoBoxSize={appearance.settings.renkoBoxSize}
-      pointFigureBoxSizeMode={appearance.settings.pointFigureBoxSizeMode} pointFigureAtrLength={appearance.settings.pointFigureAtrLength}
-      pointFigureBoxSize={appearance.settings.pointFigureBoxSize} pointFigureReversalAmount={appearance.settings.pointFigureReversalAmount}
-      kagiReversalMode={appearance.settings.kagiReversalMode} kagiAtrLength={appearance.settings.kagiAtrLength} kagiReversalAmount={appearance.settings.kagiReversalAmount}
-      lineBreakNumberOfLines={appearance.settings.lineBreakNumberOfLines}
-      upColor={appearance.settings.upColor} downColor={appearance.settings.downColor} chartType={appearance.settings.chartType}
-      theme={appearance.resolvedTheme} customBg={appearance.settings.customBg} followLatest={result === null && anchorTimeMs === null}
-      canLoadMoreLeft={source.marketData.status.canLoadMoreLeft} />}
+  return <div className="strategy-research-imported-chart" role="region" data-testid="strategy-research-live-chart"
+    data-source-mode={source.mode} aria-label={t(frozen ? "research.source.frozen" : "research.source.currentChart")}>
+    {source.marketData.view.error ? <InlineAlert tone="danger">{String(source.marketData.view.error)}</InlineAlert> : <MarketChartSurface
+      source={source} markerSources={markerSources} chartLayerSource={overlaySource?.layer ?? null} errorBoundary={ChartErrorBoundary}
+      chartProps={{ ref: surface.ref, symbol: source.session.symbol, interval: source.session.interval, datasetKey: source.datasetKey,
+        ...researchChartAppearance(appearance.settings, appearance.resolvedTheme),
+        followLatest: result === null && anchorTimeMs === null, onVisibleRangeChange: handleVisibleRange }} />}
   </div>;
 }

@@ -41,7 +41,7 @@ export interface MarketChartSourceDescription {
 }
 
 export interface MarketChartSourceRuntime {
-  readonly syntheticOrigin?: SyntheticOrigin;
+  readonly syntheticOrigin?: SyntheticOrigin | undefined;
   readonly mode: MarketChartSourceMode;
   readonly sourceId: string;
   readonly session: ChartSession;
@@ -60,6 +60,8 @@ export interface LiveReferenceSourceInput {
   session: ChartSession;
   datasetKey: string;
   marketData: MarketDataRuntimeContract;
+  /** Names the series for backend indicators when the reference reads an imported dataset. */
+  syntheticOrigin?: SyntheticOrigin;
   onPause?(): void;
   onResume?(): void;
   onDispose?(): void;
@@ -68,7 +70,7 @@ export interface LiveReferenceSourceInput {
 export interface LiveReferenceMarketChartSourceRuntime extends MarketChartSourceRuntime {
   readonly mode: "LIVE_REFERENCE";
   readonly executionIdentity: null;
-  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData">): void;
+  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData" | "syntheticOrigin">): void;
 }
 
 export interface FrozenSnapshotSourceInput {
@@ -207,6 +209,7 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
   private currentSession: ChartSession;
   private currentDatasetKey: string;
   private currentMarketData: MarketDataRuntimeContract;
+  private currentOrigin: SyntheticOrigin | undefined;
   private state: MarketChartSourceLifecycleState = "ACTIVE";
   private readonly onPause: (() => void) | undefined;
   private readonly onResume: (() => void) | undefined;
@@ -217,6 +220,7 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
     this.currentSession = cloneSession(input.session);
     this.currentDatasetKey = requiredText(input.datasetKey, "datasetKey");
     this.currentMarketData = input.marketData;
+    this.currentOrigin = input.syntheticOrigin;
     this.onPause = input.onPause;
     this.onResume = input.onResume;
     this.onDispose = input.onDispose;
@@ -225,13 +229,15 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
   get session() { return this.currentSession; }
   get datasetKey() { return this.currentDatasetKey; }
   get marketData() { return this.currentMarketData; }
+  get syntheticOrigin() { return this.currentOrigin; }
   get lifecycle() { return this.state; }
 
-  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData">) {
+  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData" | "syntheticOrigin">) {
     if (this.state === "DISPOSED") throw new Error("cannot update a disposed market chart source");
     this.currentSession = cloneSession(input.session);
     this.currentDatasetKey = requiredText(input.datasetKey, "datasetKey");
     this.currentMarketData = input.marketData;
+    this.currentOrigin = input.syntheticOrigin;
   }
 
   pause() {
