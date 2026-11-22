@@ -1,5 +1,11 @@
 # Frozen chart book execution
 
+> **ADR-BACKTEST-015 P6d (2026-11-23):** Pine with order-book data now runs only through
+> CandleScope matching in the Pine panel (`/backtests/external/runs`). New Host Pine engine runs
+> with `BOOK_*` modes are refused with `FIDELITY_UNSUPPORTED`, and the run capability matrix no
+> longer lists those modes for Host Pine. Runs stored before that keep executing, resuming and
+> reading under the contract below; built-in and Python strategies keep the Host book path.
+
 Advanced Pine chart research exposes `BOOK_ASSISTED`, `BOOK_DEPTH` and
 `BOOK_SAMPLED` alongside the existing BAR and aggregate-print modes. Upload an
 explicit JSON object with `symbol`, `exchange`, `market_type`, nonempty

@@ -4469,10 +4469,30 @@ class BacktestService:
         if time.monotonic() > deadline:
             raise BacktestError("BUDGET_EXCEEDED", "backtest run exceeded time ceiling")
 
+    def _refuse_host_pine_book(self, payload: Mapping[str, object], fidelity: str) -> None:
+        """ADR-BACKTEST-015 P6d: Pine with order-book data runs only through CandleScope matching.
+
+        The Pine panel's CandleScope matching (``/backtests/external/runs``) owns every book
+        fidelity for Pine. New Host Pine engine runs with frozen book data are refused;
+        runs stored before this keep executing, resuming and reading as they were.
+        """
+        if fidelity not in BOOK_MODES:
+            return
+        revision_id = str(payload.get("strategy_revision_id") or "")
+        revision = self.repository.get_strategy_revision(revision_id) if revision_id else None
+        if revision_id == PINE_ENGINE_REVISION or (
+                revision is not None and revision["base_revision_id"] == PINE_ENGINE_REVISION):
+            raise BacktestError(
+                "FIDELITY_UNSUPPORTED",
+                "Pine with order-book data runs through CandleScope matching in the Pine panel "
+                "(/backtests/external/runs); the Host Pine engine takes no book data",
+            )
+
     def _identity_from_payload(self, payload: Mapping[str, object]) -> RunIdentity:
         fidelity = str(payload.get("fidelity_mode") or "")
         if fidelity not in FIDELITY_MATRIX:
             raise BacktestError("FIDELITY_UNSUPPORTED", f"unknown fidelity {fidelity}")
+        self._refuse_host_pine_book(payload, fidelity)
         book_data_hash=None
         if fidelity in BOOK_MODES:
             _,book_data_hash=normalize_data(payload.get('execution_data'),max_events=self.settings.max_trade_events,

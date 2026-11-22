@@ -422,7 +422,11 @@ class StrategyRuns:
         languages["python"] = None if flags.get("BACKTEST_PYTHON_STRATEGY_ENABLED") else "FLAG_DISABLED"
         available = bool(flags.get("BACKTEST_ENABLED")) and bool(fidelities)
         family = _family(available, None if available else "FLAG_DISABLED")
-        rows = [_profile("host", language, authority="HOST", clock_policy="FIXED", fidelities=fidelities,
+        from app.backtest.chart_book import BOOK_MODES
+
+        # Pine book fidelities belong to CandleScope matching (the external family, ADR-BACKTEST-015 P6d).
+        rows = [_profile("host", language, authority="HOST", clock_policy="FIXED",
+                         fidelities=[mode for mode in fidelities if language != "pine" or mode not in BOOK_MODES],
                          available=available and reason is None, reason=family["reason"] or reason,
                          account_models=list(payload.get("account_models") or ()), intervals=None, cancel=True)
                 for language, reason in languages.items()]

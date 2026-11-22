@@ -205,6 +205,22 @@ def test_forward_ids_resolve_only_in_their_own_store(runtime_run, monkeypatch):
     assert unknown_phase.status_code == 400 and unknown_phase.json()["error"]["code"] == "RUN_STATE_UNKNOWN"
 
 
+def test_pine_book_fidelities_belong_to_candlescope_matching(runtime_run, monkeypatch):
+    """ADR-BACKTEST-015 P6d: the Host Pine profile lists no book fidelity; builtin and Python keep them."""
+    runtime, _ = runtime_run
+    original = runtime.service.capabilities
+    books = {"BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"}
+    monkeypatch.setattr(runtime.service, "capabilities",
+                        lambda: {**original(), "fidelity_modes": [*original()["fidelity_modes"], *sorted(books)]})
+    client, _manager = _client(runtime)
+    with client:
+        matrix = client.get("/strategy-runs/capabilities").json()
+    rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
+    assert books <= set(rows["host", "builtin"]["fidelities"]) and books <= set(rows["host", "python"]["fidelities"])
+    assert not books & set(rows["host", "pine"]["fidelities"])
+    assert "BAR_APPROX" in rows["host", "pine"]["fidelities"]
+
+
 def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     runtime, _ = runtime_run
     monkeypatch.delenv("BACKTEST_PYTHON_STRATEGY_ENABLED", raising=False)
