@@ -21,6 +21,11 @@ const REFRESH_DELAY = 15e3
 // One copy answers the readers of a start, for this long from its first reader.
 const SHARE = 60e3
 const UNREAD = 600e3
+// Every reader of a start waits for its one download, so a download that
+// receives nothing for this long is given up: the readers then ask the venue
+// themselves, with the backend's own time limits and retries. A slow download
+// that keeps receiving continues.
+const STALL = 15e3
 
 // url -> { copy: Promise<Uint8Array | undefined> | null, until: number | null }.
 // until is null before the backend's first read. An entry stays after its copy
@@ -44,9 +49,33 @@ async function stored(url) {
 async function download(url) {
   counts.downloads++
   if (OPENING_CATALOGS.includes(url)) counts.openingDownloads++
-  const response = await fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } })
-  if (!response.ok) throw Error('HTTP ' + response.status)
-  const bytes = new Uint8Array(await response.arrayBuffer())
+  const controller = new AbortController()
+  let timer
+  const waiting = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => controller.abort(Error(`No catalog data for ${STALL / 1000} s`)), STALL)
+  }
+  let bytes
+  try {
+    waiting()
+    const response = await fetch(url, {
+      credentials: 'omit',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    if (!response.ok) throw Error('HTTP ' + response.status)
+    const reader = response.body.getReader()
+    const parts = []
+    for (;;) {
+      waiting()
+      const { done, value } = await reader.read()
+      if (done) break
+      parts.push(value)
+    }
+    bytes = new Uint8Array(await new Blob(parts).arrayBuffer())
+  } finally {
+    clearTimeout(timer)
+  }
   const copy = new Response(bytes, {
     headers: { 'content-type': 'application/json', 'x-candlescope-stored': String(Date.now()) },
   })
