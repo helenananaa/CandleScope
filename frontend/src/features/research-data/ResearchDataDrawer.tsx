@@ -17,6 +17,10 @@ export function ResearchDataDrawer(props: {
   capabilities: ResearchCapabilitySummaryV1 | null;
   currentChartEnabled?: boolean;
   availableKinds?: ResearchSourceKind[];
+  /** The source kind the drawer shows; exchange history shows `exchangeSeries` instead of the library. */
+  selectedKind?: ResearchSourceKind;
+  /** The workspace's exchange history form (ADR-BACKTEST-015 P5a). */
+  exchangeSeries?: ReactNode;
   library?: ResearchDataLibraryController;
   settings: ChartSettings;
   events: readonly LocalAnalysisEvent[];
@@ -39,6 +43,8 @@ function ResearchDataDrawerBody({
   capabilities,
   currentChartEnabled = false,
   availableKinds,
+  selectedKind,
+  exchangeSeries = null,
   library,
   settings,
   events,
@@ -57,6 +63,10 @@ function ResearchDataDrawerBody({
   capabilities: ResearchCapabilitySummaryV1 | null;
   currentChartEnabled?: boolean;
   availableKinds?: ResearchSourceKind[];
+  /** The source kind the drawer shows; exchange history shows `exchangeSeries` instead of the library. */
+  selectedKind?: ResearchSourceKind;
+  /** The workspace's exchange history form (ADR-BACKTEST-015 P5a). */
+  exchangeSeries?: ReactNode;
   library?: ResearchDataLibraryController;
   settings: ChartSettings;
   events: readonly LocalAnalysisEvent[];
@@ -76,8 +86,9 @@ function ResearchDataDrawerBody({
       <div className="research-data-drawer-content" data-testid="research-data-drawer">
       {kinds.length > 1 && <div className="research-source-cards">
         {kinds.map((kind) => {
-          const runnable = kind !== "CURRENT_CHART" || currentChartEnabled;
-          const reason = kind === "CURRENT_CHART" && !runnable
+          // Exchange history needs the live local service, as a chart's history does.
+          const runnable = kind === "EXCHANGE_SERIES" ? runtimeMode === "LIVE" : kind !== "CURRENT_CHART" || currentChartEnabled;
+          const reason = (kind === "CURRENT_CHART" || kind === "EXCHANGE_SERIES") && !runnable
             ? runtimeMode === "LOCAL_OFFLINE"
               ? t("research.source.offlineLiveUnavailable")
               : t("strategy.currentChartUnbound")
@@ -89,7 +100,8 @@ function ResearchDataDrawerBody({
               key={kind}
               type="button"
               className="research-source-card"
-              disabled={kind === "CURRENT_CHART" && !runnable}
+              disabled={!runnable}
+              aria-pressed={selectedKind === undefined ? undefined : selectedKind === kind}
               onClick={() => onSelectKind(kind)}
               data-testid={`research-source-card-${kind}`}
             >
@@ -99,7 +111,7 @@ function ResearchDataDrawerBody({
           );
         })}
       </div>}
-      {library ? (
+      {selectedKind === "EXCHANGE_SERIES" ? exchangeSeries : library ? (
         <ResearchDatasetRail
           datasets={library.datasets}
           selectedId={library.selectedId}

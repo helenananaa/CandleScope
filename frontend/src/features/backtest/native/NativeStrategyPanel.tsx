@@ -66,6 +66,8 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
    * are their own list entries), and CandleScope matching is a fills-and-account setting, not an engine.
    */
   strategyList?: boolean;
+  /** The research workspace's exchange history (ADR-BACKTEST-015 P5a) fixes the range `[startMs, endMs)`: no date inputs. */
+  fixedRange?: { startMs: number; endMs: number } | undefined;
   onSelectPython?(): void;
   /** Supplied by the chart dock, which shows the strategy list in its header. */
   strategies?: NativeStrategyController;
@@ -409,8 +411,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         return ready.result.native_run;
       };
       if (automatic && automaticExecution !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier) {
-        const startTime = Date.parse(`${historyStart}T00:00:00Z`);
-        const endTime = Date.parse(`${historyEnd}T00:00:00Z`);
+        const startTime = props.fixedRange?.startMs ?? Date.parse(`${historyStart}T00:00:00Z`);
+        const endTime = props.fixedRange?.endMs ?? Date.parse(`${historyEnd}T00:00:00Z`);
         if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) throw new Error("INVALID_RANGE: select an increasing UTC date range");
         // One submission for a range: the user's run and every FOLLOW rebuild (P4a) prepare the same input.
         const submissionFor = async (range: FollowRange) => {
@@ -689,10 +691,10 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </section>
       {automatic && automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions) !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.date")}</h3>
-        <div className="strategy-settings-grid">
+        {!props.fixedRange && <div className="strategy-settings-grid">
           <Field label={t("preparation.startDate")}><Input size="sm" type="date" disabled={busy} value={historyStart} onChange={(event) => { setHistoryStart(event.target.value); save(source, parameters, automaticContexts, event.target.value, historyEnd); }} /></Field>
           <Field label={t("preparation.endDate")}><Input size="sm" type="date" disabled={busy} value={historyEnd} onChange={(event) => { setHistoryEnd(event.target.value); save(source, parameters, automaticContexts, historyStart, event.target.value); }} /></Field>
-        </div>
+        </div>}
         <NativePreparationContexts
           value={automaticContexts} onChange={(value) => { setAutomaticContexts(value); save(source, parameters, value); }} disabled={busy}
           exchange={props.session.exchange} marketType={props.session.marketType} symbol={props.session.symbol} />

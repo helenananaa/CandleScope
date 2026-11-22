@@ -368,7 +368,8 @@ export function StrategyResearchScriptPanel({
           />
           <TabPanel tabsId={paneTabsId} value={pane} className="strategy-research-pane">
             {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-            {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
+            {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART" || sourceKind === "EXCHANGE_SERIES"}
+              rangeFixed={sourceKind === "EXCHANGE_SERIES"} onChange={onConfigure} />}
             {openEditor && pane === "code" ? (
               <Suspense fallback={<p className="strategy-research-note">{t("strategy.scriptSlot")}</p>}>
                 <StrategyScriptWorkspace

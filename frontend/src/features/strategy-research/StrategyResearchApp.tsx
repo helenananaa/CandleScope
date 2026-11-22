@@ -27,6 +27,9 @@ import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.j
 import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
+import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
+import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
+import { RESEARCH_SOURCE_SCHEMA } from "../research-data/researchDataTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -257,11 +260,16 @@ export default function StrategyResearchApp({
     return;
   }, []);
 
+  // The drawer shows the library or the exchange history form (ADR-BACKTEST-015 P5a).
+  const [drawerKind, setDrawerKind] = useState<ResearchSourceKind>(() => (
+    runtime.state.source.source?.kind === "EXCHANGE_SERIES" ? "EXCHANGE_SERIES" : "IMPORTED_DATASET"));
   const onSelectKind = useCallback((kind: ResearchSourceKind) => {
     if (kind === "CURRENT_CHART") {
       return;
     }
+    setDrawerKind(kind);
     dispatch({ type: "source/libraryOpen", open: true });
+    if (kind === "EXCHANGE_SERIES") return;
     if (kind === "IMPORTED_DATASET" && library.selected !== null) {
       dispatchImportedSource(dispatch, runtime.state.source.source, library.selected);
     }
@@ -514,7 +522,18 @@ export default function StrategyResearchApp({
     >
       <ResearchDataDrawer
         open={state.source.libraryOpen}
-        availableKinds={["IMPORTED_DATASET"]}
+        availableKinds={["IMPORTED_DATASET", "EXCHANGE_SERIES"]}
+        selectedKind={drawerKind}
+        exchangeSeries={<ResearchMarketInputForm key={source?.kind === "EXCHANGE_SERIES" ? `${source.symbol}:${source.startMs}:${source.endMs}` : "new"}
+          legend={t("researchSource.exchangeSeries")} submitLabel={t("researchSource.use")}
+          initial={source?.kind === "EXCHANGE_SERIES" ? { session: { exchange: source.exchange, marketType: source.marketType,
+            symbol: source.symbol, interval: source.interval }, startMs: source.startMs, endMs: source.endMs } : null}
+          onSave={(input) => {
+            dispatch({ type: "source/select", source: { schemaVersion: RESEARCH_SOURCE_SCHEMA, kind: "EXCHANGE_SERIES",
+              exchange: input.session.exchange, marketType: input.session.marketType, symbol: input.session.symbol,
+              interval: input.session.interval, startMs: input.startMs, endMs: input.endMs } });
+            dispatch({ type: "source/libraryOpen", open: false });
+          }} />}
         runtimeMode={runtime.runtimeMode}
         capabilities={capabilities}
         library={library}
@@ -570,6 +589,7 @@ export default function StrategyResearchApp({
           }}
           key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun} onStatusChange={setNativeStatus}
           dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
+          fixedRange={source?.kind === "EXCHANGE_SERIES" ? { startMs: source.startMs, endMs: source.endMs } : undefined}
           onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
             requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
           } }))} />
@@ -643,7 +663,11 @@ export default function StrategyResearchApp({
     </div>
   </Suspense> : null : (
     <>
-    {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
+    {researchRun.preparation && <div data-testid="research-preparation"><InlineAlert
+      title={`${t("preparation.title")} · ${researchRun.preparation.completed}/${researchRun.preparation.total}`}>
+      <PreparationWaiting job={researchRun.preparation} />
+    </InlineAlert></div>}
+    {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={`return:${researchRun.result.run.run_id}`}
       manager={researchRun.historyManager} runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
         : researchRun.sourceResult && source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
@@ -745,7 +769,9 @@ export default function StrategyResearchApp({
     hostStatus: nativeMode ? undefined : researchRun.error ? "FAILED" as const : researchRun.runStatus,
     source,
     ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
-      : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),
+      : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` }
+        : source?.kind === "EXCHANGE_SERIES" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange} · ${
+          new Date(source.startMs).toISOString().slice(0, 16).replace("T", " ")} – ${new Date(source.endMs).toISOString().slice(0, 16).replace("T", " ")} UTC` } : {}),
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
     marketBatchAvailable,
@@ -877,9 +903,10 @@ export default function StrategyResearchApp({
         toolbar={null}
         exportOverlay={null}
         chart={
-          source?.kind === "CURRENT_CHART"
+          source?.kind === "CURRENT_CHART" || source?.kind === "EXCHANGE_SERIES"
             ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} overlaySource={researchOverlay.source} /></Suspense></MarketDataWorkspaceProvider>
+              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} overlaySource={researchOverlay.source}
+                anchorTimeMs={source.kind === "EXCHANGE_SERIES" ? source.endMs - 1 : null} /></Suspense></MarketDataWorkspaceProvider>
               : <StrategyResearchCurrentChart />
             : (
               <StrategyResearchFirstOpen

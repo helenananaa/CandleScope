@@ -14,10 +14,12 @@ import { EmptyState, InlineAlert } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import type { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
 
-export default function StrategyResearchLiveChart({ session, result, focusRequest, overlaySource = null }: {
+export default function StrategyResearchLiveChart({ session, result, focusRequest, overlaySource = null, anchorTimeMs = null }: {
   session: ChartSession; result: ChartStrategyResultBundle | null; focusRequest: LocalAnalysisFocusRequest | null;
   /** The research run drawn on this chart (ADR-BACKTEST-015 P1c). */
   overlaySource?: StrategyOverlaySource | null;
+  /** Exchange history chosen in the workspace (P5a): before a result, open here instead of following the latest bar. */
+  anchorTimeMs?: number | null;
 }) {
   const surface = useChartSurfaceRuntime();
   const appearance = useChartSettingsRuntime();
@@ -33,6 +35,24 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
   useEffect(() => { if (focusRequest) surface.ref.current?.setLinkedVisibleTimeAnchor(focusRequest.time); }, [focusRequest, surface.ref]);
   const source = frozen ?? live;
   const seriesStore = source.marketData.view.seriesStore;
+  const chartReady = source.marketData.status.activeChartReady && !!seriesStore;
+  const anchored = useRef<number | null>(null);
+  const seek = marketData.actions.seekToTime;
+  const { centerVisibleTime, subscribeLinkedViewportReady } = surface.actions;
+  useEffect(() => {
+    if (anchorTimeMs === null || result !== null || !chartReady || !seek || anchored.current === anchorTimeMs) return undefined;
+    anchored.current = anchorTimeMs;
+    let cancelled = false;
+    let unsubscribe = () => {};
+    void seek(anchorTimeMs).then((located) => {
+      if (cancelled || located.status !== "located") return;
+      // The surface centers a time only once it has painted the loaded window.
+      const position = () => { if (centerVisibleTime(located.actualTimeMs / 1_000)) unsubscribe(); };
+      unsubscribe = subscribeLinkedViewportReady(position);
+      position();
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, [anchorTimeMs, centerVisibleTime, chartReady, result, seek, subscribeLinkedViewportReady]);
   useEffect(() => {
     overlaySource?.setSeries(seriesStore ?? null);
     return () => overlaySource?.setSeries(null);
@@ -62,7 +82,7 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
       kagiReversalMode={appearance.settings.kagiReversalMode} kagiAtrLength={appearance.settings.kagiAtrLength} kagiReversalAmount={appearance.settings.kagiReversalAmount}
       lineBreakNumberOfLines={appearance.settings.lineBreakNumberOfLines}
       upColor={appearance.settings.upColor} downColor={appearance.settings.downColor} chartType={appearance.settings.chartType}
-      theme={appearance.resolvedTheme} customBg={appearance.settings.customBg} followLatest={result === null}
+      theme={appearance.resolvedTheme} customBg={appearance.settings.customBg} followLatest={result === null && anchorTimeMs === null}
       canLoadMoreLeft={source.marketData.status.canLoadMoreLeft} />}
   </div>;
 }
