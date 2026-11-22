@@ -164,6 +164,7 @@
     "check:styles": "node scripts/check-style-metrics.mjs",
     "check:css-layers": "node scripts/check-css-layers.mjs",
     "css:cascade": "node scripts/css-cascade-check.mjs",
+    "prebuild:web": "npm ci --prefix browser --ignore-scripts --no-audit --no-fund",
     "build:web": "vite build --config browser/host.config.mjs"
   },
   "dependencies": {

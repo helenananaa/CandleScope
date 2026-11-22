@@ -2,12 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, mkdirSync, rmSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const frontend = resolve(here, '..')
+const outDir = resolve(frontend, process.env.CANDLE_BROWSER_OUT || 'dist-web')
+
+// Cloudflare serves the build as a Worker's static assets (wrangler.jsonc).
+// HTML pages and the service worker keep Cloudflare's default Cache-Control,
+// which revalidates on every load; the engine and asset folders are named by
+// their contents. html_handling "none" keeps every page at its .html address,
+// which the pages link to and the shell mirrors, so the root is served from
+// index.html here.
+const HEADERS = `/engine/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+`
+const REDIRECTS = `/ /index.html 200
+`
 const runtime = resolve(here, 'node_modules/pyodide')
 const pages = ['index', 'replay', 'strategy', 'local', 'backtest']
 const appVersion = readFileSync(resolve(frontend, '../backend/app/core/version.py'), 'utf8').match(
@@ -73,11 +91,17 @@ export default defineConfig({
           fileName: 'workspace-service.mjs',
           source: readFileSync(resolve(here, 'workspace-service.mjs')),
         })
+        this.emitFile({ type: 'asset', fileName: '_headers', source: HEADERS })
+        this.emitFile({ type: 'asset', fileName: '_redirects', source: REDIRECTS })
+      },
+      // public/design-previews holds design mockups for development only.
+      closeBundle() {
+        rmSync(resolve(outDir, 'design-previews'), { recursive: true, force: true })
       },
     },
   ],
   build: {
-    outDir: process.env.CANDLE_BROWSER_OUT || 'dist-web',
+    outDir,
     emptyOutDir: true,
     rollupOptions: {
       input: Object.fromEntries(pages.map((page) => [page, resolve(frontend, page + '.html')])),

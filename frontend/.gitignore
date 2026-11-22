@@ -26,4 +26,5 @@ desktop-dist
 *.sw?
 /dist-web/
 /browser/.host-cache/
+/.wrangler/
 /dist-host/
