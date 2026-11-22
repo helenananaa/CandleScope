@@ -676,6 +676,7 @@ export default function StrategyResearchApp({
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
       sharedResult={researchOverlay.shown?.run.family === "host" ? researchOverlay.shown : null}
+      manager={researchRun.historyManager}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
       barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}

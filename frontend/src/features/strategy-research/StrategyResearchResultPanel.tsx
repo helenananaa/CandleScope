@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
+import { StrategyResearchRunDetails } from "./StrategyResearchRunDetails.js";
 import { RunResultSummary, RunResultTradeList } from "../backtest/runResult/RunResultViews.js";
 import type { ShownRunResult } from "../backtest/runResult/useStrategyRunOverlay.js";
 import { CHART_RUN_RESULT_VIEWS_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
@@ -30,7 +31,10 @@ export function StrategyResearchResultPanel({
   onLocateTrade,
   dataResolution,
   sharedResult = null,
+  manager = null,
 }: {
+  /** Loads the run's details (signal trace, export, replay review); without it the details tab is hidden. */
+  manager?: ComponentProps<typeof StrategyResearchRunDetails>["manager"] | null;
   /** The run-result/1 of this run, loaded for the research overlay; the trades tab reads it (behind a flag). */
   sharedResult?: ShownRunResult | null;
   result: ChartStrategyResultBundle | null;
@@ -46,7 +50,7 @@ export function StrategyResearchResultPanel({
   dataResolution?: ChartContextResolution | null;
 }) {
   const locale = useLocale();
-  const [activeTab, setActiveTab] = useState<"overview" | "trades">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "trades" | "details">("overview");
   const [explanation, setExplanation] = useState<TradeExplanationSelection | null>(null);
   if (error !== null) {
     return <InlineAlert tone="danger">{error}</InlineAlert>;
@@ -111,6 +115,7 @@ export function StrategyResearchResultPanel({
           tabs={[
             { value: "overview", label: t("chartTester.tab.overview") },
             { value: "trades", label: t("chartTester.tab.trades") },
+            ...(manager ? [{ value: "details" as const, label: t("researchResult.details") }] : []),
           ]}
         />
         <span className="strategy-research-result-meta">
@@ -124,7 +129,8 @@ export function StrategyResearchResultPanel({
         </span>
       </div>
       <TabPanel tabsId={tabsId} value={activeTab} className="strategy-research-result-body">
-      {activeTab === "overview" ? <ChartStrategyResultOverview
+      {activeTab === "details" && manager ? <StrategyResearchRunDetails key={result.run.run_id} result={result} manager={manager} />
+        : activeTab === "overview" ? <ChartStrategyResultOverview
         result={result}
         stale={stale}
         onOpenTrades={() => setActiveTab("trades")}

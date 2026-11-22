@@ -39,7 +39,8 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
     | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
-    | "retryStrategyExperimentMember" | "watchStrategyExperiment">>;
+    | "retryStrategyExperimentMember" | "watchStrategyExperiment"
+    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -224,6 +225,48 @@ export class StrategyDataManager {
       } finally {
         this.streams -= 1;
       }
+    });
+  }
+
+  /** The backend's settings for fixed runs (feature flags such as the replay review bridge). */
+  loadBacktestCapabilities(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.capabilities) unavailable();
+      return this.api.capabilities(owned);
+    });
+  }
+
+  /** The server's export of a fixed run: its configuration, report and hashes, as one JSON document. */
+  exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.exportRun) unavailable();
+      return this.api.exportRun(runId, owned);
+    });
+  }
+
+  /** A page of a fixed run's recorded strategy decisions, oldest first. */
+  loadSignalTrace(runId: string, after = 0, limit = 1_000, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getSignalTrace) unavailable();
+      return this.api.getSignalTrace(runId, after, limit, owned);
+    });
+  }
+
+  /**
+   * A blind review of a completed run in training replay (ADR-BACKTEST-001): the server creates a
+   * training session over the run's window that shares only the fixed data and a read-only result.
+   */
+  createReviewBridge(runId: string, startTimeMs: number, endTimeMs: number, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createReviewBridge) unavailable();
+      return this.api.createReviewBridge(runId, startTimeMs, endTimeMs, owned);
+    });
+  }
+
+  revealReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.revealReviewBridge) unavailable();
+      return this.api.revealReviewBridge(bridgeId, owned);
     });
   }
 
