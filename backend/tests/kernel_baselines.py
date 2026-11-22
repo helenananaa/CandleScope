@@ -1,8 +1,8 @@
 """P6a kernel baselines for ADR-BACKTEST-015 (matching kernel convergence).
 
-P6 folds the three Pine-specific bar kernels (``PineBarKernel``, ``PineChartBarKernel``,
-``PineV2BarKernel``) into the one Host bar kernel. Its gate is that every account
-model x fill clock keeps its P0 digests. The path oracles (``strategy_run_oracles``)
+P6 folded the three Pine-specific bar kernels into the one Host bar kernel, which now
+declares its fill clock (``SimulationKernel.bar_clock``). Its gate is that every account
+model x fill clock keeps its P0 digests; P6a computed them with the separate kernels. The path oracles (``strategy_run_oracles``)
 cover one account model per run path; these baselines cover the kernels themselves:
 every bar-family fill clock with every account model it accepts, one scripted order
 flow (market entries, OCO brackets, stop-limit breakouts, resting limits, shorts on
@@ -27,10 +27,7 @@ from app.backtest.identity import canonical_json, sha256_hex
 from app.market_dataset.snapshot import MarketEvent
 from app.simulation.execution_realism import BAR_PATH_SCENARIO, EXECUTION_REALISM_V2, PINE_BAR_PATH_SCENARIO
 from app.simulation.kernel import SimulationKernel
-from app.simulation.ohlc_path import PINE_CHART, PINE_PATH, PINE_V2
-from app.simulation.pine_bar_kernel import PineBarKernel
-from app.simulation.pine_chart_kernel import PineChartBarKernel
-from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_PATH, PINE_V2
 from tests.strategy_run_oracles import UPDATE_ENV, bars, scenario
 
 SCHEMA = "candlescope.kernel-baseline/1"
@@ -45,19 +42,17 @@ SPOT = "SPOT_CASH_V1"
 REALISM = {"execution_model_revision": EXECUTION_REALISM_V2, "participation_rate": Decimal("0.05"),
            "equity_curve_event_interval": 100}
 
-# clock -> (kernel class, extra settings, driver); each clock runs with every account model it accepts.
-CLOCKS: dict[str, tuple[type, dict[str, Any], str]] = {
-    "bar-worst-case": (SimulationKernel, {}, "bar"),
-    "bar-worst-case-realism": (SimulationKernel, {**REALISM, "bar_path_scenario": BAR_PATH_SCENARIO}, "bar"),
-    "pine-ohlc-path": (PineBarKernel, {}, "path"),
-    "pine-chart-bar": (PineChartBarKernel, {}, "chart"),
-    "pine-chart-bar-on-close": (PineChartBarKernel, {"process_orders_on_close": True}, "chart"),
-    "pine-v2-path": (PineV2BarKernel, {}, "chart"),
-    "pine-v2-path-realism": (PineV2BarKernel, {**REALISM, "bar_path_scenario": PINE_BAR_PATH_SCENARIO}, "chart"),
+# name -> (Host bar kernel clock, extra settings, driver); each runs with every account model it accepts.
+CLOCKS: dict[str, tuple[str, dict[str, Any], str]] = {
+    "bar-worst-case": (BAR_CLOCK, {}, "bar"),
+    "bar-worst-case-realism": (BAR_CLOCK, {**REALISM, "bar_path_scenario": BAR_PATH_SCENARIO}, "bar"),
+    "pine-ohlc-path": (PINE_PATH, {}, "path"),
+    "pine-chart-bar": (PINE_CHART, {}, "chart"),
+    "pine-chart-bar-on-close": (PINE_CHART, {"process_orders_on_close": True}, "chart"),
+    "pine-v2-path": (PINE_V2, {}, "chart"),
+    "pine-v2-path-realism": (PINE_V2, {**REALISM, "bar_path_scenario": PINE_BAR_PATH_SCENARIO}, "chart"),
 }
 ACCOUNT_MODELS = (PERP, SPOT, PERP_V2)
-# P6b: the Host bar kernel runs every Pine clock itself; the old class names only set the clock.
-HOST_CLOCK = {PineBarKernel: PINE_PATH, PineChartBarKernel: PINE_CHART, PineV2BarKernel: PINE_V2}
 
 
 def _order(kind: str, side: str, **fields: Any) -> dict[str, Any]:
@@ -168,19 +163,16 @@ def _drive(kernel: Any, driver: str, strategy: Callable, snapshots: list[Any]) -
     return kernel.result()
 
 
-def make_kernel(clock: str, account_model: str, *, host: bool = False) -> Any:
-    """The clock's kernel; with ``host`` the Host bar kernel itself, on the clock the old class name sets."""
-    kernel_type, settings, _driver = CLOCKS[clock]
-    if host and kernel_type in HOST_CLOCK:
-        return SimulationKernel(account_model=account_model, bar_clock=HOST_CLOCK[kernel_type], **settings)
-    return kernel_type(account_model=account_model, **settings)
+def make_kernel(clock: str, account_model: str) -> SimulationKernel:
+    bar_clock, settings, _driver = CLOCKS[clock]
+    return SimulationKernel(account_model=account_model, bar_clock=bar_clock, **settings)
 
 
-def baseline(clock: str, account_model: str, *, host: bool = False) -> dict[str, Any] | None:
+def baseline(clock: str, account_model: str) -> dict[str, Any]:
     """One kernel run, or a refusal when the clock refuses the account model (refusals are pinned too)."""
-    kernel_type, _settings, driver = CLOCKS[clock]
+    driver = CLOCKS[clock][2]
     try:
-        kernel = make_kernel(clock, account_model, host=host)
+        kernel = make_kernel(clock, account_model)
     except Exception as exc:  # noqa: BLE001 - which combinations a clock refuses is itself baseline data
         return {"refused": f"{type(exc).__name__}: {getattr(exc, 'code', '')}".rstrip(": ")}
     snapshots: list[Any] = []
@@ -189,7 +181,7 @@ def baseline(clock: str, account_model: str, *, host: bool = False) -> dict[str,
     fills = [_plain(fill) for fill in result.fills]
     return {
         "summary": {
-            "kernel": kernel_type.__name__,
+            "bar_clock": kernel.bar_clock,
             "fill_policy": kernel.fill_policy,
             "orders": len(result.orders),
             "fills": len(fills),
@@ -217,13 +209,13 @@ def case_name(clock: str, account_model: str) -> str:
     return f"{clock}.{account_model.lower().replace('_', '-')}"
 
 
-def build(clock: str, *, host: bool = False) -> dict[str, Any]:
+def build(clock: str) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "clock": clock,
         "scenario": scenario(),
         "checkpoint_bar": CHECKPOINT_BAR,
-        "accounts": {case_name(clock, model): baseline(clock, model, host=host) for model in ACCOUNT_MODELS},
+        "accounts": {case_name(clock, model): baseline(clock, model) for model in ACCOUNT_MODELS},
     }
 
 

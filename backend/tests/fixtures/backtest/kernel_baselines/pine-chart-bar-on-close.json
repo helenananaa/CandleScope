@@ -14,6 +14,7 @@
       },
       "summary": {
         "ambiguity": 0,
+        "bar_clock": "PINE_CHART",
         "fill_policy": "PINE_OHLC_PATH_V1",
         "fill_rows": [
           "359999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
@@ -47,7 +48,6 @@
         ],
         "fills": 28,
         "final_equity": "9985.801449999999999999999993",
-        "kernel": "PineChartBarKernel",
         "orders": 57,
         "rejected": 0
       }
@@ -69,6 +69,7 @@
       },
       "summary": {
         "ambiguity": 0,
+        "bar_clock": "PINE_CHART",
         "fill_policy": "PINE_OHLC_PATH_V1",
         "fill_rows": [
           "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
@@ -97,7 +98,6 @@
         ],
         "fills": 23,
         "final_equity": "9986.091725",
-        "kernel": "PineChartBarKernel",
         "orders": 29,
         "rejected": 1
       }

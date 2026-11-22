@@ -6,7 +6,7 @@ import time
 from .errors import BacktestError
 from .pine_workbench import bar_event, check_risk_response
 from .strategy.pine_schedule import CONTRACT as SCHEDULE_CONTRACT
-from app.simulation.pine_bar_kernel import CONTRACT
+from app.simulation.ohlc_path import PATH_CONTRACT as CONTRACT
 
 
 def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, state=None, target=None):

@@ -5874,15 +5874,15 @@ def _strategy_execution_reporter(session):
 
 
 def _build_bar_kernel(config, execution_reporter):
-    """One BAR kernel configuration for fixed and continuing strategy execution."""
-    bar_kernel_type = SimulationKernel
-    if config.get("pine_bar_path_contract"):
-        from app.simulation.pine_chart_kernel import PineChartBarKernel
-        bar_kernel_type = PineChartBarKernel
-        if config.get("pine_v2_bar_contract"):
-            from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
-            bar_kernel_type = PineV2BarKernel
-    kernel = bar_kernel_type(
+    """One BAR kernel configuration for fixed and continuing strategy execution.
+
+    A Pine script with a frozen path contract runs on the Host bar kernel's chart clock, or
+    its V2 path clock when the V2 contract is frozen too (ADR-BACKTEST-015 P6).
+    """
+    from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_V2
+    bar_clock = (PINE_V2 if config.get("pine_v2_bar_contract") else PINE_CHART) if config.get("pine_bar_path_contract") else BAR_CLOCK
+    kernel = SimulationKernel(
+        bar_clock=bar_clock,
         process_orders_on_close=bool(config.get("pine_process_on_close")),
         account_model=str(
             config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"

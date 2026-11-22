@@ -14,6 +14,7 @@
       },
       "summary": {
         "ambiguity": 3,
+        "bar_clock": "BAR",
         "fill_policy": "BAR_NEXT_BAR_WORST_CASE_V1",
         "fill_rows": [
           "419999 SELL 0.60 @ 101.9898 NEXT_BAR_OPEN",
@@ -74,7 +75,6 @@
         ],
         "fills": 55,
         "final_equity": "10010.78376500000000000000001",
-        "kernel": "SimulationKernel",
         "orders": 57,
         "rejected": 0
       }
@@ -93,6 +93,7 @@
       },
       "summary": {
         "ambiguity": 3,
+        "bar_clock": "BAR",
         "fill_policy": "BAR_NEXT_BAR_WORST_CASE_V1",
         "fill_rows": [
           "419999 SELL 0.60 @ 101.9898 NEXT_BAR_OPEN",
@@ -153,7 +154,6 @@
         ],
         "fills": 55,
         "final_equity": "10010.77960500",
-        "kernel": "SimulationKernel",
         "orders": 57,
         "rejected": 0
       }
@@ -172,6 +172,7 @@
       },
       "summary": {
         "ambiguity": 0,
+        "bar_clock": "BAR",
         "fill_policy": "BAR_NEXT_BAR_WORST_CASE_V1",
         "fill_rows": [
           "479999 BUY 0.60 @ 98.00 LIMIT_TOUCH",
@@ -219,7 +220,6 @@
         ],
         "fills": 42,
         "final_equity": "9940.32036500",
-        "kernel": "SimulationKernel",
         "orders": 26,
         "rejected": 4
       }

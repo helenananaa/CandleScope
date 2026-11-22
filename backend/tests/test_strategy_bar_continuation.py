@@ -9,7 +9,7 @@ from app.market_dataset.snapshot import MarketDatasetError, MarketEvent
 from app.simulation.kernel import SimulationKernel
 from app.backtest.identity import canonical_json
 from app.simulation.execution_realism import EXECUTION_REALISM_V2, BAR_PATH_SCENARIO
-from app.simulation.pine_bar_kernel import PineBarKernel
+from app.simulation.ohlc_path import PINE_PATH
 
 
 def events():
@@ -130,6 +130,6 @@ def test_other_execution_clocks_and_missing_closing_handler_fail_before_input():
         raise AssertionError("Unsupported execution must reject before consuming input")
         yield
     with pytest.raises(MarketDatasetError, match="FIDELITY_UNSUPPORTED"):
-        PineBarKernel().advance(unread(), strategy([]))
+        SimulationKernel(bar_clock=PINE_PATH).advance(unread(), strategy([]))
     with pytest.raises(MarketDatasetError, match="closing-tick handler"):
         make_kernel(closing=True).advance(unread(), strategy([]))

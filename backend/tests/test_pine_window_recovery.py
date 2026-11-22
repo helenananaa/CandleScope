@@ -70,12 +70,14 @@ def test_recovery_preserves_only_a_sealed_canonical_prefix_and_never_rematches_i
         assert saved["input_skip"]==2 and saved["cursor"]==1
         assert any(item["command"]["operation"]=="stream_rebase" and item["command"]["seal"]
                    for item in saved["journal"])
-        from app.simulation.pine_chart_kernel import PineChartBarKernel
-        fill=PineChartBarKernel._fill
+        from app.simulation.kernel import SimulationKernel
+        from app.simulation.ohlc_path import PINE_CHART
+        fill=SimulationKernel._fill
         def guard(kernel,*args,**kwargs):
-            assert kernel._last_event.event_time_ms>179999,"restored ledger matched an old event"
+            if kernel.bar_clock==PINE_CHART:
+                assert kernel._last_event.event_time_ms>179999,"restored ledger matched an old event"
             return fill(kernel,*args,**kwargs)
-        monkeypatch.setattr(PineChartBarKernel,"_fill",guard)
+        monkeypatch.setattr(SimulationKernel,"_fill",guard)
     assert service.requeue_interrupted_run(run["run_id"],expected_generation=1,now_ms=8)
     recovered=execute(service,value,"window-interrupted",run=run)
     for name in ("fills","orders","pine_orders","pine_risk_stops"):

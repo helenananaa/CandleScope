@@ -1,12 +1,13 @@
 """Historical observations settle only their own market orders at that vertex."""
 from decimal import Decimal
 
-from app.simulation.pine_bar_kernel import PineBarKernel
 from tests.test_pine_bar_kernel import bar, enqueue
+from app.simulation.kernel import SimulationKernel
+from app.simulation.ohlc_path import PINE_PATH
 
 
 def test_vertex_hook_ignores_crossings_and_market_feedback_is_visible_at_the_next_observation():
-    kernel=PineBarKernel(slippage_bps=Decimal(0),taker_fee_bps=Decimal(0))
+    kernel=SimulationKernel(bar_clock=PINE_PATH, slippage_bps=Decimal(0),taker_fee_bps=Decimal(0))
     observed=[]
     def observe(point,index):
         observed.append((index,Decimal(point.payload["price"]),kernel.account.position_qty))
@@ -21,7 +22,7 @@ def test_vertex_hook_ignores_crossings_and_market_feedback_is_visible_at_the_nex
 
 
 def test_new_price_order_and_callback_market_do_not_gain_same_vertex_eligibility():
-    kernel=PineBarKernel(slippage_bps=Decimal(0))
+    kernel=SimulationKernel(bar_clock=PINE_PATH, slippage_bps=Decimal(0))
     def report(value):
         if value.get("fill") and len(kernel.fills)==1:
             enqueue(kernel,"MARKET","SELL",reduce_only=True)
@@ -38,7 +39,7 @@ def test_new_price_order_and_callback_market_do_not_gain_same_vertex_eligibility
 
 
 def test_final_observation_market_waits_for_the_next_open():
-    kernel=PineBarKernel(slippage_bps=Decimal(0))
+    kernel=SimulationKernel(bar_clock=PINE_PATH, slippage_bps=Decimal(0))
     def observe(point,index):
         if index==3: enqueue(kernel,"MARKET")
         else: kernel.match_observation_markets(point)

@@ -232,7 +232,7 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
     from .ohlc_path import CHART_CLOCKS
     if kernel.bar_clock in CHART_CLOCKS:
         # Chart clocks replay on their own path; the OHLC path clock replays as BAR, as before.
-        kind = type(kernel)
+        kind = SimulationKernel
         common["bar_clock"] = kernel.bar_clock
     return kind(
         price_tick=kernel.price_tick,

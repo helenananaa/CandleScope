@@ -11,9 +11,8 @@ from app.backtest.external_orders import ExternalOrders
 from app.backtest.pine_history_tick_clock import HistoryTickClock
 from app.backtest.pine_stream import PineStream
 from app.backtest.pine_workbench import bar_event
-from app.simulation.pine_bar_kernel import PineBarKernel
-from app.simulation.pine_chart_kernel import PineChartBarKernel
-from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+from app.simulation.kernel import SimulationKernel
+from app.simulation.ohlc_path import PINE_CHART, PINE_PATH, PINE_V2
 from tests.test_pine_stream import runtime_for
 
 pytestmark=pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PINE_PYTHON"),reason="requires installed streaming runtime")
@@ -38,21 +37,21 @@ plot(ta.cum(volume))
 '''
 
 
-@pytest.mark.parametrize("kernel_type",[PineBarKernel,PineChartBarKernel,PineV2BarKernel])
-def test_actual_stream_clock_matches_native_tick_observations_without_duplicate_fill_executions(kernel_type):
+@pytest.mark.parametrize("bar_clock",[PINE_PATH,PINE_CHART,PINE_V2])
+def test_actual_stream_clock_matches_native_tick_observations_without_duplicate_fill_executions(bar_clock):
     runtime,wire=runtime_for("external_strategy")
     bars=[dict(time=i*60,open=100,high=110,low=80,close=105,volume=100) for i in range(2)]
     opening=dict(source=SOURCE,parameters={},context=dict(symbol="A",timeframe="1"),historical_plan=bars)
     frozen={**wire,**opening,"bars":bars,"interval":"1m"}
     cancel=threading.Event()
     stream=PineStream(runtime,wire,opening,cancel)
-    kernel=kernel_type(initial_balance=Decimal(1000),slippage_bps=Decimal(0),taker_fee_bps=Decimal(0))
+    kernel=SimulationKernel(bar_clock=bar_clock,initial_balance=Decimal(1000),slippage_bps=Decimal(0),taker_fee_bps=Decimal(0))
     orders=ExternalOrders(kernel,fidelity="PINE_BAR_PATH")
     clock=HistoryTickClock(stream,kernel,orders,frozen)
     events=[bar_event(frozen,i,i+1) for i in range(2)]
     callbacks=[]
     try:
-        if kernel_type is PineBarKernel:
+        if bar_clock==PINE_PATH:
             for event in events:
                 kernel.walk_bar(event,lambda _,event=event:clock.close(event),
                                 on_vertex=lambda point,index,event=event:clock.vertex(event,point,index))
