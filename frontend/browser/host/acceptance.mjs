@@ -142,6 +142,8 @@ try {
     assert.equal(stats.boot, context.keepsSnapshots ? 'snapshot' : 'import')
     // Cache Storage that keeps the snapshot keeps the catalog of the first visit.
     if (context.keepsSnapshots) assert.ok(stats.catalog.stored >= 1, JSON.stringify(stats.catalog))
+    // ...and the engine files, which this start did not download again.
+    if (context.keepsSnapshots) assert.equal(stats.files.downloaded, 0, JSON.stringify(stats.files))
     console.log(
       'After a complete browser exit, the engine ' +
         (context.keepsSnapshots ? 'restored its snapshot' : 'started again') +

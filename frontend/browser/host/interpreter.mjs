@@ -15,9 +15,67 @@ import createPyodideModule from './pyodide.asm.mjs'
 import { loadPyodide } from './pyodide.mjs'
 
 const here = new URL('./', import.meta.url)
-export const SNAPSHOT_CACHE = 'candlescope-engine'
+// Cache Storage of the engine: its large files and its snapshot.
+const ENGINE_CACHE = 'candlescope-engine'
 // The engine folder is named by its contents, so its snapshot is too.
 export const snapshotKey = new URL('interpreter-snapshot', here).href
+
+// The engine's large files are kept in Cache Storage rather than left to the
+// HTTP cache, which Safari did not use for what workers download: every start,
+// and the snapshot worker's, downloaded all of them again. The folder is named
+// by its contents, so a kept copy is never stale. Pyodide fetches its runtime,
+// standard library and lock file with the global fetch, which therefore takes
+// these four from the cache. The module scripts (about 1.3 MB) stay with the
+// HTTP cache.
+const KEPT_FILES = ['backend.zip', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'].map(
+  (name) => new URL(name, here).href
+)
+const fileCounts = { kept: 0, downloaded: 0 }
+export const engineFileStats = () => ({ ...fileCounts })
+const networkFetch = globalThis.fetch.bind(globalThis)
+
+// Entries of other engine builds can never be used here.
+async function forgetOtherBuilds(cache) {
+  for (const request of await cache.keys()) if (!request.url.startsWith(here.href)) await cache.delete(request)
+}
+
+async function engineFile(url) {
+  let cache
+  try {
+    cache = await caches.open(ENGINE_CACHE)
+    const kept = await cache.match(url)
+    if (kept) {
+      fileCounts.kept++
+      return kept
+    }
+  } catch {
+    cache = null // a private window may refuse Cache Storage
+  }
+  fileCounts.downloaded++
+  const response = await networkFetch(url)
+  // A host that answers a missing file with its HTML page must not leave that
+  // page in place of the file.
+  if (cache && response.ok && !response.headers.get('content-type')?.startsWith('text/html'))
+    cache
+      .put(url, response.clone())
+      .then(() => forgetOtherBuilds(cache))
+      .catch((error) => console.warn('Could not keep ' + url, error))
+  return response
+}
+
+// A start that failed drops this build's kept files, so that a damaged copy
+// cannot fail every later start.
+export async function forgetEngineFiles() {
+  const cache = await caches.open(ENGINE_CACHE)
+  for (const url of KEPT_FILES) await cache.delete(url)
+}
+
+globalThis.fetch = (input, init) => {
+  const url = typeof input === 'string' ? new URL(input, location.href).href : input instanceof URL ? input.href : null
+  return url && KEPT_FILES.includes(url) && !init?.integrity && (init?.method ?? 'GET') === 'GET'
+    ? engineFile(url)
+    : networkFetch(input, init)
+}
 export const IMPORT_BACKEND = `
 import glob, sys
 sys.dont_write_bytecode = True
@@ -75,7 +133,7 @@ export function loadBackend() {
   let found
   const libraries = new Promise((resolve, reject) => (found = { resolve, reject }))
   const files = (async () => {
-    const response = await fetch(new URL('backend.zip', here))
+    const response = await engineFile(new URL('backend.zip', here).href)
     if (!response.ok) throw Error('Python backend download failed')
     let wanted = null
     const compiled = new Map()
@@ -283,19 +341,18 @@ function restoreLayout(module, layout) {
 
 // null: none yet; { disabled }: this build could not restore one.
 export async function readSnapshot() {
-  const response = await (await caches.open(SNAPSHOT_CACHE)).match(snapshotKey)
+  const response = await (await caches.open(ENGINE_CACHE)).match(snapshotKey)
   if (!response) return null
   const layout = JSON.parse(response.headers.get('x-candlescope-layout'))
   if (!layout) return { disabled: true }
   return { layout, memory: new Uint8Array(await response.arrayBuffer()) }
 }
 export async function hasSnapshot() {
-  return Boolean(await (await caches.open(SNAPSHOT_CACHE)).match(snapshotKey))
+  return Boolean(await (await caches.open(ENGINE_CACHE)).match(snapshotKey))
 }
 export async function storeSnapshot(memory, layout) {
-  const cache = await caches.open(SNAPSHOT_CACHE)
-  // Snapshots of other engine builds can never be restored here.
-  for (const request of await cache.keys()) if (request.url !== snapshotKey) await cache.delete(request)
+  const cache = await caches.open(ENGINE_CACHE)
+  await forgetOtherBuilds(cache)
   await cache.put(
     snapshotKey,
     new Response(memory, {
@@ -304,5 +361,5 @@ export async function storeSnapshot(memory, layout) {
   )
 }
 export async function disableSnapshot() {
-  await (await caches.open(SNAPSHOT_CACHE)).put(snapshotKey, new Response('', { headers: { 'x-candlescope-layout': 'null' } }))
+  await (await caches.open(ENGINE_CACHE)).put(snapshotKey, new Response('', { headers: { 'x-candlescope-layout': 'null' } }))
 }

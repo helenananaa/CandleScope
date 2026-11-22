@@ -33,6 +33,7 @@ export function engineStats(frame) {
             boot: data.boot,
             snapshot: data.snapshot,
             catalog: data.catalog,
+            files: data.files,
             sockets: data.sockets,
             tasks: data.tasks,
           })

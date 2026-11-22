@@ -1,5 +1,14 @@
 import { catalogStats, forgetCatalogs, prefetchCatalogs, readCatalog } from './catalog.mjs'
-import { IMPORT_BACKEND, disableSnapshot, hasSnapshot, interpreter, loadBackend, readSnapshot } from './interpreter.mjs'
+import {
+  IMPORT_BACKEND,
+  disableSnapshot,
+  engineFileStats,
+  forgetEngineFiles,
+  hasSnapshot,
+  interpreter,
+  loadBackend,
+  readSnapshot,
+} from './interpreter.mjs'
 import { openStore } from './store.mjs'
 
 // The backend's first requests wait for the opening market's catalog. Load it
@@ -79,7 +88,18 @@ function persist(store) {
   return task
 }
 
+// A start that failed drops the engine files it kept (see interpreter.mjs), so
+// that the next one downloads them again.
 async function start() {
+  try {
+    return await launch()
+  } catch (error) {
+    await forgetEngineFiles().catch(() => {})
+    throw error
+  }
+}
+
+async function launch() {
   // The interpreter downloads its runtime while the engine archive arrives
   // (see interpreter.mjs).
   const backend = loadBackend()
@@ -147,7 +167,15 @@ function attach(port) {
         return send(id, { kind: 'ready', transport: 2, instance, snapshot: snapshotState, storage: storageNotice })
       if (kind === 'stats') {
         const snapshot = snapshotState === 'missing' && (await hasSnapshot()) ? 'stored' : snapshotState
-        return send(id, { kind: 'stats', instance, boot, snapshot, catalog: catalogStats(), ...JSON.parse(host.stats()) })
+        return send(id, {
+          kind: 'stats',
+          instance,
+          boot,
+          snapshot,
+          catalog: catalogStats(),
+          files: engineFileStats(),
+          ...JSON.parse(host.stats()),
+        })
       }
       if (kind === 'abort') return requests.get(id)?.cancel()
       if (kind === 'http') {
