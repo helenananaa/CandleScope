@@ -31,7 +31,8 @@ def _fold(ordinal, trials, *, test_run_id=None, selected=None, state="TRAINING")
 
 def _study(state="RUNNING", folds=None, holdout=None, failure=None):
     config = {"hypothesis": "fast SMA survives OOS", "objective": "NET_RETURN", "sampler": "grid", "candidate_budget": 2,
-              "parameter_space": {"fast": [2, 3]}, "start_ms": 0, "end_ms": 200 * DAY}
+              "parameter_space": {"fast": [2, 3]}, "start_ms": 0, "end_ms": 200 * DAY, "dataset_id": "local-robust",
+              "data_epoch": "sha256:" + "e" * 64, "interval": "1d"}
     return {"study_id": "st_1", "state": state, "config_json": json.dumps(config), "folds": folds or [],
             "holdout": holdout, "oos_report": None, "failure": failure}
 
@@ -224,7 +225,8 @@ def test_the_frontend_contract_fixture_is_what_the_backend_serves(service):
                               {"ordinal": 2, "selected_params": {"fast": 3}, "test_run_id": "bt_u", "train_objective": "0.06",
                                "test_objective": "0.012", "train_test_gap": "0.048", "benchmark_return": "-0.02"}],
                     "robustness": {"selection_bias_warning": "MULTIPLE_TRIALS_REQUIRE_HUMAN_REVIEW",
-                                   "trade_order_bootstrap": {"samples": 200, "p05": "-0.01", "p50": "0.04", "p95": "0.09"}},
+                                   "trade_order_bootstrap": {"samples": 200, "p05": "-12.5", "median": "41.2", "p95": "96.8",
+                                                             "reason": None}},
                     "equity": [{"event_time_ms": 1, "equity": "1"}]})
     view = asyncio.run(experiments.view(created["experiment_id"], port))
     assert "equity" not in view["study"]["oos"], "the equity curve stays with the test runs"

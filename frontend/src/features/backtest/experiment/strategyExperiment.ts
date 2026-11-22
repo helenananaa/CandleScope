@@ -50,6 +50,8 @@ export interface ExperimentStudy {
   candidates: number | null;
   parameterSpace: Record<string, unknown>;
   window: StudyWindow | null;
+  /** The imported dataset the study runs over. */
+  dataset: { datasetId: string; dataEpoch: string; interval: string } | null;
   folds: Array<{ ordinal: number; state: string; train: StudyWindow; test: StudyWindow; selected: Record<string, unknown> | null }>;
   holdout: { state: string; window: StudyWindow; parameters: Record<string, unknown> | null } | null;
   /** The out-of-sample report: summary, per-fold rows and the robustness checks, as served. */
@@ -136,6 +138,7 @@ function study(value: unknown, at: string): ExperimentStudy {
   const body = record(value, at);
   const holdout = optionalRecord(body.holdout, `${at}.holdout`);
   const oos = optionalRecord(body.oos, `${at}.oos`);
+  const dataset = optionalRecord(body.dataset, `${at}.dataset`);
   return {
     studyId: text(body.study_id, `${at}.study_id`), state: text(body.state, `${at}.state`),
     hypothesis: typeof body.hypothesis === "string" ? body.hypothesis : "",
@@ -144,6 +147,8 @@ function study(value: unknown, at: string): ExperimentStudy {
     candidates: body.candidates === null || body.candidates === undefined ? null : count(body.candidates, `${at}.candidates`),
     parameterSpace: optionalRecord(body.parameter_space, `${at}.parameter_space`) ?? {},
     window: body.window === null || body.window === undefined ? null : window(body.window, `${at}.window`),
+    dataset: dataset && typeof dataset.dataset_id === "string" && typeof dataset.data_epoch === "string"
+      ? { datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch, interval: String(dataset.interval ?? "") } : null,
     folds: (Array.isArray(body.folds) ? body.folds : []).map((item, index) => {
       const fold = record(item, `${at}.folds[${index}]`);
       return { ordinal: count(fold.ordinal, `${at}.folds[${index}].ordinal`), state: text(fold.state, `${at}.folds[${index}].state`),

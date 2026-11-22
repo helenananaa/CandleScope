@@ -70,12 +70,15 @@ function experiment(id: string, terminal: boolean, createdAtMs = 1): StrategyExp
 test("the page lists experiments, follows the running ones, and builds inputs from its sources", async () => {
   const watched: string[] = [];
   const created: Array<{ request: ChartStrategyRunRequest; inputs: readonly { input: Record<string, unknown> }[] }> = [];
+  const robust: Array<{ request: ChartStrategyRunRequest; dataset: Record<string, unknown>; fields: Record<string, unknown> }> = [];
   const owner = new ResearchExperiments({
     async listExperiments() { return [experiment("ex_done", true, 2), experiment("ex_running", false, 1)]; },
     watchExperiment(id) { watched.push(id); return new Promise(() => undefined); },
     async createResearchExperiment(input) { created.push(input); return experiment("ex_new", false, 3); },
     async cancelExperiment(id) { return { ...experiment(id, true), state: "CANCELLED" }; },
     async retryExperimentMember(id) { return experiment(id, false); },
+    async createRobustnessExperiment(input) { robust.push(input); return { ...experiment("ex_robust", false, 4), kind: "ROBUSTNESS" }; },
+    async revealExperimentHoldout(id) { return experiment(id, false, 5); },
   });
   owner.start();
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -89,6 +92,11 @@ test("the page lists experiments, follows the running ones, and builds inputs fr
   assert.deepEqual(created[0]!.inputs.map((item) => item.input.kind), ["IMPORTED_DATASET", "EXCHANGE_SERIES"]);
   assert.deepEqual(owner.snapshot().experiments.map((item) => item.experimentId), ["ex_new", "ex_done", "ex_running"]);
   assert.deepEqual(watched, ["ex_running", "ex_new"]);
+  await owner.submitRobustness(draft, dataset("a"), { start_ms: 0, end_ms: 240_000, hypothesis: "h" });
+  assert.deepEqual(robust[0]!.dataset, { dataset_id: "local-a", data_epoch: "epoch-a", interval: "1m" });
+  assert.deepEqual(watched.slice(-1), ["ex_robust"], "a robustness check is followed like any running experiment");
+  await owner.revealHoldout("ex_robust");
+  assert.equal(owner.snapshot().experiments[0]!.experimentId, "ex_robust");
   await owner.cancel("ex_running");
   assert.equal(owner.snapshot().experiments.find((item) => item.experimentId === "ex_running")?.state, "CANCELLED");
   await assert.rejects(owner.submit(draft, [dataset("a")]), /RESEARCH_BATCH_UNSUPPORTED/, "one imported dataset alone is not a batch");

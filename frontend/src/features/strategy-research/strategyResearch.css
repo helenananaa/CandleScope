@@ -706,3 +706,16 @@
   display: none;
 }
 }
+
+/* ADR-BACKTEST-015 P5c3: the robustness check and its verdict. */
+.strategy-research-robustness { display: grid; gap: var(--space-2); }
+.strategy-research-robustness > .ui-field, .strategy-research-robustness .ui-disclosure { margin-top: var(--space-2); }
+.strategy-research-robustness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.strategy-research-robustness-summary { display: grid; gap: var(--space-1); margin: var(--space-2) 0; }
+.strategy-research-robustness-summary p { margin: 0; }
+.strategy-research-robustness-folds { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--font-size-sm); }

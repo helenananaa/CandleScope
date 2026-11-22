@@ -27,6 +27,7 @@ import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.j
 import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
+import { ResearchRobustness } from "./ResearchRobustnessPanel.js";
 import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
 import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
 import { RESEARCH_SOURCE_SCHEMA } from "../research-data/researchDataTypes.js";
@@ -626,6 +627,14 @@ export default function StrategyResearchApp({
           </div>
           {batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
         </>}</ResearchBatchSources>}
+        robustnessControls={(request) => <ResearchRobustness request={request}
+          dataset={importedManifest && !importedManifest.market_trade_input ? importedManifest : null}
+          onSubmit={async (fields) => {
+            if (!request || !importedManifest) return;
+            // The backend keeps the check as a Study V2 experiment (ADR-BACKTEST-015 P5c3); its runs show in the history.
+            await researchRun.experiments.submitRobustness(request, importedManifest, fields);
+            setHistoryOpen(true);
+          }} />}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
         configuration={state.script.configuration}
@@ -733,9 +742,14 @@ export default function StrategyResearchApp({
         <ResearchExperimentResults experiments={experimentsState.experiments}
           onCancel={(experimentId) => { void researchRun.experiments.cancel(experimentId).catch(() => setBatchError(true)); }}
           onRetry={(experimentId, ordinal) => { void researchRun.experiments.retry(experimentId, ordinal).catch(() => setBatchError(true)); }}
-          onOpen={(_experiment, member) => {
+          onReveal={(experimentId) => { void researchRun.experiments.revealHoldout(experimentId).catch(() => setBatchError(true)); }}
+          onOpen={(experiment, member) => {
             const input = member.input;
-            if (input.kind === "IMPORTED_DATASET" && libraryDatasets.some(dataset => dataset.dataset_id === input.datasetId && dataset.data_epoch === input.dataEpoch)) {
+            const studyData = experiment.study?.dataset;
+            if (studyData && libraryDatasets.some(dataset => dataset.dataset_id === studyData.datasetId && dataset.data_epoch === studyData.dataEpoch)) {
+              setLibrarySelectedId(studyData.datasetId);
+              onSelectDataset(studyData.datasetId);
+            } else if (input.kind === "IMPORTED_DATASET" && libraryDatasets.some(dataset => dataset.dataset_id === input.datasetId && dataset.data_epoch === input.dataEpoch)) {
               setLibrarySelectedId(String(input.datasetId));
               onSelectDataset(String(input.datasetId));
             } else if (input.kind === "EXCHANGE_SERIES" && typeof input.startMs === "number" && typeof input.endMs === "number") {

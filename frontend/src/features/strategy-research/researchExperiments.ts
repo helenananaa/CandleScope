@@ -7,7 +7,7 @@ import { importedResearchRange, importedResearchRunSource } from "./importedData
 import { RESEARCH_BATCH_MAX_INPUTS, marketInputKey, supportsBatchSource, validMarketInput, type ResearchMarketInput } from "./strategyResearchBatch.js";
 
 type ExperimentManager = Pick<StrategyDataManager, "createResearchExperiment" | "listExperiments" | "watchExperiment"
-  | "cancelExperiment" | "retryExperimentMember">;
+  | "cancelExperiment" | "retryExperimentMember" | "createRobustnessExperiment" | "revealExperimentHoldout">;
 export interface ResearchExperimentsState { experiments: readonly StrategyExperiment[]; loaded: boolean; failed: boolean }
 
 /**
@@ -90,6 +90,20 @@ export class ResearchExperiments {
     const experiment = await this.manager.createResearchExperiment({ request: structuredClone(request), inputs });
     this.upsert(experiment);
     return experiment;
+  }
+
+  /** Check the request's strategy for robustness over an imported dataset (a Study V2 in the backend). */
+  async submitRobustness(request: ChartStrategyRunRequest, dataset: LocalDatasetManifest,
+    fields: Parameters<ExperimentManager["createRobustnessExperiment"]>[0]["fields"]): Promise<StrategyExperiment> {
+    const experiment = await this.manager.createRobustnessExperiment({ request: structuredClone(request),
+      dataset: { dataset_id: dataset.dataset_id, data_epoch: dataset.data_epoch, interval: dataset.interval }, fields });
+    this.upsert(experiment);
+    return experiment;
+  }
+
+  /** Open a robustness check's holdout; the study runs it and the page follows it again. */
+  async revealHoldout(experimentId: string): Promise<void> {
+    this.upsert(await this.manager.revealExperimentHoldout(experimentId));
   }
 
   /** Stop the members still preparing or running; finished members keep their results. */

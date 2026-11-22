@@ -148,6 +148,11 @@
   },
   "study": {
     "candidates": 2,
+    "dataset": {
+      "data_epoch": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "dataset_id": "local-robust",
+      "interval": "1d"
+    },
     "error": null,
     "folds": [
       {
@@ -217,9 +222,10 @@
       "robustness": {
         "selection_bias_warning": "MULTIPLE_TRIALS_REQUIRE_HUMAN_REVIEW",
         "trade_order_bootstrap": {
-          "p05": "-0.01",
-          "p50": "0.04",
-          "p95": "0.09",
+          "median": "41.2",
+          "p05": "-12.5",
+          "p95": "96.8",
+          "reason": null,
           "samples": 200
         }
       },

@@ -76,6 +76,7 @@ export function StrategyResearchScriptPanel({
   configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
   onConfigure,
   batchControls,
+  robustnessControls,
   batchSession,
   marketBatchAvailable,
 }: {
@@ -95,6 +96,8 @@ export function StrategyResearchScriptPanel({
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
   batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  /** The robustness check of this strategy, given the same request as the batch controls. */
+  robustnessControls?(request: ChartStrategyRunRequest | null): ReactNode;
   batchSession?: ChartSession | null;
   marketBatchAvailable?: boolean;
 }) {
@@ -408,6 +411,8 @@ export function StrategyResearchScriptPanel({
         </>
       )}
       {batchControls?.(runRequest && !runRequest.attachment.pythonBarExecution
+        && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
+      {robustnessControls?.(runRequest && !runRequest.attachment.pythonBarExecution
         && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
     </section>
   );

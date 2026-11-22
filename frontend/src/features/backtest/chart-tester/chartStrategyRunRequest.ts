@@ -684,6 +684,66 @@ export type ResearchExperimentInput =
  * imported data becomes a run over its frozen snapshot, exchange history a strategy data preparation that
  * starts its run when the history is ready. One strategy revision serves every member.
  */
+/** One strategy revision for every run an experiment makes, frozen from the request. */
+function createResearchRevision(api: Pick<ChartStrategyRunApi, "createStrategyRevision">, base: ChartStrategyFrozenRunRequest,
+  signal?: AbortSignal): Promise<StrategyRevisionRecord> {
+  return api.createStrategyRevision({
+    name: base.displayName,
+    language: revisionLanguage(base.language),
+    base_revision_id: null,
+    source_text: base.source,
+    parameter_schema: [],
+    ...(base.language === "pine" ? { libraries: base.attachment.parameters.__pineLibraries ?? {} } : {}),
+  }, signal);
+}
+
+/**
+ * A robustness check's study (ADR-BACKTEST-015 P5c3): the request's Python strategy, frozen as one
+ * revision, with the rule ``fields`` over an imported dataset. Study V2 runs strategies that output
+ * signals on perpetual accounts, so the data must carry its historical contract data; the study runs
+ * the strategy in trusted local Python, which the request has confirmed.
+ */
+export async function buildRobustnessStudy(options: {
+  api: Pick<ChartStrategyRunApi, "createStrategyRevision" | "previewSnapshot">;
+  request: ChartStrategyRunRequest;
+  dataset: { dataset_id: string; data_epoch: string; interval: string };
+  fields: Record<string, unknown> & { start_ms: number; end_ms: number };
+  signal?: AbortSignal;
+}): Promise<{ revision: StrategyRevisionRecord; study: Record<string, unknown> }> {
+  const { request, dataset, fields } = options;
+  if (request.language !== "python" || request.attachment.pythonBarExecution) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A robustness check runs a Python strategy that outputs signals",
+      { next_step: "open a Python strategy" });
+  }
+  if (!request.pythonTrustedConfirmed) {
+    throw new ChartStrategyRunError("PYTHON_TRUST_REQUIRED", "Confirm running this Python strategy on this computer");
+  }
+  const base = await freezeChartStrategyRunRequest(request);
+  const revision = await createResearchRevision(options.api, base, options.signal);
+  if (!revision.output_modes.includes("SIGNAL")) {
+    throw new ChartStrategyRunError("PROVIDER_PROTOCOL_VIOLATION", "The strategy cannot output signals");
+  }
+  if (typeof options.api.previewSnapshot !== "function") {
+    throw new ChartStrategyRunError("SNAPSHOT_PREVIEW_UNAVAILABLE", "imported data requires a backend snapshot preview");
+  }
+  const preview = await options.api.previewSnapshot({
+    dataset_id: dataset.dataset_id, data_epoch: dataset.data_epoch, start_time_ms: fields.start_ms,
+    end_time_ms: fields.end_ms - 1, interval: dataset.interval, fidelity_mode: "BAR_APPROX",
+    contract_data_mode: "HISTORICAL_CONTRACT_V1", account_model: "LINEAR_PERP_ONE_WAY_V2",
+    funding_mode: typeof fields.funding_mode === "string" ? fields.funding_mode : "OFF",
+  }, options.signal);
+  if ((preview.quality.contract_data as Record<string, unknown> | undefined)?.status !== "complete") {
+    throw new ChartStrategyRunError("CONTRACT_DATA_REQUIRED", "The data has no complete historical contract data",
+      { next_step: "import the contract history for this dataset" });
+  }
+  return { revision, study: {
+    ...fields,
+    strategy_revision_id: revision.revision_id, dataset_id: dataset.dataset_id, data_epoch: preview.data_epoch,
+    dataset_snapshot_hash: preview.snapshot_hash, interval: dataset.interval, parameters: executionParameters(base),
+    python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: true,
+  } };
+}
+
 export async function buildResearchExperimentMembers(options: {
   api: Pick<ChartStrategyRunApi, "createStrategyRevision" | "previewSnapshot" | "smokeStrategyRevision" | "validate">;
   request: ChartStrategyRunRequest;
@@ -694,14 +754,7 @@ export async function buildResearchExperimentMembers(options: {
     throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A saved continuous profile runs on its own chart market only");
   }
   const base = await freezeChartStrategyRunRequest(options.request);
-  const revision = await options.api.createStrategyRevision({
-    name: base.displayName,
-    language: revisionLanguage(base.language),
-    base_revision_id: null,
-    source_text: base.source,
-    parameter_schema: [],
-    ...(base.language === "pine" ? { libraries: base.attachment.parameters.__pineLibraries ?? {} } : {}),
-  }, options.signal);
+  const revision = await createResearchRevision(options.api, base, options.signal);
   const members: Array<Record<string, unknown>> = [];
   for (const { input, source } of options.inputs) {
     const session = source.kind === "IMPORTED_DATASET"

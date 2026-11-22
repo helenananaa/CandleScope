@@ -8,7 +8,7 @@ import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import {
-  buildImportedExternalRunBody, buildResearchExperimentMembers, runChartStrategyBacktest, runResearchBacktest,
+  buildImportedExternalRunBody, buildResearchExperimentMembers, buildRobustnessStudy, runChartStrategyBacktest, runResearchBacktest,
   type ChartStrategyRunApi, type ResearchExperimentInput,
 } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
@@ -39,7 +39,7 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
     | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
-    | "retryStrategyExperimentMember" | "watchStrategyExperiment"
+    | "retryStrategyExperimentMember" | "watchStrategyExperiment" | "revealStrategyExperimentHoldout"
     | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun">>;
 
 /** Owns fixed-history operations and immutable results independently of live
@@ -315,6 +315,35 @@ export class StrategyDataManager {
           draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
         members,
       }, owned));
+    });
+  }
+
+  /**
+   * A robustness check (ADR-BACKTEST-015 P5c3): the request's Python strategy as a Study V2 over an
+   * imported dataset with contract data. ``fields`` is the rule (windows, parameter space, selection).
+   */
+  createRobustnessExperiment(input: { request: ChartStrategyRunRequest; dataset: { dataset_id: string; data_epoch: string; interval: string };
+    fields: Parameters<typeof buildRobustnessStudy>[0]["fields"] }, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      const { revision, study } = await buildRobustnessStudy({ api: this.api, request: input.request, dataset: input.dataset,
+        fields: input.fields, signal: owned });
+      return parseStrategyExperiment(await this.api.createStrategyExperiment({
+        idempotency_key: crypto.randomUUID(),
+        name: input.request.displayName,
+        kind: "ROBUSTNESS",
+        strategy: { language: input.request.language, draft_id: input.request.draftId,
+          draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
+        study,
+      }, owned));
+    });
+  }
+
+  /** Open a robustness check's sealed holdout once every fold has selected a candidate. */
+  revealExperimentHoldout(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.revealStrategyExperimentHoldout) unavailable();
+      return parseStrategyExperiment(await this.api.revealStrategyExperimentHoldout(experimentId, owned));
     });
   }
 

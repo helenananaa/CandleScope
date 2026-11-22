@@ -270,6 +270,8 @@ def study_view(study: Mapping[str, Any]) -> dict[str, Any]:
         "objective": config.get("objective"), "sampler": config.get("sampler"),
         "candidates": config.get("candidate_budget"), "parameter_space": config.get("parameter_space"),
         "window": _window(config["start_ms"], config["end_ms"]),
+        "dataset": {"dataset_id": config.get("dataset_id"), "data_epoch": config.get("data_epoch"),
+                    "interval": config.get("interval")},
         "folds": [{"ordinal": int(fold["ordinal"]), "state": fold["state"],
                    "train": _window(fold["train_start_ms"], fold["train_end_ms"]),
                    "test": _window(fold["test_start_ms"], fold["test_end_ms"]),
