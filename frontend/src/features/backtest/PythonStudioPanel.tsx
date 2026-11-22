@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Checkbox, Field, InlineAlert, Select, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import type { BacktestApiClient, BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
+import type { BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
 import { isPythonTrustedLocalEnabled } from "./backtestFlags.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -12,6 +12,7 @@ import {
   PYTHON_TEMPLATES,
   PYTHON_UNSUPPORTED,
   TRUSTED_LOCAL_FACT_KEYS,
+  TRUSTED_LOCAL_SETTING,
   trustedLocalConfirmLabel,
   assessCoverage,
   assertRequiredBundleFiles,
@@ -26,12 +27,13 @@ import {
   type PythonBundleFileMap,
   type PythonBundleIdentity,
   type PythonRuntimeMode,
+  type PythonStudioApi,
   type PythonStudioGate,
   type StudioFailure,
 } from "./pythonStudio.js";
 
 interface PythonStudioPanelProps {
-  api: BacktestApiClient;
+  api: PythonStudioApi;
   loading: boolean;
   snapshot: BacktestSnapshot | null;
   datasetId: string;
@@ -368,7 +370,7 @@ export default function PythonStudioPanel({
         {runtimeMode === "TRUSTED_LOCAL" && (
           <div className="python-trusted-facts" data-testid="python-trusted-facts">
             <ul>
-              {TRUSTED_LOCAL_FACT_KEYS.map((key) => <li key={key}>{t(key, {}, locale)}</li>)}
+              {TRUSTED_LOCAL_FACT_KEYS.map((key) => <li key={key}>{t(key, { setting: TRUSTED_LOCAL_SETTING }, locale)}</li>)}
             </ul>
             <small>{t("backtest.flagState", { state: trustedFlagEnabled ? t("backtest.flagOn") : t("backtest.flagOff") })}</small>
             <Checkbox

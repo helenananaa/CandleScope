@@ -28,6 +28,7 @@ import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeRes
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
 import { ResearchRobustness } from "./ResearchRobustnessPanel.js";
+import { ResearchSavedStrategy } from "./ResearchSavedStrategy.js";
 import { CHART_STRATEGY_FOLLOW_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
@@ -568,6 +569,7 @@ export default function StrategyResearchApp({
 
   const [externalVisited, setExternalVisited] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
   // ADR-BACKTEST-015 P5c4: as on the chart (P4c2), strategies are named by their language and the engine
   // follows from it: Pine runs as the script declares or with CandleScope matching (a fills setting), Python on CandleScope.
   const strategyList = CHART_STRATEGY_FOLLOW_ENABLED;
@@ -650,6 +652,22 @@ export default function StrategyResearchApp({
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
         languageFixed={strategyList}
       />}
+      {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
+        <Disclosure className="strategy-research-external" summary={t("researchSaved.title")} open={savedOpen} onToggle={(open) => {
+          setSavedOpen(open);
+          if (open) setNativeMode(false);
+        }}>
+          {savedOpen && <ResearchSavedStrategy
+            key={chartUiScope}
+            manager={researchRun.historyManager}
+            dataset={importedManifest}
+            interval={selectedInterval}
+            settings={state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS}
+            runBusy={["RESOLVING", "QUEUED", "RUNNING"].includes(researchRun.runStatus)}
+            onRunCreated={handleRunId}
+          />}
+        </Disclosure>
+      )}
       {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
         <Disclosure className="strategy-research-external" summary={t("research.external.title")} open={externalOpen} onToggle={(open) => {
           setExternalOpen(open);

@@ -1,3 +1,4 @@
+import type { BacktestApiClient } from "./backtestApi.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 
 export const PYTHON_STUDIO_STORAGE_KEY = "candlescope.python-studio.v1";
@@ -28,6 +29,9 @@ export interface PythonBundleIdentity {
   signalClock?: string;
   outputModes?: string[];
 }
+
+/** What the studio asks of the backend: bundle inspection and freezing, and the smoke. */
+export type PythonStudioApi = Pick<BacktestApiClient, "inspectPythonBundle" | "createPythonBundle" | "createPythonRevision" | "smokeStrategyRevision">;
 
 export interface PythonStudioGate {
   revisionId: string | null;

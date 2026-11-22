@@ -594,6 +594,53 @@ export async function buildImportedExternalRunBody(input: {
   });
 }
 
+/** The bar snapshot of imported research data (ADR-BACKTEST-015 P5c4b: a saved strategy's coverage and smoke). */
+export function previewImportedBars(api: Pick<ChartStrategyRunApi, "previewSnapshot">,
+  source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>, signal?: AbortSignal): Promise<BacktestSnapshot> {
+  return previewImportedSnapshot(api, source, false, signal);
+}
+
+/**
+ * A run of a saved strategy revision (a Python bundle, a builtin template; ADR-BACKTEST-015 P5c4b) over
+ * imported candles with the workspace's run settings, built as an external model's run is. Returns the
+ * body and the snapshot it runs on, which the revision's smoke must cover.
+ */
+export async function buildImportedSavedRunBody(input: {
+  api: Pick<ChartStrategyRunApi, "previewSnapshot">;
+  source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>;
+  settings: StrategyRunSettings;
+  revision: StrategyRevisionRecord;
+  outputMode: string;
+  parameters: Record<string, unknown>;
+  /** Bars before the range a strategy needs (a builtin RSI its length); at least the revision's own requirement. */
+  warmupBars?: number;
+  signal?: AbortSignal;
+}): Promise<{ body: Record<string, unknown>; snapshot: BacktestSnapshot }> {
+  const { api, source, settings, revision, outputMode, signal } = input;
+  if (!validStrategyRunSettings(settings) || settings.fidelityPreference === "PRECISE"
+    || settings.pythonBarExecution || source.marketTradeInput) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A saved strategy runs on imported candles with bar execution");
+  }
+  if (revision.provider_kind === "EXTERNAL_PROVIDER" || !revision.output_modes.includes(outputMode)) {
+    throw new ChartStrategyRunError("SCHEMA_UNKNOWN_FIELD", "Choose an output mode the saved strategy supports");
+  }
+  const snapshot = await previewImportedSnapshot(api, source, false, signal);
+  const resolution = resolutionFromImportedPreview({ source, rangeMode: settings.rangeMode, preview: snapshot, precise: false });
+  if (!resolution.coverage.complete) {
+    throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "Imported candles have gaps");
+  }
+  return { snapshot, body: fixedStrategyRunBody({
+    session: { exchange: "local", marketType: "spot", symbol: source.symbol, interval: source.interval },
+    attachment: { ...settings, quickPresetId: resolution.quick_preset_id },
+    cellScope: "strategy-research-saved",
+    revision,
+    resolution,
+    parameters: input.parameters,
+    outputMode,
+    warmupBars: Math.max(Number(revision.warmup_requirement?.bars ?? 0) || 0, input.warmupBars ?? 0),
+  }) };
+}
+
 async function previewImportedSnapshot(
   api: Pick<ChartStrategyRunApi, "previewSnapshot">,
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>,

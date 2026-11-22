@@ -4,11 +4,15 @@ import {
   BacktestApiError, defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyReferenceKind, type StrategyRevisionRecord,
 } from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestSnapshot } from "../../backtest/backtestApi.js";
+import { BUILTIN_RSI_PARAMETERS, BUILTIN_RSI_REVISION } from "../../backtest/builtinTemplate.js";
+import type { PythonStudioApi } from "../../backtest/pythonStudio.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import {
-  buildImportedExternalRunBody, buildResearchExperimentMembers, buildRobustnessStudy, runChartStrategyBacktest, runResearchBacktest,
+  buildImportedExternalRunBody, buildImportedSavedRunBody, buildResearchExperimentMembers, buildRobustnessStudy, previewImportedBars,
+  runChartStrategyBacktest, runResearchBacktest,
   type ChartStrategyRunApi, type ResearchExperimentInput,
 } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
@@ -40,7 +44,8 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
     | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
     | "retryStrategyExperimentMember" | "watchStrategyExperiment" | "revealStrategyExperimentHoldout"
-    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun">>;
+    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun"
+    | "inspectPythonBundle" | "createPythonBundle" | "createPythonRevision">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -135,6 +140,60 @@ export class StrategyDataManager {
         source_text: JSON.stringify(manifest),
         parameter_schema: [],
       }, owned);
+    });
+  }
+
+  // -- Saved strategies in the research workspace (ADR-BACKTEST-015 P5c4b) ------
+
+  /** Python bundle authoring (inspect, freeze, smoke), reached through this manager. */
+  pythonStudioApi(): PythonStudioApi {
+    const api = this.api;
+    const call = <T>(name: string, run: (owned: AbortSignal) => Promise<T>, signal?: AbortSignal) => this.operation(signal, (owned) => {
+      if (!api[name as keyof StrategyDataApi]) unavailable();
+      return run(owned);
+    });
+    return {
+      inspectPythonBundle: (zip, signal) => call("inspectPythonBundle", (owned) => api.inspectPythonBundle!(zip, owned), signal),
+      createPythonBundle: (zip, signal) => call("createPythonBundle", (owned) => api.createPythonBundle!(zip, owned), signal),
+      createPythonRevision: (bundleId, signal) => call("createPythonRevision", (owned) => api.createPythonRevision!(bundleId, owned), signal),
+      smokeStrategyRevision: (revisionId, body, signal) => call("smokeStrategyRevision",
+        (owned) => api.smokeStrategyRevision(revisionId, body, owned), signal),
+    };
+  }
+
+  /** The bar snapshot of imported research data, for a saved strategy's coverage and smoke. */
+  previewImportedBars(source: Parameters<typeof previewImportedBars>[1], signal?: AbortSignal): Promise<BacktestSnapshot> {
+    return this.operation(signal, (owned) => previewImportedBars(this.api, source, owned));
+  }
+
+  /** The frozen builtin RSI (Wilder) template as a strategy revision, with its parameters. */
+  createBuiltinRsiRevision(signal?: AbortSignal): Promise<StrategyRevisionRecord> {
+    return this.operation(signal, (owned) => this.api.createStrategyRevision({
+      name: "RSI (Wilder)", language: "BUILTIN_TEMPLATE", base_revision_id: BUILTIN_RSI_REVISION, source_text: "",
+      parameter_schema: BUILTIN_RSI_PARAMETERS.map((item) => ({ ...item })),
+    }, owned));
+  }
+
+  /**
+   * Run a saved revision over imported candles: smoke it on the run's snapshot (a Python bundle in its
+   * runtime mode), validate, and create the run. Returns the created run.
+   */
+  startSavedRevision(input: Omit<Parameters<typeof buildImportedSavedRunBody>[0], "api" | "signal"> & {
+    python?: { runtimeMode: string; trustedConfirmed: boolean } | null;
+  }, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      const { body: built, snapshot } = await buildImportedSavedRunBody({ ...input, api: this.api, signal: owned });
+      const python: Record<string, unknown> = input.python ? { python_runtime_mode: input.python.runtimeMode,
+        python_trusted_confirmed: input.python.runtimeMode === "TRUSTED_LOCAL" && input.python.trustedConfirmed } : {};
+      const body: Record<string, unknown> = { ...built, ...python };
+      const start = Number(body.start_time_ms);
+      await this.api.smokeStrategyRevision(input.revision.revision_id, {
+        dataset_id: body.dataset_id, snapshot_hash: snapshot.snapshot_hash, start_time_ms: start,
+        end_time_ms: Math.min(Number(body.end_time_ms), start + 7 * 86_400_000), parameters: input.parameters, ...python,
+      }, owned);
+      await this.api.validate(body, owned);
+      owned.throwIfAborted();
+      return this.api.createRun(body, crypto.randomUUID(), owned);
     });
   }
 
