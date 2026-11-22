@@ -308,6 +308,8 @@ export interface SingleChartPanesProps {
   loading?: boolean;
   indicatorStatusText?: string | null;
   onCrosshairMove?: ((value: MainSeriesCrosshairValue | null) => void) | null;
+  /** A click on the main pane (not on a marker): the clicked bar's time and the price under the pointer. */
+  onChartPointClick?: ((point: { time: ChartTime; price: number }) => void) | null;
   onNeedMoreLeft?: LoadMoreLeft | null;
   onNeedMoreRight?: (() => Promise<boolean>) | null;
   onRestoreLatestWindow?: (() => Promise<boolean>) | null;
@@ -837,6 +839,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   loading = false,
   indicatorStatusText = null,
   onCrosshairMove,
+  onChartPointClick = null,
   onNeedMoreLeft,
   onNeedMoreRight = null,
   onRestoreLatestWindow = null,
@@ -1355,6 +1358,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       try { chart.unsubscribeClick(handleMarkerClick); } catch { /* chart may already be disposing */ }
     };
   }, [datasetKey, drawingSeriesGeneration, externalMarkerSource, usesDerivedAxis]);
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onChartPointClick || usesDerivedAxis) return undefined;
+    const handlePointClick = (param: ChartClickParam) => {
+      if (typeof param.hoveredObjectId === "string" || (param.paneIndex ?? 0) !== 0) return;
+      const price = param.point ? mainSeriesRef.current?.coordinateToPrice(param.point.y) : null;
+      if (param.time === undefined || typeof price !== "number" || !Number.isFinite(price)) return;
+      onChartPointClick({ time: param.time as ChartTime, price });
+    };
+    chart.subscribeClick(handlePointClick);
+    return () => {
+      try { chart.unsubscribeClick(handlePointClick); } catch { /* chart may already be disposing */ }
+    };
+  }, [datasetKey, drawingSeriesGeneration, onChartPointClick, usesDerivedAxis]);
   useEffect(() => {
     const series = mainSeriesRef.current;
     if (!pluginChartLayerSource || !series || usesDerivedAxis) return undefined;
