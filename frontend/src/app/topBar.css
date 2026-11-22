@@ -157,3 +157,76 @@
   flex-shrink: 0;
   min-width: max-content;
 }
+
+/* ── Phone layout (phoneLayout.ts) ────────────────────────────
+ * Two rows: the brand, the workspaces and Settings on the first; the page's own context, tools
+ * and actions on the second. The end region dissolves (display: contents) so Settings can move
+ * up while its other controls follow the context. Pages with nothing but Settings keep one row.
+ * The desktop download link stays off a phone, which cannot run it. */
+@media (max-width: 640px) {
+  .app-header.top-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 8px;
+    column-gap: 8px;
+    row-gap: 4px;
+  }
+
+  .app-header > * {
+    order: 5;
+  }
+
+  .app-header > .logo {
+    order: 0;
+  }
+
+  .app-header .logo-text {
+    display: none;
+  }
+
+  .app-header > .workspace-navigation {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .app-header > .workspace-navigation > a[target="_blank"] {
+    display: none;
+  }
+
+  .app-header-end {
+    display: contents;
+  }
+
+  .app-header-end > * {
+    order: 6;
+  }
+
+  .app-header-end > .settings-btn {
+    order: 2;
+  }
+
+  /* Ends the first row. */
+  .app-header::after {
+    content: "";
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  /* The second row never wraps: the context shrinks through the compaction steps instead, and
+     every page action goes into 更多. */
+  .app-header-main {
+    flex: 1 1 0;
+  }
+
+  .app-header-main:not(:empty) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .app-header-actions {
+    flex: 0 1 auto;
+  }
+}
