@@ -161,7 +161,7 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
     <>
       {tierDot && <span className={`wl-tier-dot ${tierDot}`} title={tierTitle}/>}
       <span className="wl-sym-name">
-        <span className="wl-sym-text">{symbol}</span>
+        <span className="wl-sym-text" title={symbol}>{symbol}</span>
         {marketType === "futures" && <span className="wl-market-badge futures">{translateMarketType("futures")}</span>}
         <span className={`wl-exchange-badge ${exchange}`}>
           {translateExchangeName(exchange)}
@@ -238,11 +238,13 @@ export default function WatchlistSidebar({
     setWatchlists((groups) => sortWatchlists(groups, column, direction, snapshot, subscriptionTiers));
     setLastSort({ column, direction });
   };
-  const sortHeader = (column: WatchlistSortColumn, label: string, className: string) => {
+  // Number columns are narrow: they show a short name ("Chg %", "Изм. %"); the full name is the
+  // button's title and accessible name.
+  const sortHeader = (column: WatchlistSortColumn, label: string, shortLabel: string, className: string) => {
     const direction = lastSort?.column === column && lastSort.direction === "asc" ? "desc" : "asc";
     const description = `${label} · ${t(direction === "asc" ? "watchlist.sortAscending" : "watchlist.sortDescending")}`;
     return <button type="button" className={className} title={description} aria-label={description} onClick={() => sortBy(column)}>
-      {label}<span className="wl-sort-icon" aria-hidden="true"><Icon name={lastSort?.column === column ? (lastSort.direction === "asc" ? "chevron-up" : "chevron-down") : "sort"} size={11} /></span>
+      {shortLabel}<span className="wl-sort-icon" aria-hidden="true"><Icon name={lastSort?.column === column ? (lastSort.direction === "asc" ? "chevron-up" : "chevron-down") : "sort"} size={11} /></span>
     </button>;
   };
 
@@ -686,10 +688,10 @@ export default function WatchlistSidebar({
         {/* ── Column header row (table header) ── */}
         {!sidebarCollapsed && (
           <div className="wl-table-header">
-            {sortHeader("symbol", t("watchlist.symbol"), "wl-th-name")}
-            {sortHeader("price", t("watchlist.last"), "wl-th-price")}
-            {sortHeader("change", t("watchlist.change"), "wl-th-change")}
-            {sortHeader("changePct", t("watchlist.changePct"), "wl-th-changepct")}
+            {sortHeader("symbol", t("watchlist.symbol"), t("watchlist.symbolShort"), "wl-th-name")}
+            {sortHeader("price", t("watchlist.last"), t("watchlist.lastShort"), "wl-th-price")}
+            {sortHeader("change", t("watchlist.change"), t("watchlist.changeShort"), "wl-th-change")}
+            {sortHeader("changePct", t("watchlist.changePct"), t("watchlist.changePctShort"), "wl-th-changepct")}
             <span className="wl-th-actions"></span>
           </div>
         )}

@@ -603,6 +603,9 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 | 7a | Contrast and the light theme: a rendered-contrast audit (`scripts/design-contrast.mjs`) over the design states in both themes, fixes for text below WCAG AA, the light theme's visual pass, and a light theme for the code editor (dark only until now, Phase 5d) |
 | 7b | Keyboard and motion: every overlay and menu operable by keyboard (open, move, Escape, focus return), visible focus on every control, keyboard paths through the market page, and reduced motion |
 | 7c | Widths and languages: 1024 / 1366 / 1440 / 1920 and the longest languages (English, German, Russian) — truncated rail tabs, the chart header's link group, order book controls, replay session cards (§2.8, Phase 4b) |
+| 7c2 | Messages still in English (split from 7c, 2026-11-16): the 30 catalogs keep English in many messages (two or more words: German 206, Russian 115, Italian 213, Polish 208, French 131, Ukrainian 124, Spanish 121, Japanese 72), and the feature catalogs fall back to English; German shows its top navigation, "Go to date" and "Trades & notes" in English. Translate them, starting with German and Russian, then run `npm run design:layout` in both again. **Narrowed when it started (2026-11-17):** counted with the feature catalogs, German shows 1,203 messages of two or more words in English and Russian 1,106 (983 of them from seven feature blocks that 21 languages spread in English: continuous research, trade history, replay notes, history study, read-only and trading accounts, native strategies). 7c2 translates German and Russian completely (each feature block in full, about 1,220 messages, plus their inline English) and audits both |
+| 7c3 | The other languages (split from 7c2, 2026-11-17): the same seven feature blocks and inline English in Spanish, French, Italian, Portuguese (PT), Dutch, Polish, Ukrainian, Czech, Hungarian, Romanian, Swedish, Turkish, Indonesian, Malay, Vietnamese, Thai, Hindi, Arabic and Hebrew (about 1,100–1,200 each); Traditional Chinese (zh-Hant, zh-TW, zh-HK, zh-MO, about 620–720: continuous, replay notes, native and read-only blocks) and Japanese (290). One language per batch, each block in full, through the per-language feature files 7c2 adds. **Split when it started (2026-11-17):** 7c3 takes Traditional Chinese (one Traditional feature file shared by zh-Hant, zh-TW, zh-HK and zh-MO, as the trading-accounts block already is) and Japanese — the smallest gaps, with the Simplified Chinese messages as their source and the existing zh-TW remnant check as a guard |
+| 7c4 | The other 19 languages (split from 7c3, 2026-11-17): Spanish, French, Italian, Portuguese (PT), Dutch, Polish, Ukrainian, Czech, Hungarian, Romanian, Swedish, Turkish, Indonesian, Malay, Vietnamese, Thai, Hindi, Arabic and Hebrew, about 1,100–1,200 messages each, two languages per PR (7c4, 7c5, …) through `<language>FeatureMessages.ts` files like 7c2's. 7c4 also gives the replay hub's run status codes (`READY`, `AWAITING_MARKET`, `UNAVAILABLE`, `HEDGE_INPUT_RECOVERY_REQUIRED`) catalog messages in every language: the hub shows the server's Simplified Chinese message as sent (found in 7c3). 7c4 (2026-11-18) is Spanish and French with the hub status; the other 17 follow in the order listed, two per PR (7c5 Italian and Portuguese (PT), 7c6 Dutch and Polish, …) |
 
 **Phase 7a is done (branch `design/phase-7a-contrast`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7A.md).
 
@@ -616,6 +619,84 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The interval picker could not be seen since Phase 4a (the header's clip hid it below its row); it is fixed-positioned now.
 - Popups a page draws in place join the overlay stack through `useAnchoredPopup` (Escape, focus in and back, close when focus moves on); menus share `moveMenuFocus`. Watchlist rows, their menus and the drawing tools' variants work from the keyboard (Shift+F10, →); "跳到图表" is the first Tab stop on chart pages.
 - Focus rings use a `--focus-ring` token (darker in the light theme, 3:1 on every surface) and reach text fields and selects outside the kit. Reduced motion is one rule in `reset.css`; spinners keep turning, slower.
+
+**Phase 7c is done (branch `design/phase-7c-widths`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C.md).
+
+- `npm run design:layout` opens every design state at 1024 / 1366 / 1440 / 1920 in Chinese, English, German and Russian and lists what does not fit as rendered: cut text, selects narrower than their option, text running over its neighbour, controls on top of each other; it marks a finding whose whole text is its title or accessible name. Before: 629 (434 without the text on hover; Russian 232, German 132, English 59, Chinese 11); after: 63, all data or messages with their whole text as the title.
+- The chart header's link group and the order book's selects are as wide as their value (`field-sizing: content`); the watchlist's number columns use short headings (the full name stays the title and accessible name; 4 messages in all 30 catalogs); the order book's and the tape's headers keep the status whole and let the data mode go first, down to the status dot; at 1024 px the tape drops the base-asset size and keeps the time with milliseconds; rail labels take three lines; the strategy page's source name and the tester's tabs give way instead of the buttons and the strategy name; the alerts' "Disable when the limit is reached" is shorter in 9 languages.
+- Design states: `replay-create` (the training hub's New training view; §2.8's summary cards fit in both builds); a step looks for its control for up to 8 s and skips disabled ones.
+- Not here: messages still in English (row 7c2), and the replay session, which cannot be opened without writing.
+
+**Phase 7c2 is done (branch `design/phase-7c2-translations`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C2.md).
+
+- German and Russian have their own feature blocks (`catalogs/germanFeatureMessages.ts`, `catalogs/russianFeatureMessages.ts`: continuous research, trade history, replay notes, history study, read-only and trading accounts, native strategies; 1,218 messages each, typed against the English blocks, loaded only with their language) and their inline English translated (224 German, 129 Russian). Messages shown in English: German 1,203 → 18, Russian 1,106 → 6; what is left reads the same in both.
+- 27 English duplicates of the native block (`aiControl.*`) that overrode it in `de.ts` / `ru.ts` are removed.
+- Layout in German and Russian (184 visits): nothing the app writes itself is cut. The Russian read-only account is "Счёт в режиме чтения" (the longer title was cut in the 52 px rail tab), and tab labels hyphenate only words of eight letters or more.
+- Next: row 7c3, the same per-language files for the other languages, one language per batch.
+
+**Phase 7c3 is done (branch `design/phase-7c3-cjk`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C3.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C3.md).
+
+- Traditional Chinese has its own feature file (`catalogs/traditionalFeatureMessages.ts`: continuous research, read-only account and native strategies, 748 messages in Taiwan usage), shared by zh-Hant, zh-TW, zh-HK and zh-MO like the Traditional trading-accounts block; all four now use the Traditional replay notes, and 42 inline messages each are translated. Japanese has `catalogs/japaneseFeatureMessages.ts` (read-only account, research batch, workbench, Pine host; 272), 55 inline messages and the 26 `aiControl.*` messages it held only in English. The order-flow pane's descriptions are translated in Simplified and Traditional Chinese and Japanese.
+- Messages shown in English: Traditional Chinese 625–718 → 6, Japanese 290 → 5, Simplified Chinese 7 → 6.
+- Layout in Japanese and zh-TW (184 visits): nothing the app writes itself is cut; Japanese rail tabs break between characters ("読み取り専 / 用口座"), as "ウォッチリ / スト" already did.
+- Next: row 7c4, two of the other 19 languages, plus the replay hub's status messages.
+
+**Phase 7c4 is done (branch `design/phase-7c4-es-fr`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C4.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C4.md).
+
+- Spanish and French have their own feature files (`catalogs/spanishFeatureMessages.ts`, `catalogs/frenchFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (123 Spanish, 139 French), and the 27 English `aiControl.*` / `settings.category.ai` duplicates that hid the native block removed. Messages shown in English: Spanish 1,113 → 14, French 1,130 → 27; what is left is names and terms that read the same.
+- The replay hub's run status is the reader's language in all 30 catalogs: `trainingRunStatusLabel` maps the server's codes (`READY`, `AWAITING_MARKET`, `UNAVAILABLE`, `HEDGE_INPUT_RECOVERY_REQUIRED`) to `replay.hub.status*`; an unknown code still shows the server's text.
+- Layout in Spanish and French (184 visits): the one cut the app writes itself was the Spanish tape's bubble threshold in the narrow rail, already cut before; the tape's two filters now share the row by content, and Spanish "off" there is "Ninguna". No screens: the local backend stopped answering after the audits (QA, Known gaps).
+- Next: row 7c4's remaining 17 languages, two per PR: 7c5 Italian and Portuguese (PT).
+
+**Phase 7c5 is done (branch `design/phase-7c5-it-pt`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C5.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C5.md).
+
+- Italian and European Portuguese have their own feature files (`catalogs/italianFeatureMessages.ts`, `catalogs/europeanPortugueseFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (215 Italian, 163 Portuguese), and the 27 English duplicates that hid the native block removed. The Portuguese starts from the Brazilian blocks, converted to Portugal's usage and the pre-1990 spelling `pt-PT.ts` uses, and reviewed against the current English. Messages shown in English: Italian 1,209 → 25, Portuguese 1,134 → 26; what is left is names and trading terms that read the same.
+- Layout in Italian and Portuguese (152 visits, the 19 states that open without the local service, which kept hanging): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
+- Next: row 7c4's remaining 15 languages, two per PR: 7c6 Dutch and Polish.
+
+**Phase 7c6 is done (branch `design/phase-7c6-nl-pl`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C6.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C6.md).
+
+- Dutch and Polish have their own feature files (`catalogs/dutchFeatureMessages.ts`, `catalogs/polishFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (163 Dutch, 221 Polish), and the 27 English duplicates that hid the native block removed. Messages shown in English: Dutch 1,157 → 44, Polish 1,203 → 13; what is left is names and trading terms that read the same (Dutch keeps more of them).
+- Layout in Dutch and Polish (152 visits, the 19 states that open without the local service, which was not started): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
+- Next: row 7c4's remaining 13 languages, two per PR: 7c7 Ukrainian and Czech.
+
+**Phase 7c7 is done (branch `design/phase-7c7-uk-cs`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C7.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C7.md).
+
+- Ukrainian and Czech have their own feature files (`catalogs/ukrainianFeatureMessages.ts`, `catalogs/czechFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (132 Ukrainian, 189 Czech), and the 27 English duplicates that hid the native block removed. Messages shown in English: Ukrainian 1,115 → 13, Czech 1,150 → 27; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both, as in the four languages before.
+- Layout in Ukrainian and Czech (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 11 languages, two per PR: 7c8 Hungarian and Romanian.
+
+**Phase 7c8 is done (branch `design/phase-7c8-hu-ro`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C8.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C8.md).
+
+- Hungarian and Romanian have their own feature files (`catalogs/hungarianFeatureMessages.ts`, `catalogs/romanianFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (147 Hungarian, 162 Romanian), and the 27 English duplicates that hid the native block removed. Messages shown in English: Hungarian 1,136 → 27, Romanian 1,155 → 40; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both.
+- IBM Plex Sans now loads from its per-weight files with every subset's unicode-range (`styles/fonts.ts`): with only the latin and cyrillic subset files, which have no unicode-range, Hungarian ő / ű fell through to the CJK font and drew with a detached accent, and other Latin Extended-A letters came from a fallback face.
+- Layout in Hungarian and Romanian (152 visits, the 19 states that open without the local service, audited again with the font change): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 9 languages, two per PR: 7c9 Swedish and Turkish.
+
+**Phase 7c9 is done (branch `design/phase-7c9-sv-tr`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C9.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C9.md).
+
+- Swedish and Turkish have their own feature files (`catalogs/swedishFeatureMessages.ts`, `catalogs/turkishFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (188 Swedish, 223 Turkish), and the 27 English duplicates that hid the native block removed. Messages shown in English: Swedish 1,166 → 32, Turkish 1,204 → 12; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both (it was cut in Turkish).
+- Turkish ğ, ı, ş and İ draw in IBM Plex Sans thanks to Phase 7c8's font change; no suffix is attached to a placeholder, since Turkish vowel harmony would depend on the value.
+- Layout in Swedish and Turkish (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 7 languages, two per PR: 7c10 Indonesian and Malay.
+
+**Phase 7c10 is done (branch `design/phase-7c10-id-ms`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C10.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C10.md).
+
+- Indonesian and Malay have their own feature files (`catalogs/indonesianFeatureMessages.ts`, `catalogs/malayFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (214 Indonesian, 134 Malay), and the 27 English duplicates that hid the native block removed. Messages shown in English: Indonesian 1,206 → 24, Malay 1,125 → 20; what is left is names and trading terms that read the same.
+- Layout in Indonesian and Malay (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut. The CSV import's volume option already fits in both, so it is unchanged. The rail's tab titles fit; the Malay rail's existing collapse label breaks mid-word (known gap).
+- Next: row 7c4's remaining 5 languages: 7c11 Vietnamese and Thai, then Hindi, Arabic and Hebrew.
+
+**Phase 7c11 is done (branch `design/phase-7c11-vi-th`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C11.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C11.md).
+
+- Vietnamese and Thai have their own feature files (`catalogs/vietnameseFeatureMessages.ts`, `catalogs/thaiFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (223 Vietnamese, 154 Thai), and the 27 English duplicates that hid the native block removed. Messages shown in English: Vietnamese 1,204 → 12, Thai 1,140 → 21; what is left is names and trading terms that read the same.
+- Layout in Vietnamese and Thai (152 visits, the 19 states that open without the local service): the CSV import's volume option, cut in both, is shorter, and the Vietnamese rail's tape summary ("Giao dịch trực tiếp") now fits at 1024 px. What remains is cut with its full text on hover. The rail's tab titles fit. Thai draws in the system's Thai font, since the interface font has no Thai (known gap).
+- Next: row 7c4's last 3 languages, Hindi, Arabic and Hebrew, from Phase 7c12.
+
+**Phase 7c12 is done (branch `design/phase-7c12-hi-ar`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C12.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C12.md).
+
+- Hindi and Arabic have their own feature files (`catalogs/hindiFeatureMessages.ts`, `catalogs/arabicFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (138 Hindi, 124 Arabic), and the 27 English duplicates that hid the native block removed. Messages shown in English: Hindi 1,121 → 14, Arabic 1,113 → 10; what is left is names and trading terms that read the same.
+- Layout in Hindi and Arabic (152 visits, the 19 states that open without the local service): Arabic is the first right-to-left language of row 7c4, and two existing right-to-left faults are fixed. The layout menu's popover was anchored by `right: 0` and opened past the window's left edge (cut at every width); it now uses `inset-inline-end`. The header's wordmark read "ScopeCandle"; it keeps left-to-right order. What remains is cut with its full text on hover. The CSV import's volume option already fits in both. The rail's tab titles fit. Both scripts draw in system fonts, since the interface font has no Devanagari or Arabic (known gap).
+- Next: row 7c4's last language, Hebrew (7c13), right-to-left like Arabic.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

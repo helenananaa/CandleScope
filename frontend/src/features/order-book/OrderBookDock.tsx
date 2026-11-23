@@ -346,20 +346,24 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
         )}
         <span className="ob-title">{t("orderBook.title")}</span>
         <span className="ob-symbol">{symbol || view.identity.symbol}</span>
-        <span className="ob-delivery-mode" title={t("orderBook.delivery.title")}>
-          {deliveryLabel}
-        </span>
-        <span
-          className={`ob-status ob-status-${snapshot.status}`}
-          title={[
-            orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage),
-            snapshot.lastReceivedAtMs === null
-              ? null
-              : `${t("orderBook.lastReceived")} ${new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}`,
-          ].filter(Boolean).join("\n")}
-        >
-          <span className="ob-status-dot" aria-hidden="true" />
-          {orderBookStatusLabel(snapshot.status)}
+        {/* Status first: the data mode is the one that gives way in a narrow rail (orderBook.css). */}
+        <span className="ob-meta">
+          <span
+            className={`ob-status ob-status-${snapshot.status}`}
+            title={[
+              orderBookStatusLabel(snapshot.status),
+              orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage),
+              snapshot.lastReceivedAtMs === null
+                ? null
+                : `${t("orderBook.lastReceived")} ${new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}`,
+            ].filter(Boolean).join("\n")}
+          >
+            <span className="ob-status-dot" aria-hidden="true" />
+            {orderBookStatusLabel(snapshot.status)}
+          </span>
+          <span className="ob-delivery-mode" title={t("orderBook.delivery.title")}>
+            {deliveryLabel}
+          </span>
         </span>
       </header>
 

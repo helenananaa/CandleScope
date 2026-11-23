@@ -3,6 +3,7 @@ import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback } from "react";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import AppPageShell from "../../app/AppPageShell.js";
+import { Button, buttonClassName } from "../../components/ui/index.js";
 import { PageSettingsContext } from "../../app/pageSettingsContext.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -63,8 +64,8 @@ function ReplayStatusSurface({
             <p>{message}</p>
           </div>
           <div className="training-hub-heading-actions">
-            {retry !== undefined && <button type="button" onClick={retry}>{t("replay.retry")}</button>}
-            <a href="/replay.html">{t("replay.backToHub")}</a>
+            {retry !== undefined && <Button variant="primary" onClick={retry}>{t("replay.retry")}</Button>}
+            <a className={buttonClassName({ variant: "ghost" })} href="/replay.html">{t("replay.backToHub")}</a>
           </div>
         </header>
       </section>
