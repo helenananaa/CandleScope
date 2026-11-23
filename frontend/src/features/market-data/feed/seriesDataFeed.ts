@@ -680,6 +680,7 @@ export class SeriesDataFeed {
   pendingGapRepairs: Map<string, PendingGapRepair>;
   private terminalHistoryGaps: readonly TerminalHistoryGap[] = [];
   private readonly terminalHistoryGapListeners = new Set<() => void>();
+  private readonly pendingBeforePageListeners = new Set<() => void>();
   gapRepairInFlight: Map<string, EpochLease>;
   gapRepairGenerationBySeries: Map<SeriesKey, number>;
   repairAbortStateBySeries: Map<SeriesKey, RepairAbortState>;
@@ -1145,11 +1146,28 @@ export class SeriesDataFeed {
   }
 
   setPendingBeforePage(series: MarketSeries, pending: PendingBeforePage): void {
-    this.pendingBeforePages.set(this.beforePageKey(series), pending);
+    const key = this.beforePageKey(series);
+    const previous = this.pendingBeforePages.get(key);
+    this.pendingBeforePages.set(key, pending);
+    if (previous?.before !== pending.before) this.publishPendingBeforePages();
   }
 
   clearPendingBeforePage(series: MarketSeries): void {
-    this.pendingBeforePages.delete(this.beforePageKey(series));
+    if (this.pendingBeforePages.delete(this.beforePageKey(series))) this.publishPendingBeforePages();
+  }
+
+  /**
+   * Notifies when a series gains, loses or moves its unresolved left page.
+   * The page owner keeps reporting older history as loading until this
+   * settles, because the rows it already holds can still have a hole.
+   */
+  subscribePendingBeforePages = (listener: () => void): (() => void) => {
+    this.pendingBeforePageListeners.add(listener);
+    return () => { this.pendingBeforePageListeners.delete(listener); };
+  };
+
+  private publishPendingBeforePages(): void {
+    for (const listener of [...this.pendingBeforePageListeners]) listener();
   }
 
   getBeforePageAvailability(series: MarketSeries): BeforePageAvailability | null {
