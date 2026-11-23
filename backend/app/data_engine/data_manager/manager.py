@@ -161,6 +161,7 @@ from .runtime_pressure import (
     storage_file_snapshot,
 )
 from .storage_intents import PRIORITY_RANK, StorageIntentRegistry, WILDCARD_INTERVAL
+from .upstream_availability import UpstreamAvailability
 from .stream_policy import StreamEnsurePlanner
 from .warm_start import AggregatorWarmStartService
 
@@ -324,6 +325,10 @@ class DataManager(DataManagerCore):
             interval_resolver=self.interval_resolver,
             has_stream_lease=lambda key: key in self._stream_leases,
         )
+        # Exchange reachability per market from ingestion session health; the
+        # browser stream endpoints turn it into explicit offline states.
+        self.upstream_availability = UpstreamAvailability()
+        self.coordinator.set_upstream_availability(self.upstream_availability)
         self.query_engine = QueryEngine(
             cache=self.cache,
             config=self._cfg.query,

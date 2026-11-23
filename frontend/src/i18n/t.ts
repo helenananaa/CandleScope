@@ -48,6 +48,7 @@ const WS_STATUS_KEYS = {
   disconnected: "status.ws.disconnected",
   fallback: "status.ws.fallback",
   mock: "status.ws.mock",
+  offline: "status.ws.offline",
 } as const satisfies Record<string, MessageKey>;
 
 export function translateWsStatus(status: string, locale: LocaleId = getLocale()): string {

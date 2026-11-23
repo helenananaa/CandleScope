@@ -693,6 +693,7 @@ function LiveChartCell({
       indicatorSignature: indicatorSignature(indicators.view.activeIndicators),
       marketReady: !obscured && sourceMarketData.status.barCount > 0 && !sourceMarketData.view.loading
         && !sourceMarketData.status.initialHistoryPending && !sourceMarketData.status.loadingMoreLeft,
+      liveStatus: sourceMarketData.view.wsStatus,
       indicatorsReady: !indicators.status.computing && indicators.view.activeIndicators.every((indicator) =>
         !indicator.error && (indicator.visible === false || indicator.lines?.some((line) => line.data.length > 0))),
       barCount: sourceMarketData.status.barCount,
@@ -708,7 +709,7 @@ function LiveChartCell({
   }, [cell.id, chartSession.view.exchange, chartSession.view.marketType, chartSession.view.symbol,
     chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
     sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
-    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation,
+    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, sourceMarketData.view.wsStatus, obscured, onControlObservation,
     study.pending, study.masked, study.playback, study.busy, study.error, cell.session, cell.quickReplay, quickReplay, replay.error, replay.key]);
   useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
@@ -1142,6 +1143,12 @@ function LiveChartCell({
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
+          {sourceMarketData.view.wsStatus === "offline" && (
+            <span role="status" className="multi-chart-cell-offline" data-live-offline="true"
+              title={t("status.ws.offlineDetail")}>
+              {t("status.ws.offline")}
+            </span>
+          )}
           {linkGroupControl ?? (linkGroup && (
             <span
               className="multi-chart-cell-link"

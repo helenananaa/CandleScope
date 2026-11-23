@@ -7,7 +7,9 @@ import type {
   KlineStreamFactory,
   KlineStreamOptions,
   KlineStreamSeries,
+  KlineStreamStatusMessage,
 } from "../klineContracts.js";
+import { upstreamAvailabilityOf } from "../klineContracts.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey } from "../klineSeriesIdentity.js";
 import { KlineStreamSubscription } from "./klineStreamSubscription.js";
 
@@ -35,6 +37,8 @@ interface SharedStreamEntry {
   open: boolean;
   disposed: boolean;
   lastPingAt: number;
+  /** Latest exchange-offline report, replayed to charts that join later. */
+  upstreamOffline: KlineStreamStatusMessage | null;
 }
 
 export interface SharedKlineStreamCoordinatorOptions {
@@ -170,6 +174,9 @@ export class SharedKlineStreamCoordinator {
             active_intervals: active,
           }, subscriber.controller);
         }
+        // The backend reports an outage once per instrument; a chart that
+        // joins the shared stream later must not look connected.
+        if (entry.upstreamOffline) subscriber.options.onStreamStatus?.(entry.upstreamOffline, subscriber.controller);
       });
     }
     return subscriber.controller;
@@ -234,6 +241,7 @@ export class SharedKlineStreamCoordinator {
       open: false,
       disposed: false,
       lastPingAt: 0,
+      upstreamOffline: null,
     };
     entry.controller = this.createPhysicalStream(series, {
       ...initialOptions,
@@ -247,6 +255,8 @@ export class SharedKlineStreamCoordinator {
         this.reconcileIntervals(entry);
       },
       onStreamStatus: (message) => {
+        const upstream = upstreamAvailabilityOf(message);
+        if (upstream) entry.upstreamOffline = upstream === "offline" ? message : null;
         entry.subscribers.forEach((subscriber) => {
           if (
             !subscriber.closed
@@ -295,6 +305,8 @@ export class SharedKlineStreamCoordinator {
         if (entry.disposed) return;
         entry.open = false;
         entry.activeIntervals.clear();
+        // The backend re-reports availability after the next subscribe.
+        entry.upstreamOffline = null;
         if (!this.reconnects) {
           entry.disposed = true;
           if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);

@@ -5,8 +5,9 @@ import { useLocale } from "../i18n/useLocale.js";
 import MarketStatusBar from "./MarketStatusBar.js";
 import { APP_VERSION } from "../shared/appVersion.js";
 import type { TerminalHistoryGap } from "../features/market-data/klineContracts.js";
+import { statusBarConnectionState, type ConnectionStatus } from "./statusBarState.js";
 
-export type ConnectionStatus = "connected" | "loading" | "disconnected" | string;
+export type { ConnectionStatus } from "./statusBarState.js";
 
 export interface StatusBarModel {
   connectionStatus: ConnectionStatus;
@@ -33,6 +34,7 @@ export interface StatusBarProps {
 
 function connectionLabel(status: StatusBarModel): string {
   if (status.historyOnly) return t("interval.historyOnly");
+  if (status.wsStatus === "offline") return t("status.exchangeOffline", { exchange: status.exchangeLabel });
   if (status.connectionStatus === "connected") {
     if (status.wsStatus && status.wsStatus !== "live") return translateWsStatus(status.wsStatus);
     return t("status.connectedTo", { exchange: status.exchangeLabel });
@@ -65,7 +67,6 @@ function StatusBar({ status, extensions }: StatusBarProps) {
   useLocale();
   const historyGapLabel = status.historyGap ? historyGapDetail(status.historyGap) : null;
   const {
-    connectionStatus: dataConnectionStatus,
     dataSource,
     exchangeLabel,
     marketLabel,
@@ -77,9 +78,7 @@ function StatusBar({ status, extensions }: StatusBarProps) {
     exchangeCatalogStatus,
     exchangeLimitations = [],
   } = status;
-  const connectionStatus = status.historyOnly ? "disconnected" : dataConnectionStatus === "connected" && wsStatus && wsStatus !== "live"
-    ? wsStatus === "disconnected" ? "disconnected" : "loading"
-    : dataConnectionStatus;
+  const connectionStatus = statusBarConnectionState(status);
   const wsLabel = status.historyOnly ? t("interval.historyOnly") : wsStatus ? translateWsStatus(wsStatus) : wsStatusLabel;
 
   return (
@@ -87,7 +86,8 @@ function StatusBar({ status, extensions }: StatusBarProps) {
       source="live"
       connectionStatus={connectionStatus}
       left={<>
-        <span title={t("status.klineScopeDetail")}>
+        <span title={wsStatus === "offline" ? t("status.ws.offlineDetail") : t("status.klineScopeDetail")}
+          data-live-offline={wsStatus === "offline" ? "true" : undefined}>
           <span className={`status-dot ${connectionStatus}`} />
           {t("status.klineScope")} {connectionLabel(status)}
         </span>

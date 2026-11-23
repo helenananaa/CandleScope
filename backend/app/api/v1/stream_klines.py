@@ -5,7 +5,7 @@ import asyncio
 import json
 from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -338,6 +338,58 @@ async def stream_single_kline(
                 pass
 
 
+class UpstreamStatusRelay:
+    """Push one instrument's exchange availability to a browser K-line socket.
+
+    The browser only sees its local socket, which stays open while the
+    exchange is unreachable. DataManager's ``upstream_availability`` knows
+    better; relay its offline/online changes as ``stream_status`` messages
+    without an interval, so they apply to every interval of the instrument.
+    """
+
+    def __init__(self, dm, *, exchange: str, market_type: str, symbol: str,
+                 send: Callable[[dict[str, Any]], Awaitable[bool]]) -> None:
+        self._availability = getattr(dm, "upstream_availability", None)
+        self._market = (str(exchange).strip().lower(), str(market_type).strip().lower(),
+                        str(symbol).strip().upper())
+        self._payload = {"exchange": exchange, "market_type": market_type, "symbol": symbol}
+        self._send = send
+        self._sent_offline = False
+        self._tasks: set[asyncio.Task] = set()
+        subscribe = getattr(self._availability, "subscribe", None)
+        self._unsubscribe = subscribe(self._changed) if callable(subscribe) else None
+
+    def _status(self, offline: bool, reason: str) -> dict[str, Any]:
+        return {"type": "stream_status", **self._payload,
+                "status": "offline" if offline else "online", "source": "upstream", "reason": reason}
+
+    def _changed(self, change) -> None:
+        market = change.market
+        if market.kind != "kline" or (market.exchange, market.market_type, market.symbol) != self._market:
+            return
+        if change.offline == self._sent_offline:
+            return
+        self._sent_offline = change.offline
+        task = asyncio.get_running_loop().create_task(self._send(self._status(change.offline, change.reason)))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def sync(self) -> None:
+        is_offline = getattr(self._availability, "is_offline", None)
+        offline = bool(callable(is_offline) and is_offline("kline", *self._market))
+        if offline == self._sent_offline:
+            return
+        self._sent_offline = offline
+        await self._send(self._status(offline, "upstream_unavailable" if offline else "upstream_available"))
+
+    def close(self) -> None:
+        unsubscribe, self._unsubscribe = self._unsubscribe, None
+        if unsubscribe is not None:
+            unsubscribe()
+        for task in tuple(self._tasks):
+            task.cancel()
+
+
 async def stream_multi_kline(
     websocket: WebSocket,
     dm,
@@ -406,6 +458,9 @@ async def stream_multi_kline(
                 await require_resync()
         except Exception:
             await require_resync()
+
+    upstream = UpstreamStatusRelay(dm, exchange=exchange, market_type=market_type,
+                                   symbol=symbol, send=safe_send_json)
 
     try:
         async def forwarder() -> None:
@@ -552,6 +607,8 @@ async def stream_multi_kline(
                         "active_intervals": sorted(active_intervals),
                         "market_type": market_type,
                     }, msg))
+                    if active_intervals:
+                        await upstream.sync()
 
                 elif action == "unsubscribe":
                     async def detach_interval(iv: str) -> None:
@@ -605,6 +662,7 @@ async def stream_multi_kline(
 
     finally:
         ws_closed = True
+        upstream.close()
         async def cleanup() -> None:
             release_stream = getattr(dm, "release_stream", None)
             intervals_to_release = list(active_intervals)

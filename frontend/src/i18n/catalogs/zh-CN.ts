@@ -763,6 +763,10 @@ export const zhCN = {
   "status.ws.disconnected": "已断开",
   "status.ws.fallback": "轮询回退",
   "status.ws.mock": "模拟模式",
+  "status.ws.offline": "离线",
+  "status.exchangeOffline": "离线：无法连接 {exchange}",
+  "status.ws.offlineDetail": "目前无法连接交易所。图表保留已有的 K 线，不会自行补造；连接恢复后自动补齐缺失的 K 线。",
+  "watchlist.priceStale": "已过期：交易所离线前的最后价格",
   "status.ws.unknown": "未知",
 
   "rail.ariaLabel": "市场侧栏",
