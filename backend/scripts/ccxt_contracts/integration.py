@@ -106,6 +106,19 @@ def main() -> int:
         # Synthetic series and chart inputs.
         "test_synthetic_series.py", "test_synthetic_api.py", "test_synthetic_pinned.py",
         "test_chart_indicator_input.py", "test_chart_strategy_signals.py",
+        # Strategy results in replay reveal only the revealed prefix (Pine-native replay runs in pine-host-contracts).
+        "test_local_bar_result_replay.py", "test_native_replay_views.py", "test_native_replay_origin.py",
+        # Local imports: bars, user market trades and manual replay imports.
+        "test_local_data_service.py", "test_local_data_jobs.py", "test_user_market_trades.py",
+        "test_replay_imported_market_trades.py", "test_market_dataset_local_bar.py", "test_manual_replay_import.py",
+        # External model interface.
+        "test_external_provider_*.py", "test_external_model_adapters.py",
+        # Simulation and backtest layering, and the backtest core.
+        "test_simulation_architecture.py", "test_backtest_architecture.py", "test_backtest_accounting.py",
+        "test_backtest_determinism.py", "test_backtest_execution.py", "test_simulation_kernel.py",
+        # Practice HEDGE money and migration, multi-chart replay finances, restart and shutdown.
+        "test_trading_practice_hedge.py", "test_trading_state_shutdown.py", "test_replay_multi_interval.py",
+        "test_replay_multi_interval_service.py", "test_replay_recovery.py", "test_replay_shutdown.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",
