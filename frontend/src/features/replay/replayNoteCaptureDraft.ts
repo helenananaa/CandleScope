@@ -1,13 +1,11 @@
 import { JournalDraftError, journalClientId } from "../trading-accounts/journalEditor.js";
-import { replayNoteSelectedCaptures, parseReplayNoteContext, sameReplayNoteContext, type ReplayNoteCaptureSave, type ReplayNoteContext } from "./replayNotes.js";
+import { replayNoteContextVisibleAt, replayNoteSelectedCaptures, parseReplayNoteContext, sameReplayNoteContext, type ReplayNoteCaptureSave, type ReplayNoteContext } from "./replayNotes.js";
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export const replayNoteScreenshotField = "replayScreenshotIds";
 export const replayNotePendingCaptureField = "replayPendingCaptureId";
 const prefix = "candlescope.replay-note-capture-draft.v1:";
 const fail = (): never => { throw new JournalDraftError("storage"); };
-const owned = (a: ReplayNoteContext, b: ReplayNoteContext) => a.runId === b.runId && a.trackId === b.trackId && a.dataEpoch === b.dataEpoch;
-const within = (a: ReplayNoteContext, b: ReplayNoteContext) => owned(a, b) && a.virtualTimeMs <= b.virtualTimeMs && a.timelineSequence <= b.timelineSequence;
 const key = (id: string) => prefix + encodeURIComponent(id);
 
 export const replayNoteScreenshotIds = replayNoteSelectedCaptures;
@@ -17,6 +15,8 @@ export function replayNotePendingCapture(fields: Record<string, string>): string
   if (value.length < 1 || value.length > 128) return fail();
   return value;
 }
+// Existing envelopes can contain an original PNG copied into a same-event Review draft.
+// Keep the bytes recoverable in a later view and check visibility when reading or copying.
 function decode(raw: string): ReplayNoteCaptureSave {
   const value = JSON.parse(raw) as ReplayNoteCaptureSave;
   const context = parseReplayNoteContext(value.context), capturedContext = parseReplayNoteContext(value.capturedContext);
@@ -24,7 +24,9 @@ function decode(raw: string): ReplayNoteCaptureSave {
   if (Object.keys(value).sort().join() !== ["capturedContext", "chart", "context", "id", "image"].sort().join()
     || typeof value.id !== "string" || value.id.length < 1 || value.id.length > 128
     || typeof value.image !== "string" || value.image.length > 2_796_226
-    || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value.image) || !within(capturedContext, context)
+    || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value.image) || capturedContext.runId !== context.runId
+    || capturedContext.trackId !== context.trackId || capturedContext.dataEpoch !== context.dataEpoch
+    || capturedContext.virtualTimeMs > context.virtualTimeMs || capturedContext.timelineSequence > context.timelineSequence
     || !chart || Object.keys(chart).sort().join() !== ["chartType", "interval", "seriesKey", "sourceVersion"].sort().join()
     || typeof chart.interval !== "string" || chart.interval.length < 1 || chart.interval.length > 32
     || typeof chart.chartType !== "string" || chart.chartType.length < 1 || chart.chartType.length > 32
@@ -38,6 +40,7 @@ const same = (a: ReplayNoteCaptureSave, b: ReplayNoteCaptureSave) => a.id === b.
   && a.chart.seriesKey === b.chart.seriesKey && a.chart.sourceVersion === b.chart.sourceVersion;
 
 export function createReplayNoteCaptureDraft(context: ReplayNoteContext, capture: Omit<ReplayNoteCaptureSave, "id" | "context">): ReplayNoteCaptureSave {
+  if (!replayNoteContextVisibleAt(capture.capturedContext, context, context.virtualTimeMs)) throw new JournalDraftError("changed");
   return decode(JSON.stringify({ ...capture, id: "rc_" + journalClientId(), context }));
 }
 export function saveReplayNoteCaptureDraft(storage: Store, payload: ReplayNoteCaptureSave): void {
@@ -49,7 +52,8 @@ export function readReplayNoteCaptureDraft(storage: Store, id: string, context: 
   const raw = storage.getItem(key(id));
   if (raw === null) return null;
   const value = decode(raw);
-  if (value.id !== id || !sameReplayNoteContext(value.context, context) || !within(value.capturedContext, view)) throw new JournalDraftError("changed");
+  if (value.id !== id || !sameReplayNoteContext(value.context, context) || !replayNoteContextVisibleAt(value.context, view, view.virtualTimeMs)
+    || !replayNoteContextVisibleAt(value.capturedContext, view, view.virtualTimeMs)) throw new JournalDraftError("changed");
   return value;
 }
 export function releaseReplayNoteCaptureDraft(storage: Store, payload: ReplayNoteCaptureSave): void {
@@ -71,7 +75,7 @@ export function copyReplayNoteCaptureDraft(storage: Store, fields: Record<string
   current: ReplayNoteContext): Record<string, string> {
   const id = replayNotePendingCapture(fields);
   if (id === null) return { ...fields };
-  if (!within(original, current)) throw new JournalDraftError("changed");
+  if (!replayNoteContextVisibleAt(original, current, current.virtualTimeMs)) throw new JournalDraftError("changed");
   const source = readReplayNoteCaptureDraft(storage, id, original, current);
   if (source === null) return { ...fields }; // An already uploaded id can be resolved through its scoped metadata.
   const copy = createReplayNoteCaptureDraft(current, { image: source.image, capturedContext: source.capturedContext, chart: source.chart });

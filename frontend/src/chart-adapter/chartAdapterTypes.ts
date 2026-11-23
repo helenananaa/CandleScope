@@ -17,6 +17,7 @@ import type {
   ProjectionCustomValues,
 } from "../features/chart-representation/chartRepresentationTypes.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
+import type { IndicatorPartialSeedRange } from "../features/indicators/indicatorTypes.js";
 
 export { TickMarkType } from "lightweight-charts";
 
@@ -98,6 +99,7 @@ export type NormalizedIndicatorSeriesEntry =
   | NormalizedIndicatorWhitespaceEntry;
 
 export interface IndicatorLine {
+  inputAxis?: "display-ordinal";
   nativeScene?: Record<string, unknown>;
   id?: string;
   indicatorId?: string;
@@ -119,6 +121,8 @@ export interface IndicatorLine {
   data?: IndicatorDataEntry[];
   colorData?: IndicatorDataEntry[] | null;
   renderUpdate?: "tail" | "full" | null;
+  /** Owner indicator's partial-seed spans; read by legends, ignored by renderers. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
 }
 
 export interface IndicatorSeriesDefinition extends IndicatorLine {
@@ -135,6 +139,7 @@ export interface IndicatorMarkerEntry {
 }
 
 export interface IndicatorMarkerGroup {
+  inputAxis?: "display-ordinal";
   id?: string;
   indicatorId?: string;
   pane?: string;
@@ -142,6 +147,7 @@ export interface IndicatorMarkerGroup {
 }
 
 export interface IndicatorBgcolorGroup {
+  inputAxis?: "display-ordinal";
   id?: string;
   indicatorId?: string;
   pane?: string;
@@ -272,6 +278,7 @@ export interface DeltaViewportController<TRow extends TimedSeriesRow> {
 }
 
 export interface IndicatorBarcolorGroup {
+  inputAxis?: "display-ordinal";
   data?: Array<{ time?: ChartTime; color?: string }>;
 }
 

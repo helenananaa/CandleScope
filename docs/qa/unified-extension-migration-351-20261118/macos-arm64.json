@@ -1,0 +1,79 @@
+{
+  "oldExecutable": "e1b6d7722e66352ba696bf9460ae49a57d8efc2790d09b8ed62882ae28c8631b",
+  "oldAppearance": "521627c2a1adf240a24dfc69ccecfe3c84036fb7979094317bec677216e022e8",
+  "terminal": "sha256:594d88ecfebcb496a02f471e3e5445daf000072f46ae7e6dac6164987e4c74ff",
+  "previousRegistrySha256": "69e814a460d4aa063dbad69ca2b20ca01e741f0ddba42070e87c8284cafcc198",
+  "platform": "macOS 26.6.2 arm64",
+  "arch": "arm64",
+  "asarSha256": "450a369770e5e63789ffd660a84c654397e648b440c6db007d9315a2f23a804d",
+  "signatureVerified": true,
+  "phases": [
+    {
+      "name": "retire-migrate-and-select",
+      "electron": "43.3.0",
+      "retiredStatus": 410,
+      "migratedDigest": "sha256:995ce555d3bde4a4c9261c631961ca0766e645ff6ffec966e79a94e20156ebf0",
+      "window": {
+        "theme": "light",
+        "background": "#faf8f2",
+        "rail": "left"
+      },
+      "terminal": "CANDLE / TERMINALWORKSPACE ONLINE",
+      "legacyStatePreserved": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "normal-restart",
+      "electron": "43.3.0",
+      "window": {
+        "theme": "light",
+        "background": "#faf8f2",
+        "rail": "left"
+      },
+      "terminal": "CANDLE / TERMINALWORKSPACE ONLINE",
+      "desktopActivation": {
+        "id": "candlescope.terminal-workbench",
+        "version": "1.0.0",
+        "digest": "sha256:594d88ecfebcb496a02f471e3e5445daf000072f46ae7e6dac6164987e4c74ff",
+        "generation": 4
+      },
+      "backendRunning": true,
+      "legacyStatePreserved": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "native-disable",
+      "electron": "43.3.0",
+      "window": {
+        "theme": null,
+        "background": "#0d0e10",
+        "rail": "right"
+      },
+      "singlePluginDisablePersisted": true,
+      "legacyStatePreserved": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart-after-recovery",
+      "electron": "43.3.0",
+      "window": {
+        "theme": "light",
+        "background": "#faf8f2",
+        "rail": "right"
+      },
+      "themePreserved": true,
+      "legacyStatePreserved": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true,
+  "python": "3.12.15",
+  "productSource": "22d73db9c5ae0fb246f88894da532f69bb83e05d",
+  "profile": "Isolated LOCAL_OFFLINE profile preseeded with an enabled old executable extension and selected old appearance",
+  "packagedBackendAndDesktopSourcesMatch": true,
+  "builtInScriptPackagesMatchPr482": true
+}

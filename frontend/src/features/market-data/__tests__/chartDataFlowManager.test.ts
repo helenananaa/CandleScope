@@ -120,8 +120,9 @@ test("unhealthy targets never compute; targets and enabled definitions have fixe
   assert.equal(indicatorWarmPlanKey(plan), indicatorWarmPlanKey({ ...plan, indicators: plan.indicators.map(item => ({ ...item, lines: [] })) }));
 });
 
-test("hosted warming certifies only the returned range and retains its backend revision", async t => {
+test("hosted warming certifies only the returned range and retains backend revision and seed state", async t => {
   const response = { ...payload, range: { start: 180, end: 30000 },
+    seed: { state: "partial" as const, warmupBars: 297, seedBars: 100 },
     dataRevision: { serverEpoch: "range-server", correctionRevision: "4", closedThrough: 30000 } };
   const { warm, flow, context } = setup(t, { range: async ({ requests }) => ({ ok: true,
     results: requests.map(request => ({ clientId: request.clientId, payload: response })) }) });
@@ -130,6 +131,7 @@ test("hosted warming certifies only the returned range and retains its backend r
   assert.equal(cached.computedSegments[0]?.start, 180, "unreturned history must remain unproven");
   assert.equal(cached.revision?.serverEpoch, "range-server");
   assert.equal(cached.revision?.correctionRevision, "4");
+  assert.deepEqual(cached.partialSeed, [{ start: 180, end: 30000, warmupBars: 297, seedBars: 100 }]);
   assert.equal(flow.health(hosted, context, { start: 60, end: 30000 }).covered, false);
 });
 

@@ -1,25 +1,28 @@
+import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
+import { useLocale } from "../../i18n/useLocale.js";
 import { useEffect, useState } from "react";
+import { Button, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export function StrategyResearchFirstOpen({
-  libraryEnabled,
   runtimeMode,
   onOpenLibrary,
   draftId,
   saving,
   onSelectTemplate,
 }: {
-  libraryEnabled: boolean;
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   onOpenLibrary(): void;
   draftId: string | null;
   saving: boolean;
   onSelectTemplate(templateId: string): void;
 }) {
+  useLocale();
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -33,13 +36,17 @@ export function StrategyResearchFirstOpen({
   const selected = draft?.id === draftId ? draft : null;
   return (
     <div className="strategy-research-first-open" data-testid="strategy-research-first-open" data-strategy-draft={draftId ?? ""}>
-      <p className="chart-strategy-eyebrow">{t("chartTester.startEyebrow")}</p>
-      <h2>{t("chartTester.startTitle")}</h2>
-      <p>{t("strategy.firstOpenLead")}</p>
+      <header className="strategy-research-first-open-head">
+        <h2>{t("chartTester.startTitle")}</h2>
+        {browserHost() ? <p>
+          {t("browser.strategy.intro")}{" "}
+          <BrowserDesktopLink feature="strategy" />
+        </p> : <p>{t("strategy.firstOpenLead")}</p>}
+      </header>
       {selected && (
         <div className="strategy-research-resume" role="status">
           <div><small>{t("chartTester.autosave.saved")}</small><strong>{selected.displayName}</strong></div>
-          <button type="button" className="research-primary" onClick={onOpenLibrary}>{t("research.source.openLibrary")}</button>
+          <Button variant="primary" size="sm" onClick={onOpenLibrary}>{t("research.source.openLibrary")}</Button>
         </div>
       )}
       <div className="strategy-research-templates" data-testid="strategy-research-templates">
@@ -47,8 +54,9 @@ export function StrategyResearchFirstOpen({
           <button
             key={template.id}
             type="button"
+            className="strategy-template-card"
             data-testid={`strategy-research-template-${template.id}`}
-            disabled={!libraryEnabled || saving}
+            disabled={saving}
             aria-pressed={selected?.source === template.source}
             onClick={() => onSelectTemplate(template.id)}
           >
@@ -58,25 +66,23 @@ export function StrategyResearchFirstOpen({
           </button>
         ))}
       </div>
-      {saving && <p role="status">{t("chartTester.autosave.saving")}</p>}
-      <div className="strategy-research-first-open-actions">
-        <div data-testid="strategy-research-current-chart-unavailable">
-          <p>
-            {runtimeMode === "LOCAL_OFFLINE"
-              ? t("research.source.offlineLiveUnavailable")
-              : t("strategy.currentChartUnbound")}
-          </p>
+      {saving && <p className="strategy-research-note" role="status">{t("chartTester.autosave.saving")}</p>}
+      <div className="strategy-research-first-open-actions" data-testid="strategy-research-current-chart-unavailable">
+        <p>
+          {runtimeMode === "LOCAL_OFFLINE"
+            ? t("research.source.offlineLiveUnavailable")
+            : t("strategy.currentChartUnbound")}
+        </p>
+        <div className="strategy-research-first-open-buttons">
           {runtimeMode === "LIVE" ? (
-            <a href="/" data-testid="strategy-research-open-market-tester">
+            <a href="/" className={buttonClassName({ variant: "ghost" })} data-testid="strategy-research-open-market-tester">
               {t("strategy.openMarketTester")}
             </a>
           ) : null}
-        </div>
-        {libraryEnabled ? (
-          <button type="button" data-testid="strategy-research-import-own-data" onClick={onOpenLibrary}>
+          <Button data-testid="strategy-research-import-own-data" onClick={onOpenLibrary}>
             {t("research.source.openLibrary")}
-          </button>
-        ) : null}
+          </Button>
+        </div>
       </div>
     </div>
   );

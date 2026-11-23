@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**', '.local/**']),
+  globalIgnores(['dist', 'dist-web', 'dist-host', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**', '.local/**']),
   {
     files: ['**/*.{js,jsx,mjs,cjs}'],
     extends: [
@@ -84,6 +84,7 @@ export default defineConfig([
       'src/**/__tests__/**/*.{ts,tsx}',
       'src/**/*.test.{ts,tsx}',
       'src/test/**/*.{ts,tsx}',
+      'dev/**/*.{ts,tsx}',
     ],
     languageOptions: {
       globals: {

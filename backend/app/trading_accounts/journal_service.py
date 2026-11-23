@@ -120,6 +120,7 @@ class JournalService:
             "symbol": entry["symbol"],
             "kind": entry["kind"],
             "tradeId": entry["trade_id"],
+            **({"positionSide": trade.position_side} if trade and trade.position_side else {}),
             "tradeLinkedAtMs": entry["trade_linked_at_ms"],
             "createdAtMs": entry["created_at_ms"],
             "updatedAtMs": entry["updated_at_ms"],

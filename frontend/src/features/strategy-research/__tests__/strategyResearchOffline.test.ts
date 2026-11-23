@@ -28,8 +28,9 @@ test("offline launcher opens the unified imported workspace and keeps local.html
   const sh = readFileSync(path.join(repoRoot, "start-local-offline.sh"), "utf8");
   assert.match(ps1, /strategy\.html\?source=imported/);
   assert.match(sh, /strategy\.html\?source=imported/);
-  assert.match(ps1, /VITE_RESEARCH_DATA_LIBRARY_ENABLED/);
-  assert.match(sh, /VITE_RESEARCH_DATA_LIBRARY_ENABLED/);
+  // The library flag is retired; the launchers no longer set it.
+  assert.doesNotMatch(ps1, /VITE_RESEARCH_DATA_LIBRARY_ENABLED/);
+  assert.doesNotMatch(sh, /VITE_RESEARCH_DATA_LIBRARY_ENABLED/);
   assert.doesNotMatch(ps1, /FrontendPort\/local\.html/);
   const localHtml = readFileSync(path.join(repoRoot, "frontend/local.html"), "utf8");
   assert.match(localHtml, /local/);
@@ -62,7 +63,6 @@ test("health payload sets LOCAL_OFFLINE without inventing a page toggle", () => 
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?source=imported" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(html, /data-runtime-mode="LIVE"/);
@@ -73,7 +73,6 @@ test("LOCAL_OFFLINE current chart is shown with a reason and is not runnable", (
   const runtime = new StrategyResearchRuntime({
     restoreWorkspace: false,
     runtimeMode: "LOCAL_OFFLINE",
-    libraryEnabled: true,
   });
   assert.equal(runtime.currentChartRunnable(), false);
   const html = renderToStaticMarkup(
@@ -81,7 +80,6 @@ test("LOCAL_OFFLINE current chart is shown with a reason and is not runnable", (
       open: true,
       runtimeMode: "LOCAL_OFFLINE",
       capabilities: runtime.capabilitiesFor("CURRENT_CHART"),
-      libraryEnabled: true,
       settings,
       events: [],
       onSelectKind() {},

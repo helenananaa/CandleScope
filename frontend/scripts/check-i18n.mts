@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { DEFAULT_LOCALE, LOCALES, loadLocaleCatalog, localeDefinition } from "../src/i18n/registry.js";
 import { workspaceNameAliases } from "../src/i18n/workspaceNameAliases.js";
+import { internalTermProblems } from "./i18nInternalTerms.mts";
 
 const ZH_TW_SIMPLIFIED_HAN = new Set(
   fs.readFileSync(new URL("./zh-tw-simplified-han.txt", import.meta.url), "utf8").trim(),
@@ -196,7 +197,7 @@ async function main(): Promise<void> {
   await Promise.all(LOCALES.map(loadLocaleCatalog));
   const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const catalogs = Object.fromEntries(LOCALES.map((locale) => [locale, localeDefinition(locale).messages]));
-  const catalog = catalogProblems(catalogs, DEFAULT_LOCALE);
+  const catalog = [...catalogProblems(catalogs, DEFAULT_LOCALE), ...internalTermProblems(catalogs)];
   const sources = sourceProblems(path.join(frontendRoot, "src"));
   const lines = [
     ...catalog.map((message) => `catalog: ${message}`),
@@ -213,7 +214,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log(`i18n check passed (${LOCALES.length} locales, ${Object.keys(catalogs[DEFAULT_LOCALE]!).length} catalog keys, ${sourceFiles(path.join(frontendRoot, "src")).length} source files)`);
+  console.log(`i18n check passed (${LOCALES.length} locales, ${Object.keys(catalogs[DEFAULT_LOCALE]!).length} catalog keys, ${sourceFiles(path.join(frontendRoot, "src")).length} source files, no internal terms)`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) void main();

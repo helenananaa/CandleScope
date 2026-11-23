@@ -178,6 +178,9 @@ class SignedMarketplaceBuilder:
             ),
             "sha256Sums": (f"{bundle.sha256.removeprefix('sha256:')}  {file_name}\n"),
         }
+        return self.add_release_statement(statement)
+
+    def add_release_statement(self, statement: dict[str, Any]) -> dict[str, Any]:
         statement["sha256SumsSha256"] = _digest_bytes(
             statement["sha256Sums"].encode("utf-8")
         )

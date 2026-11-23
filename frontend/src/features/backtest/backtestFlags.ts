@@ -37,16 +37,6 @@ export function isPythonTrustedLocalEnabled(
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-export function isBacktestResearchEnabled(
-  env: Record<string, string | boolean | undefined> = import.meta.env as Record<
-    string,
-    string | boolean | undefined
-  >,
-): boolean {
-  const raw = String(env.VITE_BACKTEST_RESEARCH_ENABLED ?? "1").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
 export function isBacktestResearchAdvancedEnabled(
   env: Record<string, string | boolean | undefined> = import.meta.env as Record<
     string,
@@ -54,18 +44,6 @@ export function isBacktestResearchAdvancedEnabled(
   >,
 ): boolean {
   const raw = String(env.VITE_BACKTEST_RESEARCH_ADVANCED_ENABLED ?? "1")
-    .trim()
-    .toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
-export function isBacktestLegacyWorkbenchEnabled(
-  env: Record<string, string | boolean | undefined> = import.meta.env as Record<
-    string,
-    string | boolean | undefined
-  >,
-): boolean {
-  const raw = String(env.VITE_BACKTEST_LEGACY_WORKBENCH_ENABLED ?? "1")
     .trim()
     .toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";

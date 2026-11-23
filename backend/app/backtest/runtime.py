@@ -42,6 +42,7 @@ from .chart_book import BOOK_MODES, DUAL_MODES
 from .chart_context import ChartBacktestContextResolver
 from .service import BacktestService
 from .strategy.isolated import IsolatedStrategyProvider
+from .strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, PineEngineProvider
 from .strategy.registry import build_default_strategy_registry
 from .external_provider.provider import ExternalHostInterrupted
 
@@ -123,6 +124,7 @@ class BacktestRuntime:
         local_data_dir: Path | None = None,
         local_data_service: LocalDatasetService | None = None,
         trade_archive_dir: Path | None = None,
+        start_worker: bool = True,
     ) -> BacktestRuntime:
         service = BacktestService.start(
             settings,
@@ -140,7 +142,8 @@ class BacktestRuntime:
             if settings.external_provider_enabled:
                 service.external.open()
                 service.external.store.reset_client_leases()
-            runtime.worker.start()
+            if start_worker:
+                runtime.worker.start()
         except BaseException:
             runtime.native.shutdown()
             runtime.worker.shutdown()
@@ -840,13 +843,18 @@ class BacktestWorker:
                     trusted_confirmed=bool(config.get("python_trusted_confirmed")),
                 )
             else:
-                provider = IsolatedStrategyProvider(
-                    str(
-                        config.get("strategy_execution_revision")
-                        or record["strategy_revision_id"]
-                    ),
-                    step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                execution_revision = str(
+                    config.get("strategy_execution_revision") or record["strategy_revision_id"]
                 )
+                # The Pine adapter pins and supervises its evaluator through the
+                # active lifecycle owner in this process.
+                if execution_revision == PINE_ENGINE_REVISION:
+                    provider = PineEngineProvider()
+                else:
+                    provider = IsolatedStrategyProvider(
+                        execution_revision,
+                        step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                    )
             if config.get("pine_runtime_identity"):
                 observation_market = {"venue": str(config["exchange"]), "market_type": str(config["market_type"]),
                                       "symbol": str(manifest["symbol"])}

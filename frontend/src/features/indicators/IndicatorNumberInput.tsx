@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Input } from "../../components/ui/Field.js";
 
 export function IndicatorNumberInput({ value, min, max, step, title, disabled, onCommit }: {
   value: string | number;
@@ -20,9 +21,9 @@ export function IndicatorNumberInput({ value, min, max, step, title, disabled, o
     if (input.valueAsNumber !== Number(value)) onCommit(input.valueAsNumber);
   };
   return (
-    <div>
-      <input
-        className="indicator-param-input"
+    <div className="indicator-number-input">
+      <Input
+        size="sm"
         title={title}
         type="number"
         disabled={disabled}
@@ -42,7 +43,7 @@ export function IndicatorNumberInput({ value, min, max, step, title, disabled, o
           }
         }}
       />
-      {error && <div id={errorId} role="alert" style={{ color: "var(--text-primary)", fontSize: 12 }}>{error}</div>}
+      {error && <div id={errorId} role="alert" className="ui-field-error">{error}</div>}
     </div>
   );
 }

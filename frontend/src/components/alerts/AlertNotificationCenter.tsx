@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { dismissToast, notify } from "../ui/overlay/overlayApi.js";
+import { toastStore } from "../ui/overlay/toastStore.js";
 import { useControlCommands } from "../../features/app-control/useControlCommands.js";
 import { command } from "../../features/app-control/commandRegistry.js";
 import { empty, object, text } from "../../features/app-control/commandSchema.js";
@@ -17,46 +19,56 @@ import {
   parseAlertNotificationMessage,
 } from "../../features/alerts/alertTypes.js";
 import type { AlertNotificationMessage } from "../../features/alerts/alertTypes.js";
-import { Icon } from "../icons/Icon.js";
-
-interface AlertToast {
-  id: string;
-  notification: AlertNotificationMessage;
-  deliveryError?: string;
-}
 
 export interface AlertNotificationCenterProps {
   onOpenAlerts(): void;
 }
 
 const TOAST_LIFETIME_MS = 15_000;
-const MAX_TOASTS = 5;
 
+/**
+ * Listens for fired alerts and shows them on the shared toast stack (`notify`), above dialogs,
+ * with 打开警报 as their action. Alert toasts are keyed by dispatch so automation can dismiss them.
+ */
 export default function AlertNotificationCenter({ onOpenAlerts }: AlertNotificationCenterProps) {
   useLocale();
-  const [toasts, setToasts] = useState<AlertToast[]>([]);
+  // Dispatch key → toast id on the shared stack.
+  const toastIdsRef = useRef(new Map<string, number>());
   const seenDispatchesRef = useRef(new Set<string>());
   const seenEventsRef = useRef(new Set<string>());
 
-  const dismiss = useCallback((id: string) => {
-    setToasts((current) => current.filter((item) => item.id !== id));
+  const show = useCallback((key: string, options: Parameters<typeof notify>[0]) => {
+    const previous = toastIdsRef.current.get(key);
+    if (previous !== undefined) dismissToast(previous);
+    toastIdsRef.current.set(key, notify(options));
+    if (toastIdsRef.current.size > 64) toastIdsRef.current = new Map([...toastIdsRef.current].slice(-32));
   }, []);
 
   const publishToast = useCallback((notification: AlertNotificationMessage) => {
-    const toast: AlertToast = { id: notification.dispatchId, notification };
-    setToasts((current) => [...current.filter((item) => item.id !== toast.id), toast].slice(-MAX_TOASTS));
-    window.setTimeout(() => dismiss(toast.id), TOAST_LIFETIME_MS);
-  }, [dismiss]);
+    const symbol = notification.target.symbol || "--";
+    show(notification.dispatchId, {
+      tone: "info",
+      title: t("alert.toastHit", { symbol }),
+      message: notification.message || t("alert.toastDefault", { symbol }),
+      action: { label: t("alert.openAlerts"), onClick: onOpenAlerts },
+      durationMs: TOAST_LIFETIME_MS,
+    });
+  }, [onOpenAlerts, show]);
 
   const publishDeliveryError = useCallback((notification: AlertNotificationMessage, detail: string) => {
-    const toast: AlertToast = {
-      id: `delivery-error-${notification.dispatchId}`,
-      notification,
-      deliveryError: detail,
-    };
-    setToasts((current) => [...current, toast].slice(-MAX_TOASTS));
-    window.setTimeout(() => dismiss(toast.id), TOAST_LIFETIME_MS);
-  }, [dismiss]);
+    show(`delivery-error-${notification.dispatchId}`, {
+      tone: "danger",
+      title: t("alert.toastFailed"),
+      message: [notification.message, detail].filter(Boolean).join(" · "),
+      action: { label: t("alert.openAlerts"), onClick: onOpenAlerts },
+      durationMs: TOAST_LIFETIME_MS,
+    });
+  }, [onOpenAlerts, show]);
+
+  const activeToasts = () => {
+    const live = new Set(toastStore.list().map((toast) => toast.id));
+    return [...toastIdsRef.current].filter(([, id]) => live.has(id)).map(([key]) => key);
+  };
 
   useEffect(() => {
     if (typeof EventSource === "undefined") return undefined;
@@ -112,27 +124,13 @@ export default function AlertNotificationCenter({ onOpenAlerts }: AlertNotificat
     };
   }, [onOpenAlerts, publishDeliveryError, publishToast]);
 
-  useControlCommands(() => ({ id: "alert-notifications", title: "Alert notification center", context: () => toasts.map((toast) => toast.id), snapshot: () => ({ toasts }), commands: [
-    command("dismiss", "Dismiss a current notification toast.", object({ toastId: text(128) }), ({ toastId }) => { if (!toasts.some((toast) => toast.id === toastId)) throw new Error("TOAST_UNAVAILABLE"); dismiss(toastId); }),
+  useControlCommands(() => ({ id: "alert-notifications", title: "Alert notification center", context: () => activeToasts(), snapshot: () => ({ toasts: activeToasts() }), commands: [
+    command("dismiss", "Dismiss a current notification toast.", object({ toastId: text(128) }), ({ toastId }) => {
+      const id = toastIdsRef.current.get(toastId);
+      if (id === undefined || !activeToasts().includes(toastId)) throw new Error("TOAST_UNAVAILABLE");
+      dismissToast(id);
+    }),
     command("openAlerts", "Open the existing alerts panel.", empty, onOpenAlerts),
   ] }));
-  if (toasts.length === 0) return null;
-  return (
-    <div className="alert-toast-stack" role="region" aria-live="polite" aria-label={t("alert.toastRegion")}>
-      {toasts.map((toast) => {
-        const { notification } = toast;
-        const symbol = notification.target.symbol || "--";
-        return (
-          <div className={`alert-toast ${toast.deliveryError ? "is-error" : ""}`} key={toast.id}>
-            <button className="alert-toast-main" type="button" onClick={onOpenAlerts}>
-              <span className="alert-toast-kicker">{toast.deliveryError ? t("alert.toastFailed") : t("alert.toastHit", { symbol })}</span>
-              <strong>{notification.message || t("alert.toastDefault", { symbol })}</strong>
-              {toast.deliveryError && <small>{toast.deliveryError}</small>}
-            </button>
-            <button className="alert-toast-close" type="button" onClick={() => dismiss(toast.id)} aria-label={t("alert.toastClose")}><Icon name="close" size={14} /></button>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return null;
 }

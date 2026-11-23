@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Button, Checkbox, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { tradingApi } from "./tradingApi.js";
@@ -29,16 +30,21 @@ export default function PracticeOrderTicket({
   onPlanTrade(draft: PlanDraft): void;
 }) {
   useLocale();
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [oneWaySide, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<OrderType>("market");
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
-  const [reduceOnly, setReduceOnly] = useState(false);
+  const [oneWayReduceOnly, setReduceOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
+  const hedge = account.settings.positionMode === "HEDGE" && context.marketType === "futures";
+  const [action, setAction] = useState<"openLong" | "openShort" | "closeLong" | "closeShort">("openLong");
+  const positionSide = action === "openLong" || action === "closeLong" ? "LONG" : "SHORT";
+  const reduceOnly = hedge ? action === "closeLong" || action === "closeShort" : oneWayReduceOnly;
+  const side = hedge ? (action === "openLong" || action === "closeShort" ? "buy" : "sell") : oneWaySide;
   const reference = context.lastPrice;
   const entry = type === "market" ? reference : Number(price) || null;
   const risk = useMemo(() => {
@@ -59,6 +65,7 @@ export default function PracticeOrderTicket({
         marketType: context.marketType,
         symbol: context.symbol,
         side,
+        ...(hedge ? { positionSide, positionEffect: reduceOnly ? "close" : "open" } : {}),
         type,
         qty,
         ...(type === "limit" ? { limitPrice: price } : {}),
@@ -84,49 +91,50 @@ export default function PracticeOrderTicket({
 
   return (
     <section className="trading-ticket" aria-label={t("trading.ticket.title")}>
-      <div className="trading-segmented" role="group" aria-label={t("trading.ticket.side")}>
-        <button type="button" data-active={side === "buy"} data-tone="up" onClick={() => setSide("buy")}>
-          {t(context.marketType === "futures" ? "trading.ticket.long" : "trading.ticket.buy")}
-        </button>
-        <button type="button" data-active={side === "sell"} data-tone="down" onClick={() => setSide("sell")}>
-          {t(context.marketType === "futures" ? "trading.ticket.short" : "trading.ticket.sell")}
-        </button>
-      </div>
-      <div className="trading-segmented" role="group" aria-label={t("trading.ticket.type")}>
-        {(["market", "limit", "stop"] as const).map((item) => (
-          <button key={item} type="button" data-active={type === item} onClick={() => setType(item)}>
-            {t(`trading.ticket.${item}` as const)}
-          </button>
-        ))}
-      </div>
+      {hedge ? <SegmentedControl size="sm" fullWidth label={t("trading.ticket.side")} value={action} onChange={setAction}
+        options={(["openLong", "openShort", "closeLong", "closeShort"] as const).map(value => ({
+          value, label: t(`backtest.${value}` as const),
+        }))} /> : <SegmentedControl
+        className="trading-side"
+        size="sm"
+        fullWidth
+        label={t("trading.ticket.side")}
+        value={side}
+        onChange={setSide}
+        options={[
+          { value: "buy", label: t(context.marketType === "futures" ? "trading.ticket.long" : "trading.ticket.buy") },
+          { value: "sell", label: t(context.marketType === "futures" ? "trading.ticket.short" : "trading.ticket.sell") },
+        ]}
+      />}
+      <SegmentedControl
+        size="sm"
+        fullWidth
+        label={t("trading.ticket.type")}
+        value={type}
+        onChange={setType}
+        options={(["market", "limit", "stop"] as const).map((item) => ({ value: item, label: t(`trading.ticket.${item}` as const) }))}
+      />
       <div className="trading-field-row">
-        <label className="trading-field">
-          <span>{t("trading.ticket.qty", { base: context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol })}</span>
-          <input inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
-        </label>
+        <Field label={t("trading.ticket.qty", { base: context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol })}>
+          <Input size="sm" inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
+        </Field>
         {type !== "market" && (
-          <label className="trading-field">
-            <span>{t(type === "limit" ? "trading.ticket.limitPrice" : "trading.ticket.stopPrice")}</span>
-            <input inputMode="decimal" value={price} placeholder={reference ? String(reference) : ""} onChange={(event) => setPrice(event.target.value)} />
-          </label>
+          <Field label={t(type === "limit" ? "trading.ticket.limitPrice" : "trading.ticket.stopPrice")}>
+            <Input size="sm" inputMode="decimal" value={price} placeholder={reference ? String(reference) : ""} onChange={(event) => setPrice(event.target.value)} />
+          </Field>
         )}
       </div>
       {!reduceOnly && (
         <div className="trading-field-row">
-          <label className="trading-field">
-            <span>{t("trading.ticket.stopLoss")}</span>
-            <input inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} />
-          </label>
-          <label className="trading-field">
-            <span>{t("trading.ticket.takeProfit")}</span>
-            <input inputMode="decimal" value={takeProfit} onChange={(event) => setTakeProfit(event.target.value)} />
-          </label>
+          <Field label={t("trading.ticket.stopLoss")}>
+            <Input size="sm" inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} />
+          </Field>
+          <Field label={t("trading.ticket.takeProfit")}>
+            <Input size="sm" inputMode="decimal" value={takeProfit} onChange={(event) => setTakeProfit(event.target.value)} />
+          </Field>
         </div>
       )}
-      <label className="trading-check">
-        <input type="checkbox" checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} />
-        <span>{t("trading.ticket.reduceOnly")}</span>
-      </label>
+      {!hedge && <Checkbox label={t("trading.ticket.reduceOnly")} checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} />}
       <dl className="trading-kv">
         <dt>{t("trading.ticket.reference")}</dt>
         <dd>{reference ? formatPrice(reference) : t("trading.ticket.noPrice")}</dd>
@@ -138,15 +146,10 @@ export default function PracticeOrderTicket({
           {risk !== null && equity ? ` · ${formatAmount((risk / equity) * 100)}%` : ""}
         </dd>
       </dl>
-      {message && (
-        <p className={message.tone === "error" ? "trading-error" : "trading-ok"} role={message.tone === "error" ? "alert" : "status"}>
-          {message.text}
-        </p>
-      )}
+      {message && <InlineAlert tone={message.tone === "error" ? "danger" : "success"}>{message.text}</InlineAlert>}
       <div className="trading-actions">
-        <button
-          type="button"
-          className="trading-button"
+        <Button
+          size="sm"
           disabled={!entry}
           onClick={() => onPlanTrade({
             entryPrice: entry ? String(entry) : "",
@@ -156,16 +159,17 @@ export default function PracticeOrderTicket({
           })}
         >
           {t("trading.ticket.plan")}
-        </button>
-        <button
-          type="button"
-          className="trading-button"
-          data-variant={side === "buy" ? "buy" : "sell"}
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          className="trading-submit"
+          data-side={side}
           disabled={busy || !qty || account.archived}
           onClick={() => { void submit(); }}
         >
-          {t(side === "buy" ? "trading.ticket.submitBuy" : "trading.ticket.submitSell")}
-        </button>
+          {hedge ? t(`backtest.${action}` as const) : t(side === "buy" ? "trading.ticket.submitBuy" : "trading.ticket.submitSell")}
+        </Button>
       </div>
       <p className="trading-help">{t("trading.ticket.model")}</p>
     </section>

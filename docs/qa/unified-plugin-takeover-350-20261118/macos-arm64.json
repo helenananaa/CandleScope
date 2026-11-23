@@ -1,0 +1,45 @@
+{
+  "good": "sha256:d3637d4b8f7a2965b0fd0bc1af2087d88c051d6bbc29ffd7c4a33f6a7527eceb",
+  "before": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "phases": [
+    {
+      "name": "01-normal-takeover",
+      "shell": "example.startup-takeover",
+      "page": "/",
+      "runtime": "example.startup-takeover",
+      "exited": true
+    },
+    {
+      "name": "02-fault",
+      "startupError": true,
+      "backendHealthy": false,
+      "sidecarExitCode": 3,
+      "exited": true
+    },
+    {
+      "name": "03-native-disable",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    },
+    {
+      "name": "04-normal-restart",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    }
+  ],
+  "bad": "sha256:00caf5155b073d9bcd02cbb40bc027883361adc08f2b5925d5c666e9c0197eab",
+  "after": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "ok": true,
+  "productSource": "7a07534c12703503464b4513a8f7b223797116ef",
+  "fixtureSource": "f1c6c4b9dd88d73a5534e0a4ef2f5187ed9363ee",
+  "platform": "macOS 26.6.2 arm64",
+  "electron": "43.3.0",
+  "python": "3.12.15",
+  "profile": "fresh isolated LOCAL_OFFLINE profile, reused across four launches",
+  "asarSha256": "873a3e8fdc6288fb2430e2292678cc552d464a6057c466285164be6ef0ec0340",
+  "signature": "codesign --verify --deep --strict passed"
+}

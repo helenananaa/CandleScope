@@ -1,0 +1,465 @@
+/* Symbol selector, search modal and its context menu. */
+
+/* ── 交易对选择器（触发按钮） ────────────────────────────── */
+/* Box, color and type come from .ui-control */
+.symbol-selector {
+  min-width: 120px;
+  max-width: 280px;
+  gap: 8px;
+  padding: 0 12px;
+}
+.symbol-name {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+.symbol-exchange {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.symbol-shortcut-badge {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+.symbol-shortcut-badge kbd {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+  line-height: 1.2;
+}
+.symbol-market-badge {
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  font-family: var(--font-sans);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.03em;
+}
+.symbol-market-badge.futures {
+  color: var(--accent-purple);
+  background: color-mix(in srgb, var(--accent-purple) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent);
+}
+@keyframes sym-spin {
+  to { transform: rotate(360deg); }
+}
+
+.symbol-selector > .symbol-exchange,
+.symbol-selector > .symbol-market-badge,
+.symbol-selector > .symbol-shortcut-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Symbol search ───────────────────────────────────────── */
+.sym-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--backdrop);
+  animation: ui-fade-in var(--motion-base) var(--ease-out);
+}
+.sym-modal {
+  display: flex;
+  flex-direction: column;
+  width: 720px;
+  max-width: 100%;
+  /* Fixed height: the dialog does not jump when results and status arrive. */
+  height: min(640px, 82vh);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  animation: ui-rise-in var(--motion-base) var(--ease-out);
+  container-type: inline-size;
+}
+
+.sym-modal-search {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+  height: 52px;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+/* The field fills the header, so its focus shows on the header's edge and the search icon. */
+.sym-modal-search:focus-within {
+  border-bottom-color: var(--focus-ring);
+  box-shadow: inset 0 -1px 0 var(--focus-ring);
+}
+.sym-modal-search-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.sym-modal-search:focus-within .sym-modal-search-icon { color: var(--text-accent); }
+.sym-modal-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 var(--font-size-lg)/1 var(--font-sans);
+}
+.sym-modal-search-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sym-modal-filters {
+  display: grid;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sym-modal-filters > .ui-segmented {
+  justify-self: start;
+}
+.sym-modal-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.sym-modal-filter-grid .ui-field {
+  gap: 4px;
+  min-width: 0;
+}
+.sym-modal-filter-grid .ui-select {
+  width: 100%;
+  min-width: 0;
+}
+.sym-modal-alert {
+  flex-shrink: 0;
+  margin: var(--space-2) var(--space-4) 0;
+}
+
+.sym-modal-table-header,
+.sym-modal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) 0 var(--space-2);
+}
+.sym-modal-table-header {
+  flex-shrink: 0;
+  height: 30px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font: 500 var(--font-size-xs)/1 var(--font-sans);
+}
+.sym-modal-col-fav {
+  display: flex;
+  flex: 0 0 28px;
+  justify-content: center;
+}
+.sym-modal-col-pair { flex: 2 1 0; min-width: 0; }
+.sym-modal-col-base { flex: 1.2 1 0; min-width: 0; }
+.sym-modal-col-quote { flex: 0.8 1 0; min-width: 0; }
+.sym-modal-col-type { flex: 0 0 72px; min-width: 0; }
+.sym-modal-col-exchange { flex: 1 1 0; min-width: 0; text-align: right; }
+
+.sym-modal-list {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sym-modal-list[data-stale='true'] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.sym-modal-list > .ui-empty {
+  height: 100%;
+}
+.sym-modal-list-track {
+  position: relative;
+}
+.sym-modal-list-window {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+
+.sym-modal-row {
+  box-sizing: border-box;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.sym-modal-row.highlighted {
+  background: var(--surface-hover);
+}
+.sym-modal-row.current {
+  border-left-color: var(--accent-blue);
+}
+.sym-modal-row + .sym-discovery-group-start {
+  border-top: 1px solid var(--border-subtle);
+}
+.sym-modal-row-pair {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-primary);
+}
+.sym-modal-pair-label {
+  overflow: hidden;
+  font: 600 var(--font-size-md)/1.2 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sym-modal-row-base,
+.sym-modal-row-exchange {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.sym-modal-row-exchange {
+  align-items: flex-end;
+}
+.sym-modal-cell-text,
+.sym-modal-cell-note,
+.sym-modal-row .sym-modal-col-quote,
+.sym-modal-row .sym-modal-col-type {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sym-modal-cell-note {
+  color: var(--text-muted);
+  font-size: var(--font-size-2xs);
+}
+.sym-modal-fav-btn {
+  color: var(--text-muted);
+}
+.sym-modal-fav-btn[aria-pressed='true'],
+.sym-modal-fav-btn:hover:not(:disabled) {
+  color: var(--text-warning);
+}
+.sym-modal-wl-indicators {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+.sym-modal-wl-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+}
+.sym-modal-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-blue);
+  border-radius: var(--radius-full);
+  animation: sym-spin 0.8s linear infinite;
+  /* Still turns with reduced motion, slower (reset.css). */
+  --motion-reduced-duration: 1.6s;
+  --motion-reduced-iterations: infinite;
+}
+
+.sym-modal-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.sym-modal-result-count {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sym-modal-footer-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.sym-modal-refresh-btn[data-refreshing='true'] svg {
+  animation: sym-spin 1s linear infinite;
+  /* Still turns with reduced motion, slower (reset.css). */
+  --motion-reduced-duration: 1.6s;
+  --motion-reduced-iterations: infinite;
+}
+
+/* Source coverage: a disclosure whose list opens above the footer. */
+.sym-coverage {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  background: none;
+}
+.sym-coverage > .ui-disclosure-summary {
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.sym-coverage > .ui-disclosure-body {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 1;
+  width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+}
+.sym-coverage-partial {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-warning);
+}
+.sym-coverage-note {
+  margin: 4px 10px 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+.sym-coverage-sources {
+  display: grid;
+  gap: 1px;
+}
+
+/* Source picker: looks like a select, opens a searchable list. */
+.sym-source-picker {
+  position: relative;
+  min-width: 0;
+}
+.sym-source-trigger {
+  display: block;
+  /* The control's height less its border, so the text sits centred and can still end in an ellipsis. */
+  line-height: calc(var(--control-height-sm) - 2px);
+  overflow: hidden;
+  list-style: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sym-source-trigger::-webkit-details-marker {
+  display: none;
+}
+.sym-source-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  display: grid;
+  gap: var(--space-1);
+  width: 280px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+}
+.sym-source-options {
+  max-height: min(300px, 40vh);
+  overflow-y: auto;
+}
+.sym-source-group-title {
+  padding: 8px 10px 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-2xs);
+}
+.sym-source-option {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sym-source-option > .ui-menu-item {
+  flex: 1;
+  min-width: 0;
+}
+.sym-source-option > .ui-menu-item[aria-pressed='true'] {
+  background: var(--surface-hover);
+}
+.sym-source-check {
+  display: inline-flex;
+  color: var(--text-accent);
+}
+.sym-source-star[aria-pressed='true'] {
+  color: var(--text-warning);
+}
+.sym-source-empty {
+  margin: 8px 10px;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Right-click menu: add the symbol to a watchlist. */
+.sym-ctx-header {
+  display: grid;
+  gap: 2px;
+  margin-bottom: var(--space-1);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sym-ctx-header strong {
+  font: 600 var(--font-size-sm)/1.3 var(--font-mono);
+}
+.sym-ctx-header span {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.sym-ctx-menu .sym-modal-wl-dot {
+  width: 8px;
+  height: 8px;
+}
+
+@container (max-width: 560px) {
+  .sym-modal-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sym-modal-col-quote,
+  .sym-modal-col-type {
+    display: none;
+  }
+}
+
+/* Phone layout (app/phoneLayout.ts): the footer's actions take a second line rather than run
+   over the coverage summary. */
+@media (max-width: 640px) {
+  .sym-modal-footer {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+}

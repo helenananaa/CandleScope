@@ -29,6 +29,16 @@ function projectTimedField(
   fanout: AuxiliaryFanout,
 ): unknown {
   if (!Array.isArray(owner?.[field])) return owner?.[field];
+  if (owner.inputAxis === "display-ordinal") {
+    const times = new Map(index.targets.flatMap(target => typeof target.time === "object" && "order" in target.time
+      ? [[Number(target.time.order) + 1, target.time] as const] : []));
+    return owner[field].flatMap((entry: TimedEntry) => {
+      const time = times.get(Number(entry.time));
+      if (!time) return [];
+      const end = entry.endTime == null ? undefined : times.get(Number(entry.endTime));
+      return [{ ...entry, time, ...(entry.endTime == null ? {} : { endTime: end ?? time }) }];
+    });
+  }
   return projectSourceTimedEntries(owner[field], index, { fanout });
 }
 
@@ -156,6 +166,8 @@ export function projectPaneDescriptorsToDisplay(
         const fanout = line.pane === "volume" ? "last" : "all";
         return {
           ...line,
+          ...(line.inputAxis === "display-ordinal" && isRecord(line.nativeScene)
+            ? { nativeScene: { ...line.nativeScene, inputAxis: "display-ordinal", axisTimes: index.targets.map(target => target.time) } } : {}),
           ...(Array.isArray(line.data)
             ? { data: projectTimedField(line, "data", index, fanout) }
             : {}),
@@ -173,6 +185,13 @@ export function projectPaneDescriptorsToDisplay(
       projected.bgcolors = projectGroups(pane.bgcolors, index, "all", ["data", "regions"]);
     }
 
+    for (const field of ["fills", "hlines", "signals"]) {
+      const items: unknown[] = Array.isArray(pane[field]) ? pane[field] : [];
+      if (items.some(item => isRecord(item) && item.inputAxis === "display-ordinal")) {
+        projected[field] = items.map(item => isRecord(item) && item.inputAxis === "display-ordinal"
+          ? projectGroups([item], index, "all", ["data"])[0] : item);
+      }
+    }
     return projected;
   });
 }

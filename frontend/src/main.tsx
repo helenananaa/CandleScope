@@ -1,22 +1,13 @@
+import './styles/layers.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fontsource/inter/cyrillic-300.css'
-import '@fontsource/inter/cyrillic-400.css'
-import '@fontsource/inter/cyrillic-500.css'
-import '@fontsource/inter/cyrillic-600.css'
-import '@fontsource/inter/cyrillic-700.css'
-import '@fontsource/inter/latin-300.css'
-import '@fontsource/inter/latin-400.css'
-import '@fontsource/inter/latin-500.css'
-import '@fontsource/inter/latin-600.css'
-import '@fontsource/inter/latin-700.css'
-import '@fontsource/jetbrains-mono/latin-400.css'
-import '@fontsource/jetbrains-mono/latin-500.css'
+import './styles/fonts.js'
 import App from './App'
 import { ChartErrorBoundary } from './app/AppProviders'
 import { readPersistedLocale } from './features/settings/chartAppearanceSettings.js'
 import { bindDocumentLocale, initializeLocale } from './i18n/index.js'
 import { markPerf } from './runtime/performance/perfMarks'
+import { prepareUnifiedShell } from './features/extensions/unifiedRuntime.js'
 
 async function boot(): Promise<void> {
   await initializeLocale(readPersistedLocale())
@@ -29,6 +20,7 @@ async function boot(): Promise<void> {
   document.addEventListener('contextmenu', (e) => e.preventDefault())
 
   markPerf('app.boot.start')
+  await prepareUnifiedShell()
   markPerf('app.root.render.requested')
 
   createRoot(document.getElementById('root') as HTMLElement).render(

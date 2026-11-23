@@ -130,6 +130,11 @@ def _json_container_copier(value):
 
 class SessionWorker:
     def __init__(self, plugin, wire, cancelled, *, evaluator=False):
+        from .native import pin_native_launch
+        from app.plugin_lifecycle.pine import track_strategy_process
+
+        plugin = pin_native_launch(plugin)
+        self.plugin = plugin
         self._close_lock = threading.Lock()
         self._request_lock = threading.Lock()
         self._closed = False
@@ -160,6 +165,7 @@ class SessionWorker:
             raise
         self._io_thread = threading.Thread(target=self._exchange, name="native-worker-io", daemon=True)
         try:
+            track_strategy_process(plugin, self.process)
             self._io_thread.start()
         except Exception:
             self.close()
@@ -248,6 +254,8 @@ class SessionWorker:
                     continue
                 if isinstance(result, Exception):
                     raise result
+                from .native import pin_native_launch
+                pin_native_launch(self.plugin)
                 return self._validate_result(payload, result, streaming)
         except Exception:
             self.close()
@@ -342,6 +350,8 @@ class SessionWorker:
                     continue
                 if isinstance(results, Exception):
                     raise results
+                from .native import pin_native_launch
+                pin_native_launch(self.plugin)
                 return results
         except Exception:
             self.close()
@@ -422,15 +432,20 @@ class SessionWorker:
                 **envelope}
 
     def close(self):
+        from app.plugin_lifecycle.pine import untrack_strategy_process
+
         # Cancellation can race with request()'s exception cleanup. Only one
         # owner reaps the process and closes the pipes; later calls are no-ops.
         with self._close_lock:
             if self._closed:
                 return
             self._closed = True
-            if self.process.poll() is None:
-                self.process.kill()
-            self.process.wait()
+            try:
+                if self.process.poll() is None:
+                    self.process.kill()
+                self.process.wait()
+            finally:
+                untrack_strategy_process(self.plugin, self.process)
             for name, stream in (("stdin", self.process.stdin), ("stdout", self.process.stdout), ("stderr", self.stderr)):
                 if not stream.closed:
                     try:

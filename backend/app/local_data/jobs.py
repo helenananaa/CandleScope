@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -57,9 +59,21 @@ class LocalImportJobManager:
                 "error": None,
                 "cancel_requested": False,
             }
-            future = self._executor.submit(
-                self._run, job_id, Path(upload_path), options
-            )
+            if sys.platform == "emscripten":
+                # Run after the submission lock has been released. Pyodide
+                # already owns a worker, and cannot start native pool threads.
+                future: Future[None] = Future()
+                def work() -> None:
+                    if future.set_running_or_notify_cancel():
+                        try:
+                            self._run(job_id, Path(upload_path), options)
+                        except BaseException as exc:
+                            future.set_exception(exc)
+                        else:
+                            future.set_result(None)
+                asyncio.get_running_loop().call_soon(work)
+            else:
+                future = self._executor.submit(self._run, job_id, Path(upload_path), options)
             self._futures[job_id] = future
             return dict(self._jobs[job_id])
 

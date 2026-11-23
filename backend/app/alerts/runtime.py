@@ -10,13 +10,12 @@ from typing import Any
 from app.core.executors import run_storage
 from app.alerts.facade import AlertFacade
 from app.alerts.indicator_context import indicator_readiness
-from app.alerts.indicator_requests import request_for, values_from
+from app.alerts.indicator_requests import empty_values, is_indicator_field, request_for, values_from
 from app.alerts.validation import referenced_alert_fields
 from app.data_engine.data_manager.models import BarData, DataEvent, DataEventType, SubscriptionHandle
 
 logger = logging.getLogger("alerts.runtime")
 
-_INDICATOR_FIELDS = {"rsi", "macdHist", "ma20"}
 
 
 @dataclass(slots=True)
@@ -350,7 +349,7 @@ class AlertRuntimeEngine:
             latest_rule = self.facade.get_rule(rule_id)
             if not latest_rule or latest_rule.get("definitionRevision") != definition:
                 return None
-            indicator_values = values_from(snapshot)
+            indicator_values = values_from(snapshot, fields)
             history_bars = snapshot.closed_rows
             if snapshot.status != "ready":
                 self._previous_values.pop(rule_id, None)
@@ -358,7 +357,7 @@ class AlertRuntimeEngine:
                     history_bars=history_bars, state=snapshot.status)
                 return None
         else:
-            indicator_values = {"rsi": None, "macdHist": None, "ma20": None}
+            indicator_values = empty_values()
             history_bars = 0
 
         if baseline or event.event_type == DataEventType.BAR_AMENDED or event.detail.get("continuity_replayed"):
@@ -581,7 +580,7 @@ class AlertRuntimeEngine:
         ):
             raise RuntimeError("Alert recovery history is incomplete; waiting for a verified seed")
         window = [bar for bar in (bars or []) if getattr(bar, "is_closed", True)]
-        indicators = {"rsi": None, "macdHist": None, "ma20": None}
+        indicators = empty_values(self._required_indicator_fields(rule))
         if window:
             self._previous_values[rule_id] = self._bar_values(window[-1])
             if recovery_seed:
@@ -694,10 +693,10 @@ class AlertRuntimeEngine:
     @staticmethod
     def _required_indicator_fields(rule: dict[str, Any] | None) -> set[str]:
         expression = rule.get("expression") if isinstance(rule, dict) else None
-        return referenced_alert_fields(expression) & _INDICATOR_FIELDS
+        return {field for field in referenced_alert_fields(expression) if is_indicator_field(field)}
 
     def _adopt_numeric_snapshot(self, rule_id, rule, snapshot):
-        values = values_from(snapshot)
+        values = values_from(snapshot, self._required_indicator_fields(rule))
         if snapshot.status == "ready" and snapshot.latest_closed is not None:
             self._previous_values[rule_id] = {**self._bar_values(snapshot.latest_closed), **values}
             self._seed_frontiers[rule_id] = snapshot.closed_through

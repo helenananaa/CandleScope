@@ -16,7 +16,7 @@ test("cell layout trigger exposes an accessible per-cell action entrypoint", () 
     />,
   );
 
-  assert.match(html, /aria-label="图 2 布局操作"/);
+  assert.match(html, /aria-label="图 2 外观与布局"/);
   assert.match(html, /aria-haspopup="dialog"/);
   assert.match(html, /aria-expanded="false"/);
 });
@@ -35,4 +35,22 @@ test("disabled cell layout trigger cannot open structural actions", () => {
 
   assert.match(html, /disabled=""/);
   assert.match(html, /aria-expanded="false"/);
+});
+
+test("a chart with its own appearance shows a marker, and a locked layout still opens the menu for appearance", () => {
+  const html = renderToStaticMarkup(
+    <WorkspaceCellLayoutMenu
+      cellId="cell-1"
+      layoutCellIds={["cell-1"]}
+      disabled
+      customized
+      appearance={<span data-slot="appearance" />}
+      onSplit={() => {}}
+      onClose={() => {}}
+      onSwap={() => {}}
+    />,
+  );
+  assert.match(html, /class="chart-appearance-marker" aria-label="此图表使用自己的外观"/);
+  // The trigger is not disabled: layout actions are, appearance is not.
+  assert.doesNotMatch(html, /class="multi-chart-cell-layout-trigger"[^>]*disabled/);
 });

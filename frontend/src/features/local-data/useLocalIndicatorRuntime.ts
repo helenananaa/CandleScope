@@ -18,7 +18,10 @@ import type { LocalIndicatorComputeJob } from "./localDataApi.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
 
 
+import type { ChartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
+
 export interface UseLocalIndicatorRuntimeOptions {
+  chart?: ChartIndicatorSelection;
   manifest: LocalDatasetManifest;
   interval: string;
   bars: KlineBar[];
@@ -36,6 +39,7 @@ export interface UseLocalIndicatorRuntimeOptions {
  */
 export function useLocalIndicatorRuntime({
   manifest,
+  chart,
   interval,
   bars,
   chartDataMeta,
@@ -69,6 +73,7 @@ export function useLocalIndicatorRuntime({
 
   return useProvidedBarsIndicatorRuntime({
     bars,
+    ...(chart ? { chart } : {}),
     candleDownColor,
     candleUpColor,
     computeBatch,

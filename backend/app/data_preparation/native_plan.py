@@ -168,6 +168,8 @@ def launch(runtime, intent, inputs, job_id):
         libraries=intent["libraries"], contexts=contexts, host_inputs=intent.get("host_inputs", {}),
         context={"symbol": main["symbol"], "timeframe": main["timeframe"],
                  **({"metadata": intent["chart_metadata"]} if intent.get("chart_metadata") else {})})
+    if intent.get("signal_chart") is not None:
+        payload["signal_chart"] = intent["signal_chart"]
     if intent.get("currency_rates") is not None:
         payload["currency_rates"] = intent["currency_rates"]
     contract = NativeRunRequest

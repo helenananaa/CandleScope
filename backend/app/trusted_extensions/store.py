@@ -12,17 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from candlescope_plugin_sdk.platform_v2 import loads_strict
+from app.plugin_lifecycle.appearance import validate_layout, validate_theme
 from app.plugin_security_v2.storage import atomic_write_json, read_json, security_lock
 
 MAX_PACKAGE = 16 * 1024 * 1024
 API_VERSION = 1
 _ID = re.compile(r"[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)+\Z")
 _DIGEST = re.compile(r"[a-f0-9]{64}\Z")
-PAGE_SLOTS = {"topBar", "intervalSelector", "workspace", "featureSurfaces", "statusBar"}
-WORKSPACE_SLOTS = {"toolbar", "chart", "bottomPanel", "rightRail", "exportOverlay"}
-COLORS = {"bg-primary", "bg-secondary", "bg-tertiary", "bg-hover", "border-color",
-          "text-primary", "text-secondary", "text-muted", "accent-blue", "accent-purple",
-          "accent-cyan", "candle-up", "candle-down"}
 
 
 def safe_path(value: str) -> str:
@@ -70,30 +66,12 @@ def validate_manifest(raw: Any, files: dict[str, bytes]) -> dict[str, Any]:
             raise ValueError("Dependencies require another extension's exact version")
     theme = raw.get("theme")
     if theme is not None:
-        if not isinstance(theme, dict) or set(theme) != {"base", "tokens"} or theme["base"] not in {"dark", "light"}:
-            raise ValueError("Invalid theme")
-        tokens = theme["tokens"]
-        if not isinstance(tokens, dict) or not tokens or tokens.keys() - COLORS - {"radius-sm", "radius-md", "font-sans", "font-mono", "control-height", "panel-gap", "panel-shadow"}:
-            raise ValueError("Unknown theme token")
-        for key, value in tokens.items():
-            if not isinstance(value, str) or len(value) > 200:
-                raise ValueError("Invalid theme token")
-            if key in COLORS and not re.fullmatch(r"#[a-fA-F0-9]{6}", value):
-                raise ValueError("Theme colors must be six-digit hex values")
-            if key in {"radius-sm", "radius-md", "control-height", "panel-gap"} and not re.fullmatch(r"(?:[0-9]|[1-6][0-9])px", value):
-                raise ValueError("Invalid theme dimension")
-            if key.startswith("font-") and not re.fullmatch(r"[A-Za-z0-9 ,'-]+", value):
-                raise ValueError("Invalid theme font")
-            if key == "panel-shadow" and not re.fullmatch(r"(?:none|[0-9px .-]+ #[a-fA-F0-9]{6})", value):
-                raise ValueError("Invalid theme shadow")
+        validate_theme(theme)
     layout = raw.get("layout")
     if layout is not None:
-        if raw["trust"] != "full-trust" or not isinstance(layout, dict) or set(layout) != {"page", "workspace"}:
+        if raw["trust"] != "full-trust":
             raise ValueError("Layout requires full-trust and both slot orders")
-        for key, slots in (("page", PAGE_SLOTS), ("workspace", WORKSPACE_SLOTS)):
-            order = layout[key]
-            if not isinstance(order, list) or not all(isinstance(item, str) for item in order) or len(order) != len(slots) or set(order) != slots:
-                raise ValueError("Layout must preserve each host slot exactly once")
+        validate_layout(layout)
     if not entries and theme is None and layout is None:
         raise ValueError("Empty extension")
     return raw

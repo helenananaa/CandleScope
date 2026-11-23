@@ -77,7 +77,7 @@ test("persistent Host banner distinguishes armed and fail-closed unavailable sta
   const armed = renderToStaticMarkup(<PluginLiveControl runtime={runtime("armed", false)} />);
   assert.match(armed, /data-live-control-banner/);
   assert.match(armed, /data-live-control-mode="armed"/);
-  assert.match(armed, /Receipt control armed; execution unavailable/);
+  assert.match(armed, /One-time confirmations on; execution unavailable/);
 
   const demo = renderToStaticMarkup(
     <PluginLiveControl runtime={runtime("armed", false, true)} />,
@@ -87,7 +87,7 @@ test("persistent Host banner distinguishes armed and fail-closed unavailable sta
   const unavailable = renderToStaticMarkup(
     <PluginLiveControl runtime={runtime("unavailable", false)} />,
   );
-  assert.match(unavailable, /Control status unavailable — fail closed/);
+  assert.match(unavailable, /Control status unavailable — all actions stopped/);
   assert.equal(
     renderToStaticMarkup(<PluginLiveControl runtime={runtime("disabled", false)} />),
     "",
@@ -144,7 +144,7 @@ test("Host intent review renders every receipt binding fact", () => {
     "candlescope.okx-demo",
     "publisher:test",
     `sha256:${"b".repeat(64)}`,
-    "epoch 2 · generation 4",
+    "Policy version 2 · control generation 4",
   ]) assert.match(html, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 

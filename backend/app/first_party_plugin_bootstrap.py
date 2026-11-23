@@ -551,6 +551,7 @@ def ensure_first_party_plugins_from_environment(
     release_lock_path: Path | str = DEFAULT_RELEASE_LOCK_PATH,
     opener: Callable[..., Any] | None = None,
     installer_factory: Callable[..., PluginInstaller] = PluginInstaller,
+    excluded_runtime_ids: frozenset[str] = frozenset(),
 ) -> FirstPartyPluginBootstrapResult:
     env = runtime_environment() if environ is None else environ
     if not _environment_bool(env, PLUGIN_HOST_ENABLED_ENV, default=True):
@@ -567,7 +568,7 @@ def ensure_first_party_plugins_from_environment(
         route.runtime_id
         for route in routes.routes
         if route.mode != ROUTE_MODE_LEGACY and route.runtime_id is not None
-    }
+    } - excluded_runtime_ids
     releases: dict[str, list[OfficialPluginRelease]] = {}
     for release in load_official_plugin_releases(release_lock_path):
         releases.setdefault(release.runtime_id, []).append(release)

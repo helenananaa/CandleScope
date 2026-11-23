@@ -71,6 +71,25 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(replay, callbacks if not config.get("pine_realtime_ticks") or config.get("pine_fill_callbacks") else None)
 
+            chart_clock = None
+            if config.get("chart_event_contract"):
+                from .pine_chart_events import HostChartEventCallbacks
+                chart_clock=HostChartEventCallbacks(session,adapter,shadow_planner,replay,
+                    definition=config["signal_chart"],market=market,warmup=warmup,features=features,
+                    every_tick=bool(config.get("pine_realtime_ticks")),fills=bool(config.get("pine_fill_callbacks")),
+                    bar_state="historical" if config["fidelity_mode"]=="BAR_APPROX" else "realtime",
+                    control=lambda:(check_deadline(deadline),control()))
+                if config["fidelity_mode"]=="BAR_APPROX":historical_callbacks=chart_clock
+                else:callbacks=chart_clock
+                if closing is not None:closing.callbacks=chart_clock if config.get("pine_fill_callbacks") else None
+            elif config.get("signal_chart"):
+                from .strategy.chart_signals import ChartSignalClock
+                chart_clock = ChartSignalClock(config["signal_chart"], adapter, shadow_planner,
+                    market=market, warmup=warmup, features=features,
+                    context=lambda event: None if shadow_planner.config is None else _planning_context(account_kernel,event),
+                    account=lambda: _pine_account_view(replay),
+                    control=lambda: (check_deadline(deadline), control()))
+
             def strategy(_visible, event):
                 nonlocal observed
                 check_deadline(deadline)
@@ -78,6 +97,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                     control()
                 index = event.sequence - 1 if isinstance(replay, DualClockSimulationKernel) else observed
                 observed += 1
+                if chart_clock is not None:
+                    return chart_clock.observe(event)
                 if historical_callbacks is not None:
                     return historical_callbacks.observe(event)
                 if callbacks is not None:
@@ -101,10 +122,12 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 rows,cutoff=trial_events(events,context,pending)
                 return replay.run(rows,strategy,warmup_events=0,finalize=True,
                     **({'end_time_ms':cutoff} if cutoff is not None else
-                       {'end_time_ms':int(config['end_time_ms'])} if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'} else {}),
-                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
-                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
-                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                       {'end_time_ms':int(config['end_time_ms'])} if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'} or config.get('chart_event_contract') and isinstance(replay,DualClockSimulationKernel) else {}),
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and (not config.get("pine_realtime_ticks") or config.get("chart_event_contract") and config.get("pine_fill_callbacks")) else {}),
+                    **({"tick_callback":callbacks.on_tick} if isinstance(replay,DualClockSimulationKernel) and (config.get("pine_realtime_ticks") or config.get("chart_event_contract")) else {}),
+                    **({"combined_callbacks":True} if isinstance(replay,DualClockSimulationKernel) and config.get("chart_event_contract") and config.get("pine_fill_callbacks") else {}),
+                    **({"fill_callback": historical_callbacks.on_path_fill if config.get("chart_event_contract") else historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"chart_event_callbacks":chart_clock} if config.get("chart_event_contract") and config["fidelity_mode"]=="BAR_APPROX" else {}),
                     **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
                     **({"close_callback": closing.process} if closing is not None else {}))
             def reset_window():

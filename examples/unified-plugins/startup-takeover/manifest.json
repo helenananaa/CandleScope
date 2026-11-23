@@ -1,0 +1,12 @@
+{
+  "schema": "candlescope.unified-plugin/1",
+  "id": "example.startup-takeover",
+  "version": "1.0.0",
+  "name": "Startup takeover example",
+  "trust": "full-trust",
+  "hostApiVersion": 1,
+  "entries": [
+    {"id": "replay", "kind": "backend", "path": "replay.py", "startup": ["replay"]},
+    {"id": "shell", "kind": "frontend", "path": "shell.mjs", "startup": ["shell"]}
+  ]
+}

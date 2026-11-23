@@ -169,7 +169,7 @@ def test_bar_risk_halt_cancels_and_flattens_via_future_path_point(service, closi
     assert report["pine_orders"]["open_entries"] == []
 
 
-def test_queued_chart_uses_same_bar_callback_path_in_supervised_worker(runtime):
+def test_queued_chart_uses_same_bar_callback_path_with_unified_pine(runtime, qualified_pine):
     from tests.test_chart_pine_orders import run_chart
     host, main = runtime
     report = run_chart(host, main, '''varip bool sent=false

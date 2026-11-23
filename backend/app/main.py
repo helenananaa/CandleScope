@@ -22,6 +22,7 @@ an explicit capability error and never silently fall back.
 import asyncio
 import logging
 import os
+import sys
 
 # ── Monkey-patch: websockets recv_messages bug ──────────────────
 # websockets ≥15 initializes ``recv_messages`` in ``connection_made``,
@@ -78,6 +79,7 @@ from app.core.support_diagnostics import install_support_logging, router as supp
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
 from app.history_studies.api import router as history_studies_router
+from app.api.v1.synthetic import router as synthetic_router
 from app.api.v1.replay import router as replay_router
 from app.api.v1.stream import replay_router as replay_stream_router
 
@@ -102,7 +104,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.trading_accounts import router as trading_accounts_router
     from app.api.v1.local_data import router as local_data_router
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
-    from app.plugin_core_v2 import create_core_plugin_router
+    from app.plugin_core_v2 import CorePluginPlatform, create_core_plugin_router
     from app.data_engine.storage import initialize_market_storage
     from app.readonly_accounts.api import router as readonly_accounts_router
 else:
@@ -120,10 +122,11 @@ app = FastAPI(
     version=APP_VERSION,
 )
 app.include_router(support_router)
-from app.trusted_extensions.api import create_extension_router
-from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions, extension_factory
+from app.plugin_lifecycle.api import create_unified_router
+from app.plugin_lifecycle.bootstrap import prepare_unified, prepare_unified_startup, activate_unified, stop_unified
+from app.plugin_lifecycle.composition import startup_factory
 
-app.include_router(create_extension_router())
+app.include_router(create_unified_router())
 
 
 @app.exception_handler(ExecutorBusyError)
@@ -152,6 +155,7 @@ if RUNTIME_MODE == "LOCAL_OFFLINE":
     app.include_router(local_data_router, prefix="/api/v1")
     app.include_router(replay_stream_router, prefix="/api/v1")
 else:
+    app.include_router(synthetic_router, prefix="/api/v1")
     app.include_router(klines_router, prefix="/api/v1")
     app.include_router(market_router, prefix="/api/v1")
     app.include_router(trade_flow_router, prefix="/api/v1")
@@ -190,7 +194,7 @@ async def _init_alert_delivery() -> None:
     """Start durable alert delivery independently from live market data."""
     from app.alerts.facade import AlertFacade
 
-    alert_facade = extension_factory(app, "alert-delivery", AlertFacade)()
+    alert_facade = startup_factory(app, "alert-delivery", AlertFacade)()
     await alert_facade.start()
     app.state.alert_facade = alert_facade
 
@@ -213,13 +217,13 @@ async def _init_data_manager() -> None:
         from app.indicator.series_revision import SeriesRevisionRegistry
         from app.core import config
 
-        runtime = await extension_factory(app, "data-engine", start_data_engine)()
+        runtime = await startup_factory(app, "data-engine", start_data_engine)()
         runtime.attach_to_app_state(app.state)
 
         indicator_engine = None
         try:
             revision_registry = SeriesRevisionRegistry()
-            indicator_range_service = extension_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
+            indicator_range_service = startup_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
                 revision_registry=revision_registry,
             )
             # One authoritative revision registry is shared by WS events,
@@ -344,6 +348,21 @@ async def _init_continuous_strategies() -> None:
         logger.warning("Continuous strategies unavailable: %s",failure,exc_info=True)
 
 
+async def _start_library_replay(library):
+    from dataclasses import replace
+    from app.replay.local_bar_repository import LocalReplayBarRepository
+    from app.replay.local_trade_repository import LocalReplayTradeRepository
+    from app.replay.runtime import start_replay_runtime
+
+    settings = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
+                       replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
+    bars = LocalReplayBarRepository(library, max_rows=settings.max_bar_dataset_rows)
+    return await startup_factory(app, "replay", start_replay_runtime)(
+        settings=settings, repository=bars, native_intervals=bars.native_intervals,
+        raw_trade_archive=LocalReplayTradeRepository(library),
+    )
+
+
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
@@ -356,10 +375,13 @@ async def _init_replay_runtime() -> None:
     async def refresh_instrument_metadata(exchange: str, market_type: str):
         return await refresh_exchange_metadata(exchange, market_type=market_type)
 
-    runtime = await extension_factory(app, "replay", start_replay_runtime)(
-        instrument_metadata_resolver=get_cached_symbol_metadata,
-        instrument_metadata_refresher=refresh_instrument_metadata,
-    )
+    if sys.platform == "emscripten":
+        runtime = await _start_library_replay(app.state.local_data_service)
+    else:
+        runtime = await startup_factory(app, "replay", start_replay_runtime)(
+            instrument_metadata_resolver=get_cached_symbol_metadata,
+            instrument_metadata_refresher=refresh_instrument_metadata,
+        )
     app.state.replay_runtime = runtime
     app.state.replay_service = runtime.service
 
@@ -417,72 +439,27 @@ async def _stop_plugin_owner(owner: object | None) -> None:
 
 async def _start_plugin_plane() -> None:
     """Start script/plugin runtimes without owning core market availability."""
-    from app.first_party_plugin_bootstrap import (
-        FirstPartyPluginBootstrapError,
-        FirstPartyPluginBootstrapResult,
-        ensure_first_party_plugins_from_environment,
-    )
     from app.indicator.runtime_routes import IndicatorRuntimeRoutes
     from app.indicator.runtime_service import (
         IndicatorRuntimeService,
         build_indicator_runtime_service_from_environment,
     )
-    from app.plugin_compat_v1 import V1ScriptRuntimeCompatibilityBridge
     from app.plugin_core_v2 import (
         DisabledCorePluginPlatform,
         build_core_plugin_platform_from_environment,
         build_management_guard_from_environment,
     )
-    from app.plugin_core_v2.bootstrap import default_platform_root
-    from app.plugin_runtime import (
-        RuntimeHostService,
-        build_runtime_host_from_environment,
-    )
+    from app.plugin_lifecycle.script_runtime import ScriptRuntimeHost
 
     app.state.plugin_plane = {"status": "ok", "issues": []}
-    first_party_bootstrap = FirstPartyPluginBootstrapResult(
-        status="skipped",
-        reason="not-started",
-    )
-    plugin_runtime_host: RuntimeHostService | None = None
+    chart_runtime_host = ScriptRuntimeHost(app.state.unified_plugin_runtime)
     indicator_runtime_service: IndicatorRuntimeService | None = None
     plugin_platform_v2 = None
-    v1_compatibility = None
     plugin_platform_v2_guard = None
 
     try:
-        first_party_bootstrap = await asyncio.to_thread(
-            ensure_first_party_plugins_from_environment,
-            host_name=APP_NAME,
-            host_version=APP_VERSION,
-        )
-    except FirstPartyPluginBootstrapError as exc:
-        first_party_bootstrap = FirstPartyPluginBootstrapResult.unavailable(exc.message)
-        _mark_plugin_plane_degraded(code=exc.code, message=exc.message)
-    except Exception as exc:
-        code, message = _plugin_plane_issue_from_exception(exc)
-        first_party_bootstrap = FirstPartyPluginBootstrapResult.unavailable(message)
-        _mark_plugin_plane_degraded(code=code, message=message)
-
-    try:
-        plugin_runtime_host = build_runtime_host_from_environment(
-            host_name=APP_NAME,
-            host_version=APP_VERSION,
-        )
-        await plugin_runtime_host.start()
-    except Exception as exc:
-        code, message = _plugin_plane_issue_from_exception(exc)
-        _mark_plugin_plane_degraded(code=code, message=message)
-        await _stop_plugin_owner(plugin_runtime_host)
-        plugin_runtime_host = RuntimeHostService.disabled(
-            host_name=APP_NAME,
-            host_version=APP_VERSION,
-        )
-        await plugin_runtime_host.start()
-
-    try:
         indicator_runtime_service = build_indicator_runtime_service_from_environment(
-            host=plugin_runtime_host,
+            host=chart_runtime_host,
         )
         await indicator_runtime_service.start()
     except Exception as exc:
@@ -491,7 +468,7 @@ async def _start_plugin_plane() -> None:
         await _stop_plugin_owner(indicator_runtime_service)
         indicator_runtime_service = IndicatorRuntimeService(
             IndicatorRuntimeRoutes.first_party_sidecar_default(),
-            host=plugin_runtime_host,
+            host=chart_runtime_host,
             legacy_languages=frozenset(),
         )
         await indicator_runtime_service.start()
@@ -501,19 +478,6 @@ async def _start_plugin_plane() -> None:
             host_name=APP_NAME,
             host_version=PLUGIN_PLATFORM_V2_HOST_VERSION,
         )
-        v1_compatibility = V1ScriptRuntimeCompatibilityBridge(
-            root=getattr(
-                plugin_platform_v2,
-                "root",
-                default_platform_root(os.environ),
-            ),
-            indicator_source=indicator_runtime_service,
-            runtime_host=plugin_runtime_host,
-        )
-        indicator_runtime_service.bind_catalog_projector(
-            v1_compatibility.project_indicator_catalog
-        )
-        plugin_platform_v2.bind_v1_compatibility(v1_compatibility)
         plugin_platform_v2_guard = build_management_guard_from_environment(
             platform=plugin_platform_v2,
         )
@@ -522,39 +486,13 @@ async def _start_plugin_plane() -> None:
         _mark_plugin_plane_degraded(code=code, message=message)
         await _stop_plugin_owner(plugin_platform_v2)
         plugin_platform_v2 = DisabledCorePluginPlatform()
-        if v1_compatibility is None:
-            v1_compatibility = V1ScriptRuntimeCompatibilityBridge(
-                root=default_platform_root(os.environ),
-                indicator_source=indicator_runtime_service,
-                runtime_host=plugin_runtime_host,
-            )
-        try:
-            indicator_runtime_service.bind_catalog_projector(
-                v1_compatibility.project_indicator_catalog
-            )
-        except Exception:
-            pass
-        try:
-            plugin_platform_v2.bind_v1_compatibility(v1_compatibility)
-        except Exception:
-            pass
         plugin_platform_v2_guard = None
 
-    routing_snapshot = indicator_runtime_service.snapshot()
-    if routing_snapshot.get("unavailable"):
+    if app.state.unified_plugin_runtime.errors:
         _mark_plugin_plane_degraded(
-            code="INDICATOR_RUNTIME_UNAVAILABLE",
-            message="one or more script runtimes are unavailable",
+            code="UNIFIED_PLUGIN_STARTUP_FAILED",
+            message="one or more unified plugins are unavailable",
         )
-    host_summary = plugin_runtime_host.health_summary()
-    if host_summary.get("status") == "degraded":
-        _mark_plugin_plane_degraded(
-            code="PLUGIN_RUNTIME_DEGRADED",
-            message="one or more plugin runtimes failed to start",
-        )
-
-    app.state.first_party_plugin_bootstrap = first_party_bootstrap.to_wire()
-    app.state.plugin_runtime_host = plugin_runtime_host
     app.state.indicator_runtime_service = indicator_runtime_service
     indicator_runtime_service.pine_data_manager = lambda: getattr(app.state, "data_manager", None)
     from app.indicator.pine_host import PineHostInputs
@@ -564,25 +502,9 @@ async def _start_plugin_plane() -> None:
     indicator_runtime_service.prepare_inputs = pine_inputs.prepare
     indicator_runtime_service.release_inputs = pine_inputs.release
     indicator_runtime_service.stop_inputs = pine_inputs.stop
-    app.state.plugin_v1_compatibility = v1_compatibility
     app.state.plugin_platform_v2 = plugin_platform_v2
     app.state.plugin_platform_v2_management_guard = plugin_platform_v2_guard
-    plugin_summary = plugin_runtime_host.health_summary()
-    plugin_plane = getattr(app.state, "plugin_plane", {"status": "ok"})
-    print(
-        "[startup] Runtime plugin host "
-        f"{plugin_summary['status']} "
-        f"({plugin_summary['ready']}/{plugin_summary['enabled']} ready)"
-    )
-    print(
-        "[startup] First-party plugin bootstrap "
-        f"{first_party_bootstrap.status}"
-        + (
-            f" ({first_party_bootstrap.runtime_id} {first_party_bootstrap.version})"
-            if first_party_bootstrap.runtime_id
-            else ""
-        )
-    )
+    plugin_plane = app.state.plugin_plane
     if plugin_plane.get("status") == "degraded":
         print("[startup] Plugin plane degraded; core market runtime will continue")
 
@@ -600,7 +522,7 @@ async def startup_event() -> None:
         core = getattr(app.state, "data_manager_core", None)
         if core is not None:
             await core.shutdown_strategy()
-        await stop_extensions(app)
+        await stop_unified(app)
         raise
 
 
@@ -611,7 +533,8 @@ async def _startup_event_impl() -> None:
     app.state.event_loop_lag_monitor = lag_monitor
     app.state.runtime_mode = RUNTIME_MODE
     if RUNTIME_MODE != "LOCAL_OFFLINE":
-        await prepare_extensions(app)
+        prepare_unified(app)
+        await prepare_unified_startup(app)
 
     if RUNTIME_MODE == "LOCAL_OFFLINE":
         local_runtime = None
@@ -629,7 +552,8 @@ async def _startup_event_impl() -> None:
             from app.data_engine.data_manager.core import DataManagerCore
             app.state.data_manager_core = DataManagerCore()
             app.state.local_data_runtime = local_runtime.data
-            await prepare_extensions(app)
+            prepare_unified(app)
+            await prepare_unified_startup(app)
             if BACKTEST_SETTINGS.enabled:
                 from app.backtest.runtime import BacktestRuntime
 
@@ -646,19 +570,7 @@ async def _startup_event_impl() -> None:
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
                 )
-            from dataclasses import replace
-            from app.replay.local_bar_repository import LocalReplayBarRepository
-            from app.replay.local_trade_repository import LocalReplayTradeRepository
-            from app.replay.runtime import start_replay_runtime
-
-            offline_replay = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
-                replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
-            imported_bars = LocalReplayBarRepository(local_runtime.service,
-                max_rows=offline_replay.max_bar_dataset_rows)
-            replay_runtime = await extension_factory(app, "replay", start_replay_runtime)(
-                settings=offline_replay, repository=imported_bars,
-                native_intervals=imported_bars.native_intervals,
-                raw_trade_archive=LocalReplayTradeRepository(local_runtime.service))
+            replay_runtime = await _start_library_replay(local_runtime.service)
             app.state.replay_runtime = replay_runtime
             app.state.replay_service = replay_runtime.service
             if replay_runtime.service is not None:
@@ -666,28 +578,29 @@ async def _startup_event_impl() -> None:
         except BaseException:
             core=getattr(app.state,"data_manager_core",None)
             if core is not None:await core.shutdown_strategy()
-            await stop_extensions(app)
             if replay_runtime is not None:
                 await replay_runtime.shutdown()
             if backtest_runtime is not None:
                 backtest_runtime.shutdown()
             if local_runtime is not None:
                 local_runtime.shutdown()
+            await stop_unified(app)
             await lag_monitor.stop()
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
-        await activate_extensions(app)
+        await activate_unified(app)
         freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
 
     # Parse the CCXT CA bundle off the loop before feeds open their clients.
     from app.exchanges.ccxt_ext.tls import start_shared_ssl_context_warmup
 
-    start_shared_ssl_context_warmup()
+    if sys.platform != "emscripten":  # Fetch and WebSocket use the browser TLS stack.
+        start_shared_ssl_context_warmup()
 
     # 1. Initialize registered market-storage schemas through one composition root.
-    storage_bootstrap = initialize_market_storage(
+    storage_bootstrap = startup_factory(app, "market-storage", initialize_market_storage)(
         klines_db_path=KLINES_DB_PATH,
         trade_flow_backend=TRADE_FLOW_ROLLUP_BACKEND,
         trade_flow_db_path=TRADE_FLOW_DB_PATH,
@@ -712,7 +625,7 @@ async def _startup_event_impl() -> None:
         if BACKTEST_SETTINGS.enabled or RESEARCH_DATA_LIBRARY_ENABLED:
             from app.local_data.runtime import LocalDataRuntime
 
-            data_runtime = LocalDataRuntime(LOCAL_DATA_DIR)
+            data_runtime = startup_factory(app, "local-data", LocalDataRuntime)(LOCAL_DATA_DIR)
             data_runtime.start()
             app.state.local_data_runtime = data_runtime
             app.state.local_data_service = data_runtime.service
@@ -723,6 +636,7 @@ async def _startup_event_impl() -> None:
             data_runtime = getattr(app.state, "local_data_runtime")
             backtest_runtime = BacktestRuntime.start(
                 BACKTEST_SETTINGS,
+                start_worker=sys.platform != "emscripten",
                 local_data_service=data_runtime.service,
                 trade_archive_dir=REPLAY_AGG_TRADE_ARCHIVE_DIR,
             )
@@ -742,11 +656,9 @@ async def _startup_event_impl() -> None:
             data_runtime.shutdown()
         await _stop_plugin_owner(getattr(app.state, "plugin_platform_v2", None))
         await _stop_plugin_owner(getattr(app.state, "indicator_runtime_service", None))
-        await _stop_plugin_owner(getattr(app.state, "plugin_runtime_host", None))
         await lag_monitor.stop()
         raise
 
-    plugin_runtime_host = app.state.plugin_runtime_host
     indicator_runtime_service = app.state.indicator_runtime_service
     plugin_platform_v2 = app.state.plugin_platform_v2
 
@@ -777,6 +689,7 @@ async def _startup_event_impl() -> None:
                 local_data=getattr(app.state, "local_data_service", None),
                 backtest_runtime=getattr(app.state, "backtest_runtime", None),
                 host_history_path=KLINES_DB_PATH,
+                replay_library=getattr(app.state, "replay_library", None),
             ),
             enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
         )
@@ -812,6 +725,8 @@ async def _startup_event_impl() -> None:
                 refresh_exchange_metadata,
                 evictor=evict_exchange_metadata,
             )
+            if isinstance(plugin_platform_v2, CorePluginPlatform):
+                plugin_platform_v2.marketplace.bind_unified(app.state.unified_plugin_runtime)
             await plugin_platform_v2.start()
             plugin_platform_v2.publish_event(
                 "candlescope.app.ready/1",
@@ -821,15 +736,10 @@ async def _startup_event_impl() -> None:
             code, message = _plugin_plane_issue_from_exception(exc)
             _mark_plugin_plane_degraded(code=code, message=message)
             await _stop_plugin_owner(plugin_platform_v2)
+            app.state.unified_plugin_runtime.marketplace_policy = None
             from app.plugin_core_v2 import DisabledCorePluginPlatform
 
             plugin_platform_v2 = DisabledCorePluginPlatform()
-            v1_compatibility = getattr(app.state, "plugin_v1_compatibility", None)
-            if v1_compatibility is not None:
-                try:
-                    plugin_platform_v2.bind_v1_compatibility(v1_compatibility)
-                except Exception:
-                    pass
             app.state.plugin_platform_v2 = plugin_platform_v2
             print("[startup] Plugin Platform v2 degraded; core market runtime continues")
     except BaseException:
@@ -860,7 +770,6 @@ async def _startup_event_impl() -> None:
         if backtest_runtime is not None:
             backtest_runtime.shutdown()
         await _stop_plugin_owner(indicator_runtime_service)
-        await _stop_plugin_owner(plugin_runtime_host)
         await lag_monitor.stop()
         raise
 
@@ -877,7 +786,7 @@ async def _startup_event_impl() -> None:
     # 5. Refresh exchange symbols in the background. Product search can serve
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
-    await activate_extensions(app)
+    await activate_unified(app)
 
     # Keep the startup heap out of later full GC passes (see gc_policy).
     freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
@@ -889,7 +798,12 @@ def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
             from app.exchanges.symbol_catalog import refresh_exchange_metadata
 
             await _wait_for_catalog_foreground_quiet()
-            counts = await refresh_exchange_metadata()
+            if sys.platform == "emscripten":
+                # Warm only the initial market on visitors' network connections.
+                # The usual catalog API can discover more sources on demand.
+                counts = await refresh_exchange_metadata("binance", market_type="spot")
+            else:
+                counts = await refresh_exchange_metadata()
             print(f"[startup] Exchange info loaded [ok] {counts}")
         except asyncio.CancelledError:
             raise
@@ -959,9 +873,9 @@ async def shutdown_event() -> None:
 async def _shutdown_components() -> None:
     replay_core = getattr(app.state, "data_manager_core", None)
     if replay_core is not None:
+        await replay_core.synthetic.close()
         await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
-    await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
         core = getattr(app.state, "data_manager_core", None)
@@ -991,6 +905,7 @@ async def _shutdown_components() -> None:
             if backtest_service is not None:
                 backtest_service.shutdown()
         local_runtime.shutdown()
+        await stop_unified(app)
         lag_monitor = getattr(app.state, "event_loop_lag_monitor", None)
         if lag_monitor is not None:
             await lag_monitor.stop()
@@ -1104,15 +1019,6 @@ async def _shutdown_components() -> None:
                 exc_info=True,
             )
 
-    plugin_runtime_host = getattr(app.state, "plugin_runtime_host", None)
-    if plugin_runtime_host is not None:
-        try:
-            await plugin_runtime_host.stop()
-            print("[shutdown] Runtime plugin host shut down [ok]")
-        except Exception as exc:
-            logger.warning("Runtime plugin host shutdown error: %s", exc, exc_info=True)
-            print(f"[shutdown] Runtime plugin host shutdown error: {exc}")
-
     runtime = getattr(app.state, "data_engine_runtime", None)
     if runtime is not None:
         await runtime.shutdown(step_timeout=5)
@@ -1120,6 +1026,7 @@ async def _shutdown_components() -> None:
     if replay_runtime is not None:
         await replay_runtime.shutdown(step_timeout=5)
 
+    await stop_unified(app)
     unfreeze_startup_heap()
     print("[shutdown] All components shut down")
 
@@ -1177,34 +1084,16 @@ async def health_check() -> dict:
         }
         if plugin_plane.get("status") == "degraded":
             result["status"] = "degraded"
-    plugin_runtime_host = getattr(app.state, "plugin_runtime_host", None)
-    if plugin_runtime_host is not None:
-        result["plugin_runtimes"] = plugin_runtime_host.health_summary()
-        if result["plugin_runtimes"].get("status") == "degraded":
-            result["status"] = "degraded"
     plugin_platform_v2 = getattr(app.state, "plugin_platform_v2", None)
     if plugin_platform_v2 is not None:
         result["plugin_platform_v2"] = plugin_platform_v2.health_summary()
-    first_party_bootstrap = getattr(
-        app.state,
-        "first_party_plugin_bootstrap",
-        None,
-    )
-    if isinstance(first_party_bootstrap, dict):
-        result["first_party_plugin_bootstrap"] = {
-            key: first_party_bootstrap[key]
-            for key in (
-                "status",
-                "runtimeId",
-                "version",
-                "changed",
-                "downloaded",
-                "reason",
-            )
-            if key in first_party_bootstrap
+    unified = getattr(app.state, "unified_plugin_runtime", None)
+    if unified is not None:
+        result["unified_plugins"] = {
+            "executors_attached": unified.ready,
+            "safe_mode": unified.safe_mode,
+            "errors": len(unified.errors),
         }
-        if first_party_bootstrap.get("status") == "unavailable":
-            result["status"] = "degraded"
     indicator_runtime_service = getattr(
         app.state,
         "indicator_runtime_service",

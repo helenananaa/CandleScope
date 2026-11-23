@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "platform": "macOS arm64",
+  "package": "unpacked, ad-hoc signed QA app",
+  "bundledBackendTests": 46,
+  "bundledBackendSourcesMatch": [
+    "app/api/v1/synthetic.py",
+    "app/api/v1/synthetic_sources.py",
+    "app/data_engine/data_manager/core.py",
+    "app/data_engine/synthetic_series/core.py",
+    "app/data_engine/synthetic_series/service.py",
+    "app/local_data/service.py",
+    "app/main.py",
+    "app/replay/training/synthetic_source.py"
+  ],
+  "signatureBeforeTests": "PASS",
+  "signatureAfterTests": "PASS",
+  "scope": "bundled Python and backend modules, isolated profiles, -B and pytest --assert=plain",
+  "artifactNote": "The final local-data source changed during initial packaging. Its exact source and checked-hash bytecode were synchronized before the isolated QA app was resealed with the same entitlements and flags. All listed source files match the final working tree.",
+  "limitations": [
+    "No native UI save/exit/restart acceptance",
+    "No Windows or notarization acceptance",
+    "No live exchange or endurance qualification"
+  ]
+}

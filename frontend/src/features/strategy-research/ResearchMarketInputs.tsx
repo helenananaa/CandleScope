@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { Button, Field, Input, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { getNativeIntervals, useExchangeCatalog } from "../chart-session/exchangeCatalogRuntime.js";
@@ -34,37 +35,41 @@ export default function ResearchMarketInputs({ markets, limit, onChange }: {
     onChange([...markets, candidate]);
     setEditing(false);
   }
-  return <div data-testid="research-market-inputs">
-    {markets.length > 0 && <ul>{markets.map(item => {
+  return <div className="strategy-research-markets" data-testid="research-market-inputs">
+    {markets.length > 0 && <ul className="strategy-history-list">{markets.map(item => {
       const key = marketInputKey(item);
-      return <li key={key}>
-        {item.session.exchange} · {item.session.marketType} · {item.session.symbol} · {item.session.interval}
-        <p>{new Date(item.startMs).toLocaleString(locale)} – {new Date(item.endMs).toLocaleString(locale)}</p>
-        <button type="button" onClick={() => onChange(markets.filter(value => marketInputKey(value) !== key))}>{t("indicator.remove")}</button>
+      return <li key={key} className="strategy-history-row">
+        <div className="strategy-history-run">
+          <strong>{item.session.exchange} · {item.session.marketType} · {item.session.symbol} · {item.session.interval}</strong>
+          <span>{new Date(item.startMs).toLocaleString(locale)} – {new Date(item.endMs).toLocaleString(locale)}</span>
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => onChange(markets.filter(value => marketInputKey(value) !== key))}>{t("indicator.remove")}</Button>
       </li>;
     })}</ul>}
-    {!editing && <button type="button" disabled={markets.length >= limit} onClick={() => setEditing(true)}>{t("researchBatch.marketAdd")}</button>}
-    {editing && <fieldset>
+    {!editing && <Button size="sm" disabled={markets.length >= limit} onClick={() => setEditing(true)}>{t("researchBatch.marketAdd")}</Button>}
+    {editing && <fieldset className="strategy-research-market-form">
       <legend>{t("researchBatch.marketAdd")}</legend>
-      <button type="button" onClick={() => setSearchOpen(true)}>{symbol ? `${symbol.exchange} · ${symbol.marketType} · ${symbol.symbol}` : t("researchBatch.marketSymbol")}</button>
-      {searchOpen && <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
+      <Button size="sm" onClick={() => setSearchOpen(true)}>{symbol ? `${symbol.exchange} · ${symbol.marketType} · ${symbol.symbol}` : t("researchBatch.marketSymbol")}</Button>
+      {searchOpen && <Suspense fallback={<p className="strategy-research-note" role="status">{t("research.loading")}</p>}>
         <SymbolSearchModal open={searchOpen} onClose={() => setSearchOpen(false)}
           currentSymbol={symbol?.symbol ?? ""} currentExchange={symbol?.exchange ?? "binance"}
           currentMarketType={symbol?.marketType ?? null} exchangeCatalog={exchangeCatalog}
           onSelect={value => { setSymbol(value); setInterval(""); }} />
       </Suspense>}
-      {symbol && <label>{t("researchBatch.marketInterval")}
-        <select value={selectedInterval} onChange={event => setInterval(event.target.value)}>
+      {symbol && <Field label={t("researchBatch.marketInterval")}>
+        <Select size="sm" value={selectedInterval} onChange={event => setInterval(event.target.value)}>
           {intervals.map(item => <option key={item.value} value={item.value}>{item.value}</option>)}
-        </select>
-      </label>}
-      {symbol && !intervals.length && <p role="status">{t("researchBatch.marketUnavailable")}</p>}
-      <label>{t("researchBatch.marketStart")} <input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} /></label>
-      <label>{t("researchBatch.marketEnd")} <input type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} /></label>
-      {start && end && !valid && <p role="status">{t("researchBatch.marketRange")}</p>}
-      <button type="button" onClick={add} disabled={!valid || markets.length >= limit
-        || markets.some(item => candidate && marketInputKey(item) === marketInputKey(candidate))}>{t("researchBatch.marketSave")}</button>
-      <button type="button" onClick={() => { setEditing(false); setSearchOpen(false); }}>{t("backtest.close")}</button>
+        </Select>
+      </Field>}
+      {symbol && !intervals.length && <p className="strategy-research-note" role="status">{t("researchBatch.marketUnavailable")}</p>}
+      <Field label={t("researchBatch.marketStart")}><Input size="sm" type="datetime-local" value={start} onChange={event => setStart(event.target.value)} /></Field>
+      <Field label={t("researchBatch.marketEnd")}><Input size="sm" type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} /></Field>
+      {start && end && !valid && <p className="strategy-research-note" role="status">{t("researchBatch.marketRange")}</p>}
+      <div className="strategy-history-actions">
+        <Button size="sm" variant="primary" onClick={add} disabled={!valid || markets.length >= limit
+          || markets.some(item => candidate && marketInputKey(item) === marketInputKey(candidate))}>{t("researchBatch.marketSave")}</Button>
+        <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setSearchOpen(false); }}>{t("backtest.close")}</Button>
+      </div>
     </fieldset>}
   </div>;
 }

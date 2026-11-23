@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readAppStyles } from "../../../test/appStyles.js";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -54,7 +55,7 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
   ].map(source).join("\n");
   for (const owner of [
     "MarketPageFrame",
-    "MarketTopBarFrame",
+    "AppHeader",
     "IntervalSelector",
     "MarketChartWorkspace",
     "MarketStatusBar",
@@ -69,9 +70,11 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
   assert.doesNotMatch(workspace, /ReplayRightRail/);
   assert.match(workspace, /replay\.shell\.reviewTools/);
   assert.match(workspace, /review === null \? viewer\.seriesStore : reviewSeriesStore/);
-  assert.match(workspace, /aria-controls="replay-integrity-drawer"/);
+  // The integrity toggle is a header action that controls the drawer.
+  assert.match(workspace, /controls: "replay-integrity-drawer"/);
   assert.match(workspace, /integrityOpen &&/);
-  assert.match(workspace, /event\.key !== "Escape"/);
+  // The integrity drawer is a right-hand drawer on the overlay stack, which owns its Escape.
+  assert.match(workspace, /<OverlayLayer kind="drawer" side="right" onClose=\{\(\) => setIntegrityOpen\(false\)\}/);
   assert.doesNotMatch(workspace, /<header\s+className="top-bar replay-top-bar"/);
 });
 
@@ -130,6 +133,8 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   assert.match(controls, /globalClock\?\.playback_bases/);
   assert.match(controls, /data-replay-action="advance-display"/);
   assert.match(controls, /data-replay-action="advance-base"/);
+  // "Next base bar" only shows when it differs from "next display bar".
+  assert.match(controls, /displayInterval === config\?\.base_interval/);
   assert.match(controls, /data-replay-action="advance-source-event"/);
   assert.match(controls, /phase3Command\("advance"/);
   assert.match(controls, /replay\.control\.nextAgg/);
@@ -171,13 +176,19 @@ test("capability surface never renders unsupported history as numeric zero or st
   assert.equal(model.AGG_TRADE_TAPE.state, "UNSUPPORTED_SOURCE_MODE");
   assert.equal(model.ORDER_FLOW.state, "AVAILABLE_APPROX");
   assert.equal(model.ORDER_FLOW.value, "KLINE_TAKER_PROXY");
-  assert.match(model.ORDER_FLOW.detail, /taker buy volume/);
+  assert.match(model.ORDER_FLOW.detail, /主动买入量/);
   assert.equal(model.ORDER_BOOK.value, "--");
-  assert.match(model.FUNDING.detail, /交易所历史 funding\/mark/);
+  assert.match(model.FUNDING.detail, /交易所的历史资金费与标记价格/);
   assert.match(model.FUNDING.detail, /近似账户模拟/);
   const html = renderToStaticMarkup(<ReplayCapabilitySurface capabilities={model} />);
   assert.match(html, /UNSUPPORTED_NO_HISTORY/);
   assert.doesNotMatch(html, />0(?:\.0+)?</);
+  // One row per capability: the state is a short badge; the code stays in data-capability-state.
+  assert.match(html, /<li data-replay-capability="ORDER_BOOK" data-capability-state="UNSUPPORTED_NO_HISTORY" data-capability-value="--">/);
+  assert.doesNotMatch(html, /<code>/);
+  assert.match(html, /<span class="ui-badge"[^>]*data-tone="success"[^>]*>精确<\/span>/);
+  assert.match(html, /<span class="ui-badge"[^>]*>不可用<\/span>/);
+  assert.doesNotMatch(html, /<code>(AVAILABLE|UNSUPPORTED)_/, "state codes are not shown as text");
 
   const tape = buildReplayCapabilityModel("AGG_TRADE");
   assert.equal(tape.OHLCV.state, "AVAILABLE_APPROX");
@@ -185,8 +196,8 @@ test("capability surface never renders unsupported history as numeric zero or st
   assert.equal(tape.AGG_TRADE_TAPE.state, "AVAILABLE_EXACT");
   assert.match(tape.OHLCV.detail, /官方 K 线不同/);
   assert.equal(tape.ORDER_FLOW.state, "AVAILABLE_APPROX");
-  assert.match(tape.AGG_TRADE_TAPE.detail, /不是交易所 raw fills/);
-  assert.match(tape.ORDER_FLOW.detail, /buyer-maker/);
+  assert.match(tape.AGG_TRADE_TAPE.detail, /不是交易所的逐笔原始成交/);
+  assert.match(tape.ORDER_FLOW.detail, /买方挂单/);
 
   const book = buildReplayCapabilityModel("AGG_TRADE", {
     mode: "BOOK_ASSISTED_REQUIRED",
@@ -222,16 +233,19 @@ test("Phase 8 workspace exposes explainable plans and fail-closed aggregate trad
 test("paper trading dock owns a complete readable surface in both app themes", () => {
   const rail = source("src/features/replay/components/ReplayRightRail.tsx");
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
   assert.match(rail, /className="replay-paper-trading"/);
-  assert.match(rail, /role="tablist"/);
-  assert.match(rail, /role="tabpanel"/);
-  assert.match(rail, /handleRailTabKeyDown/);
+  // The account records and the order type are kit tabs with their panels.
+  assert.match(rail, /<Tabs\s+id=\{recordTabsId\}/);
+  assert.match(rail, /<TabPanel tabsId=\{recordTabsId\}/);
+  assert.match(rail, /<Tabs\s+id=\{orderTypeTabsId\}/);
+  assert.match(rail, /<SegmentedControl[\s\S]*replay\.paper\.openClose/);
   assert.match(marketRail, /data-active-dock=\{dockAttr\}/);
-  assert.match(styles, /\[data-theme='light'\] \.replay-paper-trading/);
-  assert.match(styles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /--replay-rail-text-muted: var\(--trade-muted\)/);
+  // Both themes come from the global tokens; buy and sell follow the candle colours.
+  assert.match(styles, /--trade-positive: var\(--text-up\)/);
+  assert.match(styles, /--trade-negative: var\(--text-down\)/);
   assert.match(styles, /--trade-muted: var\(--text-muted\)/);
+  assert.doesNotMatch(styles, /--replay-rail-[a-z-]+:/);
 });
 
 test("order-size capacity is independent from draft preview failures", () => {
@@ -302,7 +316,7 @@ test("right-rail trading workstation keeps positions and account history out of 
   const rail = source("src/features/replay/components/ReplayRightRail.tsx");
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
   const shell = source("src/features/replay/ReplayTrainingPageShell.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.doesNotMatch(shell, /bottomPanel=/);
   assert.doesNotMatch(shell, /ReplayTradingWorkbench/);
@@ -683,7 +697,7 @@ test("replay preserves whole-panel collapse after every accordion body is closed
 
 test("replay rail shows one full-height view chosen from the activity bar", () => {
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
   assert.match(marketRail, /layoutMode="single-view"/);
   assert.match(marketRail, /onToggleView=\{onActivateView\}/);
   assert.match(marketRail, /actions\.activateView\(/);
@@ -693,7 +707,7 @@ test("replay rail shows one full-height view chosen from the activity bar", () =
   assert.match(marketRail, /openViewIds=\{preferences\.openViewIds\}/);
   assert.match(marketRail, /panelCollapsed=\{preferences\.panelCollapsed\}/);
   assert.match(marketRail, /onTogglePanelCollapsed=\{actions\.togglePanelCollapsed\}/);
-  assert.match(styles, /\.replay-market-dock\[data-active-dock="paper"\] \.replay-market-dock-body \{\s*overflow: auto;/);
+  assert.match(styles, /\.replay-market-dock-body \{[^}]*min-height: 0;[^}]*overflow: auto;/);
 });
 
 test("archive cleanup removes only deleted replay workspace scopes", () => {
@@ -716,25 +730,27 @@ test("Phase 10 release surface exposes soak telemetry and an accessible danger d
   const workspace = source("src/features/replay/ReplayTrainingPageShell.tsx");
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
   const integrity = source("src/features/replay/components/ReplayIntegrityReviewPanel.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.match(workspace, /data-replay-order-count/);
   assert.match(workspace, /data-replay-fill-count/);
-  assert.match(controls, /data-replay-focus-trap="active"/);
-  assert.match(controls, /aria-describedby="replay-end-description"/);
-  assert.match(controls, /event\.key === "Escape"/);
-  assert.match(controls, /event\.key !== "Tab"/);
-  assert.match(controls, /requestAnimationFrame\(\(\) => restore\?\.focus\(\)\)/);
+  // The end dialog is the kit Dialog: it traps focus, closes on Escape and returns focus; Cancel takes focus first.
+  assert.match(controls, /<Dialog\s+open=\{showEnd\}[\s\S]*?className="replay-end-dialog"/);
+  assert.match(controls, /description=\{t\("replay\.control\.endHint"\)\}/);
+  assert.match(controls, /initialFocusRef=\{endCancelRef\}/);
+  assert.match(controls, /<Button variant="danger" data-replay-action="confirm-end"/);
+  assert.doesNotMatch(controls, /replay-modal-backdrop|data-replay-focus-trap/);
   assert.match(integrity, /data-replay-panel="report"/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "json"\)/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "csv"\)/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(styles, /\.replay-loading-spinner \{ animation: none !important; \}/);
+  // Reduced motion is one app-wide rule (reset.css); the loading spinner keeps turning, slower.
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*animation-duration: var\(--motion-reduced-duration, 0\.01ms\) !important/);
+  assert.match(styles, /\.replay-loading-spinner \{[^}]*--motion-reduced-duration: 1\.6s; --motion-reduced-iterations: infinite;/);
 });
 
 test("toolbar keeps idle time visible and scopes progress to an active cancelable advance", () => {
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.match(controls, /const cancelableAdvancePending = replayAdvanceIsCancelable\(/);
   assert.match(controls, /\{cancelableAdvancePending && \(\s*<span className="replay-advance-progress"/s);

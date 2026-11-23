@@ -1,0 +1,14 @@
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "values": [
+    22,
+    24
+  ],
+  "rejectedInvalidSource": true,
+  "formingBarsExcluded": 1,
+  "restart": "passed",
+  "sourceCommit": "6d7928acfe13116a5fc36f990af5a6005bb001ae",
+  "asarSha256": "7a978abd0b05bd51c0b0a6f3e51e9ae467472fe40204d028aedd7ff5be744836",
+  "packageSha256": "sha256:2251ac4757ec9c37e832e23db02175895416e5cc3884977741c71f52b5b46398"
+}

@@ -1,0 +1,68 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-indicator-browser-complete",
+  "browser": "Chrome/157.0.8103.78",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "cases": [
+          {
+            "kind": "CAPTURED_WINDOW",
+            "transform": "heikin-ashi",
+            "points": 4
+          },
+          {
+            "kind": "CAPTURED_WINDOW",
+            "transform": "renko",
+            "points": 8
+          },
+          {
+            "kind": "CAPTURED_WINDOW",
+            "transform": "point-and-figure",
+            "points": 2
+          },
+          {
+            "kind": "CAPTURED_WINDOW",
+            "transform": "kagi",
+            "points": 2
+          },
+          {
+            "kind": "CAPTURED_WINDOW",
+            "transform": "line-break",
+            "points": 2
+          },
+          {
+            "kind": "PARAMETER_CHANGE",
+            "transform": "renko",
+            "points": 19
+          },
+          {
+            "kind": "REPLAY",
+            "transform": "heikin-ashi",
+            "points": 2
+          },
+          {
+            "kind": "REPLAY_FORWARD",
+            "transform": "heikin-ashi",
+            "points": 3
+          },
+          {
+            "kind": "REPLAY_REWIND",
+            "transform": "heikin-ashi",
+            "points": 2
+          }
+        ],
+        "rawHostedSockets": 0,
+        "realScriptClock": true,
+        "scope": "production browser hooks, DM snapshots, builtins and isolated frontend JS; native Pine verified separately"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}
