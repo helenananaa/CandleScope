@@ -11,7 +11,7 @@
   min-height: 0;
   display: block;
   overflow: hidden;
-  background: var(--border-color);
+  background: var(--border-subtle);
 }
 .workspace-layout-root,
 .workspace-cell-layer,
@@ -31,7 +31,7 @@
 .workspace-layout-root {
   position: relative;
   overflow: hidden;
-  background: var(--border-color);
+  background: var(--border-subtle);
 }
 .workspace-cell-layer {
   z-index: 1;
@@ -40,7 +40,7 @@
   position: absolute;
   display: flex;
   overflow: hidden;
-  box-shadow: inset 0 0 0 0.5px var(--border-color);
+  box-shadow: inset 0 0 0 0.5px var(--border-subtle);
 }
 .workspace-layout-leaf-maximized {
   z-index: calc(var(--z-topbar) + 10);
@@ -124,7 +124,7 @@
   bottom: 10px;
   max-width: min(430px, calc(100% - 20px));
   padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--color-warning) 68%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 68%, var(--border-subtle));
   border-radius: var(--radius-control);
   color: var(--text-warning);
   background: color-mix(in srgb, var(--color-warning) 22%, var(--surface-1));
@@ -142,7 +142,7 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--surface-0);
   box-shadow: inset 0 0 0 1px transparent;
 }
 .multi-chart-cell.active {
@@ -158,8 +158,8 @@
   height: 26px;
   min-height: 26px;
   padding: 0 6px 0 9px;
-  border-bottom: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   line-height: 1;
@@ -167,7 +167,7 @@
 }
 .multi-chart-cell.active .multi-chart-cell-header {
   color: var(--text-primary);
-  border-bottom-color: color-mix(in srgb, var(--accent-blue) 60%, var(--border-color));
+  border-bottom-color: color-mix(in srgb, var(--accent-blue) 60%, var(--border-subtle));
 }
 .multi-chart-cell-header strong {
   color: inherit;
@@ -223,7 +223,7 @@
   border: 1px solid color-mix(in srgb, var(--text-muted) 42%, transparent);
   border-radius: var(--radius-xs);
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-0) 72%, transparent);
   font-size: var(--font-size-xs);
   font-weight: 700;
 }
@@ -268,7 +268,7 @@
   gap: 3px;
   padding: 2px 5px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 54%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 54%, var(--border-subtle));
   border-radius: var(--radius-full);
   margin-left: auto;
   color: var(--chart-link-group-color);
@@ -287,11 +287,11 @@
   width: 48px;
   height: 20px;
   padding: 0 3px;
-  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 62%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 62%, var(--border-subtle));
   border-radius: var(--radius-sm);
   outline: 0;
   color: var(--chart-link-group-color);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   font: 600 var(--font-size-xs) var(--font-mono);
   cursor: pointer;
 }
@@ -339,8 +339,8 @@
 .multi-chart-cell-drag-handle:hover,
 .multi-chart-cell-layout-trigger:hover,
 .multi-chart-cell-layout-trigger[aria-expanded="true"] {
-  border-color: var(--border-color);
-  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 .multi-chart-cell-drag-handle {
@@ -371,10 +371,10 @@
   width: 236px;
   gap: 8px;
   padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 46%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 46%, var(--border-subtle));
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-secondary) 97%, black);
+  background: color-mix(in srgb, var(--surface-1) 97%, black);
   box-shadow: 0 14px 38px rgb(0 0 0 / 42%);
   line-height: 1.25;
 }
@@ -389,7 +389,7 @@
   margin: 0;
   padding: 7px 0;
   border: 0;
-  border-block: 1px solid var(--border-color);
+  border-block: 1px solid var(--border-subtle);
 }
 .workspace-cell-layout-popover legend,
 .workspace-cell-swap-actions > span {
@@ -425,17 +425,17 @@
 .workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)) {
   min-height: 27px;
   padding: 0 7px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   color: var(--text-secondary);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   font-size: var(--font-size-xs);
   cursor: pointer;
 }
 .workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)):hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-subtle));
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .workspace-cell-layout-popover button:disabled,
 .workspace-cell-layout-popover fieldset:disabled {
@@ -447,7 +447,7 @@
   display: grid;
   gap: 7px;
   padding-bottom: 9px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .chart-appearance-section h4 {
   margin: 0;
@@ -496,7 +496,7 @@
   cursor: pointer;
 }
 .chart-appearance-marker:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .chart-appearance-marker:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -526,7 +526,7 @@
   flex: 0 0 auto;
   margin-right: 4px;
   padding-right: 6px;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-subtle);
 }
 .workspace-switcher-trigger {
   display: flex;
@@ -535,17 +535,17 @@
   height: 28px;
   gap: 6px;
   padding: 0 7px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   outline: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   color: var(--text-secondary);
   cursor: pointer;
 }
 .workspace-switcher-trigger:hover,
 .workspace-switcher-trigger[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-color));
-  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 .workspace-switcher-trigger:focus-visible {
@@ -601,9 +601,9 @@
   right: 6px;
   width: min(354px, calc(100vw - 24px));
   padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 82%, var(--text-muted));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, var(--text-muted));
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 97%, transparent);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42);
   color: var(--text-primary);
 }
@@ -637,7 +637,7 @@
   flex: 0 0 auto;
   padding: 3px 6px;
   border-radius: var(--radius-full);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 .workspace-persistence-state[data-save-state="saved"] {
   color: var(--text-up);
@@ -652,9 +652,9 @@
   gap: 2px;
   padding: 3px;
   overflow-y: auto;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 .workspace-switcher-option {
   display: flex;
@@ -670,11 +670,11 @@
   cursor: pointer;
 }
 .workspace-switcher-option:hover {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 .workspace-switcher-option.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-primary);
 }
@@ -711,15 +711,15 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 7px 0 9px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .workspace-switcher-actions button,
 .workspace-rename-form button {
   height: 27px;
   padding: 0 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   cursor: pointer;
@@ -727,14 +727,14 @@
 .workspace-switcher-actions button:hover,
 .workspace-rename-form button:hover {
   border-color: var(--text-muted);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 .workspace-switcher-actions button.danger {
   color: var(--text-down);
 }
 .workspace-switcher-actions button.danger.confirm {
-  border-color: color-mix(in srgb, var(--candle-down) 62%, var(--border-color));
+  border-color: color-mix(in srgb, var(--candle-down) 62%, var(--border-subtle));
   background: color-mix(in srgb, var(--candle-down) 12%, transparent);
 }
 .workspace-switcher-actions button:disabled,
@@ -744,7 +744,7 @@
 }
 .workspace-rename-form {
   padding: 7px 0 9px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .workspace-rename-form label {
   display: block;
@@ -764,7 +764,7 @@
   border: 1px solid var(--accent-blue);
   border-radius: var(--radius-control);
   outline: 0;
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-primary);
   font-size: var(--font-size-xs);
 }
@@ -789,16 +789,16 @@
   min-height: 46px;
   gap: 8px;
   padding: 6px 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
 }
 .workspace-template-grid > button:hover {
-  border-color: color-mix(in srgb, var(--accent-blue) 52%, var(--border-color));
-  background: color-mix(in srgb, var(--accent-blue) 9%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent-blue) 52%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-blue) 9%, var(--surface-0));
   color: var(--text-primary);
 }
 .workspace-template-glyph {
@@ -828,7 +828,7 @@
   min-height: 22px;
   margin-top: 8px;
   padding: 7px 2px 0;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 .workspace-switcher-error {
   max-width: 185px;
@@ -843,13 +843,13 @@
   gap: 2px;
   margin-right: 4px;
   padding-right: 6px;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-subtle);
 }
 .workspace-layout-action-separator {
   width: 1px;
   height: 16px;
   margin: 0 2px;
-  background: var(--border-color);
+  background: var(--border-subtle);
 }
 .workspace-top-controls,
 .workspace-link-controls,
@@ -867,7 +867,7 @@
   gap: 2px;
   margin-right: 6px;
   padding-right: 6px;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-subtle);
 }
 .workspace-window-status {
   max-width: 152px;
@@ -893,11 +893,11 @@
 .workspace-link-group-select select {
   height: 26px;
   padding: 0 5px;
-  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 58%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 58%, var(--border-subtle));
   border-radius: var(--radius-control);
   outline: 0;
   color: var(--chart-link-group-color);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   font: 600 var(--font-size-xs) var(--font-mono);
 }
 .workspace-link-setting-list {
@@ -912,10 +912,10 @@
   gap: 4px;
   height: 26px;
   padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 42%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 42%, var(--border-subtle));
   border-radius: var(--radius-control);
   color: var(--chart-link-group-color);
-  background: color-mix(in srgb, var(--chart-link-group-color) 8%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--chart-link-group-color) 8%, var(--surface-1));
   font-size: var(--font-size-xs);
   cursor: pointer;
   list-style: none;
@@ -937,10 +937,10 @@
   width: 304px;
   gap: 9px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 46%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--chart-link-group-color) 46%, var(--border-subtle));
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-secondary) 96%, black);
+  background: color-mix(in srgb, var(--surface-1) 96%, black);
   box-shadow: 0 14px 38px rgb(0 0 0 / 38%);
 }
 .workspace-link-popover > strong {
@@ -959,17 +959,17 @@
   min-width: 112px;
   height: 27px;
   padding: 0 6px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   outline: 0;
   color: var(--text-primary);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   font-size: var(--font-size-xs);
 }
 .workspace-link-popover .workspace-link-setting-list {
   flex-wrap: wrap;
   padding-block: 7px;
-  border-block: 1px solid var(--border-color);
+  border-block: 1px solid var(--border-subtle);
 }
 .workspace-link-help,
 .workspace-link-status {
@@ -997,12 +997,12 @@
   cursor: pointer;
 }
 .workspace-link-setting:hover {
-  border-color: var(--border-color);
+  border-color: var(--border-subtle);
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .workspace-link-setting[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--chart-link-group-color) 58%, var(--border-color));
+  border-color: color-mix(in srgb, var(--chart-link-group-color) 58%, var(--border-subtle));
   color: var(--chart-link-group-color);
   background: color-mix(in srgb, var(--chart-link-group-color) 13%, transparent);
 }
@@ -1027,12 +1027,12 @@
   cursor: pointer;
 }
 .workspace-layout-button:hover {
-  border-color: var(--border-color);
-  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 .workspace-layout-button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 58%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 58%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
   color: var(--text-accent);
 }
@@ -1199,14 +1199,14 @@
   border-left: 1px solid color-mix(in srgb, var(--text-secondary) 18%, transparent);
   color: var(--text-primary);
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface-0) 98%, transparent), color-mix(in srgb, var(--surface-0) 98%, transparent)),
-    var(--bg-secondary);
+    var(--surface-1);
   box-shadow: -18px 0 42px rgba(0, 0, 0, 0.38);
   animation: slide-in-right 0.2s ease-out;
 }
 [data-theme="light"] .workspace-panel {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 98%, transparent), color-mix(in srgb, var(--surface-2) 98%, transparent)),
-    var(--bg-secondary);
+    var(--surface-1);
   box-shadow: -18px 0 42px rgba(15, 23, 42, 0.16);
 }
 .workspace-panel-loading::after {
@@ -1312,7 +1312,7 @@
 .workspace-panel-close:focus-visible {
   border-color: var(--text-muted);
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   outline: none;
 }
 .workspace-panel-tabs {
@@ -1403,7 +1403,7 @@
   gap: 3px;
   padding: 3px;
   overflow-y: auto;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 26%, transparent);
 }
@@ -1425,10 +1425,10 @@
 }
 .workspace-panel-workspace-list > button:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .workspace-panel-workspace-list > button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border-subtle));
   color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 }
@@ -1480,7 +1480,7 @@
   min-width: 0;
   min-height: 30px;
   padding: 0 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
@@ -1510,13 +1510,13 @@
 ) button:hover:not(:disabled) {
   border-color: var(--text-muted);
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .workspace-panel button.danger {
   color: var(--text-down);
 }
 .workspace-panel button.danger.confirm {
-  border-color: color-mix(in srgb, var(--candle-down) 62%, var(--border-color));
+  border-color: color-mix(in srgb, var(--candle-down) 62%, var(--border-subtle));
   background: color-mix(in srgb, var(--candle-down) 12%, transparent);
 }
 .workspace-panel button:disabled {
@@ -1559,7 +1559,7 @@
   align-items: center;
   gap: 9px;
   padding: 7px 9px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
@@ -1570,12 +1570,12 @@
   background: color-mix(in srgb, var(--surface-0) 72%, transparent);
 }
 .workspace-panel-template-grid > button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-blue) 52%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 52%, var(--border-subtle));
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 9%, var(--bg-primary));
+  background: color-mix(in srgb, var(--accent-blue) 9%, var(--surface-0));
 }
 .workspace-panel-template-grid > button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 70%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 70%, var(--border-subtle));
   color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
   box-shadow: inset 2px 0 var(--accent-blue);
@@ -1639,7 +1639,7 @@
   align-items: center;
   gap: 1px 6px;
   padding: 7px 9px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
@@ -1652,9 +1652,9 @@
 }
 .workspace-panel-action-grid button:hover:not(:disabled),
 .workspace-panel-action-grid button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-color));
+  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-subtle));
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-primary));
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-0));
 }
 .workspace-panel-action-grid button > span {
   grid-row: 1 / 3;
@@ -1684,7 +1684,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 11px 12px;
-  border-color: color-mix(in srgb, var(--chart-link-group-color, var(--accent-blue)) 32%, var(--border-color));
+  border-color: color-mix(in srgb, var(--chart-link-group-color, var(--accent-blue)) 32%, var(--border-subtle));
   background: linear-gradient(135deg, color-mix(in srgb, var(--chart-link-group-color, var(--accent-blue)) 12%, transparent), transparent),
     color-mix(in srgb, var(--surface-0) 36%, transparent);
 }
@@ -1740,16 +1740,16 @@
   width: 100%;
   height: 30px;
   padding: 2px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   cursor: pointer;
 }
 .workspace-panel-delete-link-group {
   width: 100%;
   min-height: 30px;
   padding: 0 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   margin-top: 8px;
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
@@ -1764,7 +1764,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 3px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 22%, transparent);
 }
@@ -1786,7 +1786,7 @@
 }
 .workspace-panel-segmented button:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .workspace-panel-segmented button.active {
   border-color: color-mix(in srgb, var(--accent-blue) 28%, transparent);
@@ -1803,7 +1803,7 @@
   min-height: 51px;
   gap: 3px;
   padding: 7px 9px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
@@ -1908,7 +1908,7 @@
   padding: 6px 0;
   margin: 10px 0 0;
   border: 0;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 .workspace-link-members legend {
   color: var(--chart-link-group-color);
@@ -1924,10 +1924,10 @@
   flex: 1;
   min-width: 160px;
   padding: 6px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   color: var(--text-primary);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 .workspace-member-row { justify-content: space-between; padding: 6px 0; }
 .workspace-member-row > label { min-width: 0; flex: 1; }
@@ -1941,4 +1941,4 @@
 /* Replay cells share the existing workspace geometry; controls have one host. */
 .workspace-cell-layout-popover .replay-note-filter-settings { flex-direction: column; }
 
-.workspace-toolbar-trigger { color: inherit; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 4px 8px; white-space: nowrap; }
+.workspace-toolbar-trigger { color: inherit; background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-control); padding: 4px 8px; white-space: nowrap; }

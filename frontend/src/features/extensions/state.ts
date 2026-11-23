@@ -48,6 +48,25 @@ export function extensionSafeMode(): boolean {
   return typeof location !== "undefined" && new URLSearchParams(location.search).get("extensions") === "off";
 }
 
+/**
+ * Colour names of the candlescope.theme/1 contract (backend plugin_lifecycle/appearance.py) that the
+ * stylesheets know by their design-token names. A theme keeps its names; each value is written as the
+ * token it stands for, so it colours every surface and border.
+ */
+export const THEME_CONTRACT_TOKENS: Readonly<Record<string, string>> = {
+  "bg-primary": "surface-0",
+  "bg-secondary": "surface-1",
+  "bg-tertiary": "surface-2",
+  "bg-hover": "surface-hover",
+  "border-color": "border-subtle",
+};
+
+export function extensionThemeDeclarations(tokens: Readonly<Record<string, string>>): string {
+  return Object.entries(tokens)
+    .map(([name, value]) => `--${THEME_CONTRACT_TOKENS[name] ?? name}:${value} !important;`)
+    .join("");
+}
+
 export function applyExtensionTheme(theme: ExtensionState["theme"]): void {
   if (typeof document === "undefined") return;
   document.getElementById("candlescope-extension-theme")?.remove();
@@ -57,7 +76,7 @@ export function applyExtensionTheme(theme: ExtensionState["theme"]): void {
   style.id = "candlescope-extension-theme";
   // The features layer keeps theme rules competing with feature CSS by specificity, as before layers.
   style.textContent = `@layer features {
-    :root{${Object.entries(theme.tokens).map(([name, value]) => `--${name}:${value} !important;`).join("")}}
+    :root{${extensionThemeDeclarations(theme.tokens)}}
     :root[data-extension-theme] .app-layout button { border-radius:var(--radius-sm); }
     :root[data-extension-theme] :is(.plugin-center, .extension-manager) :is(button, select) { min-height:var(--control-height, 32px); }
     :root[data-extension-theme] :is(.pc-engines article, .extension-item, .extension-review) { border-radius:var(--radius-md); box-shadow:var(--panel-shadow, none); }

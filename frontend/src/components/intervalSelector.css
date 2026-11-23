@@ -6,8 +6,8 @@
   align-items: center;
   height: 36px;
   padding: 0 16px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
   gap: 4px;
   flex-shrink: 0;
   overflow-x: auto;
@@ -34,7 +34,7 @@
 .toolbar-divider {
   width: 1px;
   height: 20px;
-  background: var(--border-color);
+  background: var(--border-subtle);
   margin: 0 8px;
   flex-shrink: 0;
 }
@@ -56,7 +56,7 @@
 }
 .interval-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .interval-btn.unavailable,
 .interval-btn:disabled {
@@ -149,8 +149,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
   transform-origin: top left;
@@ -175,14 +175,14 @@
 }
 .interval-panel-close:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .interval-panel-search-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .interval-search-icon {
   display: inline-flex;
@@ -206,7 +206,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   padding: 0 8px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .interval-panel-tab {
   position: relative;
@@ -258,7 +258,7 @@
 }
 .interval-panel-body::-webkit-scrollbar { width: 6px; }
 .interval-panel-body::-webkit-scrollbar-track { background: transparent; }
-.interval-panel-body::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: var(--radius-xs); }
+.interval-panel-body::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: var(--radius-xs); }
 .interval-manage-head {
   display: flex;
   align-items: center;
@@ -311,7 +311,7 @@
   padding: 0 8px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   color: var(--text-secondary);
   cursor: pointer;
   font: 600 var(--font-size-sm) var(--font-mono);
@@ -323,7 +323,7 @@
 .interval-chip:hover,
 .interval-chip.highlighted {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .interval-chip.active {
   color: var(--text-accent);
@@ -348,7 +348,7 @@
   align-items: center;
   gap: 1px;
   padding-left: 10px;
-  background: linear-gradient(90deg, transparent, var(--bg-hover) 28%);
+  background: linear-gradient(90deg, transparent, var(--surface-hover) 28%);
 }
 .interval-chip-wrap.manage:hover .interval-chip,
 .interval-chip-wrap.manage:focus-within .interval-chip {
@@ -381,7 +381,7 @@
 .interval-chip-add {
   min-width: 28px;
   height: 28px;
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--border-subtle);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
@@ -396,16 +396,16 @@
 }
 .interval-composer {
   padding-top: 2px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 .interval-split {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) auto;
   height: 32px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
 }
 .interval-split:focus-within {
   border-color: var(--focus-ring);
@@ -433,8 +433,8 @@
 .interval-unit-tabs {
   display: flex;
   min-width: 0;
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
 }
 .interval-unit-tab {
   flex: 1;
@@ -450,7 +450,7 @@
 }
 .interval-unit-tab:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 .interval-unit-tab.active {
   color: var(--text-accent);
@@ -581,4 +581,4 @@
 
 .interval-anchor-controls { display: grid; gap: 6px; margin-bottom: 10px; font-size: 12px; }
 
-.interval-anchor-controls input[type="datetime-local"] { color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 6px; border-radius: 4px; }
+.interval-anchor-controls input[type="datetime-local"] { color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border-subtle); padding: 6px; border-radius: 4px; }

@@ -11,8 +11,8 @@
   flex-shrink: 0;
   min-height: 0;
   height: 100%;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-left: 1px solid var(--border-subtle);
   z-index: var(--z-rail);
   position: relative;
   --wl-up-color: var(--candle-up);
@@ -24,7 +24,7 @@
   transition: none;
 }
 .right-market-rail.panel-collapsed {
-  border-left-color: var(--border-color);
+  border-left-color: var(--border-subtle);
 }
 .market-rail-loading {
   width: calc(320px + var(--market-activity-bar-width, 60px));
@@ -45,7 +45,7 @@
   box-shadow:
     inset 0 10px 12px -14px rgba(15, 23, 42, 0.7),
     inset 0 -10px 12px -14px rgba(15, 23, 42, 0.7);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
 }
 .market-rail-panel::-webkit-scrollbar {
   width: 8px;
@@ -62,10 +62,10 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-1);
 }
 .market-rail-accordion-section + .market-rail-accordion-section {
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 .market-rail-accordion-trigger {
   display: grid;
@@ -76,14 +76,14 @@
   padding: 0 8px 0 6px;
   gap: 6px;
   border: 0;
-  background: color-mix(in srgb, var(--bg-secondary) 94%, var(--text-primary) 6%);
+  background: color-mix(in srgb, var(--surface-1) 94%, var(--text-primary) 6%);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
 }
 .market-rail-accordion-trigger:hover,
 .market-rail-accordion-trigger:focus-visible {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   outline: none;
 }
 .market-rail-accordion-trigger:focus-visible {
@@ -150,7 +150,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   align-items: center;
   gap: 8px;
   padding: 0 6px 0 14px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .market-rail-single-header strong {
   color: var(--text-primary);
@@ -202,8 +202,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   height: 100%;
   padding: 6px 0;
   gap: 2px;
-  background: var(--bg-tertiary, rgba(0, 0, 0, 0.12));
-  border-left: 1px solid var(--border-color);
+  background: var(--surface-2, rgba(0, 0, 0, 0.12));
+  border-left: 1px solid var(--border-subtle);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
@@ -237,7 +237,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .market-activity-item:hover,
 .market-activity-item:focus-visible {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   outline: none;
 }
 .market-activity-item.active {
@@ -324,17 +324,17 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   justify-content: center;
   height: 5px;
   cursor: row-resize;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
   outline: none;
   z-index: 2;
 }
 .market-rail-view-resizer {
   flex-basis: 7px;
   height: 7px !important;
-  border-top-color: color-mix(in srgb, var(--border-color) 75%, transparent);
-  border-bottom-color: color-mix(in srgb, var(--border-color) 75%, transparent);
+  border-top-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
 }
 .market-rail-view-resizer::before {
   inset: -4px 0;
@@ -406,7 +406,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   padding: 2px;
   gap: 1px;
   border-radius: var(--radius-control);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
 }
 .market-dock-tabs button {
   height: 24px;
@@ -427,7 +427,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   outline: none;
 }
 .market-dock-tabs button.active {
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   color: var(--text-accent);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
@@ -463,7 +463,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
     min-width: 0;
     height: auto;
     border-left: 0;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-subtle);
   }
 
   .market-activity-bar {
@@ -522,9 +522,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
     bottom: 100%;
     left: 0;
     height: min(60vh, 520px);
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: var(--bg-secondary);
+    background: var(--surface-1);
     box-shadow: 0 -12px 28px color-mix(in srgb, var(--backdrop) 75%, transparent);
   }
 

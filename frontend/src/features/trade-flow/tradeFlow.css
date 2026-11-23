@@ -48,7 +48,7 @@
   min-width: 0;
   padding: 5px 6px;
   gap: 5px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .tf-side-switch { grid-column: 1 / -1; }
 .tf-controls label {
@@ -98,7 +98,7 @@
 .tf-history-table th,
 .tf-history-table td {
   padding: 3px 5px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   text-align: start;
 }
 .tf-summary {
@@ -109,8 +109,8 @@
   min-height: 38px;
   padding: 3px 8px;
   gap: 2px 8px;
-  border-bottom: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-tertiary) 82%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
@@ -139,7 +139,7 @@
 .tf-tape-header {
   flex: 0 0 24px;
   height: 24px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   user-select: none;
@@ -163,7 +163,7 @@
   line-height: 22px;
   contain: layout paint style;
 }
-.tf-tape-row:hover { background: var(--bg-hover); }
+.tf-tape-row:hover { background: var(--surface-hover); }
 .tf-tape-row time { color: var(--text-muted); font-size: var(--font-size-xs); }
 .tf-tape-side { font-weight: 700; text-align: center !important; }
 .tf-tape-row.tf-buy .tf-tape-side,
@@ -185,7 +185,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 8px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
 }

@@ -45,9 +45,9 @@
   display: flex;
   width: min(1080px, 94vw);
   height: min(760px, 90vh);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow:
@@ -60,8 +60,8 @@
 .st-sidebar {
   width: 200px;
   min-width: 200px;
-  background: var(--bg-primary);
-  border-right: 1px solid var(--border-color);
+  background: var(--surface-0);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -146,7 +146,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 28px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
@@ -243,8 +243,8 @@ html[lang="ru"] .st-select {
   align-items: center;
   gap: 6px;
   padding: 16px 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
   color: var(--text-primary);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -322,8 +322,8 @@ html[lang="ru"] .st-select {
 .st-select {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
   color: var(--text-primary);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -339,7 +339,7 @@ html[lang="ru"] .st-select {
 /* Multi-route public market-data proxy settings. */
 .st-proxy-mode-grid { grid-template-columns: repeat(4, 1fr); }
 .st-proxy-pool { margin-top: 16px; display: grid; gap: 12px; }
-.st-proxy-route { border: 1px solid var(--border-color, #334155); border-radius: 8px; padding: 12px; min-width: 0; }
+.st-proxy-route { border: 1px solid var(--border-subtle, #334155); border-radius: 8px; padding: 12px; min-width: 0; }
 .st-proxy-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; }
 
 .st-proxy-route .st-result-detail { overflow-wrap: anywhere; margin-top: 8px; }
@@ -357,8 +357,8 @@ html[lang="ru"] .st-select {
   align-items: center;
   gap: 4px;
   padding: 14px 8px 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.18s ease;
@@ -385,7 +385,7 @@ html[lang="ru"] .st-select {
 .st-preset-level > span {
   width: 4px;
   border-radius: var(--radius-xs);
-  background: var(--border-color);
+  background: var(--border-subtle);
 }
 
 .st-preset-level > span:nth-child(1) { height: 25%; }
@@ -481,7 +481,7 @@ html[lang="ru"] .st-select {
     min-width: unset;
     flex-direction: row;
     border-right: none;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-subtle);
     padding: 0;
     align-items: center;
   }
@@ -595,13 +595,13 @@ html[lang="ru"] .st-select {
 }
 
 /* ── About section ──────────────────────────────────────── */
-.st-support-card { border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; }
+.st-support-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; }
 .st-support-description { color: var(--text-primary); font-size: 13px; line-height: 1.7; }
 .st-support-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .st-support-actions, .st-support-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .st-support-actions a { text-decoration: none; }
 .st-support-actions label { color: var(--text-secondary); font-size: 13px; }
-.st-support-actions select { color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 7px; }
+.st-support-actions select { color: var(--text-primary); background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-control); padding: 7px; }
 .st-support-links a { color: var(--text-accent); font-size: 13px; text-underline-offset: 4px; }
 .st-support-export { margin-top: 16px; }
 .st-support-export summary { cursor: pointer; color: var(--text-primary); font-size: 13px; padding: 6px 0; }
@@ -655,7 +655,7 @@ html[lang="ru"] .st-select {
   gap: 1px;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
 }
 
 .st-stack-item {
@@ -663,7 +663,7 @@ html[lang="ru"] .st-select {
   justify-content: space-between;
   align-items: center;
   padding: 11px 16px;
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   font-size: 13px;
 }
 

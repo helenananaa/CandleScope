@@ -13,9 +13,9 @@
   gap: 5px;
   min-width: 0;
   padding: 3px 7px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   white-space: nowrap;
 }
 .advanced-market-chip-label {

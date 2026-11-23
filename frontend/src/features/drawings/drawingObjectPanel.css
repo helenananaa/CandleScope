@@ -4,7 +4,7 @@
  * (design refactor Phase 5). */
 
 .drawing-history-bar button { display: grid; place-items: center; width: 28px; height: 26px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; cursor: pointer; }
-.drawing-history-bar button:hover:not(:disabled) { background: var(--bg-hover); }
+.drawing-history-bar button:hover:not(:disabled) { background: var(--surface-hover); }
 .drawing-history-bar button:disabled { opacity: .3; cursor: default; }
 .drawing-history-bar button:focus-visible { outline: 2px solid var(--focus-ring); }
 .drawing-properties-tabs { display: flex; flex: 0 0 auto; gap: 8px; padding: 4px 18px 0; border-bottom: 1px solid var(--drawing-border); }
@@ -29,7 +29,7 @@
 .drawing-visibility-fields label { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; }
 
 .drawing-object-list button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 30px; min-width: 30px; padding: 0 6px; color: inherit; background: transparent; border: 0; border-radius: var(--radius-control); cursor: pointer; }
-.drawing-object-list button:hover:not(:disabled) { background: var(--bg-hover); }
+.drawing-object-list button:hover:not(:disabled) { background: var(--surface-hover); }
 .drawing-object-list button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .drawing-object-list button:disabled { opacity: .45; cursor: default; }
 .drawing-object-list button[aria-pressed='true'] { color: var(--text-accent); }
@@ -51,7 +51,7 @@
 .drawing-object-search button { font-size: var(--font-size-xs); }
 .drawing-object-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 14px 10px; border-bottom: 1px solid var(--drawing-border); flex-shrink: 0; }
 .drawing-object-filters button { font-size: var(--font-size-xs); }
-.drawing-object-filters button[aria-pressed='true'] { background: var(--bg-hover); }
+.drawing-object-filters button[aria-pressed='true'] { background: var(--surface-hover); }
 
 /* Short windows: compact the drawing toolbar so every tool stays visible
  * (it cannot scroll, because its flyouts are positioned inside it). */
