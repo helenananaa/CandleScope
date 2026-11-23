@@ -261,6 +261,7 @@ export function selectedDrawingMetaFromSavedDrawing(
     ? saved.arrowEnd && (saved.lineType ?? "line-segment") === "line-segment"
       ? "line-arrow"
       : saved.lineType ?? "line-segment"
+    : saved.type === "path" ? (saved.arrowEnd ? "path-arrow" : "path-line")
     : saved.type === "axis-line"
     ? saved.axisLineType === "cross" ? "cross-line" : `${saved.axisLineType ?? "horizontal"}-line`
     : saved.type === "angle-measure"
@@ -290,7 +291,7 @@ export function selectedDrawingMetaFromSavedDrawing(
         label: saved.label ?? "",
       } : {}),
     } : {}),
-    ...(saved.type === "line" && (saved.lineType ?? "line-segment") === "line-segment"
+    ...(saved.type === "path" || saved.type === "line" && (saved.lineType ?? "line-segment") === "line-segment"
       ? { arrowEnd: saved.arrowEnd === true }
       : {}),
     ...(saved.type === "channel"

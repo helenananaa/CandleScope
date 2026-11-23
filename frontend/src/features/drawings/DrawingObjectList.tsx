@@ -25,6 +25,7 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
     if (!drawing) return [];
     const typeName = drawing.type === "text" ? t("drawing.objects.text")
       : drawingName(drawing.type === "shape" ? drawing.shapeType ?? "rectangle"
+        : drawing.type === "path" ? (drawing.arrowEnd ? "path-arrow" : "path-line")
         : drawing.type === "line" ? (drawing.arrowEnd ? "line-arrow" : drawing.lineType ?? "line")
         : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line" : drawing.type);
     const name = drawing.type === "text" ? drawing.text || typeName : typeName;

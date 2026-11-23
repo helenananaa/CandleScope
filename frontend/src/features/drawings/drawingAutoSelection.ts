@@ -6,6 +6,7 @@ export function drawingToolForSavedObject(drawing: SavedDrawing): DrawingToolId 
     case "line": return drawing.arrowEnd && (drawing.lineType ?? "line-segment") === "line-segment"
       ? "line-arrow"
       : drawing.lineType ?? "line-segment";
+    case "path": return drawing.arrowEnd ? "path-arrow" : "path-line";
     case "channel": return "channel-parallel";
     case "axis-line": return `line-${drawing.axisLineType ?? "horizontal"}`;
     case "range-measure": return `measure-${drawing.measureType}`;

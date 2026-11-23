@@ -104,7 +104,8 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
   const isShape = drawing.type === "rectangle" || drawing.type === "ellipse" || drawing.type === "shape";
   const isZone = drawing.type === "rectangle";
   const isChannel = drawing.type === "channel";
-  const canToggleArrow = drawing.type === "line-segment" || drawing.type === "line-arrow";
+  const canToggleArrow = drawing.type === "line-segment" || drawing.type === "line-arrow"
+    || drawing.type === "path-arrow" || drawing.type === "path-line";
   const isFib = drawing.type === "fibonacci";
   const isPosition = drawing.type === "position" || drawing.type === "position-long" || drawing.type === "position-short";
   const hasStroke = typeof drawing.color === "string" && typeof drawing.lineWidth === "number";
