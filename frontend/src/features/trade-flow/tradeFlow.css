@@ -41,8 +41,9 @@
 .tf-controls {
   display: grid;
   flex: 0 0 auto;
-  /* Narrow rails stack the side switch above the two filters so option text is never clipped. */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Narrow rails stack the side switch above the two filters so option text is never clipped;
+     the filters share the row by content, so a longer label (Spanish "Burbujas") takes room from the shorter one. */
+  grid-template-columns: repeat(2, auto);
   align-items: center;
   min-width: 0;
   padding: 5px 6px;
@@ -119,11 +120,21 @@
 .tf-tape-header,
 .tf-tape-row {
   display: grid;
-  grid-template-columns: 28px minmax(72px, 1fr) minmax(48px, 0.65fr) minmax(58px, 0.8fr) minmax(78px, 0.9fr);
+  /* The time has milliseconds ("23:57:29.441"): 80 px. */
+  grid-template-columns: 28px minmax(72px, 1fr) minmax(48px, 0.65fr) minmax(58px, 0.8fr) minmax(80px, 0.9fr);
   align-items: center;
   min-width: 0;
   padding: 0 7px;
   gap: 5px;
+}
+/* A narrow rail (a 1024 px window) has no room for five columns: the base-asset size gives way
+   (the notional says how large each trade was), the B / S column narrows, and price, notional and
+   time stay whole. */
+@container trade-flow (max-width: 300px) {
+  .tf-tape-header,
+  .tf-tape-row { grid-template-columns: 20px minmax(60px, 1fr) minmax(50px, 0.8fr) minmax(80px, 1fr); }
+  .tf-tape-header > :nth-child(3),
+  .tf-tape-row > :nth-child(3) { display: none; }
 }
 .tf-tape-header {
   flex: 0 0 24px;
@@ -212,6 +223,14 @@
   contain: layout paint style;
 }
 .tf-profile-row > span:not(.tf-profile-bars) { position: relative; z-index: 1; }
+/* A narrow rail (as the tape above): the profile keeps price, delta and the trade counts; its bars
+   still show buy against sell. */
+@container trade-flow (max-width: 300px) {
+  .tf-profile-header,
+  .tf-profile-row { grid-template-columns: minmax(72px, 1fr) minmax(56px, 0.76fr) minmax(44px, 0.58fr); }
+  .tf-profile-header > :is(:nth-child(2), :nth-child(3)),
+  .tf-profile-row > :is(:nth-child(3), :nth-child(4)) { display: none; }
+}
 .tf-profile-bars { position: absolute; inset: 1px 0; z-index: 0; }
 .tf-profile-bars i { position: absolute; right: 0; height: 50%; opacity: 0.11; }
 .tf-profile-buy-bar { top: 0; background: var(--tf-buy); }

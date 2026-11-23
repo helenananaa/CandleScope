@@ -32,7 +32,11 @@ test("dock renders stream failure detail and retry instead of generic support te
     assert.match(html, /<button type="button" class="ui-btn ui-btn-sm">/);
   }
   store.publishStatus("error", { error: "Subscription timed out" });
-  assert.match(renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />), /<div class="ui-empty-description">Subscription timed out<\/div>/);
+  const html = renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />);
+  assert.match(html, /<div class="ui-empty-description">Subscription timed out<\/div>/);
+  // The header's right side lists the status before the data mode: laid out from the right, the
+  // mode is the one that wraps out of sight in a narrow rail, and the status stays.
+  assert.match(html, /<span class="ob-meta"><span class="ob-status ob-status-error"[^>]*>[\s\S]*?<\/span><span class="ob-delivery-mode"/);
   store.destroy();
 });
 

@@ -272,8 +272,11 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   text-align: center;
   overflow-wrap: break-word;
   hyphens: auto;
+  /* Long words break ("Beobach-tungsliste"); short ones move whole to the next line ("режиме"). */
+  hyphenate-limit-chars: 8 3 3;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  /* Three lines: "Список наблюдения" and "Beobachtungsliste" need them at 52 px. */
+  -webkit-line-clamp: 3;
 }
 .market-activity-badge {
   position: absolute;
@@ -369,13 +372,32 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   opacity: 1;
 }
 
-/* Short docks lay the empty state out as one row so title, detail and retry stay visible. */
+/* Short docks lay the empty state out as one row so title, detail and retry stay visible. The
+   detail takes two lines before it is shortened (the whole of it is the state's title). The tape's
+   header already shows its status, so the tape's row leaves the title to assistive technology. */
 @container rail-dock (max-height: 300px) {
-  .ui-empty-compact { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 8px 12px; text-align: left; }
+  .ui-empty-compact { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 6px 12px; text-align: left; }
   .ui-empty-compact .ui-empty-icon { display: none; }
   .ui-empty-compact .ui-empty-title { flex: 0 0 auto; }
-  .ui-empty-compact .ui-empty-description { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-empty-compact .ui-empty-description {
+    display: -webkit-box;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
   .ui-empty-compact .ui-empty-action { flex: 0 0 auto; margin: 0; }
+  .tf-empty .ui-empty-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .market-dock-tabs {
