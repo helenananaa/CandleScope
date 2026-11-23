@@ -45,6 +45,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command, contextReference } from "../../app-control/commandRegistry.js";
 import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
 import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -649,7 +650,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <Disclosure summary={t("plugin.techDetails")}><pre className="strategy-dock-detail">{errorDetails}</pre></Disclosure>
       </InlineAlert>}
       {capabilities && !engineReady && <InlineAlert>
-        <p>{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</p>
+        <p>{browserHost() ? t("browser.scripts.desktopOnly") : `${t("indicator.editor.runtimeUnavailableHelp")} ${t("native.platformHelp")}`}</p>
         {available?.reason && <Disclosure summary={t("plugin.techDetails")}><p>{available.reason}</p></Disclosure>}
       </InlineAlert>}
       {historicalRun && <InlineAlert title={t("strategyHistory.viewing")}

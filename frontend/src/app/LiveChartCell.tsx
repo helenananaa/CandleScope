@@ -735,6 +735,7 @@ function LiveChartCell({
     },
     orderBookOpen,
     capability: activeExchangeCapability,
+    capabilityLoading: chartSession.status.exchangeCatalogStatus === "loading",
   });
   const tradeFlow = useTradeFlowRuntime({
     identity: {

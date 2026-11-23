@@ -1,0 +1,65 @@
+name: Browser version
+
+# Builds the browser version as Cloudflare Workers Builds does for the
+# candlescope-web Worker (frontend/wrangler.jsonc), checks what it deploys, and
+# runs the engine storage acceptance, which needs no exchange network.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml"]
+  push:
+    branches: [main]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      # The versions Workers Builds uses.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            frontend/browser/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build as Workers Builds does
+        run: npm ci && npm run build:web
+      - name: Check the deployed files
+        run: |
+          test -f dist-web/_headers
+          test -f dist-web/_redirects
+          test -f dist-web/index.html
+          test ! -e dist-web/design-previews
+          # Cloudflare's static assets take files up to 25 MiB.
+          large=$(find dist-web -type f -size +25M)
+          if [ -n "$large" ]; then echo "Files over 25 MiB: $large"; exit 1; fi
+      - name: Check the engine's browser storage in Chrome
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-audit --no-fund playwright-core@1.56.1
+          python3 -m http.server 4178 --bind 127.0.0.1 --directory dist-web > "$RUNNER_TEMP/server.log" 2>&1 &
+          for attempt in $(seq 30); do curl -sf -o /dev/null http://127.0.0.1:4178/ && break; sleep 1; done
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/playwright/node_modules/playwright-core" \
+            node browser/host/storage-acceptance.mjs http://127.0.0.1:4178/

@@ -1,0 +1,15 @@
+// The browser version on Cloudflare: the candlescope-web Worker serves the
+// output of `npm run build:web` as static assets. Workers Builds runs that
+// build and `npx wrangler deploy` in this folder for the main branch.
+{
+  "name": "candlescope-web",
+  "compatibility_date": "2026-11-21",
+  "assets": {
+    "directory": "./dist-web",
+    // Serve each page at its own .html address, which the pages link to and
+    // the shell mirrors; the build's _redirects serves / from index.html.
+    "html_handling": "none",
+    // A missing file is a 404, never a page in its place.
+    "not_found_handling": "none"
+  }
+}

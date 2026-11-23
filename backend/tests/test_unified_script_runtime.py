@@ -21,6 +21,8 @@ from app.indicator.runtime_service import (
     removed_in_process_runtime,
 )
 from app.plugin_core_v2.api import create_core_plugin_router
+from app.plugin_core_v2.errors import CorePluginError
+from app.plugin_core_v2.local_bundle import verify_local_platform_bundle
 from app.plugin_core_v2.runtime import CorePluginPlatform
 from app.plugin_lifecycle.api import create_unified_router
 from app.plugin_lifecycle.runtime import UnifiedRuntime
@@ -214,20 +216,29 @@ async def test_application_installers_reject_legacy_archive_without_registration
     async with httpx.AsyncClient(
         transport=transport, base_url="http://127.0.0.1"
     ) as client:
+        # With the unified runtime attached, every Platform v2 local install
+        # route is retired (410) before the archive is read.
         for route in ("install", "install/prepare"):
             response = await client.post(
                 f"/api/v2/plugins/manage/{route}", content=data, headers=headers
             )
-            assert response.status_code == 409, response.text
+            assert response.status_code == 410, response.text
             assert (
                 response.json()["detail"]["code"]
-                == "PLUGIN_SCRIPT_RUNTIME_UPDATE_REQUIRED"
+                == "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
             )
         response = await client.post(
             "/api/v2/plugins/manage/unified/stage", content=data, headers=headers
         )
         assert response.status_code == 400
         assert "update the plugin package" in response.json()["detail"]
+    # The retired script-bundle format is still named by the archive verifier
+    # that the routes above no longer reach.
+    with pytest.raises(CorePluginError) as retired:
+        verify_local_platform_bundle(
+            archive, expected_sha256=digest, host_version="1.0.0"
+        )
+    assert retired.value.code == "PLUGIN_SCRIPT_RUNTIME_UPDATE_REQUIRED"
     assert not store.snapshot()["plugins"]
     assert not platform.installer.list_plugins()
     assert archive.read_bytes() == data

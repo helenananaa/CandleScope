@@ -14,7 +14,7 @@ test("forward runs are listed by market and tell their account rules", () => {
     run("run-backtest", { exchange: "binance", market_type: "spot", symbol: "ETHUSDT", interval: "1m" }, null),
   ]);
   assert.deepEqual(listed.map((entry) => [entry.label, entry.practice]), [["BTCUSDT · 1m", true], ["ETHUSDT · 1m", false]]);
-  assert.equal(forwardRunFromOption(listed[0].option), "run-practice");
+  assert.equal(forwardRunFromOption(listed[0]!.option), "run-practice");
 });
 
 test("runs on one market are told apart, and a run without a market is named by its id", () => {

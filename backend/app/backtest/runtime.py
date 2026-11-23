@@ -124,6 +124,7 @@ class BacktestRuntime:
         local_data_dir: Path | None = None,
         local_data_service: LocalDatasetService | None = None,
         trade_archive_dir: Path | None = None,
+        start_worker: bool = True,
     ) -> BacktestRuntime:
         service = BacktestService.start(
             settings,
@@ -141,7 +142,8 @@ class BacktestRuntime:
             if settings.external_provider_enabled:
                 service.external.open()
                 service.external.store.reset_client_leases()
-            runtime.worker.start()
+            if start_worker:
+                runtime.worker.start()
         except BaseException:
             runtime.native.shutdown()
             runtime.worker.shutdown()

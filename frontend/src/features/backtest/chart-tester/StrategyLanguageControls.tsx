@@ -2,6 +2,7 @@ import { Checkbox, Field, InlineAlert, Select } from "../../../components/ui/ind
 import { t } from "../../../i18n/index.js";
 import type { StrategyDraftLanguage } from "./StrategyDraftStore.js";
 import { strategyLanguageLabel } from "./strategyLanguageLabel.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 export function StrategyLanguageControls({ language, onLanguage, confirmed, onConfirm, languageFixed = false }: {
   language: StrategyDraftLanguage;
@@ -17,7 +18,8 @@ export function StrategyLanguageControls({ language, onLanguage, confirmed, onCo
         <option value="pine">{strategyLanguageLabel("pine")}</option><option value="python">{strategyLanguageLabel("python")}</option>
       </Select>
     </Field>}
-    {language === "python" && <InlineAlert tone="warning">
+    {/* Strategies run in the desktop app; the web version has no local Python to permit. */}
+    {language === "python" && !browserHost() && <InlineAlert tone="warning">
       <div className="strategy-python-permissions" data-testid="strategy-python-permissions">
         <p>{t("python.fact.noSandbox")} {t("python.fact.fsAccess")}</p>
         <Checkbox data-testid="strategy-python-confirm" checked={confirmed} onChange={(event) => onConfirm(event.target.checked)} label={t("python.confirmTrusted")} />
