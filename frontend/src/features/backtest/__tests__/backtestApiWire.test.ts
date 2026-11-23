@@ -271,3 +271,72 @@ test("signal trace pagination and Run compare compatibility stay typed", async (
     mock.restoreAll();
   }
 });
+
+test("the run facade is addressed beside the backtest base, one entry for every family", async () => {
+  const calls: CapturedRequest[] = [];
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({});
+  });
+  try {
+    const api = createBacktestApi("/api/v1/backtests");
+    await api.getStrategyRun!("native_a/b");
+    await api.getStrategyRunResult!("bt_1");
+    await api.cancelStrategyRun!("cs_1");
+    await api.strategyRunCapabilities!();
+    await createBacktestApi("/wire", "/runs-wire").getStrategyRun!("bt_2");
+    assert.deepEqual(calls.map(({ url, init }) => [init?.method ?? "GET", url]), [
+      ["GET", "/api/v1/strategy-runs/native_a%2Fb"],
+      ["GET", "/api/v1/strategy-runs/bt_1/result"],
+      ["POST", "/api/v1/strategy-runs/cs_1/cancel"],
+      ["GET", "/api/v1/strategy-runs/capabilities"],
+      ["GET", "/runs-wire/bt_2"],
+    ]);
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test("a run's status stream is read from the facade's events route", async () => {
+  const urls: string[] = [];
+  const frame = { schema: "candlescope.strategy-run-stream/1", type: "status", terminal: true, progress: null, status: {
+    schema: "candlescope.strategy-run/1", run_id: "native_1", family: "native", authority: "SCRIPT", clock_policy: "FIXED",
+    fidelity: null, language: "pine", state: "COMPLETED", source_state: "COMPLETED", terminal: true, generation: null,
+    result_available: true, error: null } };
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return new Response(`${JSON.stringify(frame)}\n`, { headers: { "content-type": "application/x-ndjson" } });
+  });
+  try {
+    const status = await createBacktestApi("/api/v1/backtests").watchStrategyRun!("native_1");
+    assert.equal(status.state, "COMPLETED");
+    assert.deepEqual(urls, ["/api/v1/strategy-runs/native_1/events"]);
+    mock.method(globalThis, "fetch", async () => Response.json({}));
+    await assert.rejects(createBacktestApi("/api/v1/backtests").watchStrategyRun!("native_1"), /stream/);
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test("strategy versions and their names are addressed beside the run facade", async () => {
+  const calls: CapturedRequest[] = [];
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({ names: [] });
+  });
+  try {
+    const api = createBacktestApi("/api/v1/backtests");
+    await api.getStrategyVersion!("sha256:abc");
+    await api.strategyVersionNames!();
+    await api.nameStrategyVersion!("My SMA", "sha256:abc");
+    await api.unnameStrategyVersion!("My SMA");
+    assert.deepEqual(calls.map(({ url, init }) => [init?.method ?? "GET", url, init?.body ?? null]), [
+      ["GET", "/api/v1/strategy-versions/sha256%3Aabc", null],
+      ["GET", "/api/v1/strategy-versions/names", null],
+      ["PUT", "/api/v1/strategy-versions/names/My%20SMA", JSON.stringify({ version_hash: "sha256:abc" })],
+      ["DELETE", "/api/v1/strategy-versions/names/My%20SMA", null],
+    ]);
+  } finally {
+    mock.restoreAll();
+  }
+});

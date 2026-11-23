@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activateContinuousReference, continuousArchiveScope, continuousReferenceKey, listContinuousReferences, readContinuousReference, saveContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
+import {
+  activateContinuousReference, backendContinuousReferences, CONTINUOUS_REFERENCE_IMPORT_MARKER, continuousArchiveScope, continuousReferenceKey,
+  listContinuousReferences, parseContinuousReference, readContinuousReference, saveContinuousReference, type ContinuousRunReference,
+} from "./continuousRunReference.js";
 import { loadChartStrategyPanelPreferences, saveChartStrategyPanelPreferences } from "../chart-tester/chartStrategyPanelPreferences.js";
 function storage(): Storage {
   const values = new Map<string, string>();
@@ -37,4 +40,69 @@ test("switching runs retains earlier accounts and uncertain requests within the 
   assert.deepEqual(listContinuousReferences(saved, "other-cell"), []);
   saveContinuousReference(saved, continuousArchiveScope("cell", next.requestKey), next);
   assert.equal(listContinuousReferences(saved, "cell").length, 2, "current and archive references are deduplicated");
+});
+
+// -- ADR-BACKTEST-015 P3c: references in the backend ---------------------------
+
+function backend(options: { importFails?: boolean } = {}) {
+  const values = new Map<string, unknown>();
+  const calls: string[] = [];
+  return {
+    values, calls,
+    async loadStrategyReference(_kind: "continuous-run", key: string) { calls.push(`get:${key}`); return values.get(key) ?? null; },
+    async listStrategyReferences(_kind: "continuous-run", prefix = "") {
+      return [...values].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }));
+    },
+    async saveStrategyReference(_kind: "continuous-run", key: string, value: unknown) { calls.push(`put:${key}`); values.set(key, value); },
+    async importStrategyReferences(_kind: "continuous-run", entries: Array<{ key: string; value: unknown }>) {
+      calls.push(`import:${entries.length}`);
+      if (options.importFails) throw new Error("backend unreachable");
+      for (const entry of entries) if (!values.has(entry.key)) values.set(entry.key, entry.value);
+      return {};
+    },
+  };
+}
+
+test("browser references are imported once into the backend and the originals are kept", async () => {
+  const legacy = storage();
+  activateContinuousReference(legacy, "cell/A", { ...reference, runId: "cs_a" });
+  saveContinuousReference(legacy, continuousArchiveScope("cell/A", "chart/old"), { ...reference, requestKey: "chart/old", createdAtMs: 0 });
+  legacy.setItem(continuousReferenceKey("cell/broken"), "{\"schema\":2}");
+  legacy.setItem("unrelated", "x");
+  const before = new Map([...Array(legacy.length).keys()].map((index) => [legacy.key(index)!, legacy.getItem(legacy.key(index)!)]));
+  const server = backend();
+  const store = backendContinuousReferences(server, legacy);
+  assert.equal((await store.read("cell/A"))?.runId, "cs_a");
+  assert.deepEqual((await store.list("cell/A")).map((value) => value.requestKey), ["chart/stable", "chart/old"]);
+  assert.deepEqual(server.calls.filter((call) => call.startsWith("import")), ["import:3"], "the invalid entry is skipped");
+  assert.ok(legacy.getItem(CONTINUOUS_REFERENCE_IMPORT_MARKER));
+  for (const [key, value] of before) assert.equal(legacy.getItem(key), value, "originals stay");
+  assert.ok(!CONTINUOUS_REFERENCE_IMPORT_MARKER.startsWith("candlescope.continuous-run.v1:"), "the marker is never read as a reference");
+  // Another chart, or the next launch, does not import again; the backend alone decides from now on.
+  legacy.setItem(continuousReferenceKey("cell/A"), JSON.stringify({ ...reference, runId: "browser-only" }));
+  const again = backendContinuousReferences(server, legacy);
+  assert.equal((await again.read("cell/A"))?.runId, "cs_a");
+  assert.equal(server.calls.filter((call) => call.startsWith("import")).length, 1);
+});
+
+test("until the import succeeds, browser references stay readable; selecting archives first", async () => {
+  const legacy = storage();
+  activateContinuousReference(legacy, "cell/B", { ...reference, runId: "cs_b" });
+  const server = backend({ importFails: true });
+  const store = backendContinuousReferences(server, legacy);
+  assert.equal((await store.read("cell/B"))?.runId, "cs_b");
+  assert.equal(legacy.getItem(CONTINUOUS_REFERENCE_IMPORT_MARKER), null, "a failed import is retried");
+  const next = { ...reference, requestKey: "chart/next", runId: "cs_next", createdAtMs: 9 };
+  await store.activate("cell/B", next);
+  assert.deepEqual(server.calls.filter((call) => call.startsWith("put")), [`put:${continuousArchiveScope("cell/B", "chart/next")}`, "put:cell/B"]);
+  assert.deepEqual((await store.list("cell/B")).map((value) => value.requestKey), ["chart/next", "chart/stable"]);
+  assert.equal((await store.read("cell/B"))?.runId, "cs_next");
+});
+
+test("a forward run on the practice account model keeps its leverage; older references carry none (ADR-BACKTEST-015 P6e)", () => {
+  const practice = { ...reference, settings: { ...reference.settings, leverage: "10" } };
+  const saved = storage(); saveContinuousReference(saved, "cell/practice", practice);
+  assert.equal(readContinuousReference(saved, "cell/practice")!.settings.leverage, "10");
+  assert.equal(parseContinuousReference(JSON.parse(JSON.stringify(reference))).settings.leverage, undefined);
+  assert.throws(() => parseContinuousReference({ ...practice, settings: { ...practice.settings, leverage: 10 } }), /INVALID/);
 });

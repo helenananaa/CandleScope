@@ -187,8 +187,10 @@ function TradeFlowTape({ runtime }: { runtime: TradeFlowRuntime }) {
   return (
     <div className="tf-body">
       <TradeFlowSummary snapshot={snapshot} />
+      {/* The side column has no heading: its B / S marks are coloured and each has a name, and
+          no language's word for "side" fits its 28 px ("Сторона"). */}
       <div className="tf-tape-header" aria-hidden="true">
-        <span>{t("trade.side")}</span><span>{t("trade.price")}</span><span>{t("trade.qty")}</span><span>{t("trade.notional")}</span><span>{t("trade.time")}</span>
+        <span /><span>{t("trade.price")}</span><span>{t("trade.qty")}</span><span>{t("trade.notional")}</span><span>{t("trade.time")}</span>
       </div>
       {rows.length > 0 ? (
         <div className="tf-tape-list" role="log" aria-live="off">
@@ -315,21 +317,24 @@ function TradeFlowDock({
             </svg>} />
         )}
         <span className="ob-title">{mode === "profile" ? t("trade.profile") : t("trade.tape")}</span>
-        <span
-          className="ob-symbol"
-          title={runtime.view.deliveryMode === "polling_observational"
-            ? t("trade.mode.pollingDetail")
-            : runtime.view.continuityMode === "observational"
-              ? t("trade.mode.observationalDetail")
-            : t("trade.mode.strictDetail")}
-        >
-          {runtime.view.deliveryMode === "polling_observational"
-            ? t("trade.mode.polling")
-            : runtime.view.continuityMode === "observational"
-              ? t("trade.mode.observational")
-            : t("trade.mode.strict")}
+        {/* As in the order book: the status stays, the data mode gives way in a narrow rail. */}
+        <span className="ob-meta">
+          <TradeFlowStatus store={runtime.view.store} />
+          <span
+            className="ob-delivery-mode"
+            title={runtime.view.deliveryMode === "polling_observational"
+              ? t("trade.mode.pollingDetail")
+              : runtime.view.continuityMode === "observational"
+                ? t("trade.mode.observationalDetail")
+              : t("trade.mode.strictDetail")}
+          >
+            {runtime.view.deliveryMode === "polling_observational"
+              ? t("trade.mode.polling")
+              : runtime.view.continuityMode === "observational"
+                ? t("trade.mode.observational")
+              : t("trade.mode.strict")}
+          </span>
         </span>
-        <TradeFlowStatus store={runtime.view.store} />
       </header>
       {historyAvailable && <div className="tf-history-actions">
         <Button size="sm" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}>

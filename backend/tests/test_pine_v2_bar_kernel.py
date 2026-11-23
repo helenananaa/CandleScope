@@ -6,8 +6,8 @@ import pytest
 
 from app.market_dataset.snapshot import MarketEvent, MarketDatasetError
 from app.simulation.execution_realism import EXECUTION_REALISM_V2, PINE_BAR_PATH_SCENARIO
-from app.simulation.pine_chart_kernel import PineChartBarKernel
-from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+from app.simulation.kernel import SimulationKernel
+from app.simulation.ohlc_path import PINE_CHART, PINE_V2
 from tests.test_backtest_account_v2_m4 import rules
 from tests.test_pine_bar_kernel import bar
 
@@ -21,7 +21,7 @@ def mark(stamp, price):
 
 
 def kernel(**extra):
-    return PineV2BarKernel(slippage_bps=D(0), participation_rate=D(".5"),
+    return SimulationKernel(bar_clock=PINE_V2, slippage_bps=D(0), participation_rate=D(".5"),
         execution_model_revision=EXECUTION_REALISM_V2, bar_path_scenario=PINE_BAR_PATH_SCENARIO, **extra)
 
 
@@ -97,7 +97,7 @@ def test_complete_bar_restore_reproduces_source_path_capacity_and_account():
     assert actual == expected
     assert restored.snapshot() == original.snapshot()
     with pytest.raises(MarketDatasetError, match="own matcher"):
-        PineChartBarKernel().restore(saved)
+        SimulationKernel(bar_clock=PINE_CHART).restore(saved)
 
 
 def test_tail_account_settlement_and_undelivered_callback_survive_snapshot():

@@ -128,12 +128,13 @@ import { loadUserPrefs, updateUserPref } from "../features/chart-session/chartSe
 import { preloadDrawingEngineHost } from "../features/drawings/drawingEngineLoader.js";
 import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.js";
 import ChartCellCanvas from "./ChartCellCanvas.js";
+import { combineChartLayerSources } from "../features/plugins/pluginChartLayerSource.js";
+import type { StrategyOverlaySource } from "../features/backtest/runResult/strategyOverlay.js";
 import LazyFeatureSurfaces from "./LazyFeatureSurfaces.js";
 import StatusBar from "./StatusBar.js";
 import TopBar from "./TopBar.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
-import type { ChartStrategyResultMarkerSource } from "../features/backtest/chart-tester/chartStrategyResultMarkerSource.js";
 import { Icon } from "../components/icons/Icon.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
@@ -891,15 +892,21 @@ function LiveChartCell({
   const handleLinkedViewportRangeChange = useChartViewportLink(linkCoordinator, cell.id, cellStorageScope);
   const [strategyPanelVisited, setStrategyPanelVisited] = useState(false);
   useEffect(() => { if (active && strategyPanelOpen) setStrategyPanelVisited(true); }, [active, strategyPanelOpen]);
-  const strategyMarkerSourceRef = useRef<ChartStrategyResultMarkerSource | null>(null);
   const strategyTradeFocusRef = useRef<{ trade: StrategyTradeFocus; interval: string } | null>(null);
-  const [strategyMarkerSource, setStrategyMarkerSource] = useState<ChartStrategyResultMarkerSource | null>(null);
-  const handleStrategyMarkerSourceChange = useCallback((source: ChartStrategyResultMarkerSource | null) => {
-    strategyMarkerSourceRef.current = source;
+  // ADR-BACKTEST-015 P1c/P2d: the strategy bridge owns the run overlay for every run family; this cell only draws it.
+  const [runOverlaySource, setRunOverlaySource] = useState<StrategyOverlaySource | null>(null);
+  const runOverlaySourceRef = useRef<StrategyOverlaySource | null>(null);
+  const handleOverlaySourceChange = useCallback((source: StrategyOverlaySource | null) => {
+    runOverlaySourceRef.current = source;
     const focus = strategyTradeFocusRef.current;
     if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
-    setStrategyMarkerSource(source);
+    setRunOverlaySource(source);
   }, []);
+  const strategyMarkerSource = runOverlaySource?.markers ?? null;
+  const combinedChartLayerSource = useMemo(
+    () => combineChartLayerSources([plugins.view.chartLayerSource, runOverlaySource?.layer]),
+    [plugins.view.chartLayerSource, runOverlaySource],
+  );
   const upstreamViewportRangeChangeRef = useRef(
     model.chartWorkspace.chart.chartProps.onViewportRangeChange,
   );
@@ -908,11 +915,12 @@ function LiveChartCell({
   }, [model.chartWorkspace.chart.chartProps.onViewportRangeChange]);
   const handleChartViewportRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
     upstreamViewportRangeChangeRef.current?.(range);
-    strategyMarkerSourceRef.current?.setVisibleRange(range);
+    runOverlaySourceRef.current?.setVisibleRange(range);
   }, []);
   const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
     strategyTradeFocusRef.current = trade ? { trade, interval: liveSourceSession.interval } : null;
-    strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
+    // Fixed-history results are drawn by the run overlay, so the reviewed trade is highlighted there.
+    runOverlaySourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     if (!trade) return;
     chartSurface.actions.setLinkedVisibleTimeRange(strategyTradeRange(trade, parseIntervalSeconds(liveSourceSession.interval) ?? 60));
     chartSurface.actions.setLinkedCrosshairTime(trade.entryTimeMs / 1000);
@@ -1197,7 +1205,7 @@ function LiveChartCell({
             pluginMarkerSource={plugins.view.markerSource}
             accountMarkerSource={tradingOverlay.markerSource}
             accountPriceLineSource={tradingOverlay.priceLineSource}
-            pluginChartLayerSource={plugins.view.chartLayerSource}
+            pluginChartLayerSource={combinedChartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
             drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
@@ -1276,7 +1284,7 @@ function LiveChartCell({
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
-              onMarkerSourceChange={handleStrategyMarkerSourceChange}
+              onOverlaySourceChange={handleOverlaySourceChange}
               onLocateTrade={handleLocateStrategyTrade}
               onReviewTrade={handleReviewStrategyTrade}
               onAttachmentChange={handleStrategyAttachmentChange}

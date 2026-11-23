@@ -63,6 +63,14 @@ def get_run(request: Request, run_id: str, if_state: str | None = Query(default=
     return _call(lambda: _native(request).get(run_id, if_state=if_state))
 
 
+@router.get("/runs/{run_id}/run-result")
+@external_router.get("/runs/{run_id}/run-result")
+def get_run_result(request: Request, run_id: str):
+    """The completed run in the shared ``candlescope.run-result/1`` shape (ADR-BACKTEST-015)."""
+    from app.backtest.run_result import from_native_record
+    return _call(lambda: from_native_record(_native(request).get(run_id)))
+
+
 @router.post("/runs/{run_id}/cancel")
 @external_router.post("/runs/{run_id}/cancel")
 def cancel(request: Request, run_id: str):

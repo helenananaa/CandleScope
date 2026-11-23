@@ -1,92 +1,83 @@
 import { MAX_PLUGIN_CHART_BARS, observePluginBar, usePluginChartSource } from "../plugins/unifiedChartContext.js";
-import { useId, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
+import { ChartErrorBoundary } from "../../app/AppProviders.js";
+import { parseIntervalSeconds } from "../../utils/intervals.js";
+import type { ChartSession } from "../chart-session/chartSessionTypes.js";
+import { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
+import MarketChartSurface from "../market-chart-platform/MarketChartSurface.js";
+import { storeMarketData } from "../market-chart-platform/marketChartSourceRuntime.js";
+import { useLiveReferenceMarketChartSource } from "../market-chart-platform/useLiveReferenceMarketChartSource.js";
+import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import { useChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import { Button, Checkbox, Disclosure, Field, InlineAlert, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 import type { BacktestResultReplayFrame, BacktestResultReplayMA } from "../backtest/backtestTypes.js";
-import { replayChartMarkers, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
-import { replayDrawingBarIndex, revealedReplayDrawings, type ReplayDrawing, type ReplayDrawingEdit, type ReplayDrawingPoint } from "./strategyResultReplayDrawings.js";
+import type { ReplayChartDisplay, ReplayChartSlot } from "./strategyResultReplayDisplay.js";
+import { revealedReplayDrawings, type ReplayDrawing, type ReplayDrawingEdit, type ReplayDrawingPoint } from "./strategyResultReplayDrawings.js";
+import { buildReplayOverlay, replayChartRows, replayPointAt } from "./strategyResultReplayOverlay.js";
 
-function ReplayCandles({ bars, ma, display, markers, drawings, firstPoint, onDrawingPoint }: {
-  bars: BacktestResultReplayFrame["bars"];
-  ma: BacktestResultReplayMA | undefined;
+const NO_DRAWINGS: readonly ReplayDrawing[] = [];
+
+/**
+ * One replay chart on the shared chart surface (ADR-BACKTEST-015 P5d3b). The revealed bars fill a store
+ * this chart owns, served as a reference source (a replay is never a run input); fills, notes, the
+ * moving average and the replay's lines are a strategy overlay. With a line tool on, a click on the
+ * chart places a point at the clicked bar and price.
+ */
+function ReplaySurface({ slot, chart, frame, symbol, display, ownsMarkers, ma, drawings, firstPoint, onDrawingPoint }: {
+  slot: ReplayChartSlot;
+  chart: ReplayChart;
+  frame: BacktestResultReplayFrame;
+  symbol: string;
   display: ReplayChartDisplay;
-  markers: ReturnType<typeof replayChartMarkers>;
+  ownsMarkers: boolean;
+  ma: BacktestResultReplayMA | undefined;
   drawings: readonly ReplayDrawing[];
   firstPoint: ReplayDrawingPoint | undefined;
   onDrawingPoint: ((point: ReplayDrawingPoint) => void) | undefined;
 }) {
-  const clipId = useId();
-  if (bars.length === 0) return null;
-  const values = ma?.points.map(point => point.value) ?? [];
-  const high = Math.max(...bars.map(bar => Number(bar.high)), ...values);
-  const low = Math.min(...bars.map(bar => Number(bar.low)), ...values);
-  const y = (price: string | number) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
-  const spacing = Math.min(48, 968 / bars.length);
-  const x = (index: number) => 24 + index * spacing;
-  const left = Math.max(0, x(0) - spacing / 2);
-  const right = x(bars.length - 1) + spacing / 2;
-  const placePoint = (event: MouseEvent<SVGSVGElement>) => {
-    if (!onDrawingPoint) return;
-    const matrix = event.currentTarget.getScreenCTM();
-    if (!matrix) return;
-    const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
-    if (local.x < left || local.x > right || local.y < 24 || local.y > 316) return;
-    const index = Math.min(bars.length - 1, Math.max(0, Math.round((local.x - x(0)) / spacing)));
-    onDrawingPoint({ timeMs: bars[index]!.open_time_ms, price: low + (316 - local.y) / 292 * (high - low) });
-  };
-  const points = new Map(ma?.points.map(point => [point.open_time_ms, point.value]));
-  const line = bars.flatMap((bar, index) => {
-    const value = points.get(bar.open_time_ms);
-    if (value === undefined) return [];
-    const previous = bars[index - 1];
-    const adjacent = previous?.close_time_ms === bar.open_time_ms - 1 && points.has(previous.open_time_ms);
-    const at = `${24 + index * spacing} ${y(value)}`;
-    return adjacent ? `L ${at}` : `M ${at} h 0`;
-  }).join(" ");
-  return <svg viewBox="0 0 1000 340" role="img" aria-label={t("strategy.chartSlot")} className="strategy-result-replay-candles"
-    data-drawing-active={onDrawingPoint ? true : undefined} onClick={onDrawingPoint ? placePoint : undefined}>
-    <defs><clipPath id={clipId}><rect x={left} y={24} width={right - left} height={292} /></clipPath></defs>
-    {bars.map((bar, index) => {
-      const x = 24 + index * spacing;
-      const open = y(bar.open);
-      const close = y(bar.close);
-      const rising = Number(bar.close) >= Number(bar.open);
-      const color = rising ? display.upColor : display.downColor;
-      const fill = rising && display.candleStyle === "hollow" ? "none" : color;
-      return <g key={bar.open_time_ms} opacity={bar.closed ? 1 : 0.65}>
-        <line x1={x} x2={x} y1={y(bar.high)} y2={y(bar.low)} stroke={color} strokeWidth="2" />
-        <rect x={x - spacing * 0.28} y={Math.min(open, close)} width={spacing * 0.56}
-          height={Math.max(2, Math.abs(open - close))} fill={fill} stroke={color} />
-        <title>{new Date(bar.open_time_ms).toISOString()} · {bar.open} / {bar.high} / {bar.low} / {bar.close}</title>
-      </g>;
-    })}
-    {line && <path d={line} data-testid="strategy-replay-ma-line" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
-    <g clipPath={`url(#${clipId})`} className="strategy-result-replay-drawings">
-      {drawings.map(({ id, points: [first, second] }) => {
-        const from = second ? replayDrawingBarIndex(bars, first.timeMs) : 0;
-        const to = second ? replayDrawingBarIndex(bars, second.timeMs) : 0;
-        if (from < 0 || to < 0) return null;
-        return <line key={id} data-testid="strategy-replay-drawing" data-drawing-id={id}
-          x1={second ? x(from) : left} y1={y(first.price)} x2={second ? x(to) : right} y2={y(second?.price ?? first.price)} />;
-      })}
-      {firstPoint && <circle cx={x(replayDrawingBarIndex(bars, firstPoint.timeMs))} cy={y(firstPoint.price)} r={3} />}
-    </g>
-    {[...markers].map(([index, { fills, notes }]) => {
-      const x = 24 + index * spacing;
-      const radius = Math.min(7, spacing * 0.42);
-      return <g key={index}>
-        {fills.length > 0 && <circle cx={x} cy={14} r={radius} fill="var(--strategy-replay-fill, #508bd5)"
-          data-testid="strategy-replay-fill-marker" data-cursors={fills.map(fill => fill.cursor).join(",")}>
-          <title>{fills.map(fill => `#${fill.cursor} · ${fill.side} ${fill.qty} @ ${fill.price}`).join("\n")}</title>
-        </circle>}
-        {notes.length > 0 && <circle cx={x} cy={326} r={radius} fill="#f59e0b"
-          data-testid="strategy-replay-note-marker" data-cursors={notes.map(note => note.cursor).join(",")}>
-          <title>{notes.map(note => `#${note.cursor} · ${note.body}`).join("\n")}</title>
-        </circle>}
-      </g>;
-    })}
-  </svg>;
+  const appearance = useChartSettingsRuntime();
+  const owner = chart.dataset_id === undefined ? `run:${frame.snapshot_hash}` : `${chart.dataset_id}:${chart.data_epoch ?? ""}`;
+  const datasetKey = `replay:${frame.run_id}:${owner}:${chart.interval}`;
+  const store = useMemo(() => new SeriesWindowStore({ intervalSeconds: parseIntervalSeconds(chart.interval), seriesKey: datasetKey }),
+    [chart.interval, datasetKey]);
+  const [revision, setRevision] = useState(0);
+  useLayoutEffect(() => {
+    store.replace(replayChartRows(chart.bars), { source: "result_replay" });
+    setRevision(value => value + 1);
+  }, [chart.bars, store]);
+  const session = useMemo<ChartSession>(() => ({ exchange: "replay", marketType: "result_replay", symbol, interval: chart.interval }),
+    [chart.interval, symbol]);
+  const marketData = useMemo(() => {
+    void revision;
+    return storeMarketData("RESULT_REPLAY", session, store);
+  }, [revision, session, store]);
+  const source = useLiveReferenceMarketChartSource({ sourceId: `research-replay:${slot}`, session, datasetKey, marketData, paused: false });
+  const overlaySource = useMemo(() => new StrategyOverlaySource(), []);
+  useEffect(() => () => overlaySource.dispose(), [overlaySource]);
+  useEffect(() => {
+    overlaySource.setSeries(store);
+    return () => overlaySource.setSeries(null);
+  }, [overlaySource, store]);
+  const overlay = useMemo(() => buildReplayOverlay({ frame, bars: chart.bars, ownsMarkers, display, ma, drawings, firstPoint,
+    idPrefix: `replay:${slot}` }), [chart.bars, display, drawings, firstPoint, frame, ma, ownsMarkers, slot]);
+  useEffect(() => overlaySource.setOverlay(overlay, chart.interval, `replay:${slot}`), [chart.interval, overlay, overlaySource, slot]);
+  const markerSources = useMemo(() => [overlaySource.markers], [overlaySource]);
+  const bars = chart.bars;
+  const placePoint = useCallback(({ time, price }: { time: unknown; price: number }) => {
+    const point = typeof time === "number" ? replayPointAt(bars, time, price) : null;
+    if (point) onDrawingPoint?.(point);
+  }, [bars, onDrawingPoint]);
+  return <div className="strategy-result-replay-surface" data-testid={`strategy-replay-${slot}-surface`}
+    data-drawing-active={onDrawingPoint ? true : undefined} data-markers={overlay.markers.length} data-entries={overlay.entries.length}>
+    <MarketChartSurface source={source} markerSources={markerSources} chartLayerSource={overlaySource.layer} errorBoundary={ChartErrorBoundary}
+      chartProps={{ symbol, interval: chart.interval, datasetKey, upColor: display.upColor, downColor: display.downColor,
+        chartType: display.candleStyle === "hollow" ? "hollow-candlestick" : "candlestick",
+        theme: appearance.resolvedTheme, customBg: appearance.settings.customBg, followLatest: true,
+        onVisibleRangeChange: range => overlaySource.setVisibleRange(range as Parameters<StrategyOverlaySource["setVisibleRange"]>[0]),
+        onChartPointClick: onDrawingPoint ? placePoint : null }} />
+  </div>;
 }
 
 function ReplayMaLegend({ ma }: { ma: BacktestResultReplayMA | undefined }) {
@@ -118,7 +109,6 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
   const ownsMarkers = chart.dataset_id === undefined;
   const symbol = chart.symbol ?? frame.symbol;
   const interval = formatIntervalLabel(chart.interval);
-  const markers = replayChartMarkers(frame, chart.bars, ownsMarkers, display);
   const ma = display.showMa ? chart.ma : undefined;
   const last = chart.bars.at(-1);
   const chartInstance = useId();
@@ -198,8 +188,8 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
         {drawingLimit && <InlineAlert tone="danger">{t("drawing.objects.failed")}</InlineAlert>}
       </fieldset>}
     </Disclosure>
-    <ReplayCandles bars={chart.bars} ma={ma} display={display} markers={markers}
-      drawings={display.showDrawings ? drawings : []} firstPoint={firstPoint}
+    <ReplaySurface slot={slot} chart={chart} frame={frame} symbol={symbol} display={display} ownsMarkers={ownsMarkers} ma={ma}
+      drawings={display.showDrawings ? drawings : NO_DRAWINGS} firstPoint={firstPoint}
       onDrawingPoint={canDraw && tool !== null ? addPoint : undefined} />
     <ReplayMaLegend ma={ma} />
     {last && <p className="strategy-result-replay-ohlc" data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : `strategy-replay-${slot}-ohlc`}>

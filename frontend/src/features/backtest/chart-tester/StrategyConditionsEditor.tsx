@@ -2,12 +2,14 @@ import { Checkbox, Field, InlineAlert, Input, Select } from "../../../components
 import { t } from "../../../i18n/index.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 
-export function StrategyConditionsEditor({ settings, marketType, capitalAsset = "USDT", preciseAvailable, preciseArchiveHint = true, onChange }: {
+export function StrategyConditionsEditor({ settings, marketType, capitalAsset = "USDT", preciseAvailable, preciseArchiveHint = true, rangeFixed = false, onChange }: {
   settings: StrategyRunSettings;
   marketType: string;
   capitalAsset?: string | undefined;
   preciseAvailable?: boolean;
   preciseArchiveHint?: boolean;
+  /** The data source fixes the range (exchange history chosen in the research workspace): no range control. */
+  rangeFixed?: boolean;
   onChange(settings: StrategyRunSettings): void;
 }) {
   const profile = settings.pythonBarExecution;
@@ -39,7 +41,7 @@ export function StrategyConditionsEditor({ settings, marketType, capitalAsset = 
       {!preciseAvailable ? <p className="strategy-editor-note">{t("research.capability.tapeDenied")}</p>
         : preciseArchiveHint && settings.fidelityPreference === "PRECISE" && <p className="strategy-editor-note">{t("research.execution.preciseArchiveHint")}</p>}
     </>}
-    <Field label={t("chartTester.settings.date")}>
+    {!rangeFixed && <><Field label={t("chartTester.settings.date")}>
       <Select size="sm" disabled={!!profile} value={settings.rangeMode} onChange={(event) => onChange({ ...settings, rangeMode: event.target.value as StrategyRunSettings["rangeMode"], customRange: event.target.value === "ALL_AVAILABLE" ? null : { startMs: 0, endMs: 0 } })}>
         <option value="ALL_AVAILABLE">{t("chartTester.settings.allAvailable")}</option><option value="CUSTOM">{t("ux.customRange")}</option>
       </Select>
@@ -48,7 +50,7 @@ export function StrategyConditionsEditor({ settings, marketType, capitalAsset = 
       {(["startMs", "endMs"] as const).map((key) => <Field key={key} label={t(key === "startMs" ? "ux.startUtc" : "ux.endUtc")}>
         <Input size="sm" type="datetime-local" value={dateValue(settings.customRange?.[key])} onInput={(event) => onChange({ ...settings, customRange: { startMs: settings.customRange?.startMs ?? 0, endMs: settings.customRange?.endMs ?? 0, [key]: event.currentTarget.value ? Date.parse(`${event.currentTarget.value}Z`) : 0 } })} />
       </Field>)}
-    </div>}
+    </div>}</>}
     <Checkbox checked={settings.executionOverrides !== undefined} label={t("ux.customExecution")}
       onChange={(event) => { const { executionOverrides: _removed, ...range } = settings; void _removed; onChange(event.target.checked ? { ...settings, executionOverrides: values } : range); }} />
     <div className="strategy-condition-grid">

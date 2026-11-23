@@ -1,0 +1,402 @@
+"""ADR-BACKTEST-015 P2: one run facade over every run family.
+
+A real host runtime run, plus native and forward records shaped as their stores
+write them. Real Pine runs through the facade: ``test_strategy_runs_pine.py``.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from app.backtest.errors import BacktestError
+from app.backtest.models import RunState
+from app.backtest.native import TERMINAL as NATIVE_TERMINAL
+from app.backtest.strategy.protocol import CrashProvider, DeterministicFakeProvider
+from app.core.committed_updates import CommittedUpdates
+from app.data_engine.data_manager.strategy import StrategyDataManager
+from app.data_engine.data_manager.strategy_runs import (
+    CONTINUOUS_CREATION_PHASES, CONTINUOUS_PHASES, HOST_STATES, NATIVE_STATES, STATES, STATUS_SCHEMA, STREAM_SCHEMA,
+    RunWatch,
+)
+from app.backtest.strategy_versions import material, version_hash
+from tests import strategy_run_oracles as oracles
+from tests.test_strategy_run_oracles import BUILTIN_SMA_REVISION
+from tests.test_run_result import runtime_run  # noqa: F401 - fixture
+from tests.test_strategy_data_manager import create_run, events as bar_events, service  # noqa: F401 - fixture
+
+
+def _client(runtime):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.v1.strategy_runs import router
+
+    manager = StrategyDataManager(runtime.service, runtime=runtime)
+    app = FastAPI()
+    app.state.data_manager_core = SimpleNamespace(strategy=manager)
+    app.include_router(router)
+    return TestClient(app), manager
+
+
+def _native_record(runtime, record, key):
+    native = runtime.native
+    with native.lock:
+        native.db.execute("INSERT INTO runs VALUES (?,?,?,?)", (record["run_id"], key, "hash", json.dumps(record)))
+        native._save_summary(record)
+        native.db.commit()
+
+
+class _Forward:
+    """A continuous access whose status is whatever the test sets."""
+
+    def __init__(self, value=None, *, enabled=True):
+        self.value = value
+        self.enabled = enabled
+        self.subscriptions = ()
+
+    def controller(self):
+        return SimpleNamespace(execution_enabled=self.enabled)
+
+    async def status(self, run_id):
+        if self.value is None:
+            raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
+        return self.value
+
+    async def describe(self, run_id):
+        return {"run": self.value["run"], "definition": {"engine_version": "engine-1", "provider": {
+            "schema": "provider-1", "language": "builtin", "builtin_id": "builtin-sma-cross-v1", "source_text": ""}}}
+
+    async def committed_result(self, run_id):
+        # Neither stub has a committed account: a requested run, or no run at all.
+        raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
+
+    def close_views(self):
+        pass
+
+
+def test_every_family_state_maps_onto_the_shared_lifecycle():
+    assert set(HOST_STATES) == {state.value for state in RunState}
+    assert set(NATIVE_STATES) == set(NATIVE_TERMINAL) | {"QUEUED", "RUNNING"}
+    for mapping in (HOST_STATES, NATIVE_STATES, CONTINUOUS_PHASES, CONTINUOUS_CREATION_PHASES):
+        assert set(mapping.values()) <= set(STATES)
+
+
+def test_a_host_run_reads_the_same_through_the_facade(runtime_run):
+    runtime, run_id = runtime_run
+    client, _ = _client(runtime)
+    with client:
+        status = client.get(f"/strategy-runs/{run_id}")
+        result = client.get(f"/strategy-runs/{run_id}/result")
+        cancelled = client.post(f"/strategy-runs/{run_id}/cancel")
+    assert status.status_code == 200
+    assert status.json() == {
+        "schema": STATUS_SCHEMA, "run_id": run_id, "family": "host", "authority": "HOST", "clock_policy": "FIXED",
+        "fidelity": "BAR_APPROX", "language": None, "state": "COMPLETED", "source_state": "COMPLETED",
+        "terminal": True, "generation": runtime.service.get_run(run_id)["generation"], "result_available": True,
+        "error": None,
+        # Linked when the run was created (P3b): a builtin is its id on the engine version.
+        "version_hash": version_hash(material("builtin", BUILTIN_SMA_REVISION, {}, {
+            "engine_version": runtime.service.get_run(run_id)["engine_version"]})),
+    }
+    assert result.status_code == 200 and result.json() == runtime.run_result(run_id)
+    # The frontend parser's contract fixture is exactly this status, minus the per-run id.
+    oracles.assert_frontend_fixture("host-completed", {**status.json(), "run_id": "bt_fixture"}, kind="strategy-run")
+    # Cancelling a finished run changes nothing and is not an error.
+    assert cancelled.status_code == 200 and cancelled.json() == status.json()
+    assert runtime.service.get_run(run_id)["state"] == "COMPLETED"
+
+
+def test_unknown_and_forged_ids_are_not_found_in_any_family(runtime_run):
+    runtime, run_id = runtime_run
+    client, _ = _client(runtime)
+    with client:
+        responses = [client.get(f"/strategy-runs/{run_id}")]
+        for missing in ("bt_missing", "native_missing", "missing", "x" * 129, f"native_{run_id}"):
+            responses.append(client.get(f"/strategy-runs/{missing}"))
+            responses.append(client.get(f"/strategy-runs/{missing}/result"))
+    assert responses[0].status_code == 200
+    for response in responses[1:]:
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "RUN_NOT_FOUND"
+
+
+def test_native_and_external_records_report_their_own_authority(runtime_run):
+    runtime, _ = runtime_run
+    _native_record(runtime, {"run_id": "native_external", "execution_mode": "CANDLESCOPE", "state": "QUEUED",
+                             "config": {"language": "pine", "execution_fidelity": "TRADE_TAPE"},
+                             "result": None, "error": None}, "external")
+    _native_record(runtime, {"run_id": "native_interrupted", "execution_mode": "NATIVE", "state": "INTERRUPTED",
+                             "config": {"language": "pine"}, "result": None,
+                             "error": {"code": "HOST_RESTARTED", "message": "rerun explicitly"}}, "interrupted")
+    client, _ = _client(runtime)
+    with client:
+        external = client.get("/strategy-runs/native_external").json()
+        interrupted = client.get("/strategy-runs/native_interrupted").json()
+        not_ready = client.get("/strategy-runs/native_external/result")
+        cancelled = client.post("/strategy-runs/native_external/cancel")
+    assert {key: external[key] for key in ("family", "authority", "clock_policy", "fidelity", "language", "state",
+                                           "terminal", "result_available", "generation")} == {
+        "family": "external", "authority": "HOST", "clock_policy": "FIXED", "fidelity": "TRADE_TAPE",
+        "language": "pine", "state": "QUEUED", "terminal": False, "result_available": False, "generation": None}
+    # A native run fills by the script's own model: no host fidelity.
+    assert interrupted["family"] == "native" and interrupted["authority"] == "SCRIPT" and interrupted["fidelity"] is None
+    assert (interrupted["state"], interrupted["source_state"], interrupted["terminal"]) == ("FAILED", "INTERRUPTED", True)
+    assert interrupted["error"] == {"code": "HOST_RESTARTED", "message": "rerun explicitly"}
+    assert not_ready.status_code == 400
+    assert cancelled.status_code == 200
+    assert (cancelled.json()["state"], cancelled.json()["terminal"]) == ("CANCELLED", True)
+    assert runtime.native.get("native_external")["state"] == "CANCELLED"
+
+
+def _live(phase, generation, error=None):
+    return {"phase": phase, "generation": generation, "error": error, "checkpoint_revision": 4, "event_time_ms": 60_000}
+
+
+@pytest.mark.parametrize("value,expected", [
+    ({"creation": {"phase": "READY", "error": None}, "run": None}, ("QUEUED", "READY", None, False, False)),
+    ({"creation": {"phase": "FAILED", "error": {"code": "INPUT", "message": "m"}}, "run": None},
+     ("FAILED", "FAILED", None, True, False)),
+    ({"creation": None, "run": _live("LIVE", 1)}, ("RUNNING", "LIVE", 1, False, True)),
+    ({"creation": None, "run": _live("REPAIR_REQUIRED", 3, {"code": "GAP", "message": "m"})},
+     ("BLOCKED", "REPAIR_REQUIRED", 3, False, True)),
+])
+def test_forward_runs_report_their_lifecycle(runtime_run, monkeypatch, value, expected):
+    runtime, _ = runtime_run
+    client, manager = _client(runtime)
+    monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(value))
+    with client:
+        status = client.get("/strategy-runs/cs_run").json()
+        cancel = client.post("/strategy-runs/cs_run/cancel")
+        result = client.get("/strategy-runs/cs_run/result")
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(None))
+        unknown = client.get("/strategy-runs/cs_run/result")
+    assert (status["state"], status["source_state"], status["generation"], status["terminal"],
+            status["result_available"]) == expected
+    # A committed forward run is linked to its provider's version; a requested one has none yet.
+    assert status["version_hash"] == (None if value["run"] is None else version_hash(
+        material("builtin", "builtin-sma-cross-v1", {}, {"engine_version": "engine-1"})))
+    if value["run"] is None:
+        # Requested but not committed: the run exists, its result does not yet.
+        assert result.status_code == 409 and result.json()["error"]["code"] == "RUN_RESULT_NOT_READY"
+    assert unknown.status_code == 404 and unknown.json()["error"]["code"] == "RUN_NOT_FOUND"
+    assert (status["family"], status["authority"], status["clock_policy"], status["fidelity"]) == (
+        "continuous", "HOST", "FORWARD", "BAR_APPROX")
+    if status["terminal"]:
+        assert cancel.status_code == 200 and cancel.json() == status
+    else:
+        # Forward-run controls need the account's committed identity.
+        assert cancel.status_code == 409 and cancel.json()["error"]["code"] == "RUN_CONTROL_UNSUPPORTED"
+
+
+def test_forward_ids_resolve_only_in_their_own_store(runtime_run, monkeypatch):
+    runtime, _ = runtime_run
+    client, manager = _client(runtime)
+    with client:
+        unbound = client.get("/strategy-runs/cs_run")
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(None))
+        missing = client.get("/strategy-runs/cs_run")
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward({"creation": None, "run": _live("SOMETHING_NEW", 1)}))
+        unknown_phase = client.get("/strategy-runs/cs_run")
+    assert unbound.status_code == 503 and unbound.json()["error"]["code"] == "CONTINUOUS_NOT_READY"
+    assert missing.status_code == 404 and missing.json()["error"]["code"] == "RUN_NOT_FOUND"
+    # A state the facade does not know is refused rather than guessed.
+    assert unknown_phase.status_code == 400 and unknown_phase.json()["error"]["code"] == "RUN_STATE_UNKNOWN"
+
+
+def test_pine_book_fidelities_belong_to_candlescope_matching(runtime_run, monkeypatch):
+    """ADR-BACKTEST-015 P6d: the Host Pine profile lists no book fidelity; builtin and Python keep them."""
+    runtime, _ = runtime_run
+    original = runtime.service.capabilities
+    books = {"BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"}
+    monkeypatch.setattr(runtime.service, "capabilities",
+                        lambda: {**original(), "fidelity_modes": [*original()["fidelity_modes"], *sorted(books)]})
+    client, _manager = _client(runtime)
+    with client:
+        matrix = client.get("/strategy-runs/capabilities").json()
+    rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
+    assert books <= set(rows["host", "builtin"]["fidelities"]) and books <= set(rows["host", "python"]["fidelities"])
+    assert not books & set(rows["host", "pine"]["fidelities"])
+    assert "BAR_APPROX" in rows["host", "pine"]["fidelities"]
+
+
+def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
+    runtime, _ = runtime_run
+    monkeypatch.delenv("BACKTEST_PYTHON_STRATEGY_ENABLED", raising=False)
+    monkeypatch.setattr(runtime.native, "capabilities", lambda: {"engines": [
+        {"language": "pine", "available": True, "external_available": False}]})
+    client, manager = _client(runtime)
+    with client:
+        without_forward = client.get("/strategy-runs/capabilities").json()
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(enabled=False))
+        matrix = client.get("/strategy-runs/capabilities").json()
+    assert without_forward["families"]["continuous"] == {"available": False, "reason": "CONTINUOUS_NOT_READY"}
+    assert not [row for row in without_forward["profiles"] if row["family"] == "continuous"]
+    assert matrix["schema"] == "candlescope.strategy-run-capabilities/1"
+    oracles.assert_frontend_fixture("matrix", matrix, kind="strategy-run-capabilities")
+    assert matrix["families"] == {
+        "host": {"available": True, "reason": None}, "native": {"available": True, "reason": None},
+        "external": {"available": False, "reason": "ENGINE_UNAVAILABLE"},
+        "continuous": {"available": False, "reason": "READ_ONLY"},
+        # P4b: chart FOLLOW runs need the profile's live DataManager, which this manager has not.
+        "follow": {"available": False, "reason": "FOLLOW_UNAVAILABLE"},
+    }
+    rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
+    assert set(rows) == {("host", "builtin"), ("host", "pine"), ("host", "python"), ("native", "pine"),
+                         ("external", "pine"), ("continuous", "builtin"), ("continuous", "python"),
+                         ("follow", "builtin"), ("follow", "python")}
+    host = rows["host", "builtin"]
+    assert host["available"] and host["authority"] == "HOST" and host["clock_policy"] == "FIXED"
+    assert host["fidelities"] == runtime.service.capabilities()["fidelity_modes"] and "BAR_APPROX" in host["fidelities"]
+    assert rows["host", "python"]["available"] is False and rows["host", "python"]["reason"] == "FLAG_DISABLED"
+    native = rows["native", "pine"]
+    assert (native["available"], native["authority"], native["fidelities"], native["account_models"]) == (
+        True, "SCRIPT", None, None)
+    assert rows["external", "pine"]["authority"] == "HOST" and rows["external", "pine"]["reason"] == "ENGINE_UNAVAILABLE"
+    assert "BAR_APPROX" in rows["external", "pine"]["fidelities"]
+    forward = rows["continuous", "builtin"]
+    assert (forward["clock_policy"], forward["intervals"], forward["starts"], forward["controls"]) == (
+        "FORWARD", ["1m"], ["HISTORY_LIVE", "LIVE_ONLY"], {"cancel": False})
+    assert forward["available"] is False and forward["reason"] == "READ_ONLY"
+    follow = rows["follow", "builtin"]
+    assert (follow["authority"], follow["clock_policy"], follow["intervals"], follow["fixed_intervals_only"]) == (
+        "HOST", "FOLLOW", None, True)
+
+
+def test_a_closed_manager_serves_nothing(runtime_run):
+    runtime, run_id = runtime_run
+    client, manager = _client(runtime)
+    manager.close()
+    with client:
+        response = client.get(f"/strategy-runs/{run_id}")
+        capabilities = client.get("/strategy-runs/capabilities")
+    assert response.status_code == capabilities.status_code == 503
+    assert response.json()["error"]["code"] == "STRATEGY_MANAGER_CLOSED"
+
+
+# -- P2b: one commit-driven status stream ---------------------------------
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_a_host_run_streams_its_status_until_it_finishes(service, crash):
+    async def check():
+        run = create_run(service)
+        manager = StrategyDataManager(service)
+        stream = (await manager.runs().watch(run["run_id"])).events()
+        first = await anext(stream)
+        assert first["schema"] == STREAM_SCHEMA and first["type"] == "status"
+        assert (first["status"]["state"], first["status"]["source_state"], first["terminal"]) == ("QUEUED", "QUEUED", False)
+        provider = CrashProvider() if crash else DeterministicFakeProvider()
+        try:
+            await asyncio.to_thread(service.execute_bar_run, run["run_id"], events=bar_events(), provider=provider, now_ms=3)
+        except Exception:
+            assert crash
+        frames = [frame async for frame in stream]
+        final = frames[-1]
+        assert final["terminal"] is True and all(not frame["terminal"] for frame in frames[:-1])
+        if crash:
+            assert final["status"]["state"] == "FAILED"
+            assert final["status"]["error"]["code"] == "PROVIDER_CRASH_UNRECOVERABLE"
+            assert "crash" in final["status"]["error"]["message"].lower()
+        else:
+            assert final["status"]["state"] == "COMPLETED" and final["status"]["result_available"] is True
+        assert manager.diagnostics()["subscriptions"] == 0
+        assert service.repository.run_updates.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_a_native_run_streams_each_committed_state_without_polling(runtime_run, monkeypatch):
+    runtime, _ = runtime_run
+    _native_record(runtime, {"run_id": "native_watched", "execution_mode": "NATIVE", "state": "QUEUED",
+                             "config": {"language": "pine"}, "result": None, "error": None}, "watched")
+    reads = 0
+    original = runtime.native.status_summary
+
+    def counted(run_id):
+        nonlocal reads
+        reads += 1
+        return original(run_id)
+    monkeypatch.setattr(runtime.native, "status_summary", counted)
+
+    async def check():
+        manager = StrategyDataManager(runtime.service, runtime=runtime, heartbeat_seconds=0.01)
+        stream = (await manager.runs().watch("native_watched")).events()
+        assert (await anext(stream))["status"]["state"] == "QUEUED"
+        # Heartbeats keep the transport alive without reading the store.
+        assert [(await anext(stream))["type"] for _ in range(3)] == ["heartbeat"] * 3
+        assert reads == 1
+        await asyncio.to_thread(runtime.native._mark_running, "native_watched")
+        frame = await anext(stream)
+        while frame["type"] == "heartbeat":
+            frame = await anext(stream)
+        assert (frame["status"]["family"], frame["status"]["state"], frame["progress"]) == ("native", "RUNNING", None)
+        await asyncio.to_thread(runtime.native.cancel, "native_watched")
+        rest = [frame async for frame in stream if frame["type"] != "heartbeat"]
+        assert [(frame["status"]["state"], frame["terminal"]) for frame in rest] == [("CANCELLED", True)]
+        assert runtime.native.run_updates.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_watches_fail_before_streaming_and_share_the_subscription_capacity(service):
+    async def check():
+        run = create_run(service)
+        manager = StrategyDataManager(service, max_subscriptions=1)
+        for run_id, code in (("bt_missing", "RUN_NOT_FOUND"), ("missing", "RUN_NOT_FOUND"),
+                             ("cs_run", "CONTINUOUS_NOT_READY"), ("native_run", "FLAG_DISABLED")):
+            with pytest.raises(BacktestError) as failure:
+                await manager.runs().watch(run_id)
+            assert failure.value.code == code
+        assert manager.diagnostics()["subscriptions"] == 0
+        held = await manager.runs().watch(run["run_id"])
+        with pytest.raises(BacktestError, match="capacity"):
+            await manager.runs().watch(run["run_id"])
+        with pytest.raises(BacktestError, match="capacity"):
+            await manager.subscribe_run(run["run_id"])
+        # A refused watch leaves no subscription behind.
+        assert service.repository.run_updates.diagnostics()["subscriptions"] == 1
+        held.close()
+        assert manager.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_a_changed_generation_ends_the_stream_instead_of_mixing_runs(service):
+    async def check():
+        generation = 1
+
+        async def read(run_id):
+            return {"run_id": run_id, "generation": generation, "terminal": False, "state": "RUNNING"}, None
+        updates = CommittedUpdates()
+        manager = StrategyDataManager(service)
+        watch = await manager._admit(RunWatch(manager, "bt_x", updates, read))
+        stream = watch.events()
+        assert (await anext(stream))["type"] == "status"
+        generation = 2
+        updates.notify("bt_x")
+        final = await anext(stream)
+        assert (final["type"], final["terminal"], final["error"]["code"]) == ("error", True, "RUN_IDENTITY_CHANGED")
+        assert [frame async for frame in stream] == []
+        manager.close()
+    asyncio.run(check())
+
+
+def test_the_events_route_streams_ndjson_and_refuses_before_streaming(runtime_run):
+    runtime, run_id = runtime_run
+    client, _ = _client(runtime)
+    with client:
+        response = client.get(f"/strategy-runs/{run_id}/events")
+        missing = client.get("/strategy-runs/bt_missing/events")
+        forward = client.get("/strategy-runs/cs_run/events")
+    assert response.status_code == 200 and response.headers["content-type"].startswith("application/x-ndjson")
+    frames = [json.loads(line) for line in response.text.splitlines() if line]
+    assert len(frames) == 1 and frames[0]["terminal"] is True
+    assert frames[0]["status"] == client.app.state.data_manager_core.strategy.runs()._host_status(run_id)
+    # The frontend reader's fixture, minus the per-run id. A finished run keeps no checkpoint.
+    assert frames[0]["progress"] is None
+    oracles.assert_frontend_fixture("host-completed", {
+        **frames[0], "status": {**frames[0]["status"], "run_id": "bt_fixture"}}, kind="strategy-run-stream")
+    # Without a bound forward-run owner the stream is unavailable, not unsupported.
+    assert missing.status_code == 404 and forward.status_code == 503

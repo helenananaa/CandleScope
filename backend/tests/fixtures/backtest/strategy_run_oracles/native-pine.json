@@ -1,0 +1,31 @@
+{
+  "description": "Native Pine engine with its own account authority (/backtests/native)",
+  "digests": {
+    "equity": "sha256:ad1b340b86eafc3aebc8fe6257aef3786f270cc7483aa4572456bd1212ef1f24",
+    "orders": "sha256:9a948d0c3bd62b1d949a2f12f234ff10adc55f118025847586e58967c9e76478",
+    "plots": "sha256:182650198d1cf8e7dfb86b06ba8832635af47404769ff0ee501fcdba8f493188",
+    "position": "sha256:c186622a7b6b36fdd8a6c6b90a9b74e4ebb7bb9fcd258a758ec33fd195317580",
+    "trades": "sha256:ff6d551a3964ea571595c7645e1b9c75e9fbfe93f12a7732cdaf5481bbf400c7"
+  },
+  "path": "native-pine",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.strategy-run-oracle/1",
+  "summary": {
+    "account_authority": "pine-compat-runtime",
+    "final_equity": 9968.0,
+    "orders": 9,
+    "trade_rows": [
+      "660.0s -> 900.0s qty 1.0 107.0 -> 100.0 profit -7.0",
+      "1080.0s -> 1320.0s qty 1.0 108.0 -> 102.0 profit -6.0",
+      "1620.0s -> 1860.0s qty 1.0 107.0 -> 100.0 profit -7.0",
+      "2040.0s -> 2280.0s qty 1.0 108.0 -> 102.0 profit -6.0"
+    ],
+    "trades": 4
+  }
+}

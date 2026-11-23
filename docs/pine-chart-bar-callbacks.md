@@ -7,8 +7,10 @@ schedule. The Host derives and freezes `pine_bar_path_contract`; a caller
 cannot turn an ordinary source into a callback strategy by supplying that
 private field.
 
-`PineChartBarKernel` supplies chart lifecycle and source cursors over the
-shared `PINE_OHLC_PATH_V1` matcher. The chart planner still owns admission,
+The Host bar kernel's `PINE_CHART` clock (`SimulationKernel(bar_clock="PINE_CHART")`,
+`app/simulation/ohlc_path.py`) supplies chart lifecycle and source cursors over the
+shared `PINE_OHLC_PATH_V1` matcher. It replaced `PineChartBarKernel` in
+ADR-BACKTEST-015 P6; the checkpoint and report contracts are unchanged. The chart planner still owns admission,
 entry allocations, OCA, cash/fees and risk enforcement. Its order adapter
 selects the path profile, including trailing activation, rather than applying
 the legacy whole-bar assumptions. Workbench and chart matching share the

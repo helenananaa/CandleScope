@@ -1,0 +1,39 @@
+{
+  "description": "Host PRACTICE clock (practice account model, 10x), SDK Python sma_cross template (TRUSTED_LOCAL)",
+  "digests": {
+    "decision_hash": "2467d2e7c9a27612f2bd7c95ea46f0107320b9ffcfee566f8233a82b97024443",
+    "equity_curve": "sha256:eec6be9707b0a9eccbaa6584b644eaba1dbbd3dff537106deba067124b1c5672",
+    "fill_hash": "5cf369a8da4544b2a6f7bf1cf56fbc44aa085619a809c62ecaa055f482d72668",
+    "ledger_hash": "442271170dc3a628c7fe6e4d723b7c8799ffbe8c54a55d641b9cfc608d413c4a",
+    "orders": "sha256:9e1212359031b2a8fb177834837c285e56ff00be6c764fb85343c0eb1f3d6ac6"
+  },
+  "path": "host-practice-python",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.strategy-run-oracle/1",
+  "summary": {
+    "fill_rows": [
+      "359999 SELL 1 @ 102.989700 fee 0.0308969100",
+      "659999 BUY 2 @ 106.010600 fee 0.0636063600",
+      "899999 SELL 2 @ 100.989900 fee 0.0605939400",
+      "1079999 BUY 2 @ 107.010700 fee 0.0642064200",
+      "1319999 SELL 2 @ 102.989700 fee 0.0617938200",
+      "1619999 BUY 2 @ 106.010600 fee 0.0636063600",
+      "1859999 SELL 2 @ 100.989900 fee 0.0605939400",
+      "2039999 BUY 2 @ 107.010700 fee 0.0642064200",
+      "2279999 SELL 2 @ 102.989700 fee 0.0617938200",
+      "2579999 BUY 2 @ 106.010600 fee 0.0636063600",
+      "2819999 SELL 2 @ 100.989900 fee 0.0605939400"
+    ],
+    "fills": 11,
+    "final_equity": "9955.1260017100",
+    "final_position": "-1",
+    "orders": 11,
+    "rejected": 0
+  }
+}

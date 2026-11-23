@@ -33,13 +33,16 @@ export const STATES = [
   { name: "history-study", page: "/", steps: [{ key: "study.title" }] },
   { name: "data-workbench", page: "/", steps: [
     { key: "shell.settings" }, { selector: ".st-nav-item", index: 3 }, { key: "settings.workbench.open" }] },
-  { name: "rail-tape", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.tape" } } }] },
-  { name: "rail-accounts", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.accounts" } } }] },
+  // Wider windows open these panels at start; `unless` skips the step when the panel is open.
+  { name: "rail-tape", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.tape" } }, unless: "[data-rail-view=tape][data-expanded=true]" }] },
+  { name: "rail-accounts", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.accounts" } }, unless: "[data-rail-view=accounts][data-expanded=true]" }] },
   // The tester loads the code editor on open; give it time before capturing or auditing.
   { name: "chart-tester", page: "/", steps: [{ key: "chartTester.entryHint" }], settleMs: 5000 },
   // Extensions are managed in Settings → 插件与扩展; the recovery notice shows only in recovery mode or after a failure.
   { name: "extension-recovery", page: "/?extensions=off", steps: [{ selector: ".ui-toast .ui-btn" }] },
   { name: "replay-hub", page: "/replay.html" },
+  // Opening the create view only reads (capabilities and coverage); its summary cards are checked here.
+  { name: "replay-create", page: "/replay.html", steps: [{ key: "replay.hub.new" }] },
   { name: "strategy", page: "/strategy.html" },
   { name: "strategy-local-source", page: "/strategy.html?source=imported" },
   { name: "backtest", page: "/backtest.html" },
@@ -190,22 +193,24 @@ export const CLICK_STEP = `async (step) => {
   const resolveParams = (params = {}) => Object.fromEntries(Object.entries(params)
     .map(([name, value]) => [name, value && typeof value === "object" ? t(value.key) : value]));
   const norm = (text) => (text || "").replace(/\\s+/g, " ").trim();
-  const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  if (step.selector) {
-    const matches = [...document.querySelectorAll(step.selector)].filter(visible);
-    const el = matches[step.index ?? 0];
-    if (!el) return "not found: " + step.selector;
-    el.click();
-    return "ok";
-  }
-  let label = norm(t(step.key, resolveParams(step.params)));
+  const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.disabled; };
+  let label = step.selector ? "" : norm(t(step.key, resolveParams(step.params)));
   if (step.prefix) label = label.split(/[({]/)[0].trim();
-  const controls = [...document.querySelectorAll("button, a, [role=tab], [role=button], summary")].filter(visible);
   const names = (el) => [el.getAttribute("aria-label"), el.getAttribute("title"), el.textContent].map(norm);
-  const el = controls.find((c) => names(c).some((name) => step.prefix ? name.startsWith(label) : name === label));
-  if (!el) return "not found: " + step.key + " (" + label + ")";
-  el.click();
-  return "ok";
+  const find = () => {
+    if (step.selector) return [...document.querySelectorAll(step.selector)].filter(visible)[step.index ?? 0];
+    const controls = [...document.querySelectorAll("button, a, [role=tab], [role=button], summary")].filter(visible);
+    return controls.find((c) => names(c).some((name) => step.prefix ? name.startsWith(label) : name === label));
+  };
+  // Some controls appear only once their data loads (the accounts panel joins the rail when the
+  // accounts arrive): look again for a few seconds before giving up.
+  for (let tries = 0; tries < 32; tries += 1) {
+    if (step.unless && document.querySelector(step.unless)) return "ok";
+    const el = find();
+    if (el) { el.click(); return "ok"; }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return "not found: " + (step.selector ?? step.key + " (" + label + ")");
 }`;
 
 /** Loads a state's page and runs its steps; returns the steps that did not succeed. */

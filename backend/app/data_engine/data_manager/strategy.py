@@ -120,10 +120,15 @@ class StrategyDataManager:
         self.market_manager = market_manager
         self.continuous = None
         self._continuous_access = None
+        self._runs = None
+        self._drafts = None
+        self._follows = None
+        self._experiments = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
-        self._subscriptions: set[StrategyRunSubscription] = set()
+        # Host event subscriptions and run-facade watches share one capacity.
+        self._subscriptions: set[Any] = set()
         self._closed = False
         self.external_providers = ExternalProviderAccess(self.control_plane, runtime, check_owner=self._require_open)
 
@@ -144,6 +149,9 @@ class StrategyDataManager:
 
     async def shutdown(self):
         self.close()
+        if self._follows is not None:
+            follows, self._follows = self._follows, None
+            await follows.close()
         if self._continuous_access is not None:
             await self._continuous_access.shutdown()
         elif self.continuous is not None:
@@ -155,6 +163,53 @@ class StrategyDataManager:
             from .continuous_strategy import ContinuousStrategyAccess
             self._continuous_access=ContinuousStrategyAccess(self)
         return self._continuous_access
+
+    def references(self):
+        """Small references the strategy pages keep (ADR-BACKTEST-015 P3c)."""
+        self._require_open()
+        from app.backtest.strategy_references import StrategyReferences
+        return StrategyReferences(self.service.repository)
+
+    def versions(self):
+        """Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b)."""
+        self._require_open()
+        from app.backtest.strategy_versions import StrategyVersions
+        return StrategyVersions(self.service.repository)
+
+    def drafts(self):
+        """The strategy editor's working copies (ADR-BACKTEST-015 P3a)."""
+        self._require_open()
+        if self._drafts is None:
+            from app.backtest.strategy_drafts import StrategyDrafts
+            self._drafts = StrategyDrafts(self.service.repository)
+        return self._drafts
+
+    def experiments(self):
+        """Experiments: one strategy run over several inputs (ADR-BACKTEST-015 P5b)."""
+        self._require_open()
+        if self._experiments is None:
+            from app.backtest.strategy_experiments import StrategyExperiments
+            self._experiments = StrategyExperiments(self.service.repository, heartbeat_seconds=self.heartbeat_seconds)
+        return self._experiments
+
+    def runs(self):
+        """One facade over every run family: status, result, cancel and capabilities (ADR-BACKTEST-015 P2)."""
+        self._require_open()
+        if self._runs is None:
+            from .strategy_runs import StrategyRuns
+            self._runs = StrategyRuns(self)
+        return self._runs
+
+    def follows(self):
+        """Chart FOLLOW runs for HOST strategies, fed by this profile's DataManager (ADR-BACKTEST-015 P4b)."""
+        self._require_open()
+        if self._follows is None:
+            from .strategy_follows import StrategyFollows
+            self._follows = StrategyFollows(self)
+        return self._follows
+
+    def follows_or_none(self):
+        return self._follows
 
     async def start_continuous(self):
         return await self.continuous_access().start()
@@ -169,12 +224,19 @@ class StrategyDataManager:
         return self.service
 
     async def subscribe_run(self, run_id: str) -> StrategyRunSubscription:
+        self._require_capacity()
+        return await self._admit(StrategyRunSubscription(self, run_id))
+
+    def _require_capacity(self) -> None:
         if self._closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
         continuous_count=0 if self._continuous_access is None else len(self._continuous_access.subscriptions)
         if len(self._subscriptions)+continuous_count >= self.max_subscriptions:
             raise BacktestError("RUN_CAPACITY_EXCEEDED", "strategy subscription capacity reached")
-        subscription = StrategyRunSubscription(self, run_id)
+
+    async def _admit(self, subscription):
+        """Count a run view against the shared capacity and read its first frame."""
+        self._require_capacity()
         self._subscriptions.add(subscription)
         try:
             # Errors in the initial lookup are returned before streaming headers.

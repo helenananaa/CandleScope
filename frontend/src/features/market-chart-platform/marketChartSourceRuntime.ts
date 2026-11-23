@@ -2,6 +2,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { MarketDataRuntimeContract } from "../market-data/marketDataRuntimeContract.js";
 import type { KlineBar, KlineBarInput } from "../market-data/marketDataTypes.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import type { SyntheticOrigin } from "../market-data/synthetic/syntheticSeries.js";
 
 export const MARKET_CHART_SOURCE_MODES = [
@@ -41,7 +42,7 @@ export interface MarketChartSourceDescription {
 }
 
 export interface MarketChartSourceRuntime {
-  readonly syntheticOrigin?: SyntheticOrigin;
+  readonly syntheticOrigin?: SyntheticOrigin | undefined;
   readonly mode: MarketChartSourceMode;
   readonly sourceId: string;
   readonly session: ChartSession;
@@ -60,6 +61,8 @@ export interface LiveReferenceSourceInput {
   session: ChartSession;
   datasetKey: string;
   marketData: MarketDataRuntimeContract;
+  /** Names the series for backend indicators when the reference reads an imported dataset. */
+  syntheticOrigin?: SyntheticOrigin;
   onPause?(): void;
   onResume?(): void;
   onDispose?(): void;
@@ -68,7 +71,7 @@ export interface LiveReferenceSourceInput {
 export interface LiveReferenceMarketChartSourceRuntime extends MarketChartSourceRuntime {
   readonly mode: "LIVE_REFERENCE";
   readonly executionIdentity: null;
-  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData">): void;
+  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData" | "syntheticOrigin">): void;
 }
 
 export interface FrozenSnapshotSourceInput {
@@ -118,17 +121,15 @@ function lastDisplayBar(rows: readonly KlineBar[]) {
   };
 }
 
-function createStaticMarketData(
+/**
+ * A bar store a page owns, served as offline market data: no feed, no paging. A static source copies
+ * its bars into one; a result replay (ADR-BACKTEST-015 P5d3) reveals a run's bars into one step by step.
+ */
+export function storeMarketData(
   source: string,
   session: ChartSession,
-  rows: readonly KlineBarInput[],
-): { marketData: MarketDataRuntimeContract; disposeStore(): void } {
-  const copiedRows = rows.map((row) => ({ ...row }));
-  const store = new SeriesWindowStore({
-    maxBars: Math.max(1, copiedRows.length),
-    seriesKey: `${source}:${session.exchange}:${session.marketType}:${session.symbol}:${session.interval}`,
-  });
-  store.replace(copiedRows, { source });
+  store: SeriesWindowView,
+): MarketDataRuntimeContract {
   const bars = store.snapshot({ force: true });
   const firstTime = bars.at(0)?.time ?? null;
   const lastTime = bars.at(-1)?.time ?? null;
@@ -169,34 +170,48 @@ function createStaticMarketData(
     },
   };
   return {
-    disposeStore: () => store.clear({ source: `${source}:dispose` }),
-    marketData: {
-      view,
-      actions: {
-        retry() {},
-        async loadMoreLeft() {},
-        async loadMoreRight() { return false; },
-        async restoreLatestWindow() { return false; },
-        onCrosshairMove() {},
-        onVisibleRangeChange() {},
-        consumeIndicatorRangeRequest() {},
-      },
-      status: {
-        hasMoreLeft: false,
-        loadingMoreLeft: false,
-        loadingMoreRight: false,
-        initialHistoryPending: false,
-        activeChartReady: bars.length > 0,
-        canLoadMoreLeft: false,
-        canLoadMoreRight: false,
-        canRestoreLatestWindow: false,
-        barCount: bars.length,
-        cacheDiagnostics: () => ({ source, bars: view.bars.length }),
-        trimCacheEntries: () => ({ source, removed: 0 }),
-        indicatorRangeRequests: [],
-        requestDemand: null,
-      },
+    view,
+    actions: {
+      retry() {},
+      async loadMoreLeft() {},
+      async loadMoreRight() { return false; },
+      async restoreLatestWindow() { return false; },
+      onCrosshairMove() {},
+      onVisibleRangeChange() {},
+      consumeIndicatorRangeRequest() {},
     },
+    status: {
+      hasMoreLeft: false,
+      loadingMoreLeft: false,
+      loadingMoreRight: false,
+      initialHistoryPending: false,
+      activeChartReady: bars.length > 0,
+      canLoadMoreLeft: false,
+      canLoadMoreRight: false,
+      canRestoreLatestWindow: false,
+      barCount: bars.length,
+      cacheDiagnostics: () => ({ source, bars: view.bars.length }),
+      trimCacheEntries: () => ({ source, removed: 0 }),
+      indicatorRangeRequests: [],
+      requestDemand: null,
+    },
+  };
+}
+
+function createStaticMarketData(
+  source: string,
+  session: ChartSession,
+  rows: readonly KlineBarInput[],
+): { marketData: MarketDataRuntimeContract; disposeStore(): void } {
+  const copiedRows = rows.map((row) => ({ ...row }));
+  const store = new SeriesWindowStore({
+    maxBars: Math.max(1, copiedRows.length),
+    seriesKey: `${source}:${session.exchange}:${session.marketType}:${session.symbol}:${session.interval}`,
+  });
+  store.replace(copiedRows, { source });
+  return {
+    disposeStore: () => store.clear({ source: `${source}:dispose` }),
+    marketData: storeMarketData(source, session, store),
   };
 }
 
@@ -207,6 +222,7 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
   private currentSession: ChartSession;
   private currentDatasetKey: string;
   private currentMarketData: MarketDataRuntimeContract;
+  private currentOrigin: SyntheticOrigin | undefined;
   private state: MarketChartSourceLifecycleState = "ACTIVE";
   private readonly onPause: (() => void) | undefined;
   private readonly onResume: (() => void) | undefined;
@@ -217,6 +233,7 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
     this.currentSession = cloneSession(input.session);
     this.currentDatasetKey = requiredText(input.datasetKey, "datasetKey");
     this.currentMarketData = input.marketData;
+    this.currentOrigin = input.syntheticOrigin;
     this.onPause = input.onPause;
     this.onResume = input.onResume;
     this.onDispose = input.onDispose;
@@ -225,13 +242,15 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
   get session() { return this.currentSession; }
   get datasetKey() { return this.currentDatasetKey; }
   get marketData() { return this.currentMarketData; }
+  get syntheticOrigin() { return this.currentOrigin; }
   get lifecycle() { return this.state; }
 
-  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData">) {
+  update(input: Pick<LiveReferenceSourceInput, "session" | "datasetKey" | "marketData" | "syntheticOrigin">) {
     if (this.state === "DISPOSED") throw new Error("cannot update a disposed market chart source");
     this.currentSession = cloneSession(input.session);
     this.currentDatasetKey = requiredText(input.datasetKey, "datasetKey");
     this.currentMarketData = input.marketData;
+    this.currentOrigin = input.syntheticOrigin;
   }
 
   pause() {

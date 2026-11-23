@@ -613,9 +613,19 @@
   .wl-th-change,
   .wl-col-change { display: none; }
 }
-/* Narrower rail (a 1024px window): the exchange badge gives way, change % stays */
+/* Narrower rail (a 1024px window): the exchange badge gives way, change % stays, and the delete
+   button is drawn over the row's end while it shows instead of keeping a column, so a ticker of
+   nine characters fits (a longer one is shortened; its title holds it). */
 @container watchlist (max-width: 270px) {
   .wl-exchange-badge { display: none; }
+  .wl-th-actions { display: none; }
+  .wl-sym-del {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    background: var(--surface-hover);
+  }
 }
 /* Very narrow rail: ticker and last price only */
 @container watchlist (max-width: 230px) {

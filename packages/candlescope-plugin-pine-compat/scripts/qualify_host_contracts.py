@@ -72,7 +72,15 @@ def main():
         "test_history_prefix_runtime.py", "test_history_prefix_retention.py",
         "test_history_fetch_stream.py", "test_history_fetch_stream_engine.py",
         "test_chart_calculation_real_bus.py", "test_chart_calculation_ack_loss.py",
-        "test_chart_calculation_source_fencing.py", "test_chart_calculation_transports.py")]
+        "test_chart_calculation_source_fencing.py", "test_chart_calculation_transports.py",
+        # ADR-BACKTEST-015 P0: financial oracles (host BAR, Python, aggTrade, FORWARD; Pine paths).
+        "test_strategy_run_oracles.py", "test_strategy_run_oracles_pine.py", "test_run_result_pine.py",
+        # ADR-BACKTEST-015 P2: Pine runs through the run facade.
+        "test_strategy_runs_pine.py",
+        # ADR-BACKTEST-015 P6: every bar-family fill clock x account model keeps its kernel digests,
+        # and practice accounts keep their behaviour while their model becomes the shared one (P6e).
+        "test_kernel_baselines.py", "test_practice_baselines.py", "test_practice_clock.py",
+        "test_practice_runs.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

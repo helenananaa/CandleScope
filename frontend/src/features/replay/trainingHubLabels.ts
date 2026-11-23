@@ -6,6 +6,7 @@ import type {
   ReplayV2RunState,
   ReplayV2SourceKind,
   ReplayV2TimeDisclosurePolicy,
+  TrainingRunCard,
   TrainingRunCompatibility,
 } from "./replayV2Types.js";
 
@@ -23,6 +24,29 @@ export function trainingRunStateLabel(state: ReplayV2RunState): string {
       return t("replay.state.ended");
     case "ERROR":
       return t("replay.state.error");
+  }
+}
+
+/**
+ * A run's status line. The server sends a status code with a Simplified Chinese message; known codes
+ * show the catalog's message in the reader's language, and an unknown code shows the server's text.
+ * An ended run is described by whether its review can open, whatever its stored status says.
+ */
+export function trainingRunStatusLabel(card: Pick<TrainingRunCard, "state" | "resume_action" | "status">): string {
+  if (card.state === "ENDED") {
+    return card.resume_action === "UNAVAILABLE" ? t("replay.hub.endedUnavailable") : t("replay.hub.endedReviewable");
+  }
+  switch (card.status.code) {
+    case "READY":
+      return t("replay.hub.statusReady");
+    case "AWAITING_MARKET":
+      return t("replay.hub.statusAwaitingMarket");
+    case "UNAVAILABLE":
+      return t("replay.hub.statusUnavailable");
+    case "HEDGE_INPUT_RECOVERY_REQUIRED":
+      return t("replay.hub.statusHedgeRecovery");
+    default:
+      return card.status.message;
   }
 }
 

@@ -1,22 +1,52 @@
 import type { BacktestReplayChartOptions, BacktestReplayExtraSlot, BacktestResultReplayChart } from "../../backtest/backtestTypes.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
-import { defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyRevisionRecord } from "../../backtest/backtestApi.js";
+import {
+  BacktestApiError, defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyReferenceKind, type StrategyRevisionRecord,
+} from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestSnapshot } from "../../backtest/backtestApi.js";
+import { BUILTIN_RSI_PARAMETERS, BUILTIN_RSI_REVISION } from "../../backtest/builtinTemplate.js";
+import type { PythonStudioApi } from "../../backtest/pythonStudio.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
-import { buildImportedExternalRunBody, runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import {
+  buildImportedExternalRunBody, buildImportedSavedRunBody, buildResearchExperimentMembers, buildRobustnessStudy, previewImportedBars,
+  runChartStrategyBacktest, runResearchBacktest,
+  type ChartStrategyRunApi, type ResearchExperimentInput,
+} from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
+import { defaultNativeRunClient, type NativeExecutionMode, type NativeRun, type NativeRunClient } from "../../backtest/native/nativeBacktestApi.js";
 import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
+import { holdFollow, type HeldFollow } from "../../backtest/follow/hostFollow.js";
+import { parseStrategyExperiment, type StrategyExperiment } from "../../backtest/experiment/strategyExperiment.js";
+import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
+import {
+  parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, parseStrategyVersionDraft, StrategyRunContractError,
+  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus, type StrategyVersion, type StrategyVersionDraft,
+} from "../../backtest/runResult/strategyRun.js";
+
+const RETAINED_RUN_RESULTS = 8;
 
 type ExternalInput = Omit<Parameters<typeof buildImportedExternalRunBody>[0], "api" | "signal">;
 type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly body: Record<string, unknown> };
 
-type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
+type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
-  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders">>;
+  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
+    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
+    | "compareRecentRun" | "getSelectedVersion"
+    | "getStrategyVersion" | "getStrategyVersionDraft" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
+    | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
+    | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
+    | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
+    | "retryStrategyExperimentMember" | "watchStrategyExperiment" | "revealStrategyExperimentHoldout" | "adoptStrategyStudy"
+    | "getResearchLaunchContext"
+    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun"
+    | "inspectPythonBundle" | "createPythonBundle" | "createPythonRevision">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -25,12 +55,16 @@ export class StrategyDataManager {
   private readonly results = new ChartStrategyResultCache();
   private readonly updates = new Map<string, StrategyRunUpdate>();
   private readonly retainedResults: string[] = [];
+  /** Completed run results never change, so parsed values are kept by family and run id. */
+  private readonly runResults = new Map<string, RunResult>();
+  private runCapabilities: StrategyRunCapabilities | null = null;
   private streams = 0;
   private closed = false;
 
   readonly continuous: ContinuousStrategyDataManager;
 
-  constructor(private readonly api: StrategyDataApi = defaultBacktestApi, continuousApi: ContinuousApi = defaultContinuousApi) {
+  constructor(private readonly api: StrategyDataApi = defaultBacktestApi, continuousApi: ContinuousApi = defaultContinuousApi,
+    private readonly nativeRuns: NativeRunClient = defaultNativeRunClient) {
     this.continuous = new ContinuousStrategyDataManager(continuousApi, (signal, action) => this.operation(signal, action));
   }
 
@@ -110,6 +144,72 @@ export class StrategyDataManager {
     });
   }
 
+  // -- Saved strategies in the research workspace (ADR-BACKTEST-015 P5c4b) ------
+
+  /** Python bundle authoring (inspect, freeze, smoke), reached through this manager. */
+  pythonStudioApi(): PythonStudioApi {
+    const api = this.api;
+    const call = <T>(name: string, run: (owned: AbortSignal) => Promise<T>, signal?: AbortSignal) => this.operation(signal, (owned) => {
+      if (!api[name as keyof StrategyDataApi]) unavailable();
+      return run(owned);
+    });
+    return {
+      inspectPythonBundle: (zip, signal) => call("inspectPythonBundle", (owned) => api.inspectPythonBundle!(zip, owned), signal),
+      createPythonBundle: (zip, signal) => call("createPythonBundle", (owned) => api.createPythonBundle!(zip, owned), signal),
+      createPythonRevision: (bundleId, signal) => call("createPythonRevision", (owned) => api.createPythonRevision!(bundleId, owned), signal),
+      smokeStrategyRevision: (revisionId, body, signal) => call("smokeStrategyRevision",
+        (owned) => api.smokeStrategyRevision(revisionId, body, owned), signal),
+    };
+  }
+
+  /**
+   * A Python bundle revision the studio froze earlier, found by id, so a reloaded page can offer it again.
+   * Null when the backend no longer lists it (archived, or another database).
+   */
+  savedPythonRevision(revisionId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord | null> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.listStrategyRevisions) unavailable();
+      const revisions = await this.api.listStrategyRevisions(owned);
+      return revisions.find((revision) => revision.revision_id === revisionId && revision.provider_kind === "PYTHON_SOURCE") ?? null;
+    });
+  }
+
+  /** The bar snapshot of imported research data, for a saved strategy's coverage and smoke. */
+  previewImportedBars(source: Parameters<typeof previewImportedBars>[1], signal?: AbortSignal): Promise<BacktestSnapshot> {
+    return this.operation(signal, (owned) => previewImportedBars(this.api, source, owned));
+  }
+
+  /** The frozen builtin RSI (Wilder) template as a strategy revision, with its parameters. */
+  createBuiltinRsiRevision(signal?: AbortSignal): Promise<StrategyRevisionRecord> {
+    return this.operation(signal, (owned) => this.api.createStrategyRevision({
+      name: "RSI (Wilder)", language: "BUILTIN_TEMPLATE", base_revision_id: BUILTIN_RSI_REVISION, source_text: "",
+      parameter_schema: BUILTIN_RSI_PARAMETERS.map((item) => ({ ...item })),
+    }, owned));
+  }
+
+  /**
+   * Run a saved revision over imported candles: smoke it on the run's snapshot (a Python bundle in its
+   * runtime mode), validate, and create the run. Returns the created run.
+   */
+  startSavedRevision(input: Omit<Parameters<typeof buildImportedSavedRunBody>[0], "api" | "signal"> & {
+    python?: { runtimeMode: string; trustedConfirmed: boolean } | null;
+  }, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      const { body: built, snapshot } = await buildImportedSavedRunBody({ ...input, api: this.api, signal: owned });
+      const python: Record<string, unknown> = input.python ? { python_runtime_mode: input.python.runtimeMode,
+        python_trusted_confirmed: input.python.runtimeMode === "TRUSTED_LOCAL" && input.python.trustedConfirmed } : {};
+      const body: Record<string, unknown> = { ...built, ...python };
+      const start = Number(body.start_time_ms);
+      await this.api.smokeStrategyRevision(input.revision.revision_id, {
+        dataset_id: body.dataset_id, snapshot_hash: snapshot.snapshot_hash, start_time_ms: start,
+        end_time_ms: Math.min(Number(body.end_time_ms), start + 7 * 86_400_000), parameters: input.parameters, ...python,
+      }, owned);
+      await this.api.validate(body, owned);
+      owned.throwIfAborted();
+      return this.api.createRun(body, crypto.randomUUID(), owned);
+    });
+  }
+
   prepareExternalModel(input: ExternalInput, signal?: AbortSignal): Promise<ExternalRunDraft> {
     return this.operation(signal, async (owned) => ({
       revision: input.revision,
@@ -168,6 +268,510 @@ export class StrategyDataManager {
 
   loadResult(runId: string, signal?: AbortSignal) {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
+  }
+
+  /** Any run's current status through the run facade (ADR-BACKTEST-015 P2). Never cached. */
+  loadRunStatus(runId: string, signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyRun) unavailable();
+      const status = parseStrategyRunStatus(await this.api.getStrategyRun(runId, owned));
+      owned.throwIfAborted();
+      if (status.run_id !== runId) throw new StrategyRunContractError("run_id", `asked for ${runId}, served ${status.run_id}`);
+      return status;
+    });
+  }
+
+  /**
+   * Follow one fixed run's committed status until it finishes (ADR-BACKTEST-015 P2b).
+   * Resolves with the terminal status, whatever its outcome; releasing the watch never cancels the run.
+   */
+  watchRun(runId: string, onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void,
+    signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      try {
+        return await this.api.watchStrategyRun(runId, owned, (status, progress) => {
+          if (!owned.aborted && !this.closed) onStatus?.(status, progress);
+        });
+      } finally {
+        this.streams -= 1;
+      }
+    });
+  }
+
+  /** The backend's settings for fixed runs (feature flags such as the replay review bridge). */
+  loadBacktestCapabilities(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.capabilities) unavailable();
+      return this.api.capabilities(owned);
+    });
+  }
+
+  /** The server's export of a fixed run: its configuration, report and hashes, as one JSON document. */
+  exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.exportRun) unavailable();
+      return this.api.exportRun(runId, owned);
+    });
+  }
+
+  /**
+   * Run again with changed settings (ADR-BACKTEST-015 P5c): the same strategy and input, with new
+   * parameters, fill accuracy, account, costs or risk limits. Resolves with the new run's record.
+   */
+  deriveRun(runId: string, overrides: Record<string, unknown>, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.deriveRun) unavailable();
+      return this.api.deriveRun(runId, overrides, crypto.randomUUID(), owned);
+    });
+  }
+
+  /** A page of a fixed run's recorded strategy decisions, oldest first. */
+  loadSignalTrace(runId: string, after = 0, limit = 1_000, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getSignalTrace) unavailable();
+      return this.api.getSignalTrace(runId, after, limit, owned);
+    });
+  }
+
+  /**
+   * A blind review of a completed run in training replay (ADR-BACKTEST-001): the server creates a
+   * training session over the run's window that shares only the fixed data and a read-only result.
+   */
+  createReviewBridge(runId: string, startTimeMs: number, endTimeMs: number, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createReviewBridge) unavailable();
+      return this.api.createReviewBridge(runId, startTimeMs, endTimeMs, owned);
+    });
+  }
+
+  revealReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.revealReviewBridge) unavailable();
+      return this.api.revealReviewBridge(bridgeId, owned);
+    });
+  }
+
+  /**
+   * Experiments (ADR-BACKTEST-015 P5b): one strategy run over several inputs. The backend submits and
+   * keeps the members; a closed page, a switched chart or a restart does not cancel or lose them.
+   */
+  createExperiment(body: Record<string, unknown>, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.createStrategyExperiment(body, owned));
+    });
+  }
+
+  loadExperiment(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.getStrategyExperiment(experimentId, owned));
+    });
+  }
+
+  /**
+   * Run one research request over several inputs as an experiment (ADR-BACKTEST-015 P5b): its members
+   * are built here (one strategy revision, each input's snapshot or preparation) and kept by the backend.
+   */
+  createResearchExperiment(input: { request: ChartStrategyRunRequest; inputs: readonly ResearchExperimentInput[] },
+    signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      const { revision, members } = await buildResearchExperimentMembers({ api: this.api, request: input.request, inputs: input.inputs, signal: owned });
+      return parseStrategyExperiment(await this.api.createStrategyExperiment({
+        idempotency_key: crypto.randomUUID(),
+        name: input.request.displayName,
+        strategy: { language: input.request.language, draft_id: input.request.draftId,
+          draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
+        members,
+      }, owned));
+    });
+  }
+
+  /**
+   * A robustness check (ADR-BACKTEST-015 P5c3): the request's Python strategy as a Study V2 over an
+   * imported dataset with contract data. ``fields`` is the rule (windows, parameter space, selection).
+   */
+  createRobustnessExperiment(input: { request: ChartStrategyRunRequest; dataset: { dataset_id: string; data_epoch: string; interval: string };
+    fields: Parameters<typeof buildRobustnessStudy>[0]["fields"] }, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      const { revision, study } = await buildRobustnessStudy({ api: this.api, request: input.request, dataset: input.dataset,
+        fields: input.fields, signal: owned });
+      return parseStrategyExperiment(await this.api.createStrategyExperiment({
+        idempotency_key: crypto.randomUUID(),
+        name: input.request.displayName,
+        kind: "ROBUSTNESS",
+        strategy: { language: input.request.language, draft_id: input.request.draftId,
+          draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
+        study,
+      }, owned));
+    });
+  }
+
+  /** A study the research tools made, as a robustness experiment (its `?study=` link opens in the workspace, P5d). */
+  adoptStudyExperiment(studyId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.adoptStrategyStudy) unavailable();
+      return parseStrategyExperiment(await this.api.adoptStrategyStudy(studyId, owned));
+    });
+  }
+
+  /** A launch context behind an older `?context=` link: the chart, draft and run it carried to research. */
+  loadResearchLaunchContext(contextId: string, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getResearchLaunchContext) unavailable();
+      return this.api.getResearchLaunchContext(contextId, owned);
+    });
+  }
+
+  /** Open a robustness check's sealed holdout once every fold has selected a candidate. */
+  revealExperimentHoldout(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.revealStrategyExperimentHoldout) unavailable();
+      return parseStrategyExperiment(await this.api.revealStrategyExperimentHoldout(experimentId, owned));
+    });
+  }
+
+  /** The newest experiments, newest first. */
+  listExperiments(limit = 20, signal?: AbortSignal): Promise<StrategyExperiment[]> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.listStrategyExperiments) unavailable();
+      const body = await this.api.listStrategyExperiments(limit, owned) as { experiments?: unknown };
+      if (!Array.isArray(body?.experiments)) throw new StrategyRunStreamError("STRATEGY_STREAM_INVALID", "experiments must be a list");
+      return body.experiments.map(parseStrategyExperiment);
+    });
+  }
+
+  /** Stop the members still preparing or running; finished members keep their results. */
+  cancelExperiment(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.cancelStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.cancelStrategyExperiment(experimentId, owned));
+    });
+  }
+
+  /** Submit a failed or cancelled member again. */
+  retryExperimentMember(experimentId: string, ordinal: number, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.retryStrategyExperimentMember) unavailable();
+      return parseStrategyExperiment(await this.api.retryStrategyExperimentMember(experimentId, ordinal, owned));
+    });
+  }
+
+  /**
+   * Follow an experiment through its commit-driven stream: each member's preparation and run
+   * changes are reported, without polling. Resolves once no member is active; stopping the watch
+   * never cancels the experiment.
+   */
+  watchExperiment(experimentId: string, onExperiment: (value: StrategyExperiment) => void,
+    signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.watchStrategyExperiment) unavailable();
+      this.streams += 1;
+      try {
+        return await this.api.watchStrategyExperiment(experimentId, (value) => {
+          if (!owned.aborted && !this.closed) onExperiment(value);
+        }, owned);
+      } finally {
+        this.streams -= 1;
+      }
+    });
+  }
+
+  /**
+   * Hold a chart FOLLOW run for one cell (ADR-BACKTEST-015 P4b) until `signal` aborts: create or
+   * join it, renew its lease, and release it at the end. `onReady` reports the run to show once it
+   * has a result. Rejects when the backend refuses the input; the caller keeps the fixed result.
+   */
+  holdFollowRun(body: Record<string, unknown>, holder: string, onReady: (held: HeldFollow) => void,
+    signal: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      const api = this.api;
+      const hold = api.holdStrategyFollow, renew = api.renewStrategyFollow, release = api.releaseStrategyFollow;
+      if (!hold || !renew || !release) unavailable();
+      return holdFollow({
+        hold: (value, at) => hold.call(api, value, at),
+        renew: (followId, who, at) => renew.call(api, followId, who, at),
+        release: (followId, who) => release.call(api, followId, who),
+        ready: (followId, at) => this.followReady(followId, at),
+        gone: (failure) => failure instanceof BacktestApiError && failure.status === 404,
+      }, body, holder, onReady, owned);
+    });
+  }
+
+  /** Resolves once a FOLLOW run has a result: it caught up, possibly as a recomputed generation. */
+  private async followReady(runId: string, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      const watch = new AbortController();
+      const stop = () => watch.abort(signal.reason);
+      signal.addEventListener("abort", stop, { once: true });
+      let ready = false;
+      try {
+        const last = await this.watchRun(runId, (status) => {
+          if (status.result_available) { ready = true; watch.abort(); }
+        }, watch.signal);
+        if (last.result_available) return;
+        throw new StrategyRunStreamError(last.error?.code ?? "RUN_STOPPED", "The FOLLOW run stopped before it had a result");
+      } catch (failure) {
+        if (ready) return;
+        if (signal.aborted) throw failure;
+        if (failure instanceof StrategyRunStreamError && failure.code === "RUN_IDENTITY_CHANGED") continue;
+        throw failure;
+      } finally {
+        signal.removeEventListener("abort", stop);
+      }
+    }
+  }
+
+  /**
+   * Follow a host run to its end through the run facade's status stream. Updates carry the
+   * run's header with its new state; the full record is read once at the end and returned
+   * whatever the outcome (a failed run is a result, not an error).
+   */
+  followHostRun(runId: string, onUpdate?: (run: BacktestRunRecord) => void, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      let latest = await this.api.getRun(runId, owned);
+      if (isBacktestTerminalState(latest.state)) return latest;
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      try {
+        await this.api.watchStrategyRun(runId, owned, (status) => {
+          if (owned.aborted || this.closed || status.terminal || status.source_state === latest.state) return;
+          latest = { ...latest, state: status.source_state as BacktestRunRecord["state"] };
+          onUpdate?.(latest);
+        });
+      } finally {
+        this.streams -= 1;
+      }
+      const record = await this.api.getRun(runId, owned);
+      if (!isBacktestTerminalState(record.state)) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "The finished run's record is not terminal");
+      }
+      return record;
+    });
+  }
+
+  /** Run the chart's strategy on the chart's history; the run is followed by stream, not polled. */
+  runChartStrategy(options: Omit<Parameters<typeof runChartStrategyBacktest>[0], "api" | "waitForTerminal">) {
+    return this.operation(options.signal, (signal) => runChartStrategyBacktest({
+      ...options, api: this.api, signal,
+      waitForTerminal: (runId, _signal, onUpdate) => this.followHostRun(runId, onUpdate, signal),
+    }));
+  }
+
+  compareRecentRun(runId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.compareRecentRun) unavailable();
+      return this.api.compareRecentRun(runId, owned);
+    });
+  }
+
+  /** The strategy version a research run selected, for returning it to a chart. */
+  loadSelectedRunVersion(runId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.getSelectedVersion) unavailable();
+      return this.api.getSelectedVersion(runId, owned);
+    });
+  }
+
+  // -- Strategy versions (ADR-BACKTEST-015 P3b) -----------------------------
+
+  /** The exact code of a version, with the names pointing at it. */
+  loadStrategyVersion(versionHash: string, signal?: AbortSignal): Promise<StrategyVersion> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyVersion) unavailable();
+      const version = parseStrategyVersion(await this.api.getStrategyVersion(versionHash, owned));
+      if (version.version_hash !== versionHash) throw new StrategyRunContractError("version_hash", `asked for ${versionHash}, served ${version.version_hash}`);
+      return version;
+    });
+  }
+
+  /** A version as editor text, to edit as a new draft; versions without editor text are refused. */
+  loadStrategyVersionDraft(versionHash: string, signal?: AbortSignal): Promise<StrategyVersionDraft> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyVersionDraft) unavailable();
+      const draft = parseStrategyVersionDraft(await this.api.getStrategyVersionDraft(versionHash, owned));
+      if (draft.version_hash !== versionHash) throw new StrategyRunContractError("version_hash", `asked for ${versionHash}, served ${draft.version_hash}`);
+      return draft;
+    });
+  }
+
+  listStrategyVersionNames(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.strategyVersionNames) unavailable();
+      return (await this.api.strategyVersionNames(owned)).names;
+    });
+  }
+
+  /** "Named save": point a name at a version. Naming again moves the name. */
+  nameStrategyVersion(name: string, versionHash: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.nameStrategyVersion) unavailable();
+      return this.api.nameStrategyVersion(name, versionHash, owned);
+    });
+  }
+
+  unnameStrategyVersion(name: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.unnameStrategyVersion) unavailable();
+      return this.api.unnameStrategyVersion(name, owned);
+    });
+  }
+
+  // -- Strategy references (ADR-BACKTEST-015 P3c) ---------------------------
+
+  /** A reference's stored value (unvalidated: each kind's reader validates it), or null. */
+  loadStrategyReference(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<unknown> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.getStrategyReference) unavailable();
+      return this.api.getStrategyReference(kind, key, owned);
+    });
+  }
+
+  listStrategyReferences(kind: StrategyReferenceKind, prefix = "", signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.listStrategyReferences) unavailable();
+      return this.api.listStrategyReferences(kind, prefix, owned);
+    });
+  }
+
+  saveStrategyReference(kind: StrategyReferenceKind, key: string, value: unknown, signal?: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.putStrategyReference) unavailable();
+      return this.api.putStrategyReference(kind, key, value, owned);
+    });
+  }
+
+  removeStrategyReference(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.removeStrategyReference) unavailable();
+      return this.api.removeStrategyReference(kind, key, owned);
+    });
+  }
+
+  /** Bring browser-storage entries in once; entries the backend already holds are kept. */
+  importStrategyReferences(kind: StrategyReferenceKind, entries: Array<{ key: string; value: unknown }>, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.importStrategyReferences) unavailable();
+      return this.api.importStrategyReferences(kind, entries, owned);
+    });
+  }
+
+  // -- Native and CandleScope-matched runs ----------------------------------
+
+  createNativeRun(mode: NativeExecutionMode, body: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.create(mode, body, idempotencyKey, owned));
+  }
+
+  loadNativeRun(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.get(mode, runId, owned));
+  }
+
+  /** The recent runs of one mode, plus any `include` ids the list no longer holds (unreadable ones are skipped). */
+  listNativeRuns(mode: NativeExecutionMode, include: Iterable<string> = [], signal?: AbortSignal): Promise<NativeRun[]> {
+    return this.operation(signal, async (owned) => {
+      const runs = await this.nativeRuns.list(mode, owned);
+      const listed = new Set(runs.map((run) => run.run_id));
+      const missing = [...new Set(include)].filter((runId) => !listed.has(runId));
+      const restored = await Promise.all(missing.map((runId) => this.nativeRuns.get(mode, runId, owned).catch(() => null)));
+      return [...runs, ...restored.filter((run): run is NativeRun => run !== null)];
+    });
+  }
+
+  cancelNativeRun(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.cancel(mode, runId, owned));
+  }
+
+  /**
+   * Follow a native run through the run facade's stream (no polling). Each committed state
+   * change updates its header; the finished record (result or error) is read once.
+   */
+  followNativeRun(current: NativeRun, onRun: (run: NativeRun) => void, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, async (owned) => {
+      let latest = current;
+      const mode: NativeExecutionMode = current.execution_mode === "CANDLESCOPE" ? "CANDLESCOPE" : "NATIVE";
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      let terminal: StrategyRunStatus;
+      try {
+        terminal = await this.api.watchStrategyRun(current.run_id, owned, (status) => {
+          if (owned.aborted || this.closed || status.terminal || status.source_state === latest.state) return;
+          latest = { ...latest, state: status.source_state };
+          onRun(latest);
+        });
+      } finally {
+        this.streams -= 1;
+      }
+      const record = await this.nativeRuns.get(mode, current.run_id, owned);
+      if (record.run_id !== current.run_id || record.state !== terminal.source_state) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Native run record differs from its finished status");
+      }
+      onRun(record);
+      return record;
+    });
+  }
+
+  /** Cancel any run family's run; returns its status. Cancelling a finished run changes nothing. */
+  cancelStrategyRun(runId: string, signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.cancelStrategyRun) unavailable();
+      const status = parseStrategyRunStatus(await this.api.cancelStrategyRun(runId, owned));
+      if (status.run_id !== runId) throw new StrategyRunContractError("run_id", `asked for ${runId}, served ${status.run_id}`);
+      return status;
+    });
+  }
+
+  /**
+   * The backend's one capability matrix. Reading it starts the script engines to
+   * describe them, so it is kept until `refresh` asks again.
+   */
+  loadRunCapabilities(signal?: AbortSignal, { refresh = false }: { refresh?: boolean } = {}): Promise<StrategyRunCapabilities> {
+    return this.operation(signal, async (owned) => {
+      if (this.runCapabilities && !refresh) return this.runCapabilities;
+      if (!this.api.strategyRunCapabilities) unavailable();
+      const capabilities = parseStrategyRunCapabilities(await this.api.strategyRunCapabilities(owned));
+      owned.throwIfAborted();
+      this.runCapabilities = capabilities;
+      return capabilities;
+    });
+  }
+
+  /**
+   * A run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family.
+   * A finished fixed run never changes, so it is cached; a forward run's result is its
+   * committed account at the moment of the read (P2d), and a FOLLOW run's its state at the
+   * chart's newest applied bar (P4b), so those are read every time.
+   */
+  loadRunResult(family: RunResultFamily, runId: string, signal?: AbortSignal): Promise<RunResult> {
+    return this.operation(signal, async (owned) => {
+      const key = `${family}\u0000${runId}`;
+      const clock = family === "continuous" ? "FORWARD" : family === "follow" ? "FOLLOW" : "FIXED";
+      const live = clock !== "FIXED";
+      const cached = live ? undefined : this.runResults.get(key);
+      if (cached) {
+        this.runResults.delete(key);
+        this.runResults.set(key, cached);
+        return cached;
+      }
+      if (!this.api.getStrategyRunResult) unavailable();
+      const raw = await this.api.getStrategyRunResult(runId, owned);
+      owned.throwIfAborted();
+      const result = parseRunResult(raw);
+      const expected = RUN_RESULT_FAMILY_IDENTITY[family];
+      if (result.source !== expected.source || result.authority !== expected.authority) {
+        throw new RunResultContractError("source", `${family} runs must be served by ${expected.source} with ${expected.authority} authority`);
+      }
+      if (result.clock_policy !== clock) {
+        throw new RunResultContractError("clock_policy", `${family} runs cannot be served as ${result.clock_policy}`);
+      }
+      if (live) return result;
+      this.runResults.set(key, result);
+      while (this.runResults.size > RETAINED_RUN_RESULTS) this.runResults.delete(this.runResults.keys().next().value!);
+      return result;
+    });
   }
 
   loadResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal) {
@@ -278,7 +882,7 @@ export class StrategyDataManager {
 
   diagnostics() {
     return { closed: this.closed, operations: this.operations.size, streams: this.streams,
-      continuous: this.continuous.diagnostics(), results: this.results.diagnostics(), runs: [...this.updates].map(([runId, event]) => ({
+      continuous: this.continuous.diagnostics(), results: this.results.diagnostics(), runResults: this.runResults.size, runs: [...this.updates].map(([runId, event]) => ({
         runId, state: event.run.state, snapshotHash: event.run.snapshot_hash,
         configHash: event.run.config_hash, progress: event.progress,
       })) };
@@ -290,6 +894,12 @@ export class StrategyDataManager {
     for (const operation of this.operations) operation.abort();
     this.results.clear();
     this.retainedResults.length = 0;
+    this.runResults.clear();
+    this.runCapabilities = null;
     this.updates.clear();
   }
+}
+
+function unavailable(): never {
+  throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Run results are unavailable from this backend");
 }

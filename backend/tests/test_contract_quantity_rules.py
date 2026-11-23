@@ -7,7 +7,7 @@ import pytest
 from app.market_dataset.snapshot import MarketEvent, MarketDatasetError
 from app.simulation.kernel import SimulationKernel
 from app.simulation.trade_kernel import TradeSimulationKernel
-from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+from app.simulation.ohlc_path import PINE_V2
 from tests.test_backtest_account_v2_m4 import rules, ready
 from tests.test_pine_bar_kernel import bar
 
@@ -19,8 +19,9 @@ def contract(multiplier='1',minimum='.25',maximum='1000',min_notional='1'):
 
 
 def subject(kind):
-    cls={'BAR':SimulationKernel,'TRADE':TradeSimulationKernel,'PINE_BAR':PineV2BarKernel}[kind]
-    return cls(account_model='LINEAR_PERP_ONE_WAY_V2',leverage=D(10),slippage_bps=D(0))
+    cls={'BAR':SimulationKernel,'TRADE':TradeSimulationKernel,'PINE_BAR':SimulationKernel}[kind]
+    return cls(account_model='LINEAR_PERP_ONE_WAY_V2',leverage=D(10),slippage_bps=D(0),
+               **({'bar_clock':PINE_V2} if kind=='PINE_BAR' else {}))
 
 
 def execute(kind,rule,qty):

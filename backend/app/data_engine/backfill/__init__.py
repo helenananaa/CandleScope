@@ -47,6 +47,7 @@ Usage::
 from __future__ import annotations
 
 from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views, StaleAcquisition,
+                                               prepare_planned_write_views,
                                                prepare_derived_targets, prepare_warmup_view)
 from app.data_engine.memory_budget import budgeted_work, reserve_work, MemoryBudgetExceeded
 
@@ -483,6 +484,12 @@ class BackfillEngine:
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
+            # Archive routing decides what a task really writes. Capture those
+            # windows as soon as the built-in fetcher knows them.
+            if getattr(self.fetcher.fetch, '__func__', None) is HistoricalFetcher.fetch:
+                async def capture_planned_windows(windows):
+                    await prepare_planned_write_views(self._storage, windows)
+                page_options = {**page_options, 'on_write_windows': capture_planned_windows}
             if plan.derived_source_windows:
                 prepare_warmup_view(plan.derived_source_windows)
                 fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress, **page_options)

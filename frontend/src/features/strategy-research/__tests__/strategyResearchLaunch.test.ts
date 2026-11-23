@@ -51,7 +51,7 @@ test("legacy deep links run/compare/context still parse", () => {
 
 test("every page, including the compatibility URLs, opens the one strategy research app", () => {
   const bootstrap = readFileSync(path.resolve(here, "../strategyResearchBootstrap.tsx"), "utf8");
-  assert.match(bootstrap, /return <StrategyResearchApp intent=\{intent\} \/>;/);
+  assert.match(bootstrap, /return <StrategyResearchApp intent=\{intent\} \{\.\.\.\(input\.handoff !== undefined \? \{ handoff: input\.handoff \} : \{\}\)\} \/>;/);
   assert.doesNotMatch(bootstrap, /LocalApp|BacktestApp\b|BacktestResearchDisabled|local-legacy|backtest-legacy|libraryEnabled/);
 });
 

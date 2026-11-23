@@ -158,7 +158,8 @@ test("unified app owns one library store and drawer does not create another", ()
   assert.match(appSource, /importedDatasetSourceFromManifest/);
   assert.doesNotMatch(drawerSource, /useResearchDataLibrary\(\)/);
   assert.match(drawerSource, /library\?:/);
-  assert.match(chartSource, /followLatest=\{false\}/);
+  assert.match(chartSource, /followLatest: false/);
+  assert.match(chartSource, /<MarketChartSurface/);
   assert.match(chartSource, /realtimeMode="historical-only"/);
 });
 

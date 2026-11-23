@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from app.core.committed_updates import committed_updates_for
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
@@ -152,7 +154,10 @@ class NativeBacktests:
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="native-backtest")
         self.cancel_events = {}
         self.closed = False
-        self.db = sqlite3.connect(runtime.settings.db_path.with_name("native-backtests.db"), check_same_thread=False)
+        db_path = runtime.settings.db_path.with_name("native-backtests.db")
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        # Wakes run watchers after each committed state change; carries no data.
+        self.run_updates = committed_updates_for(db_path, "native-runs")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, key TEXT UNIQUE, hash TEXT NOT NULL, record TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS native_inputs (id TEXT PRIMARY KEY, wire TEXT NOT NULL)")
@@ -425,6 +430,7 @@ class NativeBacktests:
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
             self._save_summary(record)
             self.db.commit()
+            self._record_version(record)
             cancel = threading.Event()
             self.cancel_events[run_id] = cancel
             self.pool.submit(self._execute, run_id, plugin, wire, cancel)
@@ -443,6 +449,38 @@ class NativeBacktests:
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native run not found")
             return json.loads(row[0])
+
+    def _record_version(self, record):
+        """Link the new run to the version of its code (ADR-BACKTEST-015 P3b); best effort, like the host."""
+        from .strategy_versions import StrategyVersions, native_material
+        try:
+            StrategyVersions(self.runtime.service.repository).record(
+                native_material(record), run_id=record["run_id"],
+                family="external" if record["execution_mode"] == "CANDLESCOPE" else "native",
+                now_ms=int(record["created_at_ms"]))
+        except Exception:
+            logging.getLogger(__name__).warning("Strategy version for run %s was not recorded", record["run_id"],
+                                                exc_info=True)
+
+    def status_summary(self, run_id):
+        """State, profile and whether a result is stored, without decoding the report."""
+        with self.lock:
+            try:
+                row = self.db.execute("""SELECT s.record, json_extract(r.record,'$.config.language'),
+                    json_extract(r.record,'$.config.execution_fidelity'), json_type(r.record,'$.result')
+                    FROM native_run_summaries s JOIN runs r ON r.id=s.id WHERE s.id=?""", (run_id,)).fetchone()
+            except sqlite3.OperationalError as exc:
+                if str(exc) != "malformed JSON":
+                    raise
+                # Preserve the ordinary reader's malformed-record exception.
+                record = self.get(run_id)
+                config = record.get("config") or {}
+                return {**{key: value for key, value in record.items() if key not in {"result", "config"}},
+                        "language": config.get("language"), "execution_fidelity": config.get("execution_fidelity"),
+                        "result_present": isinstance(record.get("result"), dict)}
+        if row is None:
+            raise BacktestError("RUN_NOT_FOUND", "native run not found")
+        return {**json.loads(row[0]), "language": row[1], "execution_fidelity": row[2], "result_present": row[3] == "object"}
 
     def list(self):
         with self.lock:
@@ -486,6 +524,7 @@ class NativeBacktests:
         self.db.execute("UPDATE runs SET record=? WHERE id=?", (encoded(record), run_id))
         self._save_summary(record)
         self.db.commit()
+        self.run_updates.notify(run_id)
 
     def _mark_running(self, run_id):
         # Only the initial state changes here. Keep the complete frozen input
@@ -508,6 +547,7 @@ class NativeBacktests:
             return
         self._save_summary(json.loads(row[0]))
         self.db.commit()
+        self.run_updates.notify(run_id)
 
     def _execute(self, run_id, plugin, wire, cancel):
         try:

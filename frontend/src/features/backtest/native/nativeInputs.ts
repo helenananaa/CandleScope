@@ -97,6 +97,16 @@ export function automaticHostExecution(mode: "NATIVE" | "CANDLESCOPE", hostSetti
     ...hostOptions(fidelity, fillRecalculation, options) }; } catch { return undefined; }
 }
 
+export const BOOK_FIDELITIES: readonly string[] = ["BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"];
+
+/**
+ * Book tiers match against an uploaded trade and book file (a research chart-book file works too,
+ * ADR-BACKTEST-015 P5c4c); nothing is fetched for them, so a run without one cannot start.
+ */
+export function bookFileRequired(mode: "NATIVE" | "CANDLESCOPE", fidelity: string, executionData: unknown): boolean {
+  return mode === "CANDLESCOPE" && BOOK_FIDELITIES.includes(fidelity) && (executionData === null || executionData === undefined);
+}
+
 export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown, options?: WorkbenchOptions): WorkbenchAccountPayload & {
   host_settings?: Record<string, number>; execution_fidelity?: string; fill_recalculation?: boolean; execution_data?: unknown;
   cost_sensitivity_mode?: "AUTO" | "SKIP";

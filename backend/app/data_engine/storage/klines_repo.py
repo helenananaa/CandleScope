@@ -669,7 +669,8 @@ def import_history_archive(
 
     with _ARCHIVE_IMPORT_WRITE_LOCK:
         with _connect() as conn:
-            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity)):
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
+                               native_rows=rows, source=source):
                 existing = conn.execute(
                     "SELECT content_sha256, import_version, row_count "
                     "FROM history_archive_imports WHERE object_key = ?",

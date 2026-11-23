@@ -34,23 +34,9 @@ import {
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
   chartStrategyWinRate,
+  dateTime,
+  signedClass,
 } from "./chartStrategyResultModel.js";
-
-function dateTime(value: number, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function signedClass(value: string): string {
-  const number = Number(value);
-  return Number.isFinite(number) ? (number > 0 ? "positive" : number < 0 ? "negative" : "flat") : "flat";
-}
 
 function fidelityLabel(value: string): string {
   if (value === "BAR_APPROX") return t("chartTester.result.fidelityFast");
@@ -187,7 +173,7 @@ export function ChartStrategyResultContextBar({
   );
 }
 
-function ResultMetric({ label, value, detail = "", rawValue = value }: { label: string; value: string; detail?: string; rawValue?: string }) {
+export function ResultMetric({ label, value, detail = "", rawValue = value }: { label: string; value: string; detail?: string; rawValue?: string }) {
   return (
     <div className="chart-strategy-result-metric">
       <span>{label}</span>
@@ -203,12 +189,18 @@ export function ChartStrategyResultOverview({
   comparison,
   onOpenTrades,
   onOpenAdvanced,
+  advancedLabel,
+  onOpenCompare,
 }: {
   result: ChartStrategyResultBundle;
   stale: boolean;
   comparison?: RecentRunCompareV1 | null;
   onOpenTrades(): void;
   onOpenAdvanced?: () => void;
+  /** What the advanced action opens, where it is not the research tool (the research workspace's run details). */
+  advancedLabel?: string;
+  /** Where the full comparison opens, if not with the advanced action. */
+  onOpenCompare?: () => void;
 }) {
   const { report, chart, run } = result;
   const reportedQuote = report.data_quality?.quote_asset;
@@ -268,8 +260,8 @@ export function ChartStrategyResultOverview({
                   : t("chartTester.compare.incompatible")
                 : t("chartTester.compare.noBaseline")}</span>
             </div>
-            {onOpenAdvanced
-              ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.compare.full")}</Button>
+            {onOpenCompare ?? onOpenAdvanced
+              ? <Button size="sm" variant="ghost" onClick={onOpenCompare ?? onOpenAdvanced}>{t("chartTester.compare.full")}</Button>
               : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.compare.full")}</a>}
           </div>
           {directComparison && (
@@ -319,7 +311,7 @@ export function ChartStrategyResultOverview({
           <div><dt>{t("chartTester.result.reportHash")}</dt><dd title={result.reportHash}>{result.reportHash.slice(0, 18)}…</dd></div>
         </dl>
         {onOpenAdvanced
-          ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</Button>
+          ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{advancedLabel ?? t("chartTester.openAdvanced")}</Button>
           : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.openAdvanced")}</a>}
       </Disclosure>
     </div>

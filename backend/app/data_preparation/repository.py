@@ -26,7 +26,12 @@ TERMINAL = frozenset({"READY", "FAILED", "CANCELLED"})
 
 class PreparationRepository:
     def __init__(self, path: Path, *, cache_budget_bytes=None):
+        from app.core.committed_updates import committed_updates_for
+
         self.path = Path(path)
+        # Wakeups for a job's committed changes (state, progress, waiting): an
+        # experiment's stream follows its preparations without polling (ADR-BACKTEST-015 P5b).
+        self.updates = committed_updates_for(self.path, "preparation-jobs")
         self._default_cache_budget_bytes = cache_budget_bytes or 2 * 1024**3
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
@@ -208,7 +213,9 @@ class PreparationRepository:
                 (id,idempotency_key,fingerprint,request,state,stage,total,reserved_bytes,created_ms,updated_ms)
                 VALUES (?,?,?,?,'QUEUED','QUEUED',?,?,?,?)""",
                 (job_id, request.idempotency_key, request.identity(), canonical(request.model_dump()), total, reserved, now, now))
-            return self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
+            created = self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
+        self.updates.notify(job_id)
+        return created
 
     def get(self, job_id):
         with self.connect() as db:
@@ -301,6 +308,7 @@ class PreparationRepository:
                  completed if completed is not None else job["completed"],
                  canonical(result) if result is not None else (canonical(job["result"]) if job["result"] is not None else None),
                  canonical(error) if error is not None else None, self.now(), job_id))
+        self.updates.notify(job_id)
         return self.get(job_id)
 
     def set_waiting(self, job_id, waiting):
@@ -309,6 +317,7 @@ class PreparationRepository:
             db.execute("""UPDATE preparation_jobs SET waiting=?,revision=revision+1,updated_ms=?
                 WHERE id=? AND waiting IS NOT ? AND (state='RUNNING' OR ? IS NULL)""",
                 (value, self.now(), job_id, value, value))
+        self.updates.notify(job_id)
 
     def cancel(self, job_id):
         with self.connect() as db:
@@ -319,6 +328,7 @@ class PreparationRepository:
             if row["state"] not in TERMINAL:
                 db.execute("UPDATE preparation_jobs SET cancel_requested=1,revision=revision+1,updated_ms=? WHERE id=?",
                            (self.now(), job_id))
+        self.updates.notify(job_id)
         return self.get(job_id)
 
     def begin_start(self, job_id, result):
@@ -329,6 +339,7 @@ class PreparationRepository:
                 raise PreparationError("CANCELLED", "Data preparation was cancelled")
             db.execute("UPDATE preparation_jobs SET stage='STARTING',result=?,revision=revision+1,updated_ms=? WHERE id=?",
                        (canonical(result), self.now(), job_id))
+        self.updates.notify(job_id)
 
     def retry(self, job_id):
         with self.connect() as db:
@@ -345,6 +356,7 @@ class PreparationRepository:
                 raise PreparationError("STORAGE_BUDGET", "Insufficient preparation cache budget to resume")
             db.execute("UPDATE preparation_jobs SET state='QUEUED',stage='QUEUED',error=NULL,cancel_requested=0,attempts=0,next_attempt_ms=0,revision=revision+1,updated_ms=? WHERE id=?",
                        (self.now(), job_id))
+        self.updates.notify(job_id)
         return self.get(job_id)
 
     def trade_day_retry_at(self, exchange: str, market_type: str, symbol: str, day_ms: int) -> int | None:
@@ -382,6 +394,7 @@ class PreparationRepository:
             attempts = job["attempts"] + 1
             db.execute("UPDATE preparation_jobs SET state='QUEUED',stage='WAITING_RETRY',attempts=?,next_attempt_ms=?,error=?,revision=revision+1,updated_ms=? WHERE id=?",
                        (attempts, self.now() + min(60_000, 2000 * 2**attempts), canonical(error), self.now(), job_id))
+        self.updates.notify(job_id)
 
     def cache_inventory(self):
         with self.connect() as db:
