@@ -186,6 +186,11 @@ export function useChartLoadMoreLeft({
   const activeSeries = { exchange, marketType, symbol, interval, ...seriesIdentity };
   const sessionKey = String(seriesDataFeed.seriesKey(activeSeries));
   const [loadingMoreLeft, setLoadingMoreLeftState] = useState(false);
+  // A pending page has committed only part of its rows: the rows next to the
+  // previous boundary can still be missing. It keeps reporting older history
+  // as loading until the feed settles that page, so the chart never reports
+  // a seam hole as finished history.
+  const [pendingPageHeld, setPendingPageHeldState] = useState(false);
   const [hasMoreLeft, setHasMoreLeftState] = useState(true);
   const [paginationState, setPaginationState] = useState<LeftPaginationState>({
     sessionKey,
@@ -194,6 +199,7 @@ export function useChartLoadMoreLeft({
     nextBefore: null,
   });
   const loadingMoreLeftRef = useRef(false);
+  const pendingPageHeldRef = useRef(false);
   const hasMoreLeftRef = useRef(true);
   const sessionKeyRef = useRef(sessionKey);
   const sessionGenerationRef = useRef(0);
@@ -225,6 +231,15 @@ export function useChartLoadMoreLeft({
     hasMoreLeftRef.current = value;
     setHasMoreLeftState(value);
   }, []);
+  const setPendingPageHeld = useCallback((value: boolean) => {
+    if (pendingPageHeldRef.current === value) return;
+    pendingPageHeldRef.current = value;
+    setPendingPageHeldState(value);
+  }, []);
+  const clearPendingOwnership = useCallback(() => {
+    pendingBeforePageRef.current = null;
+    setPendingPageHeld(false);
+  }, [setPendingPageHeld]);
 
   const oldestChartTime = chartData[0]?.time ?? null;
   const loadMorePageSize = planLoadMorePageSize(interval, nativeIntervalValues, tradeCandlesAvailable, historyComposition);
@@ -235,7 +250,7 @@ export function useChartLoadMoreLeft({
     abortRef.current?.abort();
     abortRef.current = null;
     inflightRef.current = null;
-    pendingBeforePageRef.current = null;
+    clearPendingOwnership();
     setLoadingMoreLeft(false);
     setHasMoreLeft(true);
     setPaginationState({
@@ -244,7 +259,7 @@ export function useChartLoadMoreLeft({
       requestedBefore: null,
       nextBefore: null,
     });
-  }, [sessionKey, setHasMoreLeft, setLoadingMoreLeft]);
+  }, [clearPendingOwnership, sessionKey, setHasMoreLeft, setLoadingMoreLeft]);
 
   useEffect(() => {
     sessionKeyRef.current = sessionKey;
@@ -258,9 +273,8 @@ export function useChartLoadMoreLeft({
     };
   }, [resetPagination, sessionKey]);
 
-  useEffect(() => {
+  const syncPendingOwnership = useCallback(() => {
     const ownership = pendingBeforePageRef.current;
-    if (!ownership) return;
     const feedPending = seriesDataFeed.getPendingBeforePage({
       exchange,
       marketType,
@@ -268,8 +282,11 @@ export function useChartLoadMoreLeft({
       interval,
       ...seriesIdentity,
     });
-    if (feedPending?.before === ownership.requestedBefore) return;
-    pendingBeforePageRef.current = null;
+    if (ownership && feedPending?.before === ownership.requestedBefore) return;
+    // The page left the feed: it was proven complete, became exhausted, or
+    // its epoch was cancelled. Only then may older history stop loading.
+    clearPendingOwnership();
+    if (!ownership) return;
     nextBeforeRef.current = null;
     setPaginationState((current) => (
       current.sessionKey === sessionKey && current.phase === "pending"
@@ -277,7 +294,7 @@ export function useChartLoadMoreLeft({
         : current
     ));
   }, [
-    chartData,
+    clearPendingOwnership,
     exchange,
     interval,
     marketType,
@@ -286,6 +303,14 @@ export function useChartLoadMoreLeft({
     sessionKey,
     symbol,
   ]);
+
+  useEffect(() => {
+    syncPendingOwnership();
+  }, [chartData, syncPendingOwnership]);
+
+  useEffect(() => (
+    seriesDataFeed.subscribePendingBeforePages(syncPendingOwnership)
+  ), [seriesDataFeed, syncPendingOwnership]);
 
   const requestPage = useCallback<RequestPage>(
     (oldestLoadedTime): Promise<void> => {
@@ -300,7 +325,7 @@ export function useChartLoadMoreLeft({
           || feedPending?.before !== pendingOwnership.requestedBefore
         )
       ) {
-        pendingBeforePageRef.current = null;
+        clearPendingOwnership();
         nextBeforeRef.current = null;
         pendingOwnership = null;
       }
@@ -311,6 +336,7 @@ export function useChartLoadMoreLeft({
           sessionKey,
         };
         pendingBeforePageRef.current = pendingOwnership;
+        setPendingPageHeld(true);
       }
       if (
         !enabled
@@ -327,7 +353,7 @@ export function useChartLoadMoreLeft({
         return Promise.resolve();
       }
       if (loadMorePageSize <= 0) {
-        pendingBeforePageRef.current = null;
+        clearPendingOwnership();
         setHasMoreLeft(false);
         setPaginationState({
           sessionKey,
@@ -393,7 +419,7 @@ export function useChartLoadMoreLeft({
           if (!ownsRequest()) return;
           if (result.skipped) {
             if (result.reason === "history-exhausted") {
-              pendingBeforePageRef.current = null;
+              clearPendingOwnership();
               nextBeforeRef.current = null;
               setHasMoreLeft(false);
               setPaginationState({
@@ -421,7 +447,7 @@ export function useChartLoadMoreLeft({
             return;
           }
           if (result.stale || result.active === false) {
-            pendingBeforePageRef.current = null;
+            clearPendingOwnership();
             setPaginationState({
               sessionKey,
               phase: "idle",
@@ -472,12 +498,15 @@ export function useChartLoadMoreLeft({
               sessionKey,
             };
             pendingBeforePageRef.current = ownership;
+            // Hold only while the feed still owns this exact page; a repair
+            // that already settled it must not leave a stale loading state.
+            setPendingPageHeld(seriesDataFeed.getPendingBeforePage(series)?.before === before);
           } else {
-            pendingBeforePageRef.current = null;
+            clearPendingOwnership();
           }
         } catch (err) {
           if (!ownsRequest()) return;
-          pendingBeforePageRef.current = null;
+          clearPendingOwnership();
           const indicatorWindowOwner = seriesDataFeed.getPendingBeforePage(series)
             ?.indicatorWindowOwner;
           commitMergedChartData(symbol, interval, [], {
@@ -504,6 +533,7 @@ export function useChartLoadMoreLeft({
       return promise;
     },
     [
+      clearPendingOwnership,
       commitMergedChartData,
       dataSource,
       enabled,
@@ -518,6 +548,7 @@ export function useChartLoadMoreLeft({
       sessionKey,
       setHasMoreLeft,
       setLoadingMoreLeft,
+      setPendingPageHeld,
       symbol,
     ],
   );
@@ -542,7 +573,7 @@ export function useChartLoadMoreLeft({
   }, [exchange, interval, marketType, seriesDataFeed, seriesIdentity, symbol]);
 
   return {
-    loadingMoreLeft,
+    loadingMoreLeft: loadingMoreLeft || pendingPageHeld,
     setLoadingMoreLeft,
     hasMoreLeft,
     setHasMoreLeft,
