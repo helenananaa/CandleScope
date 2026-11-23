@@ -155,3 +155,15 @@ test("watchlist full subscription requests require explicit target realtime capa
   assert.deepEqual(unknownFallbackInputs, { nativeIntervals: [], customIntervalRecords: [] });
   assert.equal(canIssueWatchlistFullSubscriptionRequest(unknownFallbackInputs), false);
 });
+
+test("watchlist price ticks carry the backend's stale mark only as a strict boolean", () => {
+  assert.deepEqual(parseWatchlistPriceTick({ symbol: "futures:BTCUSDT", price: 61668.79, stale: true }), {
+    symbol: "futures:BTCUSDT", price: 61668.79, stale: true,
+  });
+  assert.deepEqual(parseWatchlistPriceTick({ symbol: "futures:BTCUSDT", price: 61668.79, stale: false }), {
+    symbol: "futures:BTCUSDT", price: 61668.79,
+  });
+  assert.deepEqual(parseWatchlistPriceTick({ symbol: "futures:BTCUSDT", price: 61668.79, stale: "yes" }), {
+    symbol: "futures:BTCUSDT", price: 61668.79,
+  });
+});

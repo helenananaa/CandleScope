@@ -548,6 +548,10 @@ export const en = {
   "status.ws.disconnected": "Disconnected",
   "status.ws.fallback": "Polling fallback",
   "status.ws.mock": "Mock mode",
+  "status.ws.offline": "Offline",
+  "status.exchangeOffline": "Offline: cannot reach {exchange}",
+  "status.ws.offlineDetail": "The exchange cannot be reached. The chart keeps the bars it already has and adds none of its own; missing bars are filled in once the connection returns.",
+  "watchlist.priceStale": "Not current: last price before the exchange went offline",
   "status.ws.unknown": "Unknown",
 
   "rail.ariaLabel": "Market sidebar",

@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import StatusBar, { type StatusBarModel } from "../StatusBar.js";
+import { statusBarConnectionState } from "../statusBarState.js";
 import { t } from "../../i18n/index.js";
 
 function render(wsStatus: string, extra: Partial<StatusBarModel> = {}) {
@@ -43,4 +44,31 @@ test("history-only availability stays explicit even when transport status is sta
   assert.ok(!html.includes(t("status.connectedTo", { exchange: "Fixture" })));
   assert.match(html, /data-live-bar-count="20"/);
   assert.doesNotMatch(html, /data-connection-status="loading"/);
+});
+
+test("an unreachable exchange is shown as offline, not as waiting for a quiet market", () => {
+  const html = render("offline");
+  assert.match(html, /data-connection-status="disconnected"/);
+  assert.match(html, /data-live-offline="true"/);
+  assert.ok(html.includes(t("status.exchangeOffline", { exchange: "Binance" })));
+  assert.ok(html.includes(`${t("status.klineScope")} ${t("status.ws.offline")}`));
+  assert.ok(!html.includes(t("status.connectedTo", { exchange: "Binance" })));
+  assert.ok(!html.includes(t("status.ws.loading")));
+  // Held bars stay counted; nothing is fabricated or dropped.
+  assert.match(html, /data-live-bar-count="1500"/);
+
+  const quiet = render("loading");
+  assert.match(quiet, /data-connection-status="loading"/);
+  assert.ok(!quiet.includes(t("status.ws.offline")));
+  assert.doesNotMatch(quiet, /data-live-offline/);
+});
+
+test("offline outranks an unfinished data load in the status dot and label", () => {
+  for (const connectionStatus of ["connected", "loading"]) {
+    assert.equal(statusBarConnectionState({ connectionStatus, wsStatus: "offline" }), "disconnected");
+  }
+  assert.ok(render("offline", { connectionStatus: "loading" })
+    .includes(t("status.exchangeOffline", { exchange: "Binance" })));
+  assert.equal(statusBarConnectionState({ connectionStatus: "connected", wsStatus: "loading" }), "loading");
+  assert.equal(statusBarConnectionState({ connectionStatus: "connected", wsStatus: "live" }), "connected");
 });

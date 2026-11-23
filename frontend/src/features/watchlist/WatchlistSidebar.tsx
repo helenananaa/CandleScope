@@ -151,6 +151,10 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
     ? fullTierTitle || t("watchlist.tier.full.title")
     : t("watchlist.tier.price.title");
   const hasPrice = typeof price === "number" && tier !== "none";
+  // The feed cannot reach the exchange: keep the last price, visibly not current.
+  const stale = hasPrice && tick?.stale === true;
+  const staleTitle = stale ? t("watchlist.priceStale") : undefined;
+  const staleClass = stale ? " wl-stale" : "";
   const change = hasPrice
     ? (tick?.daily_change ?? (price - (tick?.open ?? price)))
     : null;
@@ -159,7 +163,7 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
 
   return (
     <>
-      {tierDot && <span className={`wl-tier-dot ${tierDot}`} title={tierTitle}/>}
+      {tierDot && <span className={`wl-tier-dot ${stale ? "wl-tier-offline" : tierDot}`} title={staleTitle ?? tierTitle}/>}
       <span className="wl-sym-name">
         <span className="wl-sym-text" title={symbol}>{symbol}</span>
         {marketType === "futures" && <span className="wl-market-badge futures">{translateMarketType("futures")}</span>}
@@ -169,13 +173,15 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
       </span>
       {hasPrice ? (
         <>
-          <span className={`wl-col-price ${flashDirection ? `wl-flash-${flashDirection}` : ""}`}>
+          <span className={`wl-col-price ${!stale && flashDirection ? `wl-flash-${flashDirection}` : ""}${staleClass}`}
+            title={staleTitle} aria-label={stale ? `${formatPrice(price)} · ${staleTitle}` : undefined}
+            data-price-stale={stale ? "true" : undefined}>
             {formatPrice(price)}
           </span>
-          <span className={`wl-col-change ${isUp ? "wl-val-up" : "wl-val-down"}`}>
+          <span className={`wl-col-change ${isUp ? "wl-val-up" : "wl-val-down"}${staleClass}`} title={staleTitle}>
             {isUp ? "+" : ""}{formatChange(change ?? 0, price ?? 0)}
           </span>
-          <span className={`wl-col-changepct ${isUp ? "wl-val-up" : "wl-val-down"}`}>
+          <span className={`wl-col-changepct ${isUp ? "wl-val-up" : "wl-val-down"}${staleClass}`} title={staleTitle}>
             {isUp ? "+" : ""}{formatPct(changePct ?? 0)}%
           </span>
         </>

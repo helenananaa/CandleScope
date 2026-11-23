@@ -771,6 +771,10 @@ export const ptBR = {
   "status.ws.disconnected": "Desconectado",
   "status.ws.fallback": "Fallback por polling",
   "status.ws.mock": "Modo simulado",
+  "status.ws.offline": "Sem conexão",
+  "status.exchangeOffline": "Sem conexão: não foi possível acessar {exchange}",
+  "status.ws.offlineDetail": "Não é possível acessar a exchange. O gráfico mantém as barras que já tem e não cria nenhuma por conta própria; as barras que faltarem são preenchidas quando a conexão voltar.",
+  "watchlist.priceStale": "Desatualizado: último preço antes da perda de conexão com a exchange",
   "status.ws.unknown": "Desconhecido",
 
   "rail.ariaLabel": "Barra lateral do mercado",

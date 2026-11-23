@@ -314,8 +314,15 @@
   background: var(--color-warning);
 }
 .multi-chart-cell-status.fallback,
-.multi-chart-cell-status.disconnected {
+.multi-chart-cell-status.disconnected,
+.multi-chart-cell-status.offline {
   background: var(--candle-down);
+}
+.multi-chart-cell-offline {
+  flex: 0 0 auto;
+  color: var(--candle-down);
+  font-weight: 600;
+  white-space: nowrap;
 }
 .multi-chart-cell-maximize,
 .multi-chart-cell-drawing-visibility,

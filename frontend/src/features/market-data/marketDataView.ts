@@ -101,6 +101,7 @@ export function buildChartDisplayState({
     disconnected: "Disconnected",
     fallback: "Polling fallback",
     mock: "Mock mode",
+    offline: "Offline (exchange unreachable)",
   }[wsStatus || ""] || "Unknown";
   const exchangeLabel = exchangeConfig.label || (
     exchange ? `${exchange.charAt(0).toUpperCase()}${exchange.slice(1)}` : "Unknown"

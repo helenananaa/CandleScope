@@ -1,6 +1,7 @@
 import type {
   KlineApi, KlineFetchResult, KlineHistoryBatchOutcome, KlineRequestOptions, KlineStreamFactory, StorageRevisionFloor,
 } from "../klineContracts.js";
+import { upstreamAvailabilityOf } from "../klineContracts.js";
 import type { MarketSeries } from "../marketDataTypes.js";
 import type { IntervalString } from "../../../utils/intervals.js";
 import { SharedKlineRequestCoordinator } from "../feed/sharedKlineRequestCoordinator.js";
@@ -142,7 +143,11 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
             if (!connected || !event.interval || !admits(event.interval) || !gap
               || !this.cache.invalidateRange({ ...series, interval: event.interval },
                 gap.range, event.stream_version, undefined, { id: gap.id, resolved: false })) return;
-          } else if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
+          } else if (!upstreamAvailabilityOf(event) && event.status !== "online" && event.status !== "connected") {
+            // An exchange outage keeps this socket and its cache admission;
+            // recovery backfills through the normal completion events.
+            this.cache.markDisconnected(series);
+          }
           streamOptions.onStreamStatus?.(event, controller);
         },
         onControlMessage: (event, controller) => {

@@ -216,12 +216,17 @@ class KlineBatchConnection:
         self._reserved_client_ids: set[str] = set()
         self._reserved_new_client_ids: set[str] = set()
         self._reserved_logical_subscriptions = 0
+        # Last exchange availability sent per client: True means "offline".
+        self._upstream_sent: dict[str, bool] = {}
+        self._upstream_tasks: set[asyncio.Task] = set()
+        self._upstream_unsubscribe: Callable[[], None] | None = None
 
     async def run(self) -> None:
         forwarder = asyncio.create_task(
             self._forward(),
             name=f"kline-batch-forward:{self.connection_id}",
         )
+        self._watch_upstream()
         try:
             while not self.closed:
                 raw = await self.websocket.receive_text()
@@ -247,9 +252,79 @@ class KlineBatchConnection:
 
     async def close(self) -> None:
         self._stopping.set()
+        self._stop_upstream_watch()
         if not self.subscriptions:
             return
         await finish_cleanup(self._close_owned())
+
+    # ── Exchange availability ────────────────────────────────
+
+    def _watch_upstream(self) -> None:
+        availability = getattr(self.dm, "upstream_availability", None)
+        subscribe = getattr(availability, "subscribe", None)
+        if callable(subscribe) and self._upstream_unsubscribe is None:
+            self._upstream_unsubscribe = subscribe(self._on_upstream_change)
+
+    def _stop_upstream_watch(self) -> None:
+        unsubscribe, self._upstream_unsubscribe = self._upstream_unsubscribe, None
+        if unsubscribe is not None:
+            unsubscribe()
+        for task in tuple(self._upstream_tasks):
+            task.cancel()
+
+    def _upstream_offline(self, subscription: _BatchSubscription) -> bool:
+        availability = getattr(self.dm, "upstream_availability", None)
+        is_offline = getattr(availability, "is_offline", None)
+        return bool(callable(is_offline) and is_offline(
+            "kline", subscription.exchange, subscription.market_type, subscription.symbol,
+        ))
+
+    def _on_upstream_change(self, change: Any) -> None:
+        market = change.market
+        if self.closed or market.kind != "kline":
+            return
+        for subscription in tuple(self.subscriptions.values()):
+            if (subscription.exchange.lower(), subscription.market_type.lower(),
+                    subscription.symbol.upper()) != (market.exchange, market.market_type, market.symbol):
+                continue
+            if self._upstream_sent.get(subscription.client_id, False) == change.offline:
+                continue
+            self._upstream_sent[subscription.client_id] = change.offline
+            task = asyncio.get_running_loop().create_task(self._safe_send_json(
+                self._upstream_status(subscription, change.offline, change.reason),
+            ))
+            self._upstream_tasks.add(task)
+            task.add_done_callback(self._upstream_tasks.discard)
+
+    async def _sync_upstream_status(self, client_id: str) -> None:
+        """Tell a (re)subscribed client the exchange state it cannot observe."""
+        subscription = self.subscriptions.get(client_id)
+        if subscription is None:
+            self._upstream_sent.pop(client_id, None)
+            return
+        offline = self._upstream_offline(subscription)
+        if self._upstream_sent.get(client_id, False) == offline:
+            return
+        self._upstream_sent[client_id] = offline
+        await self._safe_send_json(self._upstream_status(
+            subscription, offline, "upstream_unavailable" if offline else "upstream_available",
+        ))
+
+    @staticmethod
+    def _upstream_status(subscription: _BatchSubscription, offline: bool, reason: str) -> dict[str, Any]:
+        # No interval: the status covers every interval of the instrument.
+        return {
+            "type": "stream_status",
+            "protocol": KLINE_BATCH_PROTOCOL,
+            "client_id": subscription.client_id,
+            "exchange": subscription.exchange,
+            "market_type": subscription.market_type,
+            "symbol": subscription.symbol,
+            **(subscription.identity.to_dict() if subscription.identity else {}),
+            "status": "offline" if offline else "online",
+            "source": "upstream",
+            "reason": reason,
+        }
 
     async def _close_owned(self) -> None:
         subscriptions = list(self.subscriptions.values())
@@ -342,6 +417,10 @@ class KlineBatchConnection:
             self.item_acks += 1
             if not await self._safe_send_json(ack):
                 return
+        for ack in acknowledgements:
+            client_id = ack.get("client_id")
+            if isinstance(client_id, str):
+                await self._sync_upstream_status(client_id)
 
     async def _execute_item(
         self,

@@ -8,6 +8,8 @@ export interface ControlCellObservation {
   session: { exchange: string; marketType: string; symbol: string; interval: string };
   indicatorSignature: string;
   marketReady: boolean;
+  /** Live transport status of the chart, e.g. "live", "loading" or "offline". */
+  liveStatus?: string;
   indicatorsReady: boolean;
   barCount: number;
   loading: boolean;

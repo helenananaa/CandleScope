@@ -323,6 +323,10 @@
   background: var(--accent-blue);
   opacity: 1;
 }
+.wl-tier-dot.wl-tier-offline {
+  background: var(--candle-down);
+  opacity: 1;
+}
 
 /* ── Light theme overrides ── */
 [data-theme='light'] .watchlist-sidebar { background: var(--bg-secondary); }
@@ -607,6 +611,14 @@
 
 .wl-col-empty {
   color: var(--text-muted);
+}
+/* Feed offline: the last price stays readable but is visibly not current */
+.wl-col-price.wl-stale,
+.wl-col-change.wl-stale,
+.wl-col-changepct.wl-stale {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
 }
 /* Narrow rail: drop the absolute change so the ticker keeps its room (change % stays) */
 @container watchlist (max-width: 360px) {

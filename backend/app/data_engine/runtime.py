@@ -1136,7 +1136,10 @@ async def _start_subscription_workflows(
     price_source: IngestionPriceSource | None = None
     subscription_service: SubscriptionService | None = None
     try:
-        price_source = IngestionPriceSource(ingestion_factory)
+        price_source = IngestionPriceSource(
+            ingestion_factory,
+            availability=getattr(dm, "upstream_availability", None),
+        )
         dm.set_price_stream_controller(price_source)
         price_source.on_price_update(dm.on_price_ticks)
 

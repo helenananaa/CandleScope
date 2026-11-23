@@ -117,7 +117,7 @@ class IngestionFactory(Protocol):
 class _StreamEntry:
     """Internal tracking for one active stream."""
     __slots__ = (
-        "key", "info", "handle", "task",
+        "key", "info", "handle", "task", "upstream_probe",
         "_last_subscriber_at_ms",
     )
 
@@ -125,6 +125,7 @@ class _StreamEntry:
         self.key = key
         self.info = StreamInfo(key=key)
         self.handle: Any = None       # ingestion handle
+        self.upstream_probe: Any = None  # UpstreamProbe for a physical pipeline
         # Shared startup task.  Concurrent ensure_stream() callers for the
         # same key await this task instead of observing a transient STARTING
         # status as if startup had completed.
@@ -185,6 +186,7 @@ class StreamCoordinator:
         self._storage: StorageBackend | None = None
         self._gap_handler: Callable[[SeriesKey, Any], Awaitable[None]] | None = None
         self._before_stream_start: Callable[[SeriesKey], Awaitable[None]] | None = None
+        self._upstream_availability: Any = None
 
         # Background tasks
         self._reaper_task: asyncio.Task | None = None
@@ -198,6 +200,10 @@ class StreamCoordinator:
         ingestion pipelines.
         """
         self._ingestion_factory = factory
+
+    def set_upstream_availability(self, availability: Any) -> None:
+        """Report each physical K-line pipeline's session health and data."""
+        self._upstream_availability = availability
 
     def set_before_stream_start(self, callback: Callable[[SeriesKey], Awaitable[None]]) -> None:
         """Durably register recovery scope before a physical source can emit."""
@@ -357,6 +363,9 @@ class StreamCoordinator:
 
         entry.info.status = StreamStatus.STOPPING
         logger.info("Stopping stream: %s", key)
+        # A deliberate stop is not an outage: detach before the session
+        # reports its shutdown health.
+        self._close_upstream_probe(entry)
 
         # Quiesce startup before inspecting the handle.  Otherwise a startup
         # can publish its handle after the first ``None`` check, leaving a
@@ -380,6 +389,8 @@ class StreamCoordinator:
                 await entry.handle.stop()
             except Exception as exc:
                 logger.error("Error stopping ingestion for %s: %s", key, exc)
+        # Startup may have opened a probe after the first close above.
+        self._close_upstream_probe(entry)
 
         entry.info.status = StreamStatus.STOPPED
 
@@ -812,6 +823,8 @@ class StreamCoordinator:
                         "StreamCoordinator requires a BarAggregator for realtime kline streams"
                     )
 
+                probe = self._open_upstream_probe(entry)
+
                 async def on_market_event(market_event: MarketEvent) -> None:
                     """Callback from ingestion: route L6 events into K-line semantics.
 
@@ -835,6 +848,8 @@ class StreamCoordinator:
                                 "series_identity": key.identity.to_dict(),
                             },
                         )
+                    if probe is not None:
+                        probe.observe_data()
                     await self._bar_aggregator.on_market_event(routed_event)
 
                 async def on_gap(gap: GapMarker) -> None:
@@ -856,6 +871,8 @@ class StreamCoordinator:
                         start_kwargs["gap_repair_owner"] = "data_manager"
                     if "series_identity" in start_signature.parameters and not key.identity.is_legacy_default_for(key.exchange):
                         start_kwargs["series_identity"] = key.identity
+                    if probe is not None and "on_health" in start_signature.parameters:
+                        start_kwargs["on_health"] = probe.health
                 except (TypeError, ValueError):
                     logger.debug("Could not inspect ingestion factory start signature")
 
@@ -879,10 +896,12 @@ class StreamCoordinator:
             except asyncio.CancelledError:
                 if entry.info.status is StreamStatus.STOPPING:
                     raise
+                self._close_upstream_probe(entry)
                 entry.info.status = StreamStatus.ERROR
                 entry.info.error = "stream startup was cancelled"
                 logger.error("Stream startup was cancelled: %s", key)
             except Exception as exc:
+                self._close_upstream_probe(entry)
                 entry.info.status = StreamStatus.ERROR
                 entry.info.error = str(exc)
                 logger.error("Failed to start stream %s: %s", key, exc, exc_info=True)
@@ -897,6 +916,20 @@ class StreamCoordinator:
             # No ingestion factory — stream is "passive" (manual push only)
             entry.info.status = StreamStatus.ACTIVE
             logger.info("Stream %s started in passive mode (no ingestion factory)", key)
+
+    def _open_upstream_probe(self, entry: _StreamEntry) -> Any:
+        availability = self._upstream_availability
+        if availability is None:
+            return None
+        key = entry.key
+        entry.upstream_probe = availability.probe("kline", key.exchange, key.market_type, key.symbol)
+        return entry.upstream_probe
+
+    @staticmethod
+    def _close_upstream_probe(entry: _StreamEntry) -> None:
+        probe, entry.upstream_probe = entry.upstream_probe, None
+        if probe is not None:
+            probe.close()
 
     # ── Internal: Prewarm ────────────────────────────────────
 
