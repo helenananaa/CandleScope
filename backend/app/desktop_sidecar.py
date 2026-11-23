@@ -104,6 +104,11 @@ def bind_desktop_socket(host: str, port: int, *, allow_fallback: bool = True) ->
     try:
         if os.name == "nt":
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        elif not allow_fallback:
+            # A restart must keep the session port. Connections of a killed
+            # sidecar stay in TIME_WAIT on it for up to a minute; POSIX
+            # SO_REUSEADDR ignores those but still refuses an active listener.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
         except OSError as error:

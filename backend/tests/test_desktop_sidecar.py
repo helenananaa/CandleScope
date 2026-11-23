@@ -56,6 +56,48 @@ def test_restart_refuses_an_occupied_session_port_without_announcing_another(tmp
         assert not endpoint.exists()
 
 
+_KILLED_SERVER = """
+import socket
+s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(8)
+print(s.getsockname()[1], flush=True)
+held = []
+while True:
+    held.append(s.accept()[0])
+"""
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX TIME_WAIT reuse; Windows keeps SO_EXCLUSIVEADDRUSE")
+def test_restart_rebinds_the_session_port_of_a_killed_sidecar():
+    # A sidecar killed with open connections leaves them in TIME_WAIT on its
+    # port. The restart must still bind that exact port (RC item 18).
+    server = subprocess.Popen([sys.executable, "-c", _KILLED_SERVER], stdout=subprocess.PIPE, text=True)
+    try:
+        port = int(server.stdout.readline())
+        clients = [socket.create_connection(("127.0.0.1", port), timeout=2) for _ in range(3)]
+        time.sleep(0.2)
+        server.kill()
+        server.wait(timeout=5)
+        for client in clients:
+            with client:
+                client.settimeout(2)
+                try:
+                    client.recv(1)
+                except OSError:
+                    pass
+        time.sleep(0.2)
+    finally:
+        if server.poll() is None:
+            server.kill()
+        server.stdout.close()
+    with desktop_sidecar.bind_desktop_socket("127.0.0.1", port, allow_fallback=False) as restarted:
+        assert restarted.getsockname()[1] == port
+        # A live listener on the session port still cannot be shared.
+        with socket.socket() as competitor:
+            competitor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            with pytest.raises(OSError):
+                competitor.bind(("127.0.0.1", port))
+
+
 @pytest.mark.parametrize("port", ["0", "65536", "invalid"])
 def test_invalid_session_port_cannot_fall_back(tmp_path, monkeypatch, port):
     monkeypatch.setenv("CANDLESCOPE_DESKTOP_ENDPOINT_FILE", str(tmp_path / "endpoint.json"))

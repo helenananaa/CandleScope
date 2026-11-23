@@ -220,7 +220,7 @@ test("a signal-terminated sidecar reports stopped and does not wait for a second
   const source = `require('node:http').createServer((q,r)=>r.end(JSON.stringify({desktop_instance_id:process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID}))).listen(${port},'127.0.0.1');`;
   const supervisor = new SidecarSupervisor({ command: process.execPath, args: ["-e", source], cwd: root,
     gracefulStdin: true, healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 5000,
-    shutdownTimeoutMs: 10_000, logPath: path.join(root, "sidecar.log") });
+    shutdownTimeoutMs: 10_000, restartDelaysMs: [], logPath: path.join(root, "sidecar.log") });
   context.after(() => supervisor.stop());
   await supervisor.start();
   const child = supervisor.child;

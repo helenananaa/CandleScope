@@ -44,6 +44,7 @@ import {
   writePluginSettings,
 } from "./pluginPlatformApi.js";
 import { PluginMarkerSource } from "./pluginMarkerSource.js";
+import { useBackendRestored } from "../../desktop/backendConnection.js";
 import { PluginChartLayerSource } from "./pluginChartLayerSource.js";
 import {
   createDeferredAbortableTask,
@@ -464,6 +465,12 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
       resumeController?.abort();
     };
   }, [refreshCatalogState, refreshLiveControlState]);
+
+  // A restarted local service has no record of this page's last failed
+  // reads; refresh now instead of showing the outage error until the next poll.
+  useBackendRestored(() => {
+    void refresh().catch(() => undefined);
+  });
 
   useEffect(() => {
     if (!managerOpen || !pageVisible) return undefined;
