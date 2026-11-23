@@ -783,6 +783,19 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Raw `<button>` 92 → 57, `*-btn` families 18 → 13 (`retry-btn`, `trading-row-button`, `wl-add-list-btn` and `interval-create-btn` are gone; `wl-collapse-btn` is a declared hook).
 - Next: 8c5b, replay.
 
+**Phase 8c5b is done (branch `design/phase-8c5b-replay`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5B.md).
+
+- Replay is on the kit:
+  - **Training page shell:** the header's run identity (a ghost `Button` that reads as a label), the history error's retry (primary, under the message as in the chart load error), the review rail's and the status bar's retries, and the history notice's dismiss (`IconButton`).
+  - **Chart workspace:** the cell header's drawings and maximise toggles are `IconButton`s, as in a live cell; the maximise toggle now says maximise or restore. The workspace trigger is a `ControlButton`, and a cell without a market offers its markets as small `Button`s.
+  - **Elsewhere:** the order ticket's buy and sell (`Button`s in the trade colours), the watchlist's rows, search results and collapse (`row` `OptionButton`s and an `IconButton`), and the review timeline's events (`MenuItemButton`, same markup as before).
+- **Fixed while there:**
+  - A cell header's drawings toggle sat mid-header, so it now sits with the cell's other controls.
+  - The review rail had cut off all but two of its items, the retry included, so it now stacks them down the rail.
+  - The note screenshot viewer is centred again (`margin: auto` on the native dialog).
+- Raw `<button>` 57 → 42; replay has none left. `workspace-toolbar-trigger` and the replay cell header's `> button` rules are gone.
+- Next: 8c5c, strategy, backtest and data, the documented exceptions and the zero target.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

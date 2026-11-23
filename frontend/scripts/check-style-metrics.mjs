@@ -51,7 +51,7 @@ export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "l
 
 // Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
 // its ratchet. Lower a ratchet when its count falls; never raise it.
-export const RATCHETS = { rawButtons: 57, buttonClassFamilies: 13 };
+export const RATCHETS = { rawButtons: 42, buttonClassFamilies: 13 };
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

@@ -1410,8 +1410,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
           {ticketMessage}
         </div>
         <div className="replay-dual-cta">
-          <button
-            type="button"
+          <Button
             className="replay-submit-order"
             data-side="BUY"
             data-replay-action="place-order"
@@ -1420,9 +1419,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
             disabled={buyCtaState.disabled}
             aria-disabled={buyCtaState.ariaDisabled}
             onClick={() => void placeOrderWithSide("BUY")}
-          >{tradeValidationSide === "BUY" ? t("replay.paper.submitting") : ctaLabel("BUY")}</button>
-          <button
-            type="button"
+          >{tradeValidationSide === "BUY" ? t("replay.paper.submitting") : ctaLabel("BUY")}</Button>
+          <Button
             className="replay-submit-order"
             data-side="SELL"
             data-replay-action="place-order"
@@ -1431,7 +1429,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
             disabled={sellCtaState.disabled}
             aria-disabled={sellCtaState.ariaDisabled}
             onClick={() => void placeOrderWithSide("SELL")}
-          >{tradeValidationSide === "SELL" ? t("replay.paper.submitting") : ctaLabel("SELL")}</button>
+          >{tradeValidationSide === "SELL" ? t("replay.paper.submitting") : ctaLabel("SELL")}</Button>
         </div>
         <small className="replay-order-fidelity" data-fidelity={contract?.execution_fidelity ?? "LOADING"} title={t("replay.paper.submitHint")}>
           {contract?.execution_fidelity === "BOOK_ASSISTED_CONTINUITY_GATED_NO_QUEUE"

@@ -1,6 +1,7 @@
 import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, IconButton } from "../../components/ui/index.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
@@ -1144,7 +1145,9 @@ export default function ReplayTrainingPageShell({
         {history.loading ? <span role="status">{t("replay.loadingOlder")}</span>
           : history.error ? <>
             <span role="alert">{history.error}</span>
-            <button type="button" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+            <div className="error-overlay-actions">
+              <Button variant="primary" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</Button>
+            </div>
           </> : <><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</>}
       </div></div>
     </div>
@@ -1158,7 +1161,7 @@ export default function ReplayTrainingPageShell({
       {reviewChartBounded && <span role="status">{t("replay.shell.historyTruncated")}</span>}
       {reviewOlderLoading && <span role="status">{t("replay.loadingOlder")}</span>}
       {reviewOlderError && <><span role="alert">{reviewOlderError}</span>
-        <button type="button" onClick={() => { void loadReviewMoreLeft(); }}>{t("replay.retry")}</button></>}
+        <Button size="sm" onClick={() => { void loadReviewMoreLeft(); }}>{t("replay.retry")}</Button></>}
     </div>
   ) : (
     <DrawingToolbar
@@ -1275,7 +1278,7 @@ export default function ReplayTrainingPageShell({
           className="replay-top-bar"
           badge={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
           context={config && (
-            <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
+            <Button variant="ghost" className="replay-identity-readonly" title={t("replay.shell.identityImmutable")}><span>
               {review === null
                 ? `${trainingExchangeLabel(activeSelectedTrack?.exchange ?? config.exchange)} · ${trainingMarketTypeLabel(activeSelectedTrack?.market_type ?? config.market_type)} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
                 : t("replay.reviewIdentity", {
@@ -1284,7 +1287,7 @@ export default function ReplayTrainingPageShell({
                   ))?.symbol ?? config.symbol),
                   interval: String(review.projection.viewer_state.display_interval ?? interval),
                 })}
-            </button>
+            </span></Button>
           )}
           panels={<>
             <PanelToggle
@@ -1373,7 +1376,7 @@ export default function ReplayTrainingPageShell({
         {review === null && history.notice !== null && (
           <div className="replay-history-boundary-notice" role="status">
             <span>{history.notice}</span>
-            <button type="button" onClick={history.dismissNotice} aria-label={t("replay.shell.dismissHistory")}><Icon name="close" size={14} /></button>
+            <IconButton size="sm" label={t("replay.shell.dismissHistory")} icon={<Icon name="close" size={14} />} onClick={history.dismissNotice} />
           </div>
         )}
         {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}
@@ -1507,10 +1510,10 @@ export default function ReplayTrainingPageShell({
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
             {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
-            {review === null && history.error && <>
+            {review === null && history.error && <span className="replay-history-error-item">
               <span className="replay-history-error">{history.error}</span>
-              <button type="button" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
-            </>}
+              <Button size="sm" variant="ghost" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</Button>
+            </span>}
             {review !== null && <span>{t("replay.immutableEvent", { sequence: review.selected_timeline_sequence })}</span>}
             {review !== null && reviewChartBounded && <span>{t("replay.prefixBound")}</span>}
           </>}

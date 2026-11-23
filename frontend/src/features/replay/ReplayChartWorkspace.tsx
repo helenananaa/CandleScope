@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from "../../components/ui/index.js";
+import { Button, ControlButton, IconButton, InlineAlert } from "../../components/ui/index.js";
 import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { applicationSettingsPatch, buildAppearanceTargets, cellsWithAppearanceOverride, hasCellAppearanceOverride, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
@@ -405,9 +405,9 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
       workspace.actions.splitCell(workspace.view.activeCellId, "columns", "copy", session);
     } else workspace.actions.updateCellSession(workspace.view.activeCellId, session);
   }, [api, runId, tracks, workspace.actions, workspace.view.activeCell.session, workspace.view.activeCellId, workspace.view.layoutCellIds.length, workspace.view.layoutLocked, workspace.view.maxCellsPerWindow]);
-  const controls = <button type="button" className="workspace-toolbar-trigger" onClick={() => setPanelOpen((value) => !value)}>
+  const controls = <ControlButton onClick={() => setPanelOpen((value) => !value)}>
     {t("workspace.tab.workspaces")} · {workspace.view.layoutCellIds.length}
-  </button>;
+  </ControlButton>;
   return <>
     {import.meta.env.DEV && focusTiming && <span hidden data-replay-focus-cell={focusTiming.id} data-replay-focus-ms={focusTiming.durationMs} />}
     <MarketPageFrame
@@ -447,16 +447,17 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
               <header className="multi-chart-cell-header" draggable={!workspace.view.layoutLocked}
                 onDragStart={(event) => writeChartCellDragData(event.dataTransfer, id)}>
                 <strong>{cell.session.symbol}</strong><span>{cell.session.interval}</span>
-                <button type="button" className="multi-chart-cell-drawing-visibility"
-                  aria-label={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-                  title={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-                  aria-pressed={cell.drawingsHidden === true}
+                <IconButton size="sm" className="multi-chart-cell-drawing-visibility"
+                  label={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+                  icon={<Icon name={cell.drawingsHidden ? "eye-off" : "eye"} size={14} />}
+                  pressed={cell.drawingsHidden === true}
                   onPointerDown={event => event.stopPropagation()}
                   onFocus={event => event.stopPropagation()}
-                  onClick={() => workspace.actions.setCellDrawingsHidden(id, cell.drawingsHidden !== true)}>
-                  <Icon name={cell.drawingsHidden ? "eye-off" : "eye"} size={14} />
-                </button>
-                <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
+                  onClick={() => workspace.actions.setCellDrawingsHidden(id, cell.drawingsHidden !== true)} />
+                <IconButton size="sm" className="multi-chart-cell-maximize"
+                  label={t(workspace.view.window.maximizedCellId === id ? "chart.restore" : "chart.maximize")}
+                  icon={<Icon name={workspace.view.window.maximizedCellId === id ? "minimize" : "maximize"} size={14} />}
+                  onClick={() => workspace.actions.toggleMaximize(id)} />
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
                   appearance={<ChartAppearanceSection targets={buildAppearanceTargets({
                     application: chartSettingsRuntime.settings,
@@ -497,12 +498,12 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                 pageExportRef={pageExportRef} pageDrawingExports={pageDrawingExports} exportVisible={!obscured}
                 workspace={workspace} controller={controller} pool={pool} globalSettings={chartSettingsRuntime}
                 integrity={integrity} links={links} intervalTransfers={intervalTransfers} hosts={hosts} controls={controls} preferences={preferences} noteRevision={noteRevision} onNoteSaved={onNoteSaved} onOpenTrack={openTrack} />
-                : <div role="status">{cell.session.symbol} — {tracks.length === 0 ? t("replay.opening") : t("replay.watchlist.noCover")}
-                  {tracks.filter((candidate) => candidate.adapter_session_id).map((candidate) => <button key={candidate.track_id}
-                    type="button" onClick={() => workspace.actions.updateCellSession(id, { ...cell.session,
+                : <div className="replay-chart-cell-fallback" role="status">{cell.session.symbol} — {tracks.length === 0 ? t("replay.opening") : t("replay.watchlist.noCover")}
+                  {tracks.filter((candidate) => candidate.adapter_session_id).map((candidate) => <Button key={candidate.track_id}
+                    size="sm" onClick={() => workspace.actions.updateCellSession(id, { ...cell.session,
                       exchange: candidate.exchange, marketType: candidate.market_type, symbol: candidate.symbol })}>
                     {candidate.symbol}
-                  </button>)}
+                  </Button>)}
                 </div>}
             </section>;
           }} />}

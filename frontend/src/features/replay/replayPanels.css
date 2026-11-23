@@ -1,6 +1,7 @@
 
 
-.replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
+/* Sized to the notice's line so the notice keeps its height. */
+.replay-history-boundary-notice .ui-icon-btn { width: 22px; height: 22px; color: inherit; }
 
 /* Too narrow for the rail beside the chart; a phone shows it as a bar along the bottom instead
    (app/marketRail.css), where it sits above the replay controls. */
@@ -16,7 +17,7 @@
 
 @media (max-width: 760px) {
 
-  .replay-identity-readonly { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replay-identity-readonly { max-width: 38vw; }
   .replay-launcher-overlay { padding: 8px; }
   .replay-launcher-popup-blocked { top: 14px; right: 14px; left: 14px; flex-wrap: wrap; }
 

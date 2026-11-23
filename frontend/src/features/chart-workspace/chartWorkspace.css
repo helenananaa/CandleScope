@@ -1156,5 +1156,3 @@
 .workspace-member-bulk select { font: inherit; }
 /* Replay cells share the existing workspace geometry; controls have one host. */
 .workspace-cell-layout-popover .replay-note-filter-settings { flex-direction: column; }
-
-.workspace-toolbar-trigger { color: inherit; background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-control); padding: 4px 8px; white-space: nowrap; }

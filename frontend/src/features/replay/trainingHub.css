@@ -702,7 +702,3 @@
   .training-hub-field-grid,
   .training-hub-field-grid-three { grid-template-columns: 1fr; }
 }
-
-/* Session rules that loaded last (they move with the session in 5f3). */
-.replay-chart-cell .multi-chart-cell-header > button { color: inherit; background: transparent; border: 0; }
-
