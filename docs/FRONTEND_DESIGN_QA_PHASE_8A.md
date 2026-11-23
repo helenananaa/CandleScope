@@ -1,7 +1,7 @@
 # Frontend design refactor: Phase 8a QA (colour tokens)
 
 - Date: 2026-11-23
-- Branch: `design/phase-8-cleanup`, built on a local merge of the design (#564) and strategy (#565) integration PRs into main (`ce3577f28`); the PR targets main once both have merged
+- Branch: `design/phase-8-cleanup`, built on a local merge of the design (#564) and strategy (#565) integration PRs into main (`ce3577f28`); both have merged, and main is merged into the branch, so the PR targets main
 - Plan: [`frontend/FRONTEND_DESIGN_REFACTOR_PLAN.md`](../frontend/FRONTEND_DESIGN_REFACTOR_PLAN.md), Phase 8 (part 8a)
 - **Intended visible change:** none in the app's own themes. With a theme extension selected, the theme now colours every surface and border, where before part of the app kept its own whites and greys. In a chart with its own appearance, the loading spinner's track takes the chart's background.
 
@@ -51,4 +51,3 @@ Targeted local checks; the full check runs in CI:
 - **Electron not checked.** The plan asks for a desktop check after Phase 8; no Electron build is available here. `reportDesktopAppearance` already read `--surface-0`, so the window background is unaffected.
 - **Theme extensions were checked by applying the Paper theme through the app's extension runtime in the dev page**, not by installing the package through the plugin review. The Terminal example uses the same contract names.
 - **Charts with their own appearance were checked on a chart without data** (43 elements: legend, pane controls, loading overlay). With data, legends and indicator chips inside such a chart may also take the chart's colours where they used `--bg-tertiary` or `--border-subtle`.
-- **Built on unmerged integration PRs.** If #564 or #565 change before merging, this branch is merged again.
