@@ -131,6 +131,7 @@ Open [http://127.0.0.1:15173/](http://127.0.0.1:15173/). The API runs at
 | Plugins | [Plugin author guide](docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md) |
 | Offline data | [Local offline mode](docs/local-offline-mode.md) |
 | Alerts | [Alert delivery guide](docs/ALERTS_DELIVERY_zh.md) |
+| Upgrades and downgrades | [Release notes](RELEASE_NOTES.md) |
 
 ## Development
 

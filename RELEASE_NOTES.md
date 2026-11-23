@@ -1,0 +1,32 @@
+# Release notes
+
+## Unreleased
+
+### Going back to 0.3.0 after upgrading
+
+CandleScope 0.3.0 (the 2026-10-25 build) cannot open a profile after this
+release has opened it. Its backend stops at startup with `replay training
+schema 29 is obsolete`, and no window appears. Nothing is deleted, and this
+release still opens the profile.
+
+Before this release moves a database's schema forward, it keeps a copy next to
+that database, for example `replay.db.pre-replay-training-v26-to-v29.sqlite`.
+The existing `candlescope.db.pre-basis-v1-<id>.sqlite` copy follows the same
+pattern. The app never changes or deletes these `*.pre-*` copies, and it keeps
+one per database and schema step.
+
+To go back to 0.3.0:
+
+1. Quit CandleScope.
+2. Open the profile's data folder: `~/Library/Application Support/CandleScope Replay/data`
+   on macOS, or `%APPDATA%\CandleScope Replay\data` on Windows.
+3. For each `<database>.pre-*.sqlite` copy, move `<database>` and any
+   `<database>-wal` and `<database>-shm` files into another folder, and keep
+   them. Then rename the copy to `<database>`. If one database has several
+   copies, use the oldest.
+4. Start 0.3.0.
+
+After the restore, 0.3.0 shows the data as it was at the upgrade. Anything
+created after upgrading, such as new replay runs, exists only in the files you
+moved aside. If you start this release again, it upgrades the restored files
+and keeps a new copy.

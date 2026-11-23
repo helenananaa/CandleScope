@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from app.core.pre_migration_copy import keep_pre_migration_copy
 from app.replay.canonical import canonical_sha256
 
 
@@ -2703,6 +2704,9 @@ CREATE TABLE IF NOT EXISTS replay_training_note_capture_link (
 """
 
 
+_UPGRADABLE_TRAINING_SCHEMA_VERSIONS = frozenset((19, 20, 21, 22, 23, 24, 25, 26, 27, 28))
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2722,6 +2726,13 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     if current == TRAINING_SCHEMA_VERSION:
         _ensure_review_query_indexes(connection)
         return
+    if current in _UPGRADABLE_TRAINING_SCHEMA_VERSIONS:
+        # Releases that still write `current` reject the newer version, so keep
+        # the committed database as it is for a downgrade to restore.
+        keep_pre_migration_copy(
+            connection, schema="replay-training",
+            from_version=current, to_version=TRAINING_SCHEMA_VERSION,
+        )
     if current == 28:
         _execute_script(connection, TRAINING_SCHEMA_V29_NOTE_CAPTURES)
         connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
