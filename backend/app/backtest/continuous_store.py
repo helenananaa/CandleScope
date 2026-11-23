@@ -16,6 +16,7 @@ import time
 from collections.abc import Mapping
 
 from app.core.committed_updates import committed_updates_for
+from app.core.pre_migration_copy import keep_pre_migration_copy
 from .errors import BacktestError
 
 SCHEMA = 5
@@ -131,6 +132,8 @@ class ContinuousStrategyStore:
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
                 if version not in (0, 1, 2, 3, 4, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
+                if 0 < version < SCHEMA:
+                    keep_pre_migration_copy(self.db, schema="continuous-strategy", from_version=version, to_version=SCHEMA)
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
                         raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Unrecognized database must not be overwritten")

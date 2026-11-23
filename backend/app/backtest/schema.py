@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from app.core.pre_migration_copy import keep_pre_migration_copy
+
 SCHEMA_VERSION = 9
 
 SCHEMA_SQL = """
@@ -386,6 +388,9 @@ CREATE TABLE IF NOT EXISTS backtest_study_failures (
 
 
 def apply_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
+    stored = _stored_schema_version(connection)
+    if stored is not None and stored < SCHEMA_VERSION:
+        keep_pre_migration_copy(connection, schema="backtest", from_version=stored, to_version=SCHEMA_VERSION)
     connection.executescript(SCHEMA_SQL)
     row = connection.execute(
         "SELECT schema_version FROM backtest_schema_meta LIMIT 1"
@@ -403,3 +408,12 @@ def apply_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
             "UPDATE backtest_schema_meta SET schema_version = ?, migrated_at_ms = ?",
             (SCHEMA_VERSION, now_ms),
         )
+
+
+def _stored_schema_version(connection: sqlite3.Connection) -> int | None:
+    if connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'backtest_schema_meta'"
+    ).fetchone() is None:
+        return None
+    row = connection.execute("SELECT schema_version FROM backtest_schema_meta LIMIT 1").fetchone()
+    return None if row is None else int(row[0])
