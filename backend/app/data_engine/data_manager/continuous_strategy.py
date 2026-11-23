@@ -279,7 +279,7 @@ class ContinuousStrategyAccess:
             with controller.store.lock:
                 controller.store.db.execute("BEGIN")
                 try:
-                    return {"runs":controller.store.list_summaries(),
+                    return {"runs":controller.store.list_catalog(),
                         "repairs":controller.store.epochs.summaries(),
                         "preparations":[{field:row[field] for field in CREATION_FIELDS}
                             for row in controller.store.creations.list_pending()]}

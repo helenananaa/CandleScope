@@ -60,3 +60,30 @@ def test_the_http_run_contract_carries_the_practice_rules():
 
     body = RunCreateRequest.model_validate({**PRACTICE, "strategy_revision_id": BUILTIN_SMA_REVISION}).model_dump()
     assert body["account_rules"] == "PRACTICE_V1"
+
+
+def test_the_forward_run_catalog_names_each_run_by_market_and_account_rules(service, tmp_path):  # noqa: F811
+    """The accounts page lists forward runs beside practice accounts (P6e4): by market, on which rules."""
+    from app.backtest.continuous_bar_host import ContinuousBarHost
+    from app.backtest.continuous_store import ContinuousStrategyStore
+    from app.backtest.models import ENGINE_VERSION
+    from tests.test_strategy_run_oracles import builtin_provider, fixed_run
+
+    store = ContinuousStrategyStore(tmp_path / "continuous.db")
+    try:
+        for rules in ("practice", "bar"):
+            row, _ = fixed_run(service, "builtin", rules)
+            config = json.loads(str(row["config_json"]))
+            definition = {"engine_version": ENGINE_VERSION, "configuration": config,
+                          "input_plan": {"roles": ["BARS"], "parameters": config["parameters"]},
+                          "market": {"venue": "local", "symbol": str(row["dataset_id"])}}
+            ContinuousBarHost.create_run(store, f"forward-{rules}", definition=definition, mode="HISTORY_LIVE",
+                                         data_revision="r1", event_time_ms=0, provider_factory=lambda _: builtin_provider())
+        listed = {run["id"]: run for run in store.list_catalog()}
+        assert listed["forward-practice"]["account_rules"] == "PRACTICE_V1"
+        assert listed["forward-bar"]["account_rules"] is None
+        assert listed["forward-practice"]["market"]["interval"] == "1m"
+        assert {key: value for key, value in listed["forward-bar"].items() if key not in {"market", "account_rules"}} == \
+            next(run for run in store.list_summaries() if run["id"] == "forward-bar")
+    finally:
+        store.close()

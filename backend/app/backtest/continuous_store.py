@@ -238,6 +238,22 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             return [_summary(row) for row in self.db.execute("SELECT "+SUMMARY_COLUMNS+" FROM runs ORDER BY id")]
 
+    def list_catalog(self):
+        """Run summaries with what a list of runs shows (ADR-BACKTEST-015 P6e): each run's market and
+        account rules, read from its frozen definition."""
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            rows = self.db.execute("SELECT "+SUMMARY_COLUMNS+",definition_json FROM runs ORDER BY id").fetchall()
+        listed = []
+        for row in rows:
+            value = _summary(row)
+            configuration = (json.loads(row["definition_json"]) or {}).get("configuration") or {}
+            value["market"] = {key: configuration.get(key) for key in ("exchange", "market_type", "symbol", "interval")}
+            value["account_rules"] = configuration.get("account_rules")
+            listed.append(value)
+        return listed
+
     def restore_candidates(self):
         """One SQLite read for active runs and the committed-before-start window."""
         with self.lock:
