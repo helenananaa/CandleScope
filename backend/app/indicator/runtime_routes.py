@@ -146,6 +146,11 @@ class IndicatorRuntimeRoutes:
                     ROUTE_MODE_SIDECAR,
                     "candlescope.pine-compat",
                 ),
+                IndicatorRuntimeRoute(
+                    "python",
+                    ROUTE_MODE_SIDECAR,
+                    "candlescope.python-indicator",
+                ),
             )
         )
 

@@ -7,6 +7,7 @@ export type TradeStatus = "open" | "closed";
 export type JournalStage = "pre" | "open" | "post";
 
 export interface PracticeSettings {
+  positionMode?: "ONE_WAY" | "HEDGE";
   initialBalance: string;
   takerFeeRate: string;
   makerFeeRate: string;
@@ -75,6 +76,7 @@ export interface ReadonlyTradeSource {
 }
 
 export interface Trade {
+  positionSide?: "LONG" | "SHORT";
   readonlySource?: ReadonlyTradeSource;
   id: string;
   accountId: string;
@@ -120,6 +122,7 @@ export interface JournalSnapshot {
 }
 
 export interface JournalEntry {
+  positionSide?: "LONG" | "SHORT";
   id: string;
   accountId: string;
   exchange: string;
@@ -186,6 +189,8 @@ export interface TradeDetail extends Trade {
 }
 
 export interface PracticeOrder {
+  positionSide?: "LONG" | "SHORT";
+  positionEffect?: "open" | "close";
   id: string;
   accountId: string;
   exchange: string;
@@ -218,6 +223,7 @@ export interface PracticeFeed {
 }
 
 export interface AccountSummary {
+  valuationStatus?: "current" | "stale" | "unknown";
   account: TradingAccount;
   balance: string;
   equity: string;

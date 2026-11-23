@@ -2,6 +2,8 @@ import type { MainChartType } from "../../shared/mainChartTypes.js";
 import { getChartTypeDescriptor } from "./chartTypeRegistry.js";
 import { createProjector } from "./projectorFactory.js";
 import { ProjectionStore } from "./projectionStore.js";
+import { BackendProjectionStore } from "./backendProjectionStore.js";
+import type { SyntheticChartBinding } from "../market-data/synthetic/syntheticChartBinding.js";
 import { resolveRenkoProjectorOptions } from "./renkoProjectionOptions.js";
 import { resolvePointFigureProjectorOptions } from "./pointFigureProjectionOptions.js";
 import { resolveKagiProjectorOptions } from "./kagiProjectionOptions.js";
@@ -75,6 +77,8 @@ class ConfiguredProjectionStore extends ProjectionStore {
 }
 
 export function createConfiguredProjectionStore(chartType: MainChartType,
-  rows: readonly SourceBar[] = [], settings: ProjectionSettings = {}): ConfiguredProjectionStore {
+  rows: readonly SourceBar[] = [], settings: ProjectionSettings = {},
+  backend: SyntheticChartBinding | null = null): ConfiguredProjectionStore | BackendProjectionStore {
+  if (backend) return new BackendProjectionStore(backend);
   return new ConfiguredProjectionStore(chartType, rows, { ...settings });
 }

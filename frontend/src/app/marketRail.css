@@ -436,3 +436,101 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .right-market-rail[data-runtime-source="replay"] .replay-watchlist-pane {
   min-height: 90px;
 }
+
+/* ── Phone layout (phoneLayout.ts) ────────────────────────────
+ * The activity bar runs along the bottom under the chart, one tab per view, and the panel opens
+ * as a sheet over the lower part of the chart. MarketRightRailFrame shows one view in the sheet
+ * and drops the panel's width and resize handle; each visit starts with the sheet closed. */
+@media (max-width: 640px) {
+  .main-content-area:has(> .extension-rail-slot .right-market-rail) {
+    flex-direction: column;
+  }
+
+  .main-content-area:has(> .extension-rail-slot .right-market-rail) > .chart-with-toolbar {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .main-content-area:has(> .extension-rail-slot .right-market-rail) > .extension-rail-slot {
+    flex: 0 0 auto;
+  }
+
+  /* Above the drawing toolbar, so the sheet covers it too. */
+  .right-market-rail {
+    z-index: var(--z-panel);
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .market-activity-bar {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: space-between;
+    width: auto;
+    height: auto;
+    padding: 2px 4px;
+    border-left: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .market-activity-item {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 48px;
+    min-height: 44px;
+  }
+
+  .market-activity-item.active::before {
+    top: 0;
+    right: 10px;
+    bottom: auto;
+    left: 10px;
+    width: auto;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+  }
+
+  /* A touch screen keeps :hover on the tab last tapped, which would leave a closed tab lit. */
+  .market-activity-item:not(.active):hover:not(:focus-visible) {
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  /* With the sheet closed no tab is current. */
+  .right-market-rail[data-panel-open="false"] .market-activity-item.active {
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  .right-market-rail[data-panel-open="false"] .market-activity-item.active::before {
+    display: none;
+  }
+
+  /* The sheet's hide control points down, the way the sheet goes. */
+  .market-rail-single-hide svg {
+    transform: rotate(90deg);
+  }
+
+  .market-rail-panel {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: min(60vh, 520px);
+    border-top: 1px solid var(--border-color);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--bg-secondary);
+    box-shadow: 0 -12px 28px color-mix(in srgb, var(--backdrop) 75%, transparent);
+  }
+
+  /* One view at the sheet's full height; the view scrolls itself. */
+  .market-rail-panel.market-rail-sheet {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+}

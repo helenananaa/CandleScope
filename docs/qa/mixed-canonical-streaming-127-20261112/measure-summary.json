@@ -1,0 +1,70 @@
+[
+  {
+    "count": 1,
+    "variant": "baseline",
+    "source_rows": 336,
+    "canonical_pages": 4,
+    "phase": {
+      "cpu_us": 150453.0,
+      "wall_us": 152906.459,
+      "traced_end_bytes": 220041,
+      "traced_peak_bytes": 857657,
+      "live_canonical_rows": 0,
+      "peak_canonical_rows": 336
+    },
+    "input_hash": "01955db38886ce7ea0886e9204b48a2ce62f1ae443e76dd8fefff3103da7a38f",
+    "result_hash": "a1bc5f2c914380bdb50a3ec94e1f9bbad68e6f1f4c868db1097c316169217c57",
+    "report_rows": 336
+  },
+  {
+    "count": 1,
+    "variant": "product",
+    "source_rows": 336,
+    "canonical_pages": 4,
+    "phase": {
+      "cpu_us": 158511.0,
+      "wall_us": 159493.333,
+      "traced_end_bytes": 211269,
+      "traced_peak_bytes": 780652,
+      "live_canonical_rows": 0,
+      "peak_canonical_rows": 256
+    },
+    "input_hash": "01955db38886ce7ea0886e9204b48a2ce62f1ae443e76dd8fefff3103da7a38f",
+    "result_hash": "a1bc5f2c914380bdb50a3ec94e1f9bbad68e6f1f4c868db1097c316169217c57",
+    "report_rows": 336
+  },
+  {
+    "count": 16,
+    "variant": "baseline",
+    "source_rows": 5459,
+    "canonical_pages": 86,
+    "phase": {
+      "cpu_us": 1055029.0,
+      "wall_us": 1071117.875,
+      "traced_end_bytes": 314347,
+      "traced_peak_bytes": 10409812,
+      "live_canonical_rows": 0,
+      "peak_canonical_rows": 5459
+    },
+    "input_hash": "1bd1d7a80ff231f0d9e798ab059521b7a1ce4588b0f9f36a9d0ffc67657b8046",
+    "result_hash": "44aaa16cae2c95c6f55a7fb9352fe9b9100429cc0aed7775afa789317abc8daf",
+    "report_rows": 5459
+  },
+  {
+    "count": 16,
+    "variant": "product",
+    "source_rows": 5459,
+    "canonical_pages": 86,
+    "phase": {
+      "cpu_us": 1033054.0,
+      "wall_us": 1046219.875,
+      "traced_end_bytes": 307274,
+      "traced_peak_bytes": 988285,
+      "live_canonical_rows": 0,
+      "peak_canonical_rows": 256
+    },
+    "input_hash": "1bd1d7a80ff231f0d9e798ab059521b7a1ce4588b0f9f36a9d0ffc67657b8046",
+    "result_hash": "44aaa16cae2c95c6f55a7fb9352fe9b9100429cc0aed7775afa789317abc8daf",
+    "report_rows": 5459
+  }
+]

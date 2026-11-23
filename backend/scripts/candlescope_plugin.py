@@ -1,4 +1,4 @@
-"""Repository entry point for legacy runtimes and explicit platform v2 plugins."""
+"""Repository entry point for unified packages and platform plugin tools."""
 
 from __future__ import annotations
 
@@ -28,9 +28,15 @@ def main(argv: list[str] | None = None) -> int:
         from app.plugin_github_import_v3.cli import main as platform_v3_main
 
         return platform_v3_main(arguments[1:])
-    from app.plugin_runtime.installer_cli import main as legacy_main
+    if arguments[:1] == ["unified"]:
+        from unified_plugin import main as unified_main
 
-    return legacy_main(arguments)
+        return unified_main(arguments[1:])
+    print(
+        "The legacy script installer is retired. Use 'unified' with an updated package, or 'v2'/'v3' for platform tools.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 if __name__ == "__main__":

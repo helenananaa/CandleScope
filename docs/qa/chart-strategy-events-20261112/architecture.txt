@@ -1,0 +1,1 @@
+Architecture check passed (0 migration allowlist entries active).

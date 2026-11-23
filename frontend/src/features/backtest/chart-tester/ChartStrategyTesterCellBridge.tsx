@@ -1,3 +1,5 @@
+import type { ChartSettings } from "../../settings/chartAppearanceSettings.js";
+import { chartStrategySignalInput, withChartSignalInput } from "./chartStrategySignalInput.js";
 import { researchModeForTask, strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
@@ -73,6 +75,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   workspaceId: string;
   cellId: string;
   session: ChartSession;
+  appearance?: Partial<ChartSettings> | undefined;
   attachment: ChartStrategyAttachmentRecord | null;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
@@ -97,7 +100,8 @@ export default function ChartStrategyTesterCellBridge({
   workspaceId,
   cellId,
   session,
-  attachment,
+  attachment: savedAttachment,
+  appearance,
   nativeStrategies,
   strategyTesterMode,
   onStrategyTesterModeChange,
@@ -116,6 +120,7 @@ export default function ChartStrategyTesterCellBridge({
   onOpenPanel,
   onClosePanel,
 }: ChartStrategyTesterCellBridgeProps) {
+  const attachment = useMemo(() => savedAttachment ? withChartSignalInput(savedAttachment, appearance ?? {}) : null, [savedAttachment, appearance]);
   const locale = useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
@@ -172,6 +177,7 @@ export default function ChartStrategyTesterCellBridge({
       customRange: attachment.customRange,
       fidelityPreference: attachment.fidelityPreference,
       quickPresetId: attachment.quickPresetId,
+      signalChart: attachment.signalChart,
       executionOverrides: attachment.executionOverrides,
     })
     : null;
@@ -757,6 +763,7 @@ export default function ChartStrategyTesterCellBridge({
       session={session}
       attachment={attachment}
       nativeStrategies={nativeStrategies}
+      signalChart={attachment?.signalChart ?? chartStrategySignalInput(appearance ?? {})}
       strategyTesterMode={strategyTesterMode}
       {...(onStrategyTesterModeChange ? { onStrategyTesterModeChange } : {})}
       {...(onNativeStrategiesChange ? { onNativeStrategiesChange } : {})}

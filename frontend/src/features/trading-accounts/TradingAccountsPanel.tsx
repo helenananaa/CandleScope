@@ -65,7 +65,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
         type: "market",
         qty: trade.openQty,
         reduceOnly: true,
-        ...(trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
+        ...(selected.settings.positionMode === "HEDGE" && trade.marketType === "futures"
+          ? { positionSide: trade.direction === "long" ? "LONG" : "SHORT", positionEffect: "close", tradeId: trade.id } : {}),
+        ...(trade.exchange === context.exchange && trade.marketType === context.marketType && trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
       });
       await refresh();
     } catch (cause) {
@@ -138,8 +140,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             </Badge>
             {summary && selected.kind === "practice" && (
               <span className="trading-equity">
-                {t("trading.equity")} <strong>{formatAmount(summary.equity)}</strong>
-                <span data-tone={pnlTone(summary.unrealizedPnl)}> {formatSigned(summary.unrealizedPnl)}</span>
+                {t("trading.equity")} <strong>{summary.valuationStatus === "unknown" ? "—" : formatAmount(summary.equity)}</strong>
+                {summary.valuationStatus === "stale" && <small>{t("pane.q.estimated")}</small>}
+                <span data-tone={pnlTone(summary.unrealizedPnl)}> {summary.valuationStatus === "unknown" ? "—" : formatSigned(summary.unrealizedPnl)}</span>
               </span>
             )}
             {summary && selected.kind === "manual" && (
@@ -221,8 +224,8 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={order.id} className="trading-row" data-compact="true">
                     <div className="trading-row-main">
                       <strong>{order.symbol}</strong>
-                      <DirectionBadge direction={order.side === "buy" ? "long" : "short"}>
-                        {t(`trading.orderTag.${order.tag === "stop_loss" ? "stopLoss" : order.tag === "take_profit" ? "takeProfit" : order.type}` as const)}
+                      <DirectionBadge direction={(order.positionSide ? order.positionSide === "LONG" : order.side === "buy") ? "long" : "short"}>
+                        {order.positionSide && t(order.positionSide === "LONG" ? "trading.long" : "trading.short")} {t(`trading.orderTag.${order.tag === "stop_loss" ? "stopLoss" : order.tag === "take_profit" ? "takeProfit" : order.type}` as const)}
                       </DirectionBadge>
                       <span>{formatQty(order.qty)} @ {formatPrice(order.limitPrice ?? order.stopPrice)}</span>
                     </div>

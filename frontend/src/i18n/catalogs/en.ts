@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -11,6 +12,7 @@ import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...unifiedMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
@@ -636,6 +638,8 @@ export const en = {
   "market.spot": "Spot",
   "market.futures": "Futures",
   "market.swap": "Perp",
+  "market.swapLinear": "Linear perp",
+  "market.library": "Library",
   "exchange.binance": "Binance",
 
   "interval.toolbar": "Interval toolbar",
@@ -902,6 +906,7 @@ export const en = {
   "legend.change": "Chg",
   "legend.amplitude": "Ampl.",
   "legend.noData": "No data for this bar",
+  "legend.partialSeed": "Computed from the earliest stored bar ({seed} of {warmup} warmup bars). Values may change when older history loads.",
   "legend.line": "Line {n}",
   "legend.mainPane": "{symbol} main",
 
@@ -3805,6 +3810,8 @@ export const en = {
   "replay.storage.evicted": "EVICTED",
   "replay.hub.makerTakerBps": "Maker / Taker bps",
   "chart.loadingKlines": "Loading {symbol} {interval} candles…",
+  "chart.syntheticPreparing": "Preparing chart data…",
+  "chart.syntheticUnavailable": "Chart data is temporarily unavailable. Reconnecting…",
   "backtest.bundleHash": "Package {hash}",
   "backtest.sourceManifestHashes": "Source {source} · manifest {manifest}",
   "backtest.coverageRows": "{rows} rows / warmup {warmup}",
@@ -4578,6 +4585,11 @@ export const en = {
   "shell.moreActions": "More actions",
   "serverError.code.historyOriginUnavailable": "Couldn't read where the exchange's history begins. Try again shortly.",
   "serverError.code.subscribeFailed": "Couldn't subscribe to live data",
+  "serverError.code.desktopRequired": "This needs the CandleScope desktop app.",
+  "serverError.code.librarySourceUnsupported": "History for replay can't be downloaded for this market yet.",
+  "serverError.code.libraryRangeInvalid": "Choose a UTC range that has ended and starts and ends on whole minutes.",
+  "serverError.code.libraryRangeTooLarge": "The range is more than the library can hold. Choose a shorter one.",
+  "serverError.code.libraryDownloadEnded": "This download has ended. Submit the same range again to see the saved data.",
   "local.qualityStatus.accepted": "Accepted",
   "local.qualityStatus.acceptedWithGaps": "Accepted with gaps",
   "local.sourceBars": "{count} source bars",
@@ -4628,5 +4640,31 @@ export const en = {
   "aiControl.copyFailed": "Could not copy. Check clipboard permission.",
   "aiControl.desktopOnly": "Local MCP is available in the desktop application.",
   "aiControl.configuration": "Show connection configuration",
+  "browser.host.starting": "Starting CandleScope…",
+  "browser.host.firstStart": "The first start downloads about 40 MB. Later starts are much faster.",
+  "browser.host.unsupported": "This browser can't run the CandleScope web app. Use a current desktop browser, or download the desktop app.",
+  "browser.host.startFailed": "CandleScope couldn't start: {reason}",
+  "browser.host.updated": "The web app has been updated. Close all of this site's tabs, then open it again.",
+  "browser.host.storageWaiting": "Another version of CandleScope is open in other tabs. Close them and this page continues on its own.",
+  "browser.host.storageFailed": "Recent changes couldn't be saved in the browser ({reason}). CandleScope keeps trying; check the free disk space.",
+  "browser.desktop.download": "Download the desktop app",
+  "browser.desktop.runStrategies": "Download the desktop app to run strategies",
+  "browser.desktop.connectAccount": "Download the desktop app to connect an exchange account",
+  "browser.desktop.only": "Desktop app only",
+  "browser.scripts.desktopOnly": "Strategies and custom scripts run in the desktop app. Built-in indicators work here.",
+  "browser.strategy.intro": "Import data, analyze charts and save strategy drafts here.",
+  "browser.replay.reuseHistory": "Saved history is reused. Only missing ranges are fetched.",
+  "browser.replay.start": "Start replay",
+  "browser.replay.barsOnly": "Bar replay is available for this market.",
+  "browser.download.tab": "Download",
+  "browser.download.preparing": "Preparing market data…",
+  "browser.download.saved": "Saved to the library · {name}",
+  "browser.download.progress": "Downloading · {count}",
+  "browser.download.failed": "Download failed",
+  "browser.download.kind": "Data",
+  "browser.download.bars": "1-minute bars",
+  "browser.download.end": "End (UTC, exclusive)",
+  "browser.download.submit": "Download and import",
+  "browser.download.symbolLookupUnavailable": "Symbol lookup is unavailable. Enter the full market symbol.",
   ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

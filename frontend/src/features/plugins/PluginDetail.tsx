@@ -17,6 +17,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
   const [confirmation, setConfirmation] = useState<"uninstall" | "rollback" | null>(null);
   const settings = runtime.view.registries.settings.filter((item) => item.pluginId === selected.id);
   const status = pluginStatus(selected);
+  const retired = selected.unavailableReason === "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED";
   const mutate = async (action: "enable" | "disable" | "rollback" | "uninstall") => {
     if (pending || !runtime.view.managementAvailable) return;
     setPending(true);
@@ -34,7 +35,9 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
       <div><h3>{selected.name}</h3><p>{selected.publisher} · {selected.version}</p></div>
       <Badge tone={status === "active" ? "success" : status === "attention" ? "warning" : "neutral"}>{t(`pc.${status}`)}</Badge>
     </header>
-    <div className="plugin-action-row pc-detail-actions">
+    {retired ? <InlineAlert action={<Button size="sm" onClick={onDiscover}>{t("pc.discover")}</Button>}>
+      {t("unified.legacyUpgrade")}
+    </InlineAlert> : <div className="plugin-action-row pc-detail-actions">
       {selected.state === "active"
         ? <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("disable")}>{t("plugin.disable")}</button>
         : selected.permissions.activationReady
@@ -45,8 +48,8 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
         <button type="button" disabled={pending || !runtime.view.managementAvailable || !detail?.rollback.available} onClick={() => setConfirmation("rollback")}>{t("plugin.rollback")}</button>
         <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => setConfirmation("uninstall")}>{t("plugin.uninstall")}</button>
       </div></details>
-    </div>
-    {confirmation && <section className="pc-confirm" aria-label={t(`plugin.${confirmation}`)}>
+    </div>}
+    {!retired && confirmation && <section className="pc-confirm" aria-label={t(`plugin.${confirmation}`)}>
       <strong>{t(`plugin.${confirmation}`)} · {selected.name}</strong>
       <p>{confirmation === "uninstall" ? t("plugin.host.uninstallConfirm", { name: selected.name }) : t("plugin.rollbackAvailable", { target: detail?.rollback.target?.version ?? detail?.rollback.target?.state ?? t("plugin.previousActive") })}</p>
       <p>{t("plugin.dataRetentionHint")}</p>
@@ -59,8 +62,8 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
     {error && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => void reload()}>{t("shell.retry")}</Button>}>{error}</InlineAlert>}
     {page === "overview" && <div className="pc-detail-body">
       {/* The badge above states the plugin's status; the overview adds only an active plugin's health. */}
-      {detail && selected.state === "active" && <p>{detail.health.available ? t("plugin.available") : t("plugin.unavailableReason", { reason: detail.health.unavailableReason ?? t("plugin.unknownReason") })}</p>}
-      {!selected.permissions.activationReady && <InlineAlert tone="warning">{t("plugin.host.grantEveryPermission")}</InlineAlert>}
+      {!retired && detail && selected.state === "active" && <p>{detail.health.available ? t("plugin.available") : t("plugin.unavailableReason", { reason: detail.health.unavailableReason ?? t("plugin.unknownReason") })}</p>}
+      {!retired && !selected.permissions.activationReady && <InlineAlert tone="warning">{t("plugin.host.grantEveryPermission")}</InlineAlert>}
       <div className="pc-contributions">{selected.contributions.map((item) => <article key={item.id}><strong>{item.title}</strong><small>{item.kind === "command/1" ? t("plugin.host.commands") : item.kind === "settings/1" ? t("pc.configure") : item.kind}</small></article>)}</div>
                     <ProviderRows providers={selected.contributions.filter(
                       (item): item is PluginProviderContribution => (
@@ -109,7 +112,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
                         </section>
                       );
                     })()}
-      {detail && <PermissionRows runtime={runtime} detail={detail} reload={reload} />}
+      {!retired && detail && <PermissionRows runtime={runtime} detail={detail} reload={reload} />}
     </div>}
     {page === "diagnostics" && <div className="pc-detail-body">
       <p>{selected.id} · {selected.trust?.mode ?? selected.trustLevel}</p>

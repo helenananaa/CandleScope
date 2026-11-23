@@ -138,7 +138,12 @@ export function buildIndicatorPaneData(
     const linesByPane = new Map<string, IndicatorLine[]>();
     for (const line of indicator.lines || []) {
       const pane = line.pane || "main";
-      const lineWithId = { ...line, indicatorId: indicator.id };
+      // Legends resolve partial-seed values per displayed point time.
+      const lineWithId = {
+        ...line,
+        indicatorId: indicator.id,
+        ...(indicator.partialSeed?.length ? { partialSeed: indicator.partialSeed } : {}),
+      };
 
       if (pane === "main") {
         overlayLines.push(lineWithId);

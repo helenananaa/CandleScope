@@ -1,3 +1,4 @@
+import { chartStrategySignalInput, withChartSignalInput } from "../backtest/chart-tester/chartStrategySignalInput.js";
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { Button, Disclosure, Drawer, InlineAlert, SegmentedControl } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
@@ -150,6 +151,7 @@ import { settingsCommands } from "../app-control/settingsCommands.js";
 import { libraryCommands } from "../app-control/libraryCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { bool, choice, object, text } from "../app-control/commandSchema.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export default function StrategyResearchApp({
   intent,
@@ -404,6 +406,7 @@ export default function StrategyResearchApp({
       setSavingTemplate(false);
     });
   }, [dispatch, library]);
+  const signalConfiguration = useMemo(() => withChartSignalInput(state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS, settings), [state.script.configuration, settings]);
   const researchRun = useStrategyResearchRun({
     source,
     imported: importedManifest,
@@ -411,7 +414,7 @@ export default function StrategyResearchApp({
     runtimeMode: hostReady ? runtime.runtimeMode : "LOCAL_OFFLINE",
     draftId: state.script.draftId,
     draftContentRevision: state.script.contentRevision,
-    configuration: state.script.configuration,
+    configuration: signalConfiguration,
     restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
@@ -470,7 +473,7 @@ export default function StrategyResearchApp({
         session: researchRun.session,
         draftId: state.script.draftId,
         result: researchRun.sourceResult,
-        configuration: state.script.configuration,
+        configuration: signalConfiguration,
       }).then((search) => {
         setResearchSearch(search);
         showMode(next, search);
@@ -480,7 +483,7 @@ export default function StrategyResearchApp({
       return;
     }
     showMode(next, researchSearch);
-  }, [mode, modeSwitching, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, state.script.configuration]);
+  }, [mode, modeSwitching, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, signalConfiguration]);
   const openAdvanced = useCallback(() => switchMode("precise"), [switchMode]);
   const modeRail = <StrategyResearchModeRail mode={mode} pending={modeSwitching} onSelect={switchMode} />;
 
@@ -540,10 +543,10 @@ export default function StrategyResearchApp({
           { value: "host", label: t("native.hostMode") },
         ]}
       />
-      {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
+      {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</p>}
       {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
-        <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
           onSelectPython={() => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
               dispatch({ type: "script/setDraft", draftId: draft.id });
@@ -651,7 +654,8 @@ export default function StrategyResearchApp({
     </>
   );
   const header = {
-    actions: [
+    // Saved accounts and runs come from strategy runs, which the web version leaves to the desktop app.
+    actions: browserHost() ? [] : [
       { id: "saved-accounts", label: t("reader.title"), hasPopup: "dialog" as const, expanded: accountsOpen, onSelect: () => setAccountsOpen((open) => !open) },
       { id: "run-history", label: t("ux.history"), hasPopup: "dialog" as const, expanded: historyOpen, onSelect: () => setHistoryOpen((open) => !open) },
     ],

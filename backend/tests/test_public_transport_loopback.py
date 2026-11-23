@@ -565,9 +565,11 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("source_change", ["unchanged", "amended", "deleted"])
+@pytest.mark.parametrize("source_change,chunk_bars", [
+    ("unchanged", 1), ("unchanged", 1000), ("amended", 1000), ("deleted", 1000),
+])
 @pytest.mark.parametrize("market", ["swap.inverse", "swap.linear"])
-def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change, market):
+def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change, market, chunk_bars):
     import sqlite3
 
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
@@ -658,7 +660,7 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                         exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
                         channel="kline", variant=repair.interval,
                     )
-                ), loop=asyncio.get_running_loop(), max_retries=1, max_concurrency=1, chunk_bars=1000,
+                ), loop=asyncio.get_running_loop(), max_retries=1, max_concurrency=1, chunk_bars=chunk_bars,
             )
             return transport, engine, ledger, coordinator
 
@@ -698,7 +700,9 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                 symbol, "10m", start_ms=opened, end_ms=opened + 2 * step, **identity,
             )
             committed = storage.query_bars(symbol, "5m", start_ms=opened, order="ASC", **identity)
-            assert [row["open_time"] for row in committed] == [opened, opened + step]
+            assert [row["open_time"] for row in committed] == (
+                [] if chunk_bars == 1 else [opened, opened + step]
+            )
 
             await coordinator.shutdown()
             await demand
@@ -741,18 +745,24 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                 assert not storage.query_bars(symbol, "5m", start_ms=opened, end_ms=opened + step, **identity)
                 return
             assert outcome.verified_contiguous and final["status"] == "filled", outcome
-            assert pages == [
+            expected_pages = [
                 (opened, opened + step, 2),
                 (opened + 2 * step, opened + 3 * step, 2),
                 (opened + 2 * step, opened + 3 * step, 2),
             ]
+            if chunk_bars == 1:
+                # Each single-target chunk still needs both 5m components.
+                # Newest-first demand encounters quota before any commit.
+                expected_pages = [expected_pages[1], expected_pages[2], expected_pages[0]]
+            assert pages == expected_pages
             rows = storage.query_bars(symbol, "10m", start_ms=opened, end_ms=opened + 2 * step,
                                       order="ASC", **identity)
             assert [(row["open_time"], row["volume"], row["source"]) for row in rows] == [
                 (opened, 45 if source_change == "amended" else 9, "backfill_aggregated"),
                 (opened + 2 * step, 13, "backfill_aggregated"),
             ]
-            assert adopted == [("10m", opened), ("10m", opened + 2 * step)]
+            expected_adoptions = [("10m", opened), ("10m", opened + 2 * step)]
+            assert adopted == (list(reversed(expected_adoptions)) if chunk_bars == 1 else expected_adoptions)
         finally:
             await coordinator.shutdown()
             if demand is not None:

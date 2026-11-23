@@ -1,8 +1,12 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyIndonesian, replayNoteIndonesian, tradeHistoryIndonesian, readonlyAccountIndonesian, continuousIndonesian, tradingAccountsId, nativeIndonesian } from "./indonesianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  ...unifiedMessages["id"],
+  ...syntheticEnglish,
   ...continuousIndonesian,
   ...tradeHistoryIndonesian,
   ...replayNoteIndonesian,
@@ -334,6 +338,8 @@ export const id = {
   "market.spot": "Spot",
   "market.futures": "Berjangka",
   "market.swap": "Perp",
+  "market.swapLinear": "Perp linear",
+  "market.library": "Pustaka",
   "exchange.binance": "Binance",
   "interval.toolbar": "Bilah alat interval",
   "interval.picker": "Pemilih interval",
@@ -592,6 +598,7 @@ export const id = {
   "legend.change": "Perubahan",
   "legend.amplitude": "Amplitudo",
   "legend.noData": "Tidak ada data untuk bar ini",
+  "legend.partialSeed": "Dihitung dari bar tersimpan paling awal ({seed} dari {warmup} bar pemanasan). Nilai dapat berubah saat riwayat yang lebih lama dimuat.",
   "legend.line": "Garis {n}",
   "legend.mainPane": "{symbol} utama",
   "pane.main": "Utama",
@@ -4214,6 +4221,11 @@ export const id = {
   "shell.moreActions": "Tindakan lainnya",
   "serverError.code.historyOriginUnavailable": "Tidak dapat membaca awal riwayat bursa. Coba lagi sebentar lagi.",
   "serverError.code.subscribeFailed": "Gagal berlangganan data waktu nyata",
+  "serverError.code.desktopRequired": "Ini memerlukan aplikasi desktop CandleScope.",
+  "serverError.code.librarySourceUnsupported": "Riwayat untuk putar ulang belum dapat diunduh untuk pasar ini.",
+  "serverError.code.libraryRangeInvalid": "Pilih rentang UTC yang sudah berakhir dan dimulai serta berakhir pada menit penuh.",
+  "serverError.code.libraryRangeTooLarge": "Rentang melebihi kapasitas pustaka. Pilih rentang yang lebih pendek.",
+  "serverError.code.libraryDownloadEnded": "Unduhan ini sudah selesai. Kirim rentang yang sama lagi untuk melihat data yang tersimpan.",
   "local.qualityStatus.accepted": "Diterima",
   "local.qualityStatus.acceptedWithGaps": "Diterima dengan celah",
   "local.sourceBars": "{count} candle sumber",
@@ -4221,5 +4233,31 @@ export const id = {
   "common.working": "Memproses…",
   "common.pickDateTime": "Pilih tanggal dan waktu",
   ...tradingAccountsId,
+  "browser.host.starting": "Memulai CandleScope…",
+  "browser.host.firstStart": "Pembukaan pertama mengunduh sekitar 40 MB. Pembukaan berikutnya jauh lebih cepat.",
+  "browser.host.unsupported": "Browser ini tidak dapat menjalankan versi web CandleScope. Gunakan browser desktop terbaru, atau unduh aplikasi desktop.",
+  "browser.host.startFailed": "CandleScope gagal dimulai: {reason}",
+  "browser.host.updated": "Versi web telah diperbarui. Tutup semua tab situs ini, lalu buka lagi.",
+  "browser.host.storageWaiting": "Versi lain CandleScope terbuka di tab lain. Tutup tab tersebut dan halaman ini akan berlanjut sendiri.",
+  "browser.host.storageFailed": "Perubahan terbaru tidak dapat disimpan di browser ({reason}). CandleScope terus mencoba; periksa ruang disk yang tersedia.",
+  "browser.desktop.download": "Unduh aplikasi desktop",
+  "browser.desktop.runStrategies": "Unduh aplikasi desktop untuk menjalankan strategi",
+  "browser.desktop.connectAccount": "Unduh aplikasi desktop untuk menghubungkan akun bursa",
+  "browser.desktop.only": "Hanya di aplikasi desktop",
+  "browser.scripts.desktopOnly": "Strategi dan skrip kustom berjalan di aplikasi desktop. Indikator bawaan tetap berfungsi di sini.",
+  "browser.strategy.intro": "Di sini Anda dapat mengimpor data, menganalisis grafik, dan menyimpan draf strategi.",
+  "browser.replay.reuseHistory": "Riwayat yang tersimpan dipakai ulang. Hanya rentang yang belum ada yang diambil.",
+  "browser.replay.start": "Mulai putar ulang",
+  "browser.replay.barsOnly": "Putar ulang lilin tersedia untuk pasar ini.",
+  "browser.download.tab": "Unduh",
+  "browser.download.preparing": "Menyiapkan data pasar…",
+  "browser.download.saved": "Disimpan ke pustaka · {name}",
+  "browser.download.progress": "Mengunduh · {count}",
+  "browser.download.failed": "Unduhan gagal",
+  "browser.download.kind": "Data",
+  "browser.download.bars": "Lilin 1 menit",
+  "browser.download.end": "Selesai (UTC, tidak termasuk)",
+  "browser.download.submit": "Unduh dan impor",
+  "browser.download.symbolLookupUnavailable": "Pencarian simbol tidak tersedia. Masukkan simbol pasar lengkap.",
 } as const satisfies MessageCatalog;
 

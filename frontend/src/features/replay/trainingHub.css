@@ -706,11 +706,16 @@
   .training-hub-page.training-hub-modal-surface { height: calc(100vh - 16px); padding: 16px 12px 36px; border-radius: var(--radius-md); }
   .training-hub-heading { align-items: flex-start; flex-direction: column; }
   .training-hub-heading-actions { width: 100%; flex-wrap: wrap; }
+  /* The text takes the row and the button wraps below it, rather than the text shrinking to a
+     sliver beside the button. */
+  .training-hub-resume > div { flex: 1 1 220px; }
   .training-hub-toolbar-meta { margin-left: 0; }
   .training-hub-card { grid-template-columns: minmax(0, 1fr); }
   .training-hub-card-equity { justify-items: start; }
   .training-hub-create .ui-dialog-body { overflow-y: auto; }
-  .training-hub-create-body { grid-template-columns: 1fr; }
+  /* Its natural height, so the dialog body scrolls the form and the summary below it; stretched
+     to the body's height, the form's row shrank and ran under the summary. */
+  .training-hub-create-body { align-self: flex-start; grid-template-columns: 1fr; }
   .training-hub-create-main,
   .training-hub-create-side { overflow: visible; }
   .training-hub-field-grid,

@@ -1,3 +1,4 @@
+import { sameChartSignalInput } from "../chart-tester/chartStrategySignalInput.js";
 import { pineContractMetadata } from "../../indicators/pineContractMetadata.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
@@ -36,6 +37,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command, contextReference } from "../../app-control/commandRegistry.js";
 import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
 import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -44,6 +46,7 @@ const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as 
 const ignoreCursor = () => undefined;
 
 type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
   onStatusChange?: (status: NativeFeedbackStatus) => void;
@@ -109,10 +112,11 @@ type InstanceProps = NativeStrategyPanelProps & {
   onInstanceBusy(id: string, busy: boolean): void;
 };
 function NativeStrategyInstancePanel(props: InstanceProps) {
-  const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.instance.executionMode ?? "NATIVE");
+  const [selectedMode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.instance.executionMode ?? "NATIVE");
+  const mode = props.signalChart ? "CANDLESCOPE" : selectedMode;
   const [visited, setVisited] = useState(() => new Set([mode]));
-  const switchMode = (next: typeof mode) => { props.onInstanceChange(props.instance.id, { executionMode: next }); setMode(next); setVisited((items) => new Set([...items, next])); };
-  return <>{([...visited]).map((item) => <StrategyDockPane key={item} hidden={mode !== item}>
+  const switchMode = (next: typeof mode) => { if (props.signalChart && next === "NATIVE") return; props.onInstanceChange(props.instance.id, { executionMode: next }); setMode(next); setVisited((items) => new Set([...items, next])); };
+  return <>{([...new Set([...visited, mode])]).map((item) => <StrategyDockPane key={item} hidden={mode !== item}>
     <NativeStrategySession {...props} active={(props.active ?? true) && mode === item} executionMode={item} onExecutionModeChange={switchMode} />
   </StrategyDockPane>)}</>;
 }
@@ -337,7 +341,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const inputs = await freezeAdvancedInputs(advanced, language, {
           start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
         });
-        const submission = { language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
+        const submission = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
           ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
           ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
           ...(automaticExecution === null ? {} : { execution: automaticExecution }),
@@ -361,7 +365,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           end_time_ms: dataset.last_close_ms, interval: context.interval, ...market };
         const snapshot = await nativeApi<{ snapshot_hash: string }>("/datasets/snapshot", data);
         const inputs = await freezeAdvancedInputs(advanced, language, data);
-        const payload = { ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
+        const payload = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
           language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) } };
         if (prepareTrades) { await prepareRun("/external-strategy", { run: payload }); return; }
         const result = await nativeApi<NativeRun>(runPath, payload, crypto.randomUUID());
@@ -382,7 +386,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms!,
         exchange: context.exchange, market_type: context.marketType,
       });
-      const result = await nativeApi<NativeRun>(runPath, { ...inputs, ...execution,
+      const result = await nativeApi<NativeRun>(runPath, { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
         language, source, parameters: params, dataset_id: frozen.dataset_id, data_epoch: frozen.data_epoch,
         snapshot_hash: frozen.snapshot_hash, start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms,
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms,
@@ -401,7 +405,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     && sameExecutionData(reportRun?.config?.account_data, accountData), [accountDataState, reportRun?.config?.account_data, accountData]);
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
-  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged
+  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged || !sameChartSignalInput(reportRun.config?.signal_chart, props.signalChart)
     || datasetIdentityChanged(reportRun.config, props.dataset)
     || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
       { hostSettings, fidelity, fillRecalculation: fillRecalculation && (language === "pine" || fidelity !== "BAR_APPROX"),
@@ -524,7 +528,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <Disclosure summary={t("plugin.techDetails")}><pre className="strategy-dock-detail">{errorDetails}</pre></Disclosure>
       </InlineAlert>}
       {capabilities && !engineReady && <InlineAlert>
-        <p>{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</p>
+        <p>{browserHost() ? t("browser.scripts.desktopOnly") : `${t("indicator.editor.runtimeUnavailableHelp")} ${t("native.platformHelp")}`}</p>
         {available?.reason && <Disclosure summary={t("plugin.techDetails")}><p>{available.reason}</p></Disclosure>}
       </InlineAlert>}
       {historicalRun && <InlineAlert title={t("strategyHistory.viewing")}
@@ -559,7 +563,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <section className="strategy-settings-section">
         <h3>{t("native.mode")}</h3>
         <div className="strategy-engine-options" role="radiogroup" aria-label={t("native.mode")}>
-          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" className="strategy-engine-option" role="radio" aria-checked={mode === engine} disabled={busy}
+          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" className="strategy-engine-option" role="radio" aria-checked={mode === engine} disabled={busy || (!!props.signalChart && engine === "NATIVE")}
             onClick={() => { if (mode !== engine) props.onExecutionModeChange(engine); }}>
             <strong>{t(engine === "NATIVE" ? "native.title" : "native.external.title")}</strong>
             <span>{t(engine === "NATIVE" ? "native.description" : "native.external.description")}</span>

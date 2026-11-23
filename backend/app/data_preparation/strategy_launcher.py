@@ -36,6 +36,7 @@ def launch(runtime, intent, resolution, job_id):
                 or profile["outputMode"] not in output_modes):
             raise PreparationError("FIDELITY_UNSUPPORTED", "The selected revision cannot run the saved Python BAR profile")
     body = {
+        **({"signal_chart": intent["signal_chart"]} if intent.get("signal_chart") is not None else {}),
         "strategy_revision_id": intent["strategy_revision_id"],
         "dataset_id": resolution["dataset_id"], "data_epoch": resolution["data_epoch"],
         "snapshot_hash": resolution["snapshot_hash"], "fidelity_mode": resolution["fidelity"]["mode"],

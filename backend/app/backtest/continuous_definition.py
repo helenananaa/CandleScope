@@ -17,7 +17,7 @@ from .service import _base_execution_contract, _config_decimal, _config_optional
 
 BASE_FIELDS = {"account_model","gap_policy","contract_data_mode","funding_mode","leverage",
     "initial_balance","slippage_bps","taker_fee_bps","maker_fee_bps","funding_rate","funding_interval_hours",
-    "price_tick","qty_step","min_notional","quick_preset_id","quick_preset_revision","fee_source"}
+    "signal_chart","price_tick","qty_step","min_notional","quick_preset_id","quick_preset_revision","fee_source"}
 POLICY_FIELDS = {"sizing_policy","fixed_qty","fixed_notional","equity_percent","risk_per_stop_percent",
     "stop_distance","max_abs_position_qty","max_notional","max_leverage","max_order_risk","max_active_orders",
     "max_cumulative_fees","max_drawdown_percent","daily_loss_limit","cooldown_events"}
@@ -74,6 +74,10 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0):
     for name in ("price_tick","qty_step","min_notional"):
         value = _config_optional_decimal(payload,name)
         if value is not None:config[name] = str(value)
+    if payload.get("signal_chart") is not None:
+        from app.data_engine.synthetic_series.signals import normalize_signal_chart
+        try:config["signal_chart"] = normalize_signal_chart(payload["signal_chart"])
+        except ValueError as exc:raise BacktestError("CONTINUOUS_INPUT_INVALID",str(exc)) from exc
     if policy:config.update(policy.identity())
     if preset:config.update(quick_preset_id=preset,quick_preset_revision=preset_revision,fee_source=fee_source)
     config.update(realism.identity(fidelity_mode="BAR_APPROX"))

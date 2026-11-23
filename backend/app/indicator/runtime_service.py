@@ -121,7 +121,7 @@ class IndicatorRuntimeRequest:
         from app.data_engine.interval_policy import parse_interval_spec
         bars = _sdk_bars(output_stream, self.bars)
         spec = parse_interval_spec(self.interval)
-        if spec and (spec.phase_ms or spec.timezone) and bars:
+        if spec and (spec.phase_ms or spec.timezone) and bars and not options.get("chartInput"):
             times = [bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
             if any(spec.floor_ms(at) != at for at in times):
                 raise ValueError("indicator_bar_basis_mismatch")
@@ -353,14 +353,24 @@ class IndicatorRuntimeService:
         return service
 
     async def start(self) -> None:
-        if self._started:
+        await self._load_descriptors()
+
+    async def refresh_runtime(self, runtime_id: str) -> None:
+        await self._load_descriptors(runtime_id)
+
+    async def _load_descriptors(self, runtime_id: str | None = None) -> None:
+        if self._started and runtime_id is None:
             return
         async with self._start_lock:
-            if self._started:
+            if self._started and runtime_id is None:
                 return
-            descriptors: dict[str, RuntimeDescriptor] = {}
-            failures: dict[str, IndicatorRuntimeFailure] = {}
+            descriptors = dict(self._runtime_descriptors)
+            failures = dict(self._route_failures)
+            descriptors.pop(runtime_id, None)
             for route in self.routes.routes:
+                if runtime_id is not None and route.runtime_id != runtime_id:
+                    continue
+                failures.pop(route.language, None)
                 if (
                     route.mode in {ROUTE_MODE_LEGACY, ROUTE_MODE_SHADOW}
                     and route.language not in self.legacy_languages
@@ -371,10 +381,10 @@ class IndicatorRuntimeService:
                     )
                 if route.mode == ROUTE_MODE_LEGACY:
                     continue
-                runtime_id = route.runtime_id or ""
+                route_runtime_id = route.runtime_id or ""
                 if self.host is None or route.runtime_id is None:
                     failures[route.language] = IndicatorRuntimeFailure(
-                        runtime_id,
+                        route_runtime_id,
                         "PLUGIN_HOST_UNAVAILABLE",
                     )
                     continue

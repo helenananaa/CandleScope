@@ -8,8 +8,11 @@ actually deliver through the generic provider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import json
+import os
+from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import ccxt
@@ -107,11 +110,50 @@ def assert_supported_ccxt_version() -> None:
         )
 
 
+# A host may ship the catalog it computed at build time for the same pinned
+# package, so that starting does not construct every exchange class.
+PRECOMPUTED_CATALOG_ENV = "CANDLESCOPE_CCXT_CATALOG"
+
+
+def ccxt_catalog_document(entries: tuple[CcxtCatalogEntry, ...] | None = None) -> dict[str, Any]:
+    """Serialize the catalog for ``CANDLESCOPE_CCXT_CATALOG``."""
+
+    return {
+        "ccxt_version": SUPPORTED_CCXT_VERSION,
+        "entries": [asdict(entry) for entry in (get_ccxt_catalog() if entries is None else entries)],
+    }
+
+
+def _precomputed_ccxt_catalog(path: str) -> tuple[CcxtCatalogEntry, ...]:
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    if document.get("ccxt_version") != SUPPORTED_CCXT_VERSION:
+        raise RuntimeError(
+            f"Precomputed CCXT catalog {path} is for ccxt=={document.get('ccxt_version')}, "
+            f"not {SUPPORTED_CCXT_VERSION}",
+        )
+    return tuple(
+        CcxtCatalogEntry(
+            exchange_id=str(item["exchange_id"]),
+            name=str(item["name"]),
+            pro=bool(item["pro"]),
+            market_types=tuple(item["market_types"]),
+            timeframes=tuple(item["timeframes"]),
+            methods=tuple((str(name), bool(supported)) for name, supported in item["methods"]),
+            rate_limit_ms=int(item["rate_limit_ms"]),
+            history_limit=int(item["history_limit"]),
+        )
+        for item in document["entries"]
+    )
+
+
 @lru_cache(maxsize=1)
 def get_ccxt_catalog() -> tuple[CcxtCatalogEntry, ...]:
     """Return the deterministic catalog for the pinned CCXT package."""
 
     assert_supported_ccxt_version()
+    precomputed = os.environ.get(PRECOMPUTED_CATALOG_ENV, "").strip()
+    if precomputed:
+        return _precomputed_ccxt_catalog(precomputed)
     pro_ids = frozenset(ccxtpro.exchanges)
     entries: list[CcxtCatalogEntry] = []
     for exchange_id in ccxt.exchanges:

@@ -1,8 +1,12 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyItalian, replayNoteItalian, tradeHistoryItalian, readonlyAccountItalian, continuousItalian, tradingAccountsIt, nativeItalian } from "./italianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const it = {
+  ...unifiedMessages["it"],
+  ...syntheticEnglish,
   ...continuousItalian,
   ...tradeHistoryItalian,
   ...replayNoteItalian,
@@ -334,6 +338,8 @@ export const it = {
   "market.spot": "A pronti",
   "market.futures": "Future",
   "market.swap": "Perpetuo",
+  "market.swapLinear": "Perpetuo lineare",
+  "market.library": "Biblioteca",
   "exchange.binance": "Binance",
   "interval.toolbar": "Barra degli intervalli",
   "interval.picker": "Selettore intervalli",
@@ -592,6 +598,7 @@ export const it = {
   "legend.change": "Var.",
   "legend.amplitude": "Amp.",
   "legend.noData": "Nessun dato per questa barra",
+  "legend.partialSeed": "Calcolato dalla barra salvata più vecchia ({seed} di {warmup} barre di warmup). I valori possono cambiare quando viene caricato lo storico precedente.",
   "legend.line": "Linea {n}",
   "legend.mainPane": "{symbol} principale",
   "pane.main": "Principale",
@@ -4214,6 +4221,11 @@ export const it = {
   "shell.moreActions": "Altre azioni",
   "serverError.code.historyOriginUnavailable": "Impossibile leggere l’inizio dello storico dell’exchange. Riprova tra poco.",
   "serverError.code.subscribeFailed": "Sottoscrizione ai dati in tempo reale non riuscita",
+  "serverError.code.desktopRequired": "Serve l'applicazione desktop di CandleScope.",
+  "serverError.code.librarySourceUnsupported": "Per questo mercato non è ancora possibile scaricare lo storico per la riproduzione.",
+  "serverError.code.libraryRangeInvalid": "Scegli un intervallo UTC già concluso che inizi e finisca su minuti interi.",
+  "serverError.code.libraryRangeTooLarge": "L'intervallo supera la capacità della biblioteca. Scegline uno più breve.",
+  "serverError.code.libraryDownloadEnded": "Questo download è terminato. Invia di nuovo lo stesso intervallo per vedere i dati salvati.",
   "local.qualityStatus.accepted": "Accettato",
   "local.qualityStatus.acceptedWithGaps": "Accettato con lacune",
   "local.sourceBars": "{count} candele di origine",
@@ -4226,5 +4238,31 @@ export const it = {
   "status.exchangeLimitationCount.many": "{count} limitazioni dell’exchange",
   "workbench.intervalCount.many": "{count} intervalli",
   ...tradingAccountsIt,
+  "browser.host.starting": "Avvio di CandleScope…",
+  "browser.host.firstStart": "Il primo avvio scarica circa 40 MB. Gli avvii successivi sono molto più rapidi.",
+  "browser.host.unsupported": "Questo browser non può eseguire la versione web di CandleScope. Usa un browser desktop aggiornato o scarica l'applicazione desktop.",
+  "browser.host.startFailed": "Impossibile avviare CandleScope: {reason}",
+  "browser.host.updated": "La versione web è stata aggiornata. Chiudi tutte le schede di questo sito, poi riaprilo.",
+  "browser.host.storageWaiting": "Un'altra versione di CandleScope è aperta in altre schede. Chiudile e questa pagina proseguirà da sola.",
+  "browser.host.storageFailed": "Le modifiche recenti non sono state salvate nel browser ({reason}). CandleScope continua a riprovare; controlla lo spazio libero su disco.",
+  "browser.desktop.download": "Scarica l'applicazione desktop",
+  "browser.desktop.runStrategies": "Scarica l'applicazione desktop per eseguire le strategie",
+  "browser.desktop.connectAccount": "Scarica l'applicazione desktop per collegare un conto di exchange",
+  "browser.desktop.only": "Solo nell'applicazione desktop",
+  "browser.scripts.desktopOnly": "Strategie e script personalizzati vengono eseguiti nell'applicazione desktop. Gli indicatori integrati funzionano qui.",
+  "browser.strategy.intro": "Qui puoi importare dati, analizzare grafici e salvare bozze di strategie.",
+  "browser.replay.reuseHistory": "Lo storico salvato viene riutilizzato. Si scaricano solo gli intervalli mancanti.",
+  "browser.replay.start": "Avvia riproduzione",
+  "browser.replay.barsOnly": "Per questo mercato è disponibile la riproduzione a candele.",
+  "browser.download.tab": "Scarica",
+  "browser.download.preparing": "Preparazione dei dati di mercato…",
+  "browser.download.saved": "Salvato nella biblioteca · {name}",
+  "browser.download.progress": "Download in corso · {count}",
+  "browser.download.failed": "Download non riuscito",
+  "browser.download.kind": "Dati",
+  "browser.download.bars": "Candele da 1 minuto",
+  "browser.download.end": "Fine (UTC, esclusa)",
+  "browser.download.submit": "Scarica e importa",
+  "browser.download.symbolLookupUnavailable": "La ricerca dei simboli non è disponibile. Inserisci il simbolo completo del mercato.",
 } as const satisfies MessageCatalog;
 

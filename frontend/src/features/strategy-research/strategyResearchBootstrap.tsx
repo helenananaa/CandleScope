@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import AppProviders, { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { bindDocumentLocale, initializeLocale } from "../../i18n/index.js";
+import { prepareUnifiedShell } from "../extensions/unifiedRuntime.js";
 import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
 // Event markers on imported data (LocalAnalysisPanel, which tests import, so it cannot import CSS itself).
@@ -43,6 +44,7 @@ export async function mountStrategyResearchPage(input: {
   // backtest.html and local.html stay as compatibility URLs: show the canonical address.
   const canonical = canonicalStrategyResearchHref(location, parseStrategyResearchLaunch(location));
   if (canonical !== null) window.history.replaceState(window.history.state, "", canonical);
+  await prepareUnifiedShell();
   createRoot(root).render(
     <StrictMode>
       <ChartErrorBoundary>

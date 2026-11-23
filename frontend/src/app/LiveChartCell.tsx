@@ -84,7 +84,9 @@ import type { ForegroundPreloadGate } from "../features/market-data/foregroundPr
 import { useAdvancedMarketDataRuntime } from "../features/advanced-market-data/useAdvancedMarketDataRuntime.js";
 import { useDrawingRuntime } from "../features/drawings/useDrawingRuntime.js";
 import type { DrawingToolSelectionRuntime } from "../features/drawings/drawingToolState.js";
-import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
+import { useChartIndicatorRuntime } from "../features/indicators/useChartIndicatorRuntime.js";
+import { chartIndicatorSelection } from "../features/indicators/chartIndicatorInput.js";
+import { backendSyntheticSourceFor } from "../features/market-chart-platform/marketChartSurfaceModel.js";
 import { indicatorSignature, type ControlCellObservation } from "../features/app-control/controlModel.js";
 import { useControlCommands } from "../features/app-control/useControlCommands.js";
 import { chartCommands } from "../features/app-control/chartCommands.js";
@@ -101,6 +103,8 @@ import { useTradeFlowRuntime } from "../features/trade-flow/useTradeFlowRuntime.
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { WatchlistSubscriptionContext } from "../features/watchlist/watchlistSubscriptionRuntime.js";
 import { usePluginPlatformRuntime } from "../features/plugins/usePluginPlatformRuntime.js";
+import { buildSeriesWindowKey } from "../features/market-data/window/seriesWindowKey.js";
+import { livePluginChartSource, usePluginChartSource } from "../features/plugins/unifiedChartContext.js";
 import { pluginCommands, PluginControlSession } from "../features/app-control/pluginCommands.js";
 import { useExtensionService } from "../features/extensions/hooks.js";
 import PluginPlatformSurfaces, { PluginUiErrorBoundary } from "../features/plugins/PluginPlatformSurfaces.js";
@@ -460,12 +464,13 @@ function LiveChartCell({
     }),
     [cell.id, chartSurface.actions, linkCoordinator, study.masked],
   );
+  const livePluginContext = !obscured && !study.pending && !study.masked && !study.busy && !replay.key;
   const plugins = usePluginPlatformRuntime({
     exchange: chartSession.view.exchange,
     marketType: chartSession.view.marketType,
     symbol: chartSession.view.symbol,
     interval: chartSession.view.interval,
-  });
+  }, livePluginContext);
   useExtensionService(`charts.${cell.id}`, { session: chartSession, surface: chartSurface });
   const initialViewportCountBackCap = initialViewportCountBackCapForCellCount(
     layoutCellIds.length,
@@ -529,6 +534,17 @@ function LiveChartCell({
     paused: obscured,
   });
   const sourceMarketData = liveReferenceSource.marketData;
+  const pluginStore = sourceMarketData.view.seriesStore;
+  const pluginChartSource = useMemo(() => pluginStore
+    ? livePluginChartSource(pluginStore, liveSourceSession.symbol, liveSourceSession.interval) : null,
+    [pluginStore, liveSourceSession.symbol, liveSourceSession.interval]);
+  const pluginChartId = `${workspaceId}:${cell.id}`;
+  usePluginChartSource(pluginChartId, livePluginContext && !sourceMarketData.view.loading && !sourceMarketData.view.error
+    && !sourceMarketData.view.meta.optimistic && sourceMarketData.view.meta.status === "ready"
+    && sourceMarketData.view.meta.seriesKey === pluginStore?.seriesKey
+    && pluginStore?.seriesKey === buildSeriesWindowKey(liveSourceSession)
+    ? pluginChartSource : null);
+
 
   const workTier = obscured ? "hidden" : active ? "focused" : "visible-secondary";
   const workScheduler = marketWorkspaceResources?.workScheduler;
@@ -623,7 +639,8 @@ function LiveChartCell({
     [cell.id, windowId, workspaceId],
   );
 
-  const indicators = useIndicatorRuntime({
+  const indicators = useChartIndicatorRuntime({
+    chart: chartIndicatorSelection(backendSyntheticSourceFor(liveReferenceSource), sourceMarketData.view.seriesStore, combinedSettings),
     // Workspace schema v8 persists an explicit indicator list for every cell.
     // An empty list is therefore intentional (and is required by capacity
     // scenarios such as S3), not a signal to inject the legacy VOL default.
@@ -717,6 +734,7 @@ function LiveChartCell({
     },
     orderBookOpen,
     capability: activeExchangeCapability,
+    capabilityLoading: chartSession.status.exchangeCatalogStatus === "loading",
   });
   const tradeFlow = useTradeFlowRuntime({
     identity: {
@@ -1190,6 +1208,7 @@ function LiveChartCell({
               <QuickReplayOverlay
                 key={replay.key}
                 request={quickReplay}
+                pluginChartId={pluginChartId}
                 active={active && !obscured}
                 savedCursorSec={cell.quickReplay?.cursorSec}
                 savedStep={cell.quickReplay?.step}
@@ -1247,6 +1266,7 @@ function LiveChartCell({
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
               nativeStrategies={cell.nativeStrategies}
+              appearance={combinedSettings}
               strategyTesterMode={cell.strategyTesterMode}
               onStrategyTesterModeChange={(value) => onStrategyTesterModeChange(cell.id, value)}
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}

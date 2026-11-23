@@ -89,6 +89,69 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture(scope="session")
+def _qualified_pine_runtime(tmp_path_factory):
+    descriptor = os.environ.get("CANDLESCOPE_TEST_QUALIFIED_PINE_DESCRIPTOR")
+    if not descriptor:
+        pytest.fail("native Pine qualification requires the built unified package descriptor")
+
+    import asyncio
+    from concurrent.futures import Future, ThreadPoolExecutor
+    from threading import Event
+    from types import SimpleNamespace
+
+    from app.plugin_lifecycle.pine import PINE_ID
+    from app.plugin_lifecycle.runtime import UnifiedRuntime
+    from app.plugin_lifecycle.script_runtime import pin_script
+    from app.plugin_lifecycle.store import PackageStore
+
+    runtime = UnifiedRuntime(
+        SimpleNamespace(state=SimpleNamespace()),
+        PackageStore(tmp_path_factory.mktemp("qualified-pine")),
+    )
+    ready = Future()
+    stopped = Event()
+
+    async def run_lifecycle():
+        try:
+            await runtime.prepare_startup(bundled={PINE_ID: Path(descriptor)})
+            await runtime.start()
+            pin_script(runtime, PINE_ID)
+            ready.set_result(runtime)
+            await asyncio.to_thread(stopped.wait)
+        except BaseException as exc:
+            if not ready.done():
+                ready.set_exception(exc)
+            raise
+        finally:
+            await runtime.stop()
+
+    # The real sidecar transport keeps its event loop while synchronous Host
+    # qualification tests launch pinned chart, strategy and replay processes.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = executor.submit(asyncio.run, run_lifecycle())
+        try:
+            yield ready.result(timeout=45)
+        finally:
+            stopped.set()
+            worker.result(timeout=45)
+
+
+@pytest.fixture
+def qualified_pine_reference(monkeypatch, _qualified_pine_runtime):
+    from app.plugin_lifecycle import pine
+
+    monkeypatch.setattr(pine, "_strategy_runtime", _qualified_pine_runtime)
+    monkeypatch.setattr(pine, "_strategy_required", False)
+
+
+@pytest.fixture
+def qualified_pine(monkeypatch, qualified_pine_reference):
+    from app.plugin_lifecycle import pine
+
+    monkeypatch.setattr(pine, "_strategy_required", True)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_process_proxy_http_admission(monkeypatch):
     # Production admission deliberately spans event loops; test cases represent

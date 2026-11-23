@@ -5,21 +5,12 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi import FastAPI
-
-from candlescope_plugin_sdk import (
-    FEATURE_BATCH_EXECUTION_V1,
-    FEATURE_RENDER_LINE_SERIES_V1,
-    LanguageDescriptor,
-    RuntimeDescriptor,
-)
-
 from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
 from app.indicator.runtime_service import IndicatorRuntimeService
 from app.plugin_compat_v1 import V1ScriptRuntimeCompatibilityBridge
 from app.plugin_core_v2.api import create_core_plugin_router
 from app.plugin_core_v2.errors import CorePluginError
-from app.plugin_core_v2.runtime import CorePluginPlatform, DisabledCorePluginPlatform
+from app.plugin_core_v2.runtime import DisabledCorePluginPlatform
 from app.plugin_runtime import (
     ManagedRuntimeIdentity,
     RuntimeHostService,
@@ -27,7 +18,13 @@ from app.plugin_runtime import (
     RuntimeRegistry,
 )
 from app.plugin_security_v2.errors import PlatformSecurityError
-from app.plugin_security_v2.management import LocalManagementGuard
+from candlescope_plugin_sdk import (
+    FEATURE_BATCH_EXECUTION_V1,
+    FEATURE_RENDER_LINE_SERIES_V1,
+    LanguageDescriptor,
+    RuntimeDescriptor,
+)
+from fastapi import FastAPI
 
 
 class _DescriptorHost:
@@ -47,7 +44,9 @@ class _DescriptorHost:
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
         assert runtime_id == self.runtime_id
         language_ids = (
-            ("fixture",) if self.language_id == "fixture" else ("fixture", self.language_id)
+            ("fixture",)
+            if self.language_id == "fixture"
+            else ("fixture", self.language_id)
         )
         return RuntimeDescriptor(
             id=runtime_id,
@@ -372,62 +371,21 @@ async def test_compatibility_state_symlink_fails_closed(
 
 
 @pytest.mark.anyio
-async def test_v1_compatibility_management_api_requires_guard_and_exact_preview(
-    tmp_path: Path,
-) -> None:
-    compatibility, _indicator, _runtime_host_source = await _bridge(
-        tmp_path / "compatibility"
-    )
-    platform = CorePluginPlatform(
-        root=tmp_path / "platform",
-        host_name="CandleScope",
-        host_version="0.4.0",
-    )
-    platform.bind_v1_compatibility(compatibility)
-    guard = LocalManagementGuard(
-        ("http://127.0.0.1:5173",),
-        session_token="phase13-session-token-0123456789abcdef",
-        csrf_token="phase13-csrf-token-0123456789abcdefgh",
-    )
+async def test_retired_v1_compatibility_management_routes_are_absent():
     app = FastAPI()
-    app.state.plugin_platform_v2 = platform
-    app.state.plugin_platform_v2_management_guard = guard
     app.include_router(create_core_plugin_router())
     transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 43200))
     async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://127.0.0.1",
+        transport=transport, base_url="http://127.0.0.1"
     ) as client:
-        denied = await client.get(
-            "/api/v2/plugins/manage/compatibility/v1/import-preview"
-        )
-        assert denied.status_code == 403
-        preview = await client.get(
-            "/api/v2/plugins/manage/compatibility/v1/import-preview",
-            headers=guard.trusted_headers(),
-        )
-        assert preview.status_code == 200
-        mutation_headers = guard.trusted_headers(user_action="import-v1-registry")
-        stale = await client.post(
-            "/api/v2/plugins/manage/compatibility/v1/import",
-            headers=mutation_headers,
-            json={"previewSha256": "sha256:" + "0" * 64},
-        )
-        assert stale.status_code == 409
-        imported = await client.post(
-            "/api/v2/plugins/manage/compatibility/v1/import",
-            headers=mutation_headers,
-            json={"previewSha256": preview.json()["previewSha256"]},
-        )
-        assert imported.status_code == 200
-        assert imported.json()["compatibility"]["import"]["status"] == "current"
-        catalog = await client.get("/api/v2/plugins/catalog")
-        assert catalog.json()["schemaVersion"] == "candlescope.plugin-catalog/2"
-        assert (
-            catalog.json()["compatibility"]["contributions"][0]["kind"]
-            == "script-runtime/1"
-        )
-    audit = platform.audit_log.read_all()
-    assert [(event.category, event.action, event.outcome) for event in audit] == [
-        ("v1-compatibility", "registry-import", "applied")
-    ]
+        for method, route in (
+            ("GET", "status"),
+            ("GET", "import-preview"),
+            ("POST", "import"),
+            ("GET", "rollback-preview"),
+            ("POST", "rollback"),
+        ):
+            response = await client.request(
+                method, f"/api/v2/plugins/manage/compatibility/v1/{route}"
+            )
+            assert response.status_code == 404

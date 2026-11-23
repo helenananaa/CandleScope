@@ -1,3 +1,5 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousPortuguese } from "./continuousMessages.js";
 import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
 import { replayNoteBrazilian } from "./replayNoteMessages.js";
@@ -9,6 +11,8 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...unifiedMessages["pt-BR"],
+  ...syntheticEnglish,
   ...continuousPortuguese,
   ...tradeHistoryBrazilian,
   ...replayNoteBrazilian,
@@ -877,6 +881,8 @@ export const ptBR = {
   "market.spot": "Spot",
   "market.futures": "Futuros",
   "market.swap": "Perpétuo",
+  "market.swapLinear": "Perpétuo linear",
+  "market.library": "Biblioteca",
   "exchange.binance": "Binance",
 
   "interval.toolbar": "Barra de intervalos",
@@ -1141,6 +1147,7 @@ export const ptBR = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Sem dados para esta barra",
+  "legend.partialSeed": "Calculado a partir da barra armazenada mais antiga ({seed} de {warmup} barras de aquecimento). Os valores podem mudar quando um histórico mais antigo for carregado.",
   "legend.line": "Linha {n}",
   "legend.mainPane": "{symbol} principal",
 
@@ -4047,6 +4054,8 @@ export const ptBR = {
   "replay.storage.evicted": "EVICTED",
   "replay.hub.makerTakerBps": "Maker / Taker bps",
   "chart.loadingKlines": "Carregando candles {symbol} {interval}…",
+  "chart.syntheticPreparing": "Preparando os dados do gráfico…",
+  "chart.syntheticUnavailable": "Os dados do gráfico estão indisponíveis no momento. Reconectando…",
   "backtest.bundleHash": "Pacote {hash}",
   "backtest.sourceManifestHashes": "Fonte {source} · manifesto {manifest}",
   "backtest.coverageRows": "{rows} linhas / aquecimento {warmup}",
@@ -4830,6 +4839,11 @@ export const ptBR = {
   "shell.moreActions": "Mais ações",
   "serverError.code.historyOriginUnavailable": "Não foi possível ler onde começa o histórico da corretora. Tente novamente em instantes.",
   "serverError.code.subscribeFailed": "Falha ao assinar os dados em tempo real",
+  "serverError.code.desktopRequired": "Isso requer o aplicativo CandleScope para computador.",
+  "serverError.code.librarySourceUnsupported": "Ainda não é possível baixar o histórico para replay deste mercado.",
+  "serverError.code.libraryRangeInvalid": "Escolha um intervalo UTC já encerrado que comece e termine em minutos exatos.",
+  "serverError.code.libraryRangeTooLarge": "O intervalo é maior do que a biblioteca comporta. Escolha um mais curto.",
+  "serverError.code.libraryDownloadEnded": "Este download já terminou. Envie o mesmo intervalo de novo para ver os dados salvos.",
   "local.qualityStatus.accepted": "Aceito",
   "local.qualityStatus.acceptedWithGaps": "Aceito com lacunas",
   "local.sourceBars": "{count} candles de origem",
@@ -4880,5 +4894,31 @@ export const ptBR = {
   "aiControl.copyFailed": "Não foi possível copiar. Verifique a permissão da área de transferência.",
   "aiControl.desktopOnly": "O MCP local está disponível no aplicativo para computador.",
   "aiControl.configuration": "Mostrar configuração de conexão",
+  "browser.host.starting": "Iniciando o CandleScope…",
+  "browser.host.firstStart": "A primeira abertura baixa cerca de 40 MB. As próximas são bem mais rápidas.",
+  "browser.host.unsupported": "Este navegador não consegue executar a versão web do CandleScope. Use um navegador de computador atualizado ou baixe o aplicativo para computador.",
+  "browser.host.startFailed": "Não foi possível iniciar o CandleScope: {reason}",
+  "browser.host.updated": "A versão web foi atualizada. Feche todas as abas deste site e abra-o novamente.",
+  "browser.host.storageWaiting": "Outra versão do CandleScope está aberta em outras abas. Feche-as e esta página continuará sozinha.",
+  "browser.host.storageFailed": "Não foi possível salvar as alterações recentes no navegador ({reason}). O CandleScope continua tentando; verifique o espaço livre em disco.",
+  "browser.desktop.download": "Baixar o aplicativo para computador",
+  "browser.desktop.runStrategies": "Baixe o aplicativo para computador para executar estratégias",
+  "browser.desktop.connectAccount": "Baixe o aplicativo para computador para conectar uma conta de corretora",
+  "browser.desktop.only": "Somente no aplicativo para computador",
+  "browser.scripts.desktopOnly": "Estratégias e scripts personalizados rodam no aplicativo para computador. Os indicadores integrados funcionam aqui.",
+  "browser.strategy.intro": "Aqui você pode importar dados, analisar gráficos e salvar rascunhos de estratégias.",
+  "browser.replay.reuseHistory": "O histórico salvo é reaproveitado. Só os intervalos que faltam são baixados.",
+  "browser.replay.start": "Iniciar replay",
+  "browser.replay.barsOnly": "O replay de candles está disponível para este mercado.",
+  "browser.download.tab": "Baixar",
+  "browser.download.preparing": "Preparando dados de mercado…",
+  "browser.download.saved": "Salvo na biblioteca · {name}",
+  "browser.download.progress": "Baixando · {count}",
+  "browser.download.failed": "Falha no download",
+  "browser.download.kind": "Dados",
+  "browser.download.bars": "Candles de 1 minuto",
+  "browser.download.end": "Fim (UTC, exclusivo)",
+  "browser.download.submit": "Baixar e importar",
+  "browser.download.symbolLookupUnavailable": "A busca de símbolos está indisponível. Digite o símbolo completo do mercado.",
   ...tradingAccountsPtBR,
 } as const satisfies MessageCatalog;

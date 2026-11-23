@@ -1,0 +1,49 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-frontend-architecture-initial-owner-before-configured",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {}
+    },
+    "exceptionDetails": {
+      "exceptionId": 1,
+      "text": "Uncaught (in promise) Error: settled cold retry left the original indicator window owner pending",
+      "lineNumber": 5,
+      "columnNumber": 103145,
+      "scriptId": "4",
+      "stackTrace": {
+        "callFrames": [
+          {
+            "functionName": "Q",
+            "scriptId": "4",
+            "url": "http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js",
+            "lineNumber": 4,
+            "columnNumber": 103144
+          },
+          {
+            "functionName": "Jm",
+            "scriptId": "4",
+            "url": "http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js",
+            "lineNumber": 4,
+            "columnNumber": 106498
+          }
+        ]
+      },
+      "exception": {
+        "type": "object",
+        "subtype": "error",
+        "className": "Error",
+        "description": "Error: settled cold retry left the original indicator window owner pending\n    at Q (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:103145)\n    at Jm (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:106499)\n    at async Zm (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:122028)",
+        "objectId": "7370861185366468573.1.1"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": false,
+  "error": "Error: {\"exceptionId\":1,\"text\":\"Uncaught (in promise) Error: settled cold retry left the original indicator window owner pending\",\"lineNumber\":5,\"columnNumber\":103145,\"scriptId\":\"4\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"Q\",\"scriptId\":\"4\",\"url\":\"http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js\",\"lineNumber\":4,\"columnNumber\":103144},{\"functionName\":\"Jm\",\"scriptId\":\"4\",\"url\":\"http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js\",\"lineNumber\":4,\"columnNumber\":106498}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: settled cold retry left the original indicator window owner pending\\n    at Q (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:103145)\\n    at Jm (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:106499)\\n    at async Zm (http://127.0.0.1:65390/assets/market-health-browser-DhPLdKA1.js:5:122028)\",\"objectId\":\"7370861185366468573.1.1\"}}",
+  "browserExitCode": null
+}

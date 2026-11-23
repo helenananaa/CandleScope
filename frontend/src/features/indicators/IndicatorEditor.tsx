@@ -34,6 +34,7 @@ import type {
   IndicatorParams,
   ScriptRuntimeCatalog,
 } from "./indicatorTypes.js";
+import { browserHost } from "../../app/browserHost.js";
 
 const Editor = lazy(() => import("../../editor/LocalMonacoEditor.js"));
 /** Track whether Pine providers have been registered globally */
@@ -439,7 +440,7 @@ export default function IndicatorEditor({
           <p className="indicator-editor-hint">{t("indicator.editor.frontendWindow")}</p>
         )}
         {!readOnly && allowedRuntimeCatalog && !languageReady && (
-          <InlineAlert tone="warning">{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</InlineAlert>
+          <InlineAlert tone="warning">{browserHost() ? t("browser.scripts.desktopOnly") : `${t("indicator.editor.runtimeUnavailableHelp")} ${t("native.platformHelp")}`}</InlineAlert>
         )}
         {runtimeCatalogError && (
           <InlineAlert tone="danger">{t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}</InlineAlert>

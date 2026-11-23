@@ -1,0 +1,42 @@
+{
+  "sourceCommit": "9aad9388020760569fff608e9de9ec7c35fdae9c",
+  "workflowRun": 44289176507,
+  "platform": "win32",
+  "arch": "x64",
+  "asarSha256": "aa65fb042cb5bb99dd3144e4822d8a2f6443c7b494dc4d74c2c5da9e89c74ea6",
+  "good": "sha256:1935451d3efd7dc83461f66f58ac4fed4b5a0db7c387935238f38c9d166ad513",
+  "before": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "phases": [
+    {
+      "name": "01-normal-takeover",
+      "shell": "example.startup-takeover",
+      "page": "/",
+      "runtime": "example.startup-takeover",
+      "exited": true
+    },
+    {
+      "name": "02-fault",
+      "startupError": true,
+      "backendHealthy": false,
+      "sidecarExitCode": 3,
+      "exited": true
+    },
+    {
+      "name": "03-native-disable",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    },
+    {
+      "name": "04-normal-restart",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    }
+  ],
+  "bad": "sha256:a1cce85846b05508ad66df1a30b5c96948cc83c57c3425615a5ff8704eb18f01",
+  "after": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "ok": true
+}

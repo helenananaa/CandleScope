@@ -1,3 +1,5 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
@@ -7,6 +9,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...unifiedMessages["es"],
+  ...syntheticEnglish,
   ...continuousSpanish,
   ...tradeHistorySpanish,
   ...replayNoteSpanish,
@@ -340,6 +344,8 @@ export const es = {
   "market.spot": "Contado",
   "market.futures": "Futuros",
   "market.swap": "Perpetuo",
+  "market.swapLinear": "Perpetuo lineal",
+  "market.library": "Biblioteca",
   "exchange.binance": "Binance",
   "interval.toolbar": "Barra de intervalos",
   "interval.picker": "Selector de intervalos",
@@ -598,6 +604,7 @@ export const es = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Sin datos para esta barra",
+  "legend.partialSeed": "Calculado desde la barra almacenada más antigua ({seed} de {warmup} barras de calentamiento). Los valores pueden cambiar al cargar historial anterior.",
   "legend.line": "Línea {n}",
   "legend.mainPane": "{symbol} principal",
   "pane.main": "Principal",
@@ -4224,6 +4231,11 @@ export const es = {
   "shell.moreActions": "Más acciones",
   "serverError.code.historyOriginUnavailable": "No se pudo leer dónde empieza el historial del exchange. Inténtalo de nuevo en breve.",
   "serverError.code.subscribeFailed": "No se pudo suscribir a los datos en tiempo real",
+  "serverError.code.desktopRequired": "Esto requiere la aplicación de escritorio de CandleScope.",
+  "serverError.code.librarySourceUnsupported": "Todavía no se puede descargar el historial para reproducción de este mercado.",
+  "serverError.code.libraryRangeInvalid": "Elige un intervalo UTC ya terminado que empiece y acabe en minutos exactos.",
+  "serverError.code.libraryRangeTooLarge": "El intervalo supera la capacidad de la biblioteca. Elige uno más corto.",
+  "serverError.code.libraryDownloadEnded": "Esta descarga ya terminó. Envía el mismo intervalo otra vez para ver los datos guardados.",
   "local.qualityStatus.accepted": "Aceptado",
   "local.qualityStatus.acceptedWithGaps": "Aceptado con huecos",
   "local.sourceBars": "{count} velas de origen",
@@ -4231,4 +4243,30 @@ export const es = {
   "common.working": "Procesando…",
   "common.pickDateTime": "Elegir fecha y hora",
   ...tradingAccountsEs,
+  "browser.host.starting": "Iniciando CandleScope…",
+  "browser.host.firstStart": "El primer inicio descarga unos 40 MB. Los siguientes son mucho más rápidos.",
+  "browser.host.unsupported": "Este navegador no puede ejecutar la versión web de CandleScope. Usa un navegador de escritorio actualizado o descarga la aplicación de escritorio.",
+  "browser.host.startFailed": "CandleScope no pudo iniciarse: {reason}",
+  "browser.host.updated": "La versión web se ha actualizado. Cierra todas las pestañas de este sitio y vuelve a abrirlo.",
+  "browser.host.storageWaiting": "Otra versión de CandleScope está abierta en otras pestañas. Ciérralas y esta página continuará sola.",
+  "browser.host.storageFailed": "Los cambios recientes no se pudieron guardar en el navegador ({reason}). CandleScope seguirá intentándolo; revisa el espacio libre en disco.",
+  "browser.desktop.download": "Descargar la aplicación de escritorio",
+  "browser.desktop.runStrategies": "Descarga la aplicación de escritorio para ejecutar estrategias",
+  "browser.desktop.connectAccount": "Descarga la aplicación de escritorio para conectar una cuenta de exchange",
+  "browser.desktop.only": "Solo en la aplicación de escritorio",
+  "browser.scripts.desktopOnly": "Las estrategias y los scripts personalizados se ejecutan en la aplicación de escritorio. Los indicadores integrados funcionan aquí.",
+  "browser.strategy.intro": "Aquí puedes importar datos, analizar gráficos y guardar borradores de estrategias.",
+  "browser.replay.reuseHistory": "Se reutiliza el historial guardado. Solo se descargan los tramos que faltan.",
+  "browser.replay.start": "Iniciar reproducción",
+  "browser.replay.barsOnly": "Este mercado admite la reproducción de velas.",
+  "browser.download.tab": "Descargar",
+  "browser.download.preparing": "Preparando datos de mercado…",
+  "browser.download.saved": "Guardado en la biblioteca · {name}",
+  "browser.download.progress": "Descargando · {count}",
+  "browser.download.failed": "La descarga falló",
+  "browser.download.kind": "Datos",
+  "browser.download.bars": "Velas de 1 minuto",
+  "browser.download.end": "Fin (UTC, no incluido)",
+  "browser.download.submit": "Descargar e importar",
+  "browser.download.symbolLookupUnavailable": "La búsqueda de símbolos no está disponible. Introduce el símbolo completo del mercado.",
 } as const satisfies MessageCatalog;

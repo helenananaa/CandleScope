@@ -84,6 +84,7 @@ export function stripIndicatorRuntimeFields(indicator: IndicatorDefinition): Ind
   const rest = { ...indicator };
   delete rest.lines;
   delete rest.error;
+  delete rest.partialSeed;
   return rest;
 }
 
@@ -170,6 +171,7 @@ export function applyIndicatorScriptUpdate(
     updated.lines = [];
     delete updated.error;
     delete updated.paramSchema;
+    delete updated.partialSeed;
   }
   return normalizeIndicator?.(updated) ?? (
     normalizeIndicator ? indicator : updated

@@ -1,8 +1,12 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyGerman, replayNoteGerman, tradeHistoryGerman, readonlyAccountGerman, continuousGerman, tradingAccountsDe, nativeGerman } from "./germanFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  ...unifiedMessages["de"],
+  ...syntheticEnglish,
   ...continuousGerman,
   ...tradeHistoryGerman,
   ...replayNoteGerman,
@@ -334,6 +338,8 @@ export const de = {
   "market.spot": "Kassa",
   "market.futures": "Terminkontrakte",
   "market.swap": "Perpetuell",
+  "market.swapLinear": "Linear perpetuell",
+  "market.library": "Bibliothek",
   "exchange.binance": "Binance",
   "interval.toolbar": "Intervall-Werkzeugleiste",
   "interval.picker": "Intervallauswahl",
@@ -592,6 +598,7 @@ export const de = {
   "legend.change": "Änd.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Keine Daten für diese Kerze",
+  "legend.partialSeed": "Ab der ältesten gespeicherten Kerze berechnet ({seed} von {warmup} Warmup-Kerzen). Die Werte können sich ändern, wenn älterer Verlauf geladen wird.",
   "legend.line": "Linie {n}",
   "legend.mainPane": "{symbol} Haupt",
   "pane.main": "Haupt",
@@ -4214,6 +4221,11 @@ export const de = {
   "shell.moreActions": "Weitere Aktionen",
   "serverError.code.historyOriginUnavailable": "Der Beginn der Börsenhistorie konnte nicht gelesen werden. Bitte gleich erneut versuchen.",
   "serverError.code.subscribeFailed": "Echtzeitdaten konnten nicht abonniert werden",
+  "serverError.code.desktopRequired": "Dafür ist die Desktop-App von CandleScope nötig.",
+  "serverError.code.librarySourceUnsupported": "Für diesen Markt lässt sich noch kein Verlauf für die Wiedergabe herunterladen.",
+  "serverError.code.libraryRangeInvalid": "Wählen Sie einen abgeschlossenen UTC-Zeitraum, der auf ganzen Minuten beginnt und endet.",
+  "serverError.code.libraryRangeTooLarge": "Der Zeitraum ist größer, als die Bibliothek fassen kann. Wählen Sie einen kürzeren.",
+  "serverError.code.libraryDownloadEnded": "Dieser Download ist beendet. Senden Sie denselben Zeitraum erneut, um die gespeicherten Daten zu sehen.",
   "local.qualityStatus.accepted": "Akzeptiert",
   "local.qualityStatus.acceptedWithGaps": "Akzeptiert mit Lücken",
   "local.sourceBars": "{count} Quellkerzen",
@@ -4221,5 +4233,31 @@ export const de = {
   "common.working": "Wird bearbeitet…",
   "common.pickDateTime": "Datum und Uhrzeit wählen",
   ...tradingAccountsDe,
+  "browser.host.starting": "CandleScope wird gestartet…",
+  "browser.host.firstStart": "Beim ersten Start werden etwa 40 MB geladen. Spätere Starts sind deutlich schneller.",
+  "browser.host.unsupported": "Dieser Browser kann die Web-App von CandleScope nicht ausführen. Verwenden Sie einen aktuellen Desktop-Browser oder laden Sie die Desktop-App herunter.",
+  "browser.host.startFailed": "CandleScope konnte nicht starten: {reason}",
+  "browser.host.updated": "Die Web-App wurde aktualisiert. Schließen Sie alle Tabs dieser Website und öffnen Sie sie dann erneut.",
+  "browser.host.storageWaiting": "Eine andere Version von CandleScope ist in anderen Tabs geöffnet. Schließen Sie diese, dann fährt diese Seite selbst fort.",
+  "browser.host.storageFailed": "Letzte Änderungen konnten nicht im Browser gespeichert werden ({reason}). CandleScope versucht es weiter; prüfen Sie den freien Speicherplatz.",
+  "browser.desktop.download": "Desktop-App herunterladen",
+  "browser.desktop.runStrategies": "Desktop-App herunterladen, um Strategien auszuführen",
+  "browser.desktop.connectAccount": "Desktop-App herunterladen, um ein Börsenkonto zu verbinden",
+  "browser.desktop.only": "Nur in der Desktop-App",
+  "browser.scripts.desktopOnly": "Strategien und eigene Skripte laufen in der Desktop-App. Integrierte Indikatoren funktionieren hier.",
+  "browser.strategy.intro": "Hier können Sie Daten importieren, Charts analysieren und Strategieentwürfe speichern.",
+  "browser.replay.reuseHistory": "Gespeicherter Verlauf wird wiederverwendet. Nur fehlende Zeiträume werden geladen.",
+  "browser.replay.start": "Wiedergabe starten",
+  "browser.replay.barsOnly": "Für diesen Markt ist die Kerzen-Wiedergabe verfügbar.",
+  "browser.download.tab": "Herunterladen",
+  "browser.download.preparing": "Marktdaten werden vorbereitet…",
+  "browser.download.saved": "In der Bibliothek gespeichert · {name}",
+  "browser.download.progress": "Wird heruntergeladen · {count}",
+  "browser.download.failed": "Download fehlgeschlagen",
+  "browser.download.kind": "Daten",
+  "browser.download.bars": "1-Minuten-Kerzen",
+  "browser.download.end": "Ende (UTC, exklusiv)",
+  "browser.download.submit": "Herunterladen und importieren",
+  "browser.download.symbolLookupUnavailable": "Die Symbolsuche ist nicht verfügbar. Geben Sie das vollständige Marktsymbol ein.",
 } as const satisfies MessageCatalog;
 

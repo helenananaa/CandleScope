@@ -1,0 +1,158 @@
+[
+  {
+    "source": "architecture.log",
+    "archive": "evidence/architecture.log.gz",
+    "bytes": 119,
+    "sha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+  },
+  {
+    "source": "backend-final.log",
+    "archive": "evidence/backend-final.log.gz",
+    "bytes": 5700,
+    "sha256": "7a241978966b130bed7f992d180808c4a7f1f98f007d8445216041ccd130a0a5"
+  },
+  {
+    "source": "backend-final.xml",
+    "archive": "evidence/backend-final.xml.gz",
+    "bytes": 350944,
+    "sha256": "f94f56090c98d8a227deda59a76927de2fc4b6c35d76f3915048fb278078fd96"
+  },
+  {
+    "source": "backend.log",
+    "archive": "evidence/backend.log.gz",
+    "bytes": 2590,
+    "sha256": "3331413b04073881ef1a6f0ed8e1c8a477b746aaf269cb0a9601681043f51c9f"
+  },
+  {
+    "source": "backend.xml",
+    "archive": "evidence/backend.xml.gz",
+    "bytes": 6976,
+    "sha256": "dcf320ee51d6045e22cab4e0603fe3a76ff991f53527f8c6b33d61d05c13e3d4"
+  },
+  {
+    "source": "baseline-permission/permission-baseline.log",
+    "archive": "evidence/baseline-permission--permission-baseline.log.gz",
+    "bytes": 10711,
+    "sha256": "83727c8e6a1ff53f865436775cefa4572aaac09b2f7ee506ec16123495b62e70"
+  },
+  {
+    "source": "baseline-permission/permission-baseline.xml",
+    "archive": "evidence/baseline-permission--permission-baseline.xml.gz",
+    "bytes": 10315,
+    "sha256": "ec731801fb4eb4242d3b8e5140478cced7d166604c4280b8a2872b0eb6e9db25"
+  },
+  {
+    "source": "baseline.log",
+    "archive": "evidence/baseline.log.gz",
+    "bytes": 8323,
+    "sha256": "626cae43450389ef06645a5ede99a2b7414ac23a3a6fb307ab5811abce400f16"
+  },
+  {
+    "source": "baseline.xml",
+    "archive": "evidence/baseline.xml.gz",
+    "bytes": 8071,
+    "sha256": "048ca2d464830139c51dc2280b4712b28e2367733f7559a2ea46fc64fcf7e339"
+  },
+  {
+    "source": "compaction-fixed.log",
+    "archive": "evidence/compaction-fixed.log.gz",
+    "bytes": 291,
+    "sha256": "85054f2c2dba81ac14de449f8874fe522da50e5b580606b2d4b96e0a83f2801d"
+  },
+  {
+    "source": "compaction-fixed.xml",
+    "archive": "evidence/compaction-fixed.xml.gz",
+    "bytes": 409,
+    "sha256": "a89b9cfd69a2fa370d775a105dfa8652423033b2e7a377244665a840ea78baf5"
+  },
+  {
+    "source": "compaction.log",
+    "archive": "evidence/compaction.log.gz",
+    "bytes": 7954,
+    "sha256": "ea7ca627c2659d4064002549b83181f539f7b63c8fae54ae0fae3b3047c668db"
+  },
+  {
+    "source": "compaction.xml",
+    "archive": "evidence/compaction.xml.gz",
+    "bytes": 6423,
+    "sha256": "304ea9b07d8e6352e24e17f7e1885d1a8ada5a7dabe91a7c7d4556739e8b1008"
+  },
+  {
+    "source": "continued-boundaries.log",
+    "archive": "evidence/continued-boundaries.log.gz",
+    "bytes": 280,
+    "sha256": "647de5a6d96b2db3efb1d4448c4ddca2539fe06795d1fbb4afd0dd2d53abe12e"
+  },
+  {
+    "source": "continued-boundaries.xml",
+    "archive": "evidence/continued-boundaries.xml.gz",
+    "bytes": 1446,
+    "sha256": "4c847ac0486b70e3fe148de4b9052d1e5af65e03974f2aa572f8524dfeec0839"
+  },
+  {
+    "source": "final-new-contracts-fixed.log",
+    "archive": "evidence/final-new-contracts-fixed.log.gz",
+    "bytes": 286,
+    "sha256": "5d8d1be6d6f39895b0ceb21b0dc448036d6f8358a77e65131b5b339b0c488ce8"
+  },
+  {
+    "source": "final-new-contracts-fixed.xml",
+    "archive": "evidence/final-new-contracts-fixed.xml.gz",
+    "bytes": 2675,
+    "sha256": "5144b9226b93023a4807aef39bd4ed80d5de6a7889fcd5baac75e157d1f492ac"
+  },
+  {
+    "source": "final-new-contracts.log",
+    "archive": "evidence/final-new-contracts.log.gz",
+    "bytes": 8859,
+    "sha256": "962815f2d5fc7627b105b3135e6560043fd70ccc7e5ea3433081a5a6d3ec0cc3"
+  },
+  {
+    "source": "final-new-contracts.xml",
+    "archive": "evidence/final-new-contracts.xml.gz",
+    "bytes": 10772,
+    "sha256": "5685f7577b63c97303aaf8420f5a9d554cc34f883a9c3c5f453233f2f72e0508"
+  },
+  {
+    "source": "focused.log",
+    "archive": "evidence/focused.log.gz",
+    "bytes": 2502,
+    "sha256": "5a294afa3405bddb7d7f2906f80849dbc4b30ecec6988b32012b1c23585437b9"
+  },
+  {
+    "source": "focused.xml",
+    "archive": "evidence/focused.xml.gz",
+    "bytes": 30386,
+    "sha256": "320dc564504fcc0384b4c8decb732a15d88a8b5596c2391ea8befb1ece10f3d2"
+  },
+  {
+    "source": "initial-fixed.log",
+    "archive": "evidence/initial-fixed.log.gz",
+    "bytes": 274,
+    "sha256": "4e91c3e3d6fb7dce9d2f15b2d01646d22c6a0750451e4e3a04639b45f965a0a3"
+  },
+  {
+    "source": "initial-fixed.xml",
+    "archive": "evidence/initial-fixed.xml.gz",
+    "bytes": 3371,
+    "sha256": "01005ad4eb15ca4fdff52c1a1d7ab70cc04c80fec3182eecf8ddd6c113971936"
+  },
+  {
+    "source": "permission.log",
+    "archive": "evidence/permission.log.gz",
+    "bytes": 284,
+    "sha256": "639cafa3647e34ead344029578209ce30373586bd1cc6823ee20f6b3675ece7d"
+  },
+  {
+    "source": "permission.xml",
+    "archive": "evidence/permission.xml.gz",
+    "bytes": 734,
+    "sha256": "20e8b36396d8be409faeaed3d0885494213e2385e318b02a09ca0ef279f7823b"
+  },
+  {
+    "source": "ruff.log",
+    "archive": "evidence/ruff.log.gz",
+    "bytes": 7195,
+    "sha256": "4ee1de56117f4c4f6d9fa343abbb0c9c7116df561b15f206a28002167db39466"
+  }
+]

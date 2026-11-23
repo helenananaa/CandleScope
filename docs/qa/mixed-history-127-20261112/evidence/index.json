@@ -1,0 +1,17 @@
+{
+  "product_commit": "b2bda3ddd81fe74672f43bdcfc0377ac18b64b24",
+  "ci_selection_commit": "480eb5811",
+  "tests": 313,
+  "files": [
+    {
+      "path": "backend-final.log.gz",
+      "bytes": 190,
+      "sha256": "fef8c7aea6d78755f43173b3bc1a4fd7d0978b20e887351812b4cf3f7d579fa0"
+    },
+    {
+      "path": "backend-final.xml.gz",
+      "bytes": 5757,
+      "sha256": "5658fd2f015d861e2c845b5ae94e998f4cb0fc9e31b25a837e4313f8adc27ed5"
+    }
+  ]
+}

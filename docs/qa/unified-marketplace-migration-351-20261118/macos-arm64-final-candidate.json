@@ -1,0 +1,121 @@
+{
+  "platform": "darwin",
+  "architecture": "arm64",
+  "signatureVerified": true,
+  "appAsar": "sha256:7a978abd0b05bd51c0b0a6f3e51e9ae467472fe40204d028aedd7ff5be744836",
+  "fixtures": {
+    "failed": {
+      "color": "#f7d6e2",
+      "file": "qa.marketplace-theme-1.2.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:3e333e87dad9e236e861a85ce3dcd987f34b29328f7f834c2315516b9ec8f6f7",
+      "version": "1.2.0"
+    },
+    "initial": {
+      "color": "#ece5d2",
+      "file": "qa.marketplace-theme-1.0.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:1a45df7b560f75766fbc114fdc62f8466715e3ec23cd5410aa6dc6adba0bf6ee",
+      "version": "1.0.0"
+    },
+    "legacy": {
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:922131c7854a6a8a9165dbcbe46dd5f9eefb07f5eece1a3e55c71fe214f3eb2b",
+      "version": "0.1.0"
+    },
+    "marketplaceId": "candlescope.community",
+    "sources": {
+      "plugins/platform-grants-v2.json": "sha256:930d1f40a715b886cf0946d8d900deeb81f587ded9245bd3f211a2be263f8306",
+      "plugins/platform-registry-v2.json": "sha256:d040be82c0d2b7c4099500db4d711124d1f0fc2dab8639915814314e8ed896ae",
+      "plugins/plugin-settings-v1.json": "sha256:c3ec3289b264cbd07c0273feb7ebea014f1b9889fce2d359ea96f451dbcf0e92",
+      "plugins/private/422aef6391722fdf4bf2cca9a6d4f3ac/candlescope.hello-command/storage-v1.sqlite": "sha256:3f2694d7ee0ffd9420c521b0844a4f8237385c384db3a019ef9266917bba95a9",
+      "plugins/sandbox-v2/private/b3c4020a680a30451b62/state.bin": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+    },
+    "successor": {
+      "color": "#dfe7f8",
+      "file": "candlescope.hello-command-0.2.0.cspkg",
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:c2f8e8461e99aee30ff2979e16b457e9d4b4971c2dec42915679f530fcb1435e",
+      "version": "0.2.0"
+    },
+    "upgrade": {
+      "color": "#dcefe4",
+      "file": "qa.marketplace-theme-1.1.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:ab2460bca079062950fd9b4066f4a9bd0243c53a9185a0f4c9c8b29dacbb2395",
+      "version": "1.1.0"
+    }
+  },
+  "sessions": [
+    {
+      "name": "install, update and migrate",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "legacyAvailable": false,
+      "legacyExecutionBlocked": true,
+      "cancelLeftInactive": true,
+      "installGeneration": 4,
+      "installedWindow": {
+        "theme": "light",
+        "background": "#ece5d2"
+      },
+      "upgradedWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "migrationGeneration": 11,
+      "migratedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "copiedData": {
+        "settingsRecords": 1,
+        "hostKeys": [
+          "bookmark"
+        ],
+        "sandboxFileSha256": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+      },
+      "legacyFilesByteIdentical": true,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart, manual and health rollback",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "restartedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "manualRollback": {
+        "restoredVersion": "0.1.0",
+        "runtimeReady": false
+      },
+      "migratedAppearanceRemoved": true,
+      "healthRollback": {
+        "restoredVersion": "1.1.0",
+        "runtimeReady": true,
+        "healthError": "invalid JSON document",
+        "restoredGeneration": 19
+      },
+      "rolledBackWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart after both rollbacks",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "finalWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "legacyExecutionBlockedAfterRestart": true,
+      "bothVersionsDataPreserved": true,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true,
+  "sourceCommit": "6d7928acfe13116a5fc36f990af5a6005bb001ae"
+}

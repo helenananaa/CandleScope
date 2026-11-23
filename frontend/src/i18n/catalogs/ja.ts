@@ -1,3 +1,5 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
 import { replayNoteJapanese } from "./replayNoteMessages.js";
@@ -8,6 +10,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  ...unifiedMessages["ja"],
+  ...syntheticEnglish,
   ...continuousJapanese,
   ...researchBatchJapanese,
   ...tradeHistoryJapanese,
@@ -667,6 +671,8 @@ export const ja = {
   "market.spot": "現物",
   "market.futures": "先物",
   "market.swap": "無期限",
+  "market.swapLinear": "リニア無期限",
+  "market.library": "ライブラリ",
   "exchange.binance": "Binance",
   "interval.toolbar": "時間足ツールバー",
   "interval.picker": "時間足ピッカー",
@@ -925,6 +931,7 @@ export const ja = {
   "legend.change": "騰落",
   "legend.amplitude": "振幅",
   "legend.noData": "この足にデータがありません",
+  "legend.partialSeed": "保存済みの最古の足から計算（ウォームアップ {seed}/{warmup} 本）。より古い履歴を読み込むと値が変わる場合があります。",
   "legend.line": "ライン {n}",
   "legend.mainPane": "{symbol} 主チャート",
   "pane.main": "メイン",
@@ -4563,6 +4570,11 @@ export const ja = {
   "shell.moreActions": "その他の操作",
   "serverError.code.historyOriginUnavailable": "取引所の履歴の開始点を読み取れませんでした。しばらくしてから再試行してください。",
   "serverError.code.subscribeFailed": "リアルタイムデータの購読に失敗しました",
+  "serverError.code.desktopRequired": "この機能には CandleScope デスクトップアプリが必要です。",
+  "serverError.code.librarySourceUnsupported": "この市場のリプレイ用履歴はまだダウンロードできません。",
+  "serverError.code.libraryRangeInvalid": "終了済みで、開始と終了が分単位にそろった UTC の期間を選んでください。",
+  "serverError.code.libraryRangeTooLarge": "期間がライブラリの容量を超えています。短くしてください。",
+  "serverError.code.libraryDownloadEnded": "このダウンロードは終了しています。同じ期間をもう一度送信すると、保存済みのデータを確認できます。",
   "local.qualityStatus.accepted": "合格",
   "local.qualityStatus.acceptedWithGaps": "合格（欠損あり）",
   "local.sourceBars": "元データ {count} 本",
@@ -4613,5 +4625,31 @@ export const ja = {
   "aiControl.copyFailed": "コピーできませんでした。クリップボードの権限を確認してください。",
   "aiControl.desktopOnly": "ローカル MCP はデスクトップアプリで利用できます。",
   "aiControl.configuration": "接続設定を表示",
+  "browser.host.starting": "CandleScope を起動しています…",
+  "browser.host.firstStart": "初回の起動では約 40 MB をダウンロードします。2 回目以降はずっと速くなります。",
+  "browser.host.unsupported": "このブラウザーでは CandleScope の Web 版を実行できません。最新のデスクトップ用ブラウザーを使うか、デスクトップアプリをダウンロードしてください。",
+  "browser.host.startFailed": "CandleScope を起動できませんでした：{reason}",
+  "browser.host.updated": "Web 版が更新されました。このサイトのタブをすべて閉じてから、もう一度開いてください。",
+  "browser.host.storageWaiting": "別のバージョンの CandleScope が他のタブで開いています。そのタブを閉じると、このページは自動的に続行します。",
+  "browser.host.storageFailed": "最近の変更をブラウザーに保存できませんでした（{reason}）。CandleScope は再試行を続けます。ディスクの空き容量を確認してください。",
+  "browser.desktop.download": "デスクトップアプリをダウンロード",
+  "browser.desktop.runStrategies": "戦略を実行するにはデスクトップアプリをダウンロード",
+  "browser.desktop.connectAccount": "取引所アカウントを接続するにはデスクトップアプリをダウンロード",
+  "browser.desktop.only": "デスクトップアプリのみ",
+  "browser.scripts.desktopOnly": "戦略とカスタムスクリプトはデスクトップアプリで実行します。内蔵指標はここで使えます。",
+  "browser.strategy.intro": "ここではデータのインポート、チャート分析、戦略の下書き保存ができます。",
+  "browser.replay.reuseHistory": "保存済みの履歴を再利用し、足りない期間だけを取得します。",
+  "browser.replay.start": "リプレイを開始",
+  "browser.replay.barsOnly": "この市場ではローソク足のリプレイを利用できます。",
+  "browser.download.tab": "ダウンロード",
+  "browser.download.preparing": "市場データを準備しています…",
+  "browser.download.saved": "ライブラリに保存しました · {name}",
+  "browser.download.progress": "ダウンロード中 · {count}",
+  "browser.download.failed": "ダウンロードに失敗しました",
+  "browser.download.kind": "データ",
+  "browser.download.bars": "1 分足",
+  "browser.download.end": "終了日時（UTC、含まない）",
+  "browser.download.submit": "ダウンロードしてインポート",
+  "browser.download.symbolLookupUnavailable": "銘柄を検索できません。取引所の完全な銘柄コードを入力してください。",
   ...tradingAccountsJa,
 } as const satisfies MessageCatalog;

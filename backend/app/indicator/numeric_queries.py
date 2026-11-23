@@ -10,7 +10,12 @@ import math
 from app.core.executors import run_storage
 from .engine import indicator_code_hash
 from .history_worker import run_builtin_history, run_builtin_history_numeric
-from .query_contracts import IndicatorInputUnavailable, IndicatorQuery, NumericIndicatorSnapshot
+from .query_contracts import (
+    MAX_NUMERIC_SOURCE_SLOTS,
+    IndicatorInputUnavailable,
+    IndicatorQuery,
+    NumericIndicatorSnapshot,
+)
 from .range_result_service import IndicatorRangeRevisionChangedError
 
 
@@ -35,7 +40,7 @@ class NumericIndicatorService:
         return {**self.stats, 'closed': self.closed, 'subscriptions': len(self.subscriptions),
                 'active_queries': len(self.queries), 'max_queries': 128, 'max_subscriptions': 256,
                 'active_inputs': len(self.flights),
-                'max_source_slots': 250, 'seed_policy': 'confirmed_rolling_slots_v1'}
+                'max_source_slots': MAX_NUMERIC_SOURCE_SLOTS, 'seed_policy': 'confirmed_rolling_slots_v1'}
 
     async def subscribe(self, request, callback, *, on_recovery, consumer_id, event_types=None,
                         subscription_tier='indicators'):

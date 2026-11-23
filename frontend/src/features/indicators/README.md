@@ -115,6 +115,16 @@ and [opaque sandbox origins](https://developer.mozilla.org/en-US/docs/Web/HTML/R
 
 ## Work, Cache, and Hydration Ownership
 
+Live and speculative outputs enter the workspace `IndicatorDataManager.results`
+service before projection-cache publication. It checks input owner/version and
+captured compute-task ownership, commits immutable results, then notifies result
+subscribers. Successful JS output can also be reused across later exact-input
+demands without inheriting a chart ID. Completed semantic results are capped at
+80 entries / 4 MiB encoded keys and output; forming previews and errors are not
+retained there. Hosted script sessions keep private projection ownership.
+See [the four-runtime adapter matrix](../../../../docs/qa/indicator-results-161-164-20261111/README.md)
+for sharing, invalidation, cancellation, recovery and verification boundaries.
+
 The explicit-local lifecycle includes the dataset and normalized chart context,
 the exact bounded OHLCV content sent to the backend, and the local execution
 plan. Each bounded job key also includes indicator id, mode, name, script,
@@ -168,6 +178,15 @@ are fenced, and unchanged output lanes retain their references.
 Hosted range lifecycle is `series + demand.scope + demand.generation`. Revision
 supersession inside that lifecycle marks prior work stale without unnecessarily
 rebuilding the scheduler epoch.
+
+Builtin range payloads may carry `seed` (ADR-INDICATOR-001 §4). The parser
+drops a missing or malformed seed instead of rejecting the values. A `partial`
+seed becomes a span from the range start through its last bar before the
+convergence warmup (`indicatorSeedState.ts`). The result cache and
+`activeIndicators` keep these spans with the same snapshot / replace-range /
+merge rules as lines, so a recomputed range drops its old span. Pane projection
+attaches the spans to each line. Chart legends show a marker when the value they
+display falls inside a span. Spans are runtime-only and never persisted.
 
 ## Internal Ownership
 

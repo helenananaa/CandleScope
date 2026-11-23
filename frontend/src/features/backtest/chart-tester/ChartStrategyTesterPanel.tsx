@@ -1,3 +1,4 @@
+import { BrowserDesktopLink, desktopReleaseUrl } from "../../../app/BrowserDesktopLink.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
@@ -104,6 +105,7 @@ const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrat
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -186,6 +188,7 @@ function autoRunPauseKey(reason: ChartStrategyAutoRunPauseReason) {
 }
 
 export interface ChartStrategyTesterPanelProps {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
@@ -280,7 +283,7 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
-      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t("indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
+      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
       {availability === "unavailable" && <StrategyDockSlot name="notice"><InlineAlert>{t("native.platformHelp")}</InlineAlert></StrategyDockSlot>}
       <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
         continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
@@ -514,6 +517,10 @@ export function CandleScopeStrategyTesterPanel({
   }, [attachRecord, draftStore]);
 
   const run = useCallback(() => {
+    if (browserHost()) {
+      window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (!activeDraft || !currentAttachment) return;
     if (activeDraft.language === "python" && !pythonTrustedConfirmed) return;
     if (!validStrategyRunSettings({ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode })) {
@@ -802,7 +809,8 @@ export function CandleScopeStrategyTesterPanel({
           {canResume && (
             <Button size="sm" variant="ghost" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</Button>
           )}
-          {currentAttachment && (
+          {currentAttachment && (browserHost()
+            ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary ui-btn-sm" /> :
             <Button
               size="sm"
               variant="primary"
@@ -1095,6 +1103,7 @@ export function CandleScopeStrategyTesterPanel({
       )}
       </> : <Suspense fallback={<p className="strategy-dock-empty">{t("continuous.loading")}</p>}>
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
+          signalChart={currentAttachment?.signalChart}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}

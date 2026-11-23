@@ -1,0 +1,19 @@
+{
+  "base": "00be4ce845134b11154633b1f0e258f2bce4ccd4",
+  "product_head": "06ffa00f2be647b97e077d60a99b630145fb4b93",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "55cdf8493a49ff4471ffd8c8e26bbc0ce65f1dac9d9577c030e6799aa92757f1",
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "3be9058719f4c10d3b072dbdd2a314f3682fdbdb404df6f5375475d6184a5a25",
+    "backend/app/data_engine/bar_aggregator/config.py": "95545b354b8f52e8b498d96a0157f25ef5833d02b369c161c6b815caac6b3102",
+    "backend/app/data_engine/bar_aggregator/history_prefix_runtime.py": "ed08504b4df1d4ad368190309ad1bb8eaf32893e70d0635e09412604571ce693",
+    "backend/app/data_engine/data_manager/bar_delivery.py": "072f396c065b80e6d148f2612ec4dd5e17bda4497a76f63193d9dc6b11d4dd04",
+    "backend/app/data_engine/data_manager/manager.py": "8f6ff0af9d76e69fb925e7df6284f1ded4d4d4835ae0af2bc6f606378041c5b4",
+    "backend/scripts/ccxt_contracts/integration.py": "2253d73c0dc1f50c41fa8c592bea704677394044e243ec68b37d6b1e2ddab1ca",
+    "backend/tests/test_bar_delivery_ack_batch.py": "0a1214988d4d47e587086f8a62574ecd2191b51780e53de48055868900f0770b",
+    "backend/tests/test_closed_component_retention.py": "8a0f7b54a3b8a1e85f1b9af087194faa335f2cced84cd6ae30aa5862877bb8e3",
+    "backend/tests/test_closed_component_retention_sources.py": "ea754d010b3f4a5ca7dcd56c77034e1434a7fd709340f4bcb2cfbb48d0602239",
+    "backend/tests/test_forming_component_retention.py": "1b1f7a5982170f964a8030d9e16c22eb16c2a410602fa9d6ee0478eaff42a0b8",
+    "backend/tests/test_forming_component_retention_sources.py": "a6f10767c5d5d3290ffd7c80254b496b73c8fb49a2bdb57576a467c06342aae4",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "4f38f5294b5b87dc8efb2b5428f15b375edfa7b0409e10e3441ad4710e59e7bd"
+  }
+}

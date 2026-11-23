@@ -698,6 +698,10 @@ class ActivationStateSnapshot:
     grant_store_present: bool
     grant: PluginGrantRecord | None
 
+    @property
+    def grant_sha256(self) -> str:
+        return _grant_record_sha256(self.grant)
+
 
 @dataclass(frozen=True, slots=True)
 class _StateRecoveryTarget:
@@ -842,8 +846,8 @@ class PlatformPluginInstaller:
             raise PlatformInstallerError(
                 "v2 installer refuses the legacy runtime-registry.json path"
             )
-        self.python_executable = (
-            Path(os.path.abspath(Path(python_executable or sys.executable).expanduser()))
+        self.python_executable = Path(
+            os.path.abspath(Path(python_executable or sys.executable).expanduser())
         )
         if not self.python_executable.is_file():
             raise PlatformInstallerError("installer Python executable does not exist")

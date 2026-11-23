@@ -155,7 +155,7 @@ plot(ta.sma(close, 3))
 
 @pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PINE_PYTHON"), reason="requires installed Pine candidate")
 @pytest.mark.parametrize("module", ["chart_strategy", "external_strategy"])
-def test_real_compact_replies_rebuild_the_complete_evaluator_result(module):
+def test_real_compact_replies_rebuild_the_complete_evaluator_result(module, qualified_pine):
     from app.backtest.strategy.pine_engine import plugin
     runtime = plugin()
     runtime["command"][-1] = "candlescope_plugin_pine_compat." + module

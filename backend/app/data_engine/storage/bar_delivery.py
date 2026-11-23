@@ -129,6 +129,24 @@ class BarDeliveryJournal:
         with closing(self._connect()) as conn:
             return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
 
+    def pending_page(self, limit=64):
+        """The original page and exact count from one finite read view.
+
+        Explicit/custom pending readers keep their original independent calls.
+        This snapshot never proves the dispatcher's later empty boundary.
+        """
+        if type(limit) is not int or not 1 <= limit <= 64:
+            raise ValueError('pending page requires one to 64 records')
+        if (getattr(self.pending, '__func__', None) is not BarDeliveryJournal.pending
+                or getattr(self.pending_count, '__func__', None) is not BarDeliveryJournal.pending_count):
+            return None
+        with closing(self._connect()) as conn, conn:
+            conn.execute('BEGIN')
+            count = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
+            rows = [self._record(row) for row in conn.execute(
+                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1 ORDER BY sequence LIMIT ?", (limit,))]
+            return rows, count
+
     def _prune(self, conn):
         conn.execute("""DELETE FROM bar_delivery WHERE phase IN ('published','rejected')
             AND recovery_required=0
@@ -167,15 +185,40 @@ class BarDeliveryJournal:
                 raise ValueError('history prefix requires bounded source revisions')
             observed_revision = record["observed_revision"]
             recovery_revision = payload.get("canonical_recovery_revision")
+            source_window = payload['storage_row'].get('source_window')
+            source_version = None
+            if 'source_window' in payload['storage_row']:
+                from app.data_engine.aggregation.source_window import SourceWindowVersion
+                from app.data_engine.aggregation.blocks import BlockUnavailable
+                from .kline_sources import source_window_allows_target
+                try:
+                    source_version = SourceWindowVersion.from_dict(source_window)
+                    if (prefix_revisions or not identity.is_legacy_default_for(payload['exchange'])
+                            or recovery_revision != source_version.acquisition_revision
+                            or observed_revision > source_version.permission_floor
+                            or source_version.start_ms != payload['storage_row']['open_time']
+                            or source_version.through_ms > payload['storage_row']['close_time'] + 1
+                            or not source_window_allows_target(conn, source_version, payload['interval'],
+                                expected=(payload['exchange'],payload['market_type'],payload['symbol']))):
+                        raise ValueError('source recovery content or permission expired')
+                except (ValueError, TypeError, BlockUnavailable):
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record['phase'], record['recovery_required'] = 'rejected', 1
+                    return self._canonical(conn, record)
             if recovery_revision is not None:
                 try:
-                    if (len(prefix_revisions) != 1 or type(recovery_revision) is not int
+                    if ((len(prefix_revisions) != 1 and source_version is None) or type(recovery_revision) is not int
+                            or (source_version is not None and recovery_revision != source_version.acquisition_revision)
                             or not observed_revision <= recovery_revision <= current_revision(conn)):
                         raise StaleAcquisition("invalid canonical recovery revision")
                     check_deletions(conn, Acquisition(observed_revision), values, *(
                         series_values(payload["symbol"], interval, payload["exchange"], payload["market_type"], identity)
                         for interval, _ in prefix_revisions
                     ))
+                    if source_version is not None:
+                        source_interval = json.loads(source_version.series)[3]
+                        check_deletions(conn, Acquisition(observed_revision),
+                            series_values(payload['symbol'], source_interval, payload['exchange'], payload['market_type'], identity))
                 except StaleAcquisition:
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"], record["recovery_required"] = "rejected", 1
@@ -200,6 +243,21 @@ class BarDeliveryJournal:
             else:
                 change = series_change(conn, values)
                 changes = [change] if change is not None else []
+            source_floor = payload.get("source_permission_floor")
+            if source_floor is not None:
+                # Preserve the original source receipt's delete permission;
+                # content revision checks below retain their original clock.
+                permissions = (family if derived else list(zip(IDENTITY_COLUMNS, values)))
+                deletion = conn.execute(
+                    "SELECT MAX(revision) FROM kline_delete_permissions WHERE "
+                    + " AND ".join(f"{name}=?" for name, _ in permissions),
+                    tuple(value for _, value in permissions),
+                ).fetchone()[0]
+                if (type(source_floor) is not int or not 0 <= source_floor <= current_revision(conn)
+                        or (deletion is not None and deletion > source_floor)):
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record["phase"], record["recovery_required"] = "rejected", 1
+                    return self._canonical(conn, record)
             start = payload["storage_row"]["open_time"]
             end = payload["storage_row"].get("close_time")
             valid_window = end is not None and end >= start

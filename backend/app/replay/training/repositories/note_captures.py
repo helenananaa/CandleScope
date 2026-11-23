@@ -178,9 +178,10 @@ class TrainingNoteCaptureRepository:
             current = self.context(connection, run_id, track_id, view=view)
             if context_json != _json(current):
                 raise _error("REPLAY_NOTE_CONTEXT_CHANGED", "Replay context changed; retain the capture request", 409)
+            capture_timeline = current["timelineSequence"] if captured_context["reviewNote"] else original_note_timeline(current)
             if (any(captured_context[key] != current[key] for key in ["runId", "trackId", "dataEpoch"])
                     or captured_context["virtualTimeMs"] > current["virtualTimeMs"]
-                    or captured_context["timelineSequence"] > current["timelineSequence"]):
+                    or captured_context["timelineSequence"] > capture_timeline):
                 raise _error("REPLAY_NOTE_CAPTURE_INVALID", "Capture exceeds this view boundary")
             count, used = connection.execute("SELECT COUNT(*),COALESCE(SUM(stored_bytes),0) FROM replay_training_note_capture WHERE run_id=?",
                                              (run_id,)).fetchone()

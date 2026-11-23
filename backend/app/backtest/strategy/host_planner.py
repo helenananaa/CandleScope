@@ -364,9 +364,15 @@ class HostOrderPlanner:
                     "rejections": list(self.rejections),
                 }
             )
+        if getattr(self, "signal_input", None) is not None:
+            payload["signal_input"] = self.signal_input.snapshot()
         return payload
 
     def restore(self, payload: dict[str, Any]) -> None:
+        if getattr(self, "signal_input", None) is not None:
+            self.signal_input.restore(payload.get("signal_input"))
+        elif payload.get("signal_input") is not None:
+            raise ValueError("chart signal checkpoint requires its frozen configuration")
         self.position = Decimal(str(payload.get("position") or "0"))
         if self.config is None:
             return

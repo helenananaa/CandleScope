@@ -53,6 +53,7 @@ class HistoryBlockReceipt:
     blocks: int
     storage_rows: int
     cache_hits: int
+    storage_reads: int = 0
 
 
 class HistoryBlockPage:
@@ -257,7 +258,7 @@ class HistoryBlockReader:
                         direction, view.revisions, fields) if start_ms < next_position < end_ms else None)
                     receipt = HistoryBlockReceipt(source, (start_ms, end_ms), (lo, hi), view.revisions,
                         tuple(missing), missing_fields, not missing and not missing_fields,
-                        continuation, len(blocks), rows_read, hits)
+                        continuation, len(blocks), rows_read, hits, int(hits != len(ranges)))
                     try:
                         yield page
                         self._cancelled(cancel)

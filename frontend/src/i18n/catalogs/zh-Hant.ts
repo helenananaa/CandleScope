@@ -1,3 +1,5 @@
+import { unifiedMessages } from "./unifiedMessages.js";
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
@@ -7,6 +9,8 @@ import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } 
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  ...unifiedMessages["zh-Hant"],
+  ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,
   ...replayNoteTraditional,
@@ -339,6 +343,8 @@ export const zhHant = {
   "market.spot": "現貨",
   "market.futures": "合約",
   "market.swap": "永續",
+  "market.swapLinear": "線性永續",
+  "market.library": "本地資料",
   "exchange.binance": "幣安",
   "interval.toolbar": "時間週期工具列",
   "interval.picker": "週期選擇器",
@@ -597,6 +603,7 @@ export const zhHant = {
   "legend.change": "漲跌",
   "legend.amplitude": "振幅",
   "legend.noData": "該 K 線無資料",
+  "legend.partialSeed": "自最早一根本地 K 線起算（預熱 {seed}/{warmup} 根）。載入更早的歷史後，數值可能變動。",
   "legend.line": "線 {n}",
   "legend.mainPane": "{symbol} 主圖",
   "pane.main": "主圖",
@@ -4231,6 +4238,11 @@ export const zhHant = {
   "shell.moreActions": "更多操作",
   "serverError.code.historyOriginUnavailable": "暫時無法讀取交易所的歷史起點，請稍後重試",
   "serverError.code.subscribeFailed": "即時資料訂閱失敗",
+  "serverError.code.desktopRequired": "這項功能需要 CandleScope 桌面版。",
+  "serverError.code.librarySourceUnsupported": "這個市場還不能下載用於回放的歷史。",
+  "serverError.code.libraryRangeInvalid": "請選擇已經結束、並對齊到整分鐘的 UTC 時間段。",
+  "serverError.code.libraryRangeTooLarge": "時間段超出資料庫容量，請縮短。",
+  "serverError.code.libraryDownloadEnded": "這次下載已經結束。再次提交同一時間段即可查看已儲存的資料。",
   "local.qualityStatus.accepted": "已通過",
   "local.qualityStatus.acceptedWithGaps": "已通過（有缺口）",
   "local.sourceBars": "{count} 根來源 K 線",
@@ -4265,5 +4277,31 @@ export const zhHant = {
   "aiControl.copyFailed": "複製失敗，請檢查剪貼簿權限。",
   "aiControl.desktopOnly": "本機 MCP 僅在桌面應用程式中提供。",
   "aiControl.configuration": "顯示連線設定",
+  "browser.host.starting": "正在啟動 CandleScope…",
+  "browser.host.firstStart": "第一次開啟需要下載約 40 MB，之後啟動會快很多。",
+  "browser.host.unsupported": "這個瀏覽器無法執行 CandleScope 網頁版。請使用最新版的桌面瀏覽器，或下載桌面版。",
+  "browser.host.startFailed": "CandleScope 未能啟動：{reason}",
+  "browser.host.updated": "網頁版已更新。請關閉此網站的所有分頁，然後重新開啟。",
+  "browser.host.storageWaiting": "另一個版本的 CandleScope 正在其他分頁中執行。關閉那些分頁後，這裡會自動繼續。",
+  "browser.host.storageFailed": "最近的變更未能儲存到瀏覽器（{reason}）。CandleScope 會繼續嘗試；請檢查磁碟空間。",
+  "browser.desktop.download": "下載桌面版",
+  "browser.desktop.runStrategies": "下載桌面版執行策略",
+  "browser.desktop.connectAccount": "下載桌面版連接交易所帳戶",
+  "browser.desktop.only": "僅桌面版提供",
+  "browser.scripts.desktopOnly": "策略和自訂腳本在桌面版中執行；內建指標在這裡照常可用。",
+  "browser.strategy.intro": "可在此匯入行情、分析圖表並儲存策略草稿。",
+  "browser.replay.reuseHistory": "優先使用已儲存的行情，只補齊缺少的區間。",
+  "browser.replay.start": "開始回放",
+  "browser.replay.barsOnly": "此市場目前支援 K 線回放。",
+  "browser.download.tab": "自動下載",
+  "browser.download.preparing": "正在準備行情…",
+  "browser.download.saved": "已儲存到資料庫 · {name}",
+  "browser.download.progress": "正在下載 · {count}",
+  "browser.download.failed": "下載失敗",
+  "browser.download.kind": "行情類型",
+  "browser.download.bars": "1 分鐘 K 線",
+  "browser.download.end": "結束時間（UTC，不含）",
+  "browser.download.submit": "下載並匯入",
+  "browser.download.symbolLookupUnavailable": "暫時無法讀取商品目錄，可輸入交易所的完整商品代碼。",
   ...tradingAccountsZhHant,
 } as const satisfies MessageCatalog;

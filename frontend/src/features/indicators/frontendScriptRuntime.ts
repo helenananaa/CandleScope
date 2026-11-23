@@ -55,6 +55,11 @@ export function parseFrontendScriptOutput(encoded: unknown, request: IndicatorCo
   return frontendScriptPayload(lines);
 }
 
+/** Script time is the source clock; output codecs retain the ordered execution key. */
+export function frontendScriptBars(request: IndicatorComputeRequest) {
+  return request.ohlcv.map((row, index) => ({ ...row, time: row.sourceTime ?? row.time, index }));
+}
+
 function abortError(): DOMException { return new DOMException("Frontend script cancelled", "AbortError"); }
 
 function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal): Promise<IndicatorPayloadEnvelope> {
@@ -69,6 +74,7 @@ function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal)
     const channel = new MessageChannel();
     let settled = false;
     let connected = false;
+    let started = false;
     const finish = (result?: IndicatorPayloadEnvelope, error?: Error, workerStopped = false) => {
       if (settled) return;
       settled = true;
@@ -88,16 +94,25 @@ function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal)
       } else release();
     };
     const abort = () => finish(undefined, abortError());
-    const timer = setTimeout(() => finish(frontendScriptPayload([], "Frontend script exceeded the 2 second execution limit")), 2_000);
+    // Isolating/loading a trusted document is not user-script execution. The
+    // bootstrap cannot dispatch user source until this host starts its timer.
+    let timer = setTimeout(() => finish(frontendScriptPayload([], "Frontend script isolation did not start within 10 seconds")), 10_000);
     signal?.addEventListener("abort", abort, { once: true });
     channel.port1.onmessage = event => {
+      if (!started && event.data === "ready") {
+        started = true;
+        clearTimeout(timer);
+        timer = setTimeout(() => finish(frontendScriptPayload([], "Frontend script exceeded the 2 second execution limit")), 2_000);
+        channel.port1.postMessage("run");
+        return;
+      }
       try { finish(parseFrontendScriptOutput(event.data, request), undefined, true); }
       catch (error) { finish(frontendScriptPayload([], error instanceof Error ? error.message : "Invalid frontend script output"), undefined, true); }
     };
     frame.onload = () => {
       if (settled) return;
       connected = true;
-      frame.contentWindow?.postMessage({ script: request.script, bars: request.ohlcv, params: request.params ?? {} }, "*", [channel.port2]);
+      frame.contentWindow?.postMessage({ script: request.script, bars: frontendScriptBars(request), params: request.params ?? {} }, "*", [channel.port2]);
     };
     frame.srcdoc = frontendScriptSandboxDocument();
     document.body.append(frame);

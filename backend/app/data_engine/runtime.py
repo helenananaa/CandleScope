@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -149,6 +150,7 @@ class DataEngineRuntime:
     gap_scan_task: asyncio.Task | None = None
     gap_audit_task: asyncio.Task | None = None
     manual_history_service: Any = None
+    archive_probe_task: asyncio.Task | None = None
 
     def attach_to_app_state(self, state: Any) -> None:
         """Expose stable app.state handles used by API routes."""
@@ -212,6 +214,7 @@ class DataEngineRuntime:
 
     async def shutdown(self, step_timeout: float = 5.0) -> None:
         """Stop runtime-owned components in dependency order."""
+        await self._cancel_background_task(getattr(self, "archive_probe_task", None), "Archive probe")
         await self._cancel_background_task(self.gap_audit_task, "Gap audit")
         await self._cancel_background_task(self.gap_scan_task, "Gap scan")
 
@@ -1006,8 +1009,6 @@ async def start_data_engine() -> DataEngineRuntime:
             ingestion_config=ingestion_cfg,
         )
         backfill_engine.memory_budget = dm.memory_budget
-        archive_probe = await backfill_engine.fetcher.probe_history_archives()
-        logger.info("Historical archive capability probe: %s", archive_probe)
         backfill_engine.detector.set_calendar_resolver(
             _calendar_resolver,
             registry=history_service.calendars,
@@ -1055,8 +1056,14 @@ async def start_data_engine() -> DataEngineRuntime:
             ingestion_factory,
         )
 
-        gap_scan_task = _start_startup_gap_scan(dm, backfill_coordinator)
-        gap_audit_task = _start_background_gap_audit(dm, backfill_coordinator)
+        # A browser library may contain isolated historical replay windows.
+        # Sweeping a saved window up to today can enqueue years of unsolicited
+        # work ahead of the next replay. Chart and replay demands still repair
+        # their own gaps through the same coordinator.
+        gap_scan_task = gap_audit_task = None
+        if sys.platform != "emscripten":
+            gap_scan_task = _start_startup_gap_scan(dm, backfill_coordinator)
+            gap_audit_task = _start_background_gap_audit(dm, backfill_coordinator)
 
         manual_history_service = attach_manual_history_service(
             data_manager=dm,
@@ -1083,6 +1090,9 @@ async def start_data_engine() -> DataEngineRuntime:
             manual_history_service=manual_history_service,
         )
         backfill_engine.start_archive_cleanup()
+        runtime.archive_probe_task = asyncio.create_task(
+            _probe_history_archives(backfill_engine), name="data-engine-archive-probe",
+        )
         return runtime
     except Exception:
         if runtime is not None:
@@ -1101,6 +1111,22 @@ async def start_data_engine() -> DataEngineRuntime:
                 backfill_engine=backfill_engine,
             )
         raise
+
+
+async def _probe_history_archives(engine: BackfillEngine) -> None:
+    """Optional network qualification never gates the local runtime's readiness.
+
+    The source router remains responsible for qualifying any cold archive route
+    before use. This task only warms the same qualification; REST/local history
+    and websocket service startup do not depend on a remote archive download.
+    """
+    try:
+        result = await engine.fetcher.probe_history_archives()
+        logger.info("Historical archive capability probe: %s", result)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("Historical archive capability probe deferred: %s", exc)
 
 
 async def _start_subscription_workflows(

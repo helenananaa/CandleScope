@@ -1,0 +1,122 @@
+{
+  "sourceCommit": "6f054d9d322594ed8f02828b803f6a70d93f092a",
+  "workflowRun": 44286426077,
+  "platform": "win32",
+  "architecture": "x64",
+  "signatureVerified": null,
+  "appAsar": "sha256:94325958877f7cc78b255d0b870527a5dd918a9f1c45e7f8cbfc270120c5822a",
+  "fixtures": {
+    "failed": {
+      "color": "#f7d6e2",
+      "file": "qa.marketplace-theme-1.2.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:3e333e87dad9e236e861a85ce3dcd987f34b29328f7f834c2315516b9ec8f6f7",
+      "version": "1.2.0"
+    },
+    "initial": {
+      "color": "#ece5d2",
+      "file": "qa.marketplace-theme-1.0.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:1a45df7b560f75766fbc114fdc62f8466715e3ec23cd5410aa6dc6adba0bf6ee",
+      "version": "1.0.0"
+    },
+    "legacy": {
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:7b39133fb85a233a8e097fd146d3a67f474f99f2cbab95f239e6b44d2f0361c7",
+      "version": "0.1.0"
+    },
+    "marketplaceId": "candlescope.community",
+    "sources": {
+      "plugins\\platform-grants-v2.json": "sha256:7b6093ced206b0f6a3ae875668b858dc7e2abe55a2a9cc0a8be868b2c5db9e81",
+      "plugins\\platform-registry-v2.json": "sha256:ea3898a73e6b60d30a742aa8d6ae21e30ec650e610bf05616c8bd9703d4af864",
+      "plugins\\plugin-settings-v1.json": "sha256:d118d8f4347c855fbed3b47ce91f90eaea4a7efaa79dd81f0e9d8838fa739724",
+      "plugins\\private\\f715e90627464188ded58638e854b64b\\candlescope.hello-command\\storage-v1.sqlite": "sha256:d9fa45750790d8099faa5631b296c3d003d4ff35893b39dba2c4d032f6f7511c",
+      "plugins\\sandbox-v2\\private\\1f4b22b2ec1332034597\\state.bin": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+    },
+    "successor": {
+      "color": "#dfe7f8",
+      "file": "candlescope.hello-command-0.2.0.cspkg",
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:c2f8e8461e99aee30ff2979e16b457e9d4b4971c2dec42915679f530fcb1435e",
+      "version": "0.2.0"
+    },
+    "upgrade": {
+      "color": "#dcefe4",
+      "file": "qa.marketplace-theme-1.1.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:ab2460bca079062950fd9b4066f4a9bd0243c53a9185a0f4c9c8b29dacbb2395",
+      "version": "1.1.0"
+    }
+  },
+  "sessions": [
+    {
+      "name": "install, update and migrate",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "legacyAvailable": true,
+      "cancelLeftInactive": true,
+      "installGeneration": 4,
+      "installedWindow": {
+        "theme": "light",
+        "background": "#ece5d2"
+      },
+      "upgradedWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "migrationGeneration": 11,
+      "migratedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "copiedData": {
+        "settingsRecords": 1,
+        "hostKeys": [
+          "bookmark"
+        ],
+        "sandboxFileSha256": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+      },
+      "legacyFilesByteIdentical": true,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart, manual and health rollback",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "restartedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "manualRollback": {
+        "restoredVersion": "0.1.0",
+        "runtimeReady": true
+      },
+      "legacyCommandAfterRollback": "passed",
+      "migratedAppearanceRemoved": true,
+      "healthRollback": {
+        "restoredVersion": "1.1.0",
+        "runtimeReady": true,
+        "healthError": "invalid JSON document",
+        "restoredGeneration": 19
+      },
+      "rolledBackWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart after both rollbacks",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "finalWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "legacyCommandAfterRestart": "passed",
+      "bothVersionsDataPreserved": true,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true
+}

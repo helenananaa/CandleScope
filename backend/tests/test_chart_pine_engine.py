@@ -212,10 +212,10 @@ def test_host_account_is_required_and_not_inferred_from_previous_intents():
         provider.close()
 
 
-@pytest.mark.parametrize("isolated", [False, True])
+@pytest.mark.parametrize("inline", [False, True])
 @pytest.mark.parametrize("source,quantities", [(SOURCE, [2, 2]), (PARTIAL_SOURCE, [4, 1, 3]), (CLOCK_SOURCE, [4, 1, 3]), (PERP_SOURCE, [4, 1, 3])])
 def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
-    tmp_path, monkeypatch, isolated, source, quantities
+    tmp_path, inline, source, quantities
 ):
     from app.market_dataset.snapshot import MarketEvent
 
@@ -223,6 +223,7 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
     from tests.test_backtest_control_plane import _settings
 
     service = BacktestService.start(_settings(tmp_path), now_ms=1, enforce_registered_revisions=True)
+    service._colocated_worker = inline
     provider = PineEngineProvider()
     try:
         revision = service.create_strategy_revision(
@@ -264,11 +265,6 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
             )
             for i, value in enumerate([10, 20, 20, 5, 5, 5, 5])
         )
-        if isolated:
-            from app.backtest.strategy.isolated import IsolatedStrategyProvider
-            from app.backtest.strategy.pine_engine import REVISION
-
-            provider = IsolatedStrategyProvider(REVISION, step_timeout_s=5)
         completed = service.execute_bar_run(
             str(run["run_id"]),
             events=events,
@@ -283,3 +279,24 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
     finally:
         provider.close()
         service.shutdown()
+
+
+def test_ordered_chart_provider_preserves_duplicate_source_times_and_restore():
+    source='//@version=6\nstrategy("Bricks")\nif bar_index==1\n    strategy.entry("L", strategy.long,qty=2)\nplot(ta.sma(close,2))'
+    revision=compile_revision({'language':'PINE_ENGINE','name':'Bricks','source_text':source},now_ms=1)
+    context={'source':json.loads(revision['compiled_json'])['executionSource'],'parameters':{},'outputMode':'ORDER_INTENT',
+        'signalChart':{'transform':'renko'},'pineChartInterval':'1m'}
+    first,restored=PineEngineProvider(),PineEngineProvider()
+    try:
+        first.prepare(context)
+        def brick(i):
+            original=frame(i,20+i)
+            return replace(original,bar={**original.bar,'open_time_ms':60000,'close_time_ms':119999},event_time_ms=119999,watermark_ms=119999)
+        assert first.step(brick(0)) is None
+        output=first.step(brick(1))
+        assert output.kind=='ORDER_INTENT'
+        assert output.payload['intents'][0]['qty']==2
+        restored.restore(first.snapshot())
+        assert restored.step(brick(2))==first.step(brick(2))
+        assert [row['time'] for row in first.bars]==[60,60,60]
+    finally:first.close();restored.close()

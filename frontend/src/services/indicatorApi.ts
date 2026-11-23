@@ -161,9 +161,11 @@ export async function computeIndicator({
   marketType,
   exchange,
   replayContext,
+  chartInput,
 }: IndicatorComputeRequest): Promise<IndicatorPayloadEnvelope> {
   const body: Record<string, unknown> = { ohlcv, params: params || {} };
   if (replayContext) body.replayContext = replayContext;
+  if (chartInput) body.chartInput = chartInput;
 
   if (mode) {
     body.mode = mode;
@@ -240,7 +242,8 @@ export async function computeIndicatorBatch({
       );
     }
     if (
-      item.ohlcv !== shared.ohlcv
+      item.chartInput !== shared.chartInput
+      || item.ohlcv !== shared.ohlcv
       || item.exchange !== shared.exchange
       || item.marketType !== shared.marketType
       || item.symbol !== shared.symbol
@@ -278,6 +281,7 @@ export async function computeIndicatorBatch({
         symbol: shared.symbol || "UNKNOWN",
         interval: shared.interval || "1m",
         replayContext: shared.replayContext,
+        chartInput: shared.chartInput,
       },
       ohlcv: shared.ohlcv,
       requests,

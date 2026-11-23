@@ -164,6 +164,16 @@ async def fetch_unified_history(
                     if start_ms is None:
                         return []
                     limit = 1 + sum(1 for _ in islice(opens, limit - 1))
+            if (context.entry.exchange_id == "bitget" and descriptor.interval == "1m"
+                    and start_ms is not None and req.end_ms is not None
+                    and req.end_ms // 60_000 < int(time.time()) // 60):
+                # Bitget anchors a bounded history page at its exclusive right
+                # edge. Pin that edge to the next open, including for a one-bar gap.
+                start_ms = ((start_ms + 59_999) // 60_000) * 60_000
+                if start_ms > req.end_ms:
+                    return []
+                limit = min(limit, 200, (req.end_ms - start_ms) // 60_000 + 1)
+                options["params"] = {"until": start_ms + limit * 60_000, "useHistoryEndpoint": True}
             values = await exchange.fetch_ohlcv(
                 symbol,
                 timeframe=descriptor.interval,

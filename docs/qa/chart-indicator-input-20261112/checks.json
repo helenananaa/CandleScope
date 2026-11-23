@@ -1,0 +1,53 @@
+{
+  "frontend": {
+    "functional": 5102,
+    "functionalFailed": 0,
+    "isolatedPerformance": 1,
+    "performanceP95Ms": 0.792
+  },
+  "backend": {
+    "passed": 90,
+    "failed": 0
+  },
+  "installedPine": {
+    "passed": 24,
+    "failed": 0
+  },
+  "focusedFinal": {
+    "passed": 24,
+    "failed": 0
+  },
+  "colorFinal": {
+    "passed": 22,
+    "failed": 0
+  },
+  "browser": {
+    "cases": 9,
+    "passed": true,
+    "rawHostedSockets": 0,
+    "remainingWorkers": 0
+  },
+  "migrationOracle": {
+    "cases": 270,
+    "outputRows": 19231,
+    "priceLineagePassed": true,
+    "volumeConservationPassed": true
+  },
+  "productionBuild": true,
+  "architecture": true,
+  "eslint": {
+    "changedFileErrorsResolved": true,
+    "existingCleanupRefWarning": 1,
+    "note": "Changed-file scan plus targeted final rechecks for fixture, projection and color modules."
+  },
+  "nativeUI": {
+    "qualified": false
+  },
+  "windows": {
+    "qualified": false
+  },
+  "typecheck": {
+    "app": true,
+    "nodeAndTests": true
+  }
+}

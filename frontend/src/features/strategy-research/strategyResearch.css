@@ -685,4 +685,21 @@
 .strategy-research-shell .research-top-bar :is(.logo, .workspace-navigation) {
   display: none;
 }
+
+/* Phone layout (app/phoneLayout.ts): one column that scrolls as a whole. The first-open chooser
+   takes its own height instead of scrolling inside the chart area, and the script panel spans
+   the width below it. */
+@media (max-width: 640px) {
+  .strategy-research-shell .chart-with-toolbar:has(.strategy-research-first-open) { flex: 0 0 auto; }
+  .strategy-research-chart-slot:has(> .strategy-research-first-open) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .strategy-research-first-open { margin: 0; padding: var(--space-4); }
+  .strategy-research-templates { grid-template-columns: 1fr; }
+  .strategy-research-right-rail { flex: 1 1 auto; min-height: 0; }
+  .strategy-research-engine-switch .ui-segment { min-width: 0; white-space: normal; }
+}
 }
