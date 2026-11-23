@@ -722,6 +722,23 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `npm run check` runs `check:styles --strict`: the zero targets (unstyled class names, `!important` outside reduced motion, native dialogs, legacy colour names, and selectors with unbalanced brackets) fail it, and raw buttons (266), static inline styles (94) and `*-btn` families (25) have ratchets that fail it if they rise.
 - Next: 8c after launch (the ratchets' targets: raw `<button>` ≤ 20, no static inline styles, `*-btn` families onto the kit).
 
+**Phase 8c lands in five parts** (split decided 2026-11-23, when it started; the user started it before launch, so its PRs stay stacked until they are merged). Raw buttons move surface by surface, each with its `*-btn` families, so every PR can be checked against one area.
+
+| Part | Scope |
+|---|---|
+| 8c1 | Static inline styles (literal values only) into classes; dynamic geometry and data colours stay inline. The metric counts static ones as a zero target and leaves browser-test harnesses out |
+| 8c2 | Drawing surfaces' buttons onto the kit: the drawing toolbar, the selected drawing's style bar, the text format bar, Fibonacci levels, the object list, history and position settings, with the `drawing-*` and `fib-*` families and `chart-type-tool-btn` |
+| 8c3 | Chart chrome: the interval selector (`interval-*`, `custom-interval-btn`), pane controls and the price scale menu (`pane-control-button`), the workspace panel and layout menus, the chart cell header and the market rail |
+| 8c4 | Plugin surfaces: live control, management, detail, platform surfaces and toolbar, native fields |
+| 8c5 | The rest (watchlist `wl-*`, symbol search `sym-modal-*`, replay, strategy and backtest, data preparation, alerts, `retry-btn`), the documented raw-button exceptions, and raw `<button>` as a zero target outside them |
+
+**Phase 8c1 is done (branch `design/phase-8c-kit`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C1.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C1.md).
+
+- Static inline styles 22 (and the literal half of one mixed object) → 0, as classes in the owning stylesheets; 68 dynamic ones stay (runtime geometry, data colours). The crash screen's retry button is the kit primary `Button`.
+- `check:styles` counts static inline styles as a zero target and stops counting browser-test harnesses as components; the raw `<button>` ratchet is 263.
+- A pair comparison (each changed element added to its real container in its old and new form, plain and with hover and focus forced, both themes) finds no styling difference.
+- Next: 8c2, the drawing surfaces' buttons.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

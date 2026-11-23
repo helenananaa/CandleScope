@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RATCHETS, classNamesInCss, classNamesInTsx, collectMetrics, importantOutsideReducedMotion, malformedSelectorLines, strictFailures } from "./check-style-metrics.mjs";
+import { RATCHETS, classNamesInCss, classNamesInTsx, collectMetrics, importantOutsideReducedMotion, isStaticStyleObject, malformedSelectorLines, strictFailures } from "./check-style-metrics.mjs";
 
 test("TSX class extraction reads plain and conditional className values", () => {
   const names = classNamesInTsx(`
@@ -60,12 +60,12 @@ test("!important counts skip comments and prefers-reduced-motion blocks", () => 
 });
 
 test("strict mode fails on a metric off its zero target or above its ratchet, not below it", () => {
-  const clean = { unstyledClasses: 0, important: 0, nativeDialogs: 0, legacyColorTokens: 0, malformedSelectors: 0, ...RATCHETS };
+  const clean = { unstyledClasses: 0, important: 0, nativeDialogs: 0, legacyColorTokens: 0, malformedSelectors: 0, staticInlineStyles: 0, ...RATCHETS };
   assert.deepEqual(strictFailures(clean), []);
   assert.deepEqual(strictFailures({ ...clean, rawButtons: RATCHETS.rawButtons - 5 }), []);
-  assert.deepEqual(strictFailures({ ...clean, important: 1, inlineStyles: RATCHETS.inlineStyles + 1 }), [
+  assert.deepEqual(strictFailures({ ...clean, important: 1, rawButtons: RATCHETS.rawButtons + 1 }), [
     "important is 1, target 0",
-    `inlineStyles is ${RATCHETS.inlineStyles + 1}, above its ratchet of ${RATCHETS.inlineStyles}`,
+    `rawButtons is ${RATCHETS.rawButtons + 1}, above its ratchet of ${RATCHETS.rawButtons}`,
   ]);
 });
 
@@ -76,4 +76,25 @@ test("selectors with unbalanced brackets are reported by line; strings and keyfr
 [data-label="("] { color: green; }
 @keyframes spin { from { opacity: 0; } to { opacity: 1; } }`;
   assert.deepEqual(malformedSelectorLines(css), [2, 3]);
+});
+
+test("static inline styles hold only literal values; computed values and shorthand names are dynamic", () => {
+  assert.equal(isStaticStyleObject(' fontSize: 48 '), true);
+  assert.equal(isStaticStyleObject(' color: "var(--text-primary)", marginTop: 8, display: "block" '), true);
+  assert.equal(isStaticStyleObject(' "--accent": "#fff" '), true);
+  assert.equal(isStaticStyleObject(' height '), false);
+  assert.equal(isStaticStyleObject(' width: `${width}%` '), false);
+  assert.equal(isStaticStyleObject(' display: open ? undefined : "none" '), false);
+  assert.equal(isStaticStyleObject(' "--chart-link-group-color": group.color '), false);
+});
+
+test("component metrics skip browser-test harnesses", () => {
+  const files = {
+    "/src/A.tsx": '<div style={{ padding: 16 }} /><div style={{ width }} />',
+    "/src/drawings/tools.browser.tsx": '<div style={{ width: 1000 }}><button /></div>',
+  };
+  const metrics = collectMetrics(Object.keys(files), (file) => files[file]);
+  assert.equal(metrics.inlineStyles, 2);
+  assert.equal(metrics.staticInlineStyles, 1);
+  assert.equal(metrics.rawButtons, 0);
 });

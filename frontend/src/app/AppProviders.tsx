@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import type { ErrorInfo, PropsWithChildren, ReactNode } from "react";
 import { t } from "../i18n/index.js";
+import { Button } from "../components/ui/index.js";
 import { ExtensionRecovery } from "../features/extensions/ExtensionManager.js";
 import { startUnified } from "../features/extensions/unifiedRuntime.js";
 import { installTouchLongPress } from "./touchLongPress.js";
@@ -32,27 +33,13 @@ export class ChartErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", height: "100%", gap: 16,
-          color: "var(--text-secondary)", padding: 32,
-        }}>
-          <div style={{ fontSize: 48 }}>!</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>
-            {t("shell.chartErrorTitle")}
-          </div>
-          <div style={{ fontSize: 13, maxWidth: 400, textAlign: "center" }}>
-            {t("shell.chartErrorDetail")}
-          </div>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: "8px 24px", background: "var(--accent-blue)", color: "var(--text-on-accent)",
-              border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600,
-            }}
-          >
+        <div className="app-crash">
+          <div className="app-crash-mark" aria-hidden="true">!</div>
+          <div className="app-crash-title">{t("shell.chartErrorTitle")}</div>
+          <div className="app-crash-detail">{t("shell.chartErrorDetail")}</div>
+          <Button variant="primary" onClick={() => this.setState({ hasError: false, error: null })}>
             {t("shell.retry")}
-          </button>
+          </Button>
         </div>
       );
     }

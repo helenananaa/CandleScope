@@ -23,7 +23,6 @@ const CornerTriangle = (
     width="6"
     height="6"
     viewBox="0 0 6 6"
-    style={{ position: "absolute", right: 2, bottom: 2 }}
   >
     <polygon points="6,0 6,6 0,6" fill="currentColor" opacity="0.55" />
   </svg>

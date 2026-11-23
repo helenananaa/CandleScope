@@ -1,5 +1,20 @@
 /* Page layout, page navigation and shared shell rules. */
 
+/* Crash screen (app/AppProviders.tsx): a render error that reached the app's boundary. */
+.app-crash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+  padding: 32px;
+  color: var(--text-secondary);
+}
+.app-crash-mark { font-size: 48px; }
+.app-crash-title { color: var(--text-primary); font-size: var(--font-size-lg); font-weight: 600; }
+.app-crash-detail { max-width: 400px; font-size: var(--font-size-md); text-align: center; }
+
 .workspace-navigation { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
 .workspace-navigation :is(a, button, span) { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; text-decoration: none; font: 500 var(--font-size-sm)/1.4 var(--font-sans); white-space: nowrap; }
 .workspace-navigation [aria-current='page'] { color: var(--text-accent); background: var(--surface-hover); }

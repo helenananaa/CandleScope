@@ -44,11 +44,11 @@ export const HOOK_CLASSES = new Set([
 ]);
 
 // Metrics that have reached zero: any occurrence fails --strict.
-export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "legacyColorTokens", "malformedSelectors"];
+export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "legacyColorTokens", "malformedSelectors", "staticInlineStyles"];
 
 // Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
 // its ratchet. Lower a ratchet when its count falls; never raise it.
-export const RATCHETS = { rawButtons: 266, inlineStyles: 94, buttonClassFamilies: 25 };
+export const RATCHETS = { rawButtons: 263, buttonClassFamilies: 25 };
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -106,6 +106,17 @@ export function classNamesInCss(source) {
 // in candlescope.theme/1; features/extensions/state.ts writes them as the design tokens.
 const LEGACY_COLOR_TOKEN = /--(?:bg-(?:primary|secondary|tertiary|hover)|border-color)\b/g;
 
+/**
+ * Whether a style={{…}} object (the text between its braces) is static: only literal values,
+ * nothing computed at render time. Dynamic geometry and colours from data stay inline.
+ */
+export function isStaticStyleObject(body) {
+  if (/\$\{/.test(body)) return false;
+  let rest = body.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "S");
+  rest = rest.replace(/(^|[,{\s])(\[?[A-Za-z_$][\w$]*\]?|S)\s*:/g, "$1");
+  return !/[A-Za-z_$]/.test(rest.replace(/\bS\b/g, ""));
+}
+
 /** !important declarations outside comments and outside prefers-reduced-motion blocks. */
 export function importantOutsideReducedMotion(css) {
   let text = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -137,7 +148,9 @@ export function malformedSelectorLines(css) {
 
 export function collectMetrics(files, read = (file) => fs.readFileSync(file, "utf8")) {
   const styleFiles = files.filter((file) => file.endsWith(".css") || file.endsWith("Styles.tsx"));
-  const componentFiles = files.filter((file) => file.endsWith(".tsx") && !file.endsWith("Styles.tsx") && !/\.test\.tsx$/.test(file));
+  // Components the app ships: not tests, not browser-test harnesses (*.browser.tsx, src/test/).
+  const componentFiles = files.filter((file) => file.endsWith(".tsx") && !file.endsWith("Styles.tsx")
+    && !/\.(?:test|browser)\.tsx$/.test(file) && !file.includes(`${path.sep}src${path.sep}test${path.sep}`) && !file.startsWith(`src${path.sep}test${path.sep}`));
   const defined = new Set();
   let important = 0;
   let legacyColorTokens = 0;
@@ -155,6 +168,7 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
   let rawButtons = 0;
   let buttonPrimitive = 0;
   let inlineStyles = 0;
+  let staticInlineStyles = 0;
   let nativeDialogs = 0;
   for (const file of componentFiles) {
     const source = read(file);
@@ -163,7 +177,11 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     if (missing.length) unstyled.push({ file, classes: missing.sort() });
     if (!file.includes(`${path.sep}components${path.sep}ui${path.sep}`)) rawButtons += (source.match(/<button\b/g) ?? []).length;
     buttonPrimitive += (source.match(/<Button\b/g) ?? []).length;
-    inlineStyles += (source.match(/style=\{\{/g) ?? []).length;
+    for (const match of source.matchAll(/style=\{\{/g)) {
+      inlineStyles++;
+      const open = match.index + "style={".length;
+      if (isStaticStyleObject(source.slice(open + 1, closingBrace(source, open) - 1))) staticInlineStyles++;
+    }
   }
   for (const file of files.filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))) {
     nativeDialogs += (read(file).match(/window\.(?:confirm|alert)\(/g) ?? []).length;
@@ -176,6 +194,7 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     buttonPrimitive,
     buttonClassFamilies: buttonFamilies.size,
     inlineStyles,
+    staticInlineStyles,
     important,
     nativeDialogs,
     legacyColorTokens,
@@ -199,7 +218,8 @@ function report(metrics) {
     ["Raw <button> outside components/ui", metrics.rawButtons, `≤ 20 (ratchet ${RATCHETS.rawButtons})`],
     ["<Button> primitive uses", metrics.buttonPrimitive, "grows"],
     ["*-btn / *-button class families", metrics.buttonClassFamilies, `primitives (ratchet ${RATCHETS.buttonClassFamilies})`],
-    ["Inline style={{}}", metrics.inlineStyles, `dynamic only (ratchet ${RATCHETS.inlineStyles})`],
+    ["Inline style={{}} (dynamic)", metrics.inlineStyles - metrics.staticInlineStyles, "allowed"],
+    ["Static inline style={{}}", metrics.staticInlineStyles, "0"],
     ["!important outside reduced motion", metrics.important, "0"],
     ["window.confirm / window.alert", metrics.nativeDialogs, "0"],
     ["Legacy colour token names (--bg-*)", metrics.legacyColorTokens, "0"],

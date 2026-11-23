@@ -229,20 +229,18 @@ export default function DrawingStyleControls({
           </div>
           <div className="drawing-tool-option">
             <button
-              className={`drawing-tool-btn drawing-format-btn ${textBold ? "active" : ""}`}
+              className={`drawing-tool-btn drawing-format-btn drawing-format-bold ${textBold ? "active" : ""}`}
               onClick={() => onTextBoldChange?.(!textBold)}
               title={t("drawing.settings.bold")}
-              style={{ fontWeight: "bold", fontSize: 14, minWidth: 28 }}
             >
               B
             </button>
           </div>
           <div className="drawing-tool-option">
             <button
-              className={`drawing-tool-btn drawing-format-btn ${textItalic ? "active" : ""}`}
+              className={`drawing-tool-btn drawing-format-btn drawing-format-italic ${textItalic ? "active" : ""}`}
               onClick={() => onTextItalicChange?.(!textItalic)}
               title={t("drawing.settings.italic")}
-              style={{ fontStyle: "italic", fontSize: 14, minWidth: 28 }}
             >
               I
             </button>
@@ -256,7 +254,6 @@ export default function DrawingStyleControls({
             className="drawing-tool-btn drawing-format-btn position-settings-trigger"
             onClick={onOpenPositionSettings}
             title={t("drawing.settings.position")}
-            style={{ fontSize: 11, minWidth: 50 }}
           >
             ${formatPositionSize(positionSize)}
           </button>

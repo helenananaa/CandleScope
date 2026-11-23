@@ -134,6 +134,11 @@
   height: 28px;
   font-family: var(--font-sans);
 }
+.drawing-format-btn:is(.drawing-format-bold, .drawing-format-italic) { min-width: 28px; font-size: 14px; }
+.drawing-format-btn.drawing-format-bold { font-weight: bold; }
+.drawing-format-btn.drawing-format-italic { font-style: italic; }
+/* Pushes the export, visibility and clear buttons to the end of the drawing toolbar. */
+.drawing-toolbar-spacer { flex: 1; }
 /* ── 文字编辑浮层 ────────────────────────────────────────── */
 .text-edit-overlay {
   pointer-events: none;
@@ -258,6 +263,9 @@
   border-color: color-mix(in srgb, var(--accent-blue) 38%, transparent);
 }
 .tool-variant-indicator {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
   pointer-events: none;
 }
 /* ── 弹出菜单（右键/双击切换工具变体） ───────────────────── */

@@ -94,6 +94,15 @@
   text-align: center;
   max-width: 400px;
 }
+/* A chart whose data did not load (app/ChartLoadError.tsx): scrolls when the details are open. */
+.error-overlay.chart-load-error { overflow: auto; padding: 16px; }
+.chart-load-error .error-message { max-width: 100%; }
+.chart-load-error-details { margin-top: 12px; text-align: left; }
+.chart-load-error-details > summary { cursor: pointer; }
+.chart-load-error-details > pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.chart-load-error-diagnostic { width: 100%; max-width: 520px; color: var(--text-primary); background: var(--surface-0); }
+/* An interval the market cannot serve (app/ChartIntervalUnavailable.tsx). */
+.error-overlay.chart-interval-unavailable { padding: 16px; }
 .retry-btn {
   padding: 8px 20px;
   font-size: var(--font-size-md);

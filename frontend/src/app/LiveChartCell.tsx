@@ -1134,7 +1134,7 @@ function LiveChartCell({
           <strong>{chartSession.view.symbol}</strong>
           <span>{formatIntervalLabel(chartSession.view.interval)}</span>
           {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
-            <span role="status" style={{ color: "var(--text-warning)" }}>{t("interval.historyOnly")}</span>
+            <span role="status" className="multi-chart-cell-history-only">{t("interval.historyOnly")}</span>
           )}
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}

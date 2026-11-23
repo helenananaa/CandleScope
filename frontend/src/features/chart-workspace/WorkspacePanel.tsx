@@ -596,7 +596,7 @@ export default function WorkspacePanel({
                     aria-pressed={view.layoutLocked}
                     onClick={() => actions.setLayoutLocked(!view.layoutLocked)}
                   >
-                    <span aria-hidden="true" style={{ display: "inline-flex" }}><Icon name={view.layoutLocked ? "lock" : "unlock"} size={14} /></span>
+                    <span aria-hidden="true" className="workspace-panel-lock-icon"><Icon name={view.layoutLocked ? "lock" : "unlock"} size={14} /></span>
                     {view.layoutLocked ? t("workspace.unlock") : t("workspace.lock")}
                   </button>
                 </div>

@@ -45,7 +45,7 @@ export default function DrawingActionButtons({
   useLocale();
   return (
     <>
-      <div style={{ flex: 1 }} />
+      <div className="drawing-toolbar-spacer" />
       <button
         className={`drawing-tool-btn ${exportPanelOpen ? "active" : ""}`}
         data-drawing-action="export"

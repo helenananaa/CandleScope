@@ -11,7 +11,7 @@ export function ChartIntervalUnavailable({ session, nativeIntervals, onSelectInt
   useLocale();
   return (
     <div className="chart-area" data-interval-admission="unavailable">
-      <div className="error-overlay" role="status" style={{ padding: 16 }}>
+      <div className="error-overlay chart-interval-unavailable" role="status">
         <strong>{session.symbol} · {session.interval}</strong>
         <p>{t("interval.cannotComposeSession", {
           exchange: session.exchange, marketType: session.marketType, interval: session.interval,

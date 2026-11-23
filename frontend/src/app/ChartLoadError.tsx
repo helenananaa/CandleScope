@@ -14,18 +14,18 @@ export function ChartLoadError({ error, context, onRetry }: { error: string; con
   };
   return (
     <div className="chart-area">
-      <div className="error-overlay" style={{ overflow: "auto", padding: 16 }}>
+      <div className="error-overlay chart-load-error">
         <div className="error-icon">!</div>
-        <div className="error-message" style={{ maxWidth: "100%" }}>
+        <div className="error-message">
           <strong>{t("chart.dataLoadFailed")}</strong>
           <br />
           {t("chart.dataLoadDetail")}
-          <small style={{ color: "var(--text-muted)", marginTop: 8, display: "block" }}>
+          <small>
             {t("chart.backendHint")}
           </small>
-          <details style={{ marginTop: 12, textAlign: "left" }}>
-            <summary style={{ cursor: "pointer" }}>{t("chartTester.error.details")}</summary>
-            <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 160, overflow: "auto", userSelect: "text" }}>{error}</pre>
+          <details className="chart-load-error-details">
+            <summary>{t("chartTester.error.details")}</summary>
+            <pre>{error}</pre>
           </details>
         </div>
         <button className="retry-btn" onClick={onRetry} id="retry-btn">{t("shell.retry")}</button>
@@ -38,7 +38,7 @@ export function ChartLoadError({ error, context, onRetry }: { error: string; con
             value={diagnostic}
             onFocus={(event) => event.currentTarget.select()}
             rows={6}
-            style={{ width: "100%", maxWidth: 520, color: "var(--text-primary)", background: "var(--surface-0)" }}
+            className="chart-load-error-diagnostic"
           />
         )}
       </div>
