@@ -909,3 +909,89 @@ async def test_next_natural_close_survives_repair_of_older_gap(tmp_path, monkeyp
         assert closed(live) == [T // 1000, T // 1000 + 180]
     finally:
         await _close(dm, factory)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interval", ["7m", "10007m"])
+@pytest.mark.parametrize("late_target", [False, True])
+async def test_forming_target_gap_resyncs_after_canonical_source_repair_without_fake_final(
+    tmp_path, monkeypatch, interval, late_target,
+):
+    monkeypatch.setattr("app.data_engine.data_manager.manager.time.time", lambda: (T + 180_000) / 1000)
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch)
+    identity = {**IDENTITY, "interval": interval}
+    target = SeriesKey(**identity)
+    if not late_target:
+        await dm.ensure_stream(**identity)
+    try:
+        await factory.emit(T, 99)
+        await factory.emit(T + 120_000, 101)
+        if late_target:
+            await dm.ensure_stream(**identity)
+        assert dm.source_gaps.pending(target)
+        gap = dm.source_gaps.pending(target)[0]
+        events, errors, _ = capture(dm, identity=identity)
+        assert {request[0][1] for request in requests if request[1].get("requester") == "ingestion_gap"} == {"1m"}, "never request a final forming target"
+        await _history_repair(dm, store, T + 60_000, 100)
+        await _until(lambda: not dm.source_gaps.pending(target) and bool(errors))
+        assert errors[0].reason == "source_gap_snapshot_required"
+        assert gap.completed_at is None and gap.repaired == {}, "no target-final proof is invented"
+        assert closed(events) == []
+        assert dm.source_gaps.pending(SeriesKey(**IDENTITY)) == []
+    finally:
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
+async def test_forming_target_waits_for_all_native_gaps_and_closed_target_keeps_final_proof(tmp_path, monkeypatch):
+    now = [T + 180_000]
+    monkeypatch.setattr("app.data_engine.data_manager.manager.time.time", lambda: now[0] / 1000)
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch)
+    target = SeriesKey(**{**IDENTITY, "interval": "10007m"})
+    source = SeriesKey(**IDENTITY)
+    try:
+        first, _ = dm.source_gaps.open(source, T, T)
+        second, _ = dm.source_gaps.open(source, T + 60_000, T + 60_000)
+        await dm._project_source_gap(target, first)
+        await dm._project_source_gap(target, second)
+        dependent = dm.source_gaps.pending(target)[0]
+        assert dependent.forming_source_gap_ids == {first.id, second.id}
+        await _history_repair(dm, store, T, 99)
+        assert dm.source_gaps.pending(target) == [dependent]
+        assert dependent.forming_source_gap_ids == {second.id}
+        # The target closes before the final native proof. It must receive a
+        # normal target repair, never a forming-only snapshot retirement.
+        now[0] = parse_interval_spec(target.interval).next_ms(dependent.start_ms) + 1000
+        await _history_repair(dm, store, T + 60_000, 100)
+        assert dm.source_gaps.pending(target) == [dependent]
+        assert not dependent.future.done() and dependent.completed_at is None
+        repairs = [r for r in requests if r[1].get("requester") == "ingestion_gap"]
+        assert [r[0][1] for r in repairs] == ["10007m"]
+        await dm._retire_forming_source_dependents(source)
+        assert len([r for r in requests if r[1].get("requester") == "ingestion_gap"]) == 1
+    finally:
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("reason", ["source_repair_failed", "source_stream_restarted"])
+async def test_forming_dependency_wakes_when_physical_source_fails_or_retires(tmp_path, monkeypatch, reason):
+    monkeypatch.setattr("app.data_engine.data_manager.manager.time.time", lambda: (T + 180_000) / 1000)
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch)
+    source = SeriesKey(**IDENTITY)
+    target = SeriesKey(**{**IDENTITY, "interval": "10007m"})
+    try:
+        base, _ = dm.source_gaps.open(source, T, T)
+        await dm._project_source_gap(target, base)
+        dependent = dm.source_gaps.pending(target)[0]
+        waiting = asyncio.create_task(dm.wait_for_source_continuity(target, fail_on_error=True))
+        await asyncio.sleep(0)
+        if reason == "source_stream_restarted":
+            dm.source_gaps.retire(source)
+        else:
+            base.fail(reason)
+        with pytest.raises(ConsumerRecoveryRequired, match=reason):
+            await asyncio.wait_for(waiting, 1)
+        assert dependent.completed_at is None and dependent.repaired == {}
+    finally:
+        await _close(dm, factory)

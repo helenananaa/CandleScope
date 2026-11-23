@@ -369,6 +369,7 @@ const PT_BR_PRODUCT_TOKENS = new Set([
   "plugin", "plugins", "exchanges", "exchange", "webhook", "ccxt", "sqlite",
   "maker", "taker", "bids", "asks", "paper", "renko", "kagi", "review", "fork",
   "heikin", "ashi", "long", "short", "platform", "fibonacci", "donchian",
+  "sharpe", "calmar", "wilder", "context", "parameters",
   "train", "test", "high", "low", "close", "open", "percentage",
   "uvicorn", "aggtrade", "pro", "reverse", "windows", "bollinger",
   "socks5", "ta4j", "frontend", "backend", "python", "candle", "candles",

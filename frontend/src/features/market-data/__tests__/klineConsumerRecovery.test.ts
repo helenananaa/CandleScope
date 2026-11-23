@@ -84,6 +84,22 @@ test("a second gap fences the old snapshot and coalesces concurrent recovery att
   assert.equal(recovery.required, false);
 });
 
+test("partial consumer recovery cannot publish rows or leave an orphaned deferred indicator window", async () => {
+  let ready = false;
+  const { feed, commits } = harness(async () => ready ? proof : {
+    ...proof, complete: false, verified_contiguous: false, retryable: true, history_state: "pending",
+  });
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, held);
+  await recovery.recover(feed, () => true);
+  assert.deepEqual(commits, [], "the consumer owns a snapshot obligation, not an untracked partial indicator owner");
+  assert.equal(recovery.required, true);
+  ready = true;
+  await recovery.recover(feed, () => true);
+  assert.deepEqual(commits, [[60, 120, 180]]);
+  assert.equal(recovery.required, false);
+});
+
 test("transport failure stays recoverable and a later verified snapshot succeeds", async () => {
   let fail = true;
   const { feed } = harness(async () => {
@@ -248,12 +264,13 @@ const rejectedTails: Array<[string, KlineFetchResult]> = [
 ];
 for (const [name, latest] of rejectedTails) {
   test(`a ${name} tail cannot replace missing historical proof`, async () => {
-    const { feed, patches } = harness(async () => capped, async () => latest);
+    const { feed, patches, commits } = harness(async () => capped, async () => latest);
     const recovery = new KlineConsumerRecovery();
     recovery.capture(feed, series, [...held, forming]);
     await recovery.recover(feed, () => true);
     assert.equal(recovery.required, true);
     assert.deepEqual(patches, []);
+    assert.deepEqual(commits, [], "a rejected combined proof cannot publish even its closed prefix");
   });
 }
 
