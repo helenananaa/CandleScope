@@ -1,6 +1,37 @@
 import { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import type { ReplayV2TimeDisclosurePolicy } from "./replayV2Types.js";
 
+/**
+ * The disclosure policy the training page applies. The server's effective
+ * policy wins; before it arrives, only an explicitly non-blind session shows
+ * absolute time, and anything else stays fully hidden.
+ */
+export function replayPublicTimePolicy(
+  effectivePolicy: ReplayV2TimeDisclosurePolicy | null | undefined,
+  blindMode: boolean | null | undefined,
+): ReplayV2TimeDisclosurePolicy {
+  return effectivePolicy ?? (blindMode === false ? "NONE" : "HIDE_ALL");
+}
+
+/**
+ * Go-to-date (dialog and Alt+G) asks for an absolute date, so it is offered
+ * only when the session discloses absolute time (policy `NONE`), outside
+ * review, and once the viewer has loaded. Every `HIDE_*` policy disables it.
+ */
+export function replayDateNavigationEnabled({
+  active,
+  reviewing,
+  publicTimePolicy,
+  loading,
+}: {
+  readonly active: boolean;
+  readonly reviewing: boolean;
+  readonly publicTimePolicy: ReplayV2TimeDisclosurePolicy;
+  readonly loading: boolean;
+}): boolean {
+  return active && !reviewing && publicTimePolicy === "NONE" && !loading;
+}
+
 export interface ReplayPublicTimeFormatterOptions {
   readonly policy: ReplayV2TimeDisclosurePolicy;
   readonly originMs: number | null;

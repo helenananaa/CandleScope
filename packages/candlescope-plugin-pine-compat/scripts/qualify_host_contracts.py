@@ -80,7 +80,10 @@ def main():
         # ADR-BACKTEST-015 P6: every bar-family fill clock x account model keeps its kernel digests,
         # and practice accounts keep their behaviour while their model becomes the shared one (P6e).
         "test_kernel_baselines.py", "test_practice_baselines.py", "test_practice_clock.py",
-        "test_practice_runs.py")]
+        "test_practice_runs.py",
+        # Pine strategies in replay: native and external replay reveal and restore, and the
+        # research page's selected Pine version keeps its frozen libraries and parameters.
+        "test_native_replay.py", "test_external_replay.py", "test_research_selected_version.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():
