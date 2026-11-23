@@ -12,6 +12,7 @@ from __future__ import annotations
 from app.core.config import getenv as app_getenv
 
 import asyncio
+import sys
 import logging
 import time
 from typing import Any
@@ -561,6 +562,14 @@ def _available_account_proxy():
         return None
 
 
+async def _blocking(func, *args):
+    # The browser version's interpreter has no threads. It never holds a managed
+    # core (subscriptions are desktop-only), so these calls only save settings there.
+    if sys.platform == "emscripten":
+        return func(*args)
+    return await asyncio.to_thread(func, *args)
+
+
 async def _apply_proxy_settings(request, body):
     mode, custom_proxy = normalize_proxy_settings(body.mode, body.custom_proxy)
     cfg = _get_ingestion_config(request)
@@ -582,7 +591,7 @@ async def _apply_proxy_settings(request, body):
     if readonly_accounts is not None and previous_core and mode == "pool":
         previous_account_proxy = _available_account_proxy()
     try:
-        await asyncio.to_thread(managed.activate, selected, lambda: save_proxy_settings(
+        await _blocking(managed.activate, selected, lambda: save_proxy_settings(
             mode, custom_proxy, routes=body.routes, strategy=body.strategy))
     except SubscriptionError as exc:
         raise HTTPException(400, str(exc)) from None
@@ -660,13 +669,13 @@ async def test_proxy_connection(body: ProxyTestRequest, request: Request) -> dic
 async def _test_subscription_draft(body, request):
     draft = ManagedRoutes(managed.store)
     try:
-        await asyncio.to_thread(draft.activate, body.routes)
+        await _blocking(draft.activate, body.routes)
         routes = [dict(r, url=draft.active.resolve(r["url"])) if r["enabled"] else r for r in body.routes]
         return await _test_proxy_connection(body.model_copy(update={"routes": routes}), request)
     except SubscriptionError as exc:
         raise HTTPException(400, str(exc)) from None
     finally:
-        await asyncio.to_thread(draft.close)
+        await _blocking(draft.close)
 
 
 async def _test_proxy_connection(body, request):

@@ -517,7 +517,8 @@ async def _start_plugin_plane() -> None:
 @app.on_event("startup")
 async def startup_event() -> None:
     try:
-        if RUNTIME_MODE != "LOCAL_OFFLINE":
+        # The managed proxy core is a native process: never in the browser version.
+        if RUNTIME_MODE != "LOCAL_OFFLINE" and sys.platform != "emscripten":
             from app.proxy_subscriptions.runtime import managed
             from app.proxy_subscriptions.source import SubscriptionError
             try:
@@ -888,6 +889,8 @@ async def shutdown_event() -> None:
 
 
 async def _stop_managed_proxy() -> None:
+    if sys.platform == "emscripten":
+        return
     from app.proxy_subscriptions.runtime import managed
     supervisor = getattr(app.state, "proxy_supervisor", None)
     if supervisor is not None:

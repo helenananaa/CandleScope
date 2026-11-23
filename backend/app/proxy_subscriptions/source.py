@@ -6,7 +6,6 @@ import hashlib
 from urllib.parse import urlsplit
 
 import aiohttp
-import yaml
 
 MAX_BYTES = 2 * 1024 * 1024
 _COMMON = {"name", "type", "server", "port", "udp", "ip-version"}
@@ -33,19 +32,32 @@ class SubscriptionError(ValueError):
     """Messages may be returned to callers and must never include input values."""
 
 
-class _NodeLoader(yaml.SafeLoader):
-    depth = 0
-    count = 0
+_LOADER = None
 
-    def compose_node(self, parent, index):
-        self.count += 1
-        if self.depth >= 40 or self.count > 100_000 or self.check_event(yaml.AliasEvent):
-            raise SubscriptionError("Unsupported YAML complexity or alias")
-        self.depth += 1
-        try:
-            return super().compose_node(parent, index)
-        finally:
-            self.depth -= 1
+
+def _node_loader():
+    """PyYAML loads on first parse: the browser version imports this module through the
+    settings routes but has no PyYAML and never parses a subscription."""
+    global _LOADER
+    if _LOADER is None:
+        import yaml
+
+        class _NodeLoader(yaml.SafeLoader):
+            depth = 0
+            count = 0
+
+            def compose_node(self, parent, index):
+                self.count += 1
+                if self.depth >= 40 or self.count > 100_000 or self.check_event(yaml.AliasEvent):
+                    raise SubscriptionError("Unsupported YAML complexity or alias")
+                self.depth += 1
+                try:
+                    return super().compose_node(parent, index)
+                finally:
+                    self.depth -= 1
+
+        _LOADER = (yaml, _NodeLoader)
+    return _LOADER
 
 
 def _headers(value):
@@ -92,8 +104,9 @@ def source_id(url):
 def parse_nodes(raw: bytes, source: str):
     if len(raw) > MAX_BYTES:
         raise SubscriptionError("Subscription exceeds size limit")
+    yaml, loader = _node_loader()
     try:
-        data = yaml.load(raw, Loader=_NodeLoader)
+        data = yaml.load(raw, Loader=loader)
     except (yaml.YAMLError, UnicodeError, RecursionError, ValueError):
         raise SubscriptionError("Invalid or unsupported subscription YAML") from None
     nodes = data.get("proxies") if isinstance(data, dict) else None
