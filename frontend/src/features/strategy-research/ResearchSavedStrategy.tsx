@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, Field, InlineAlert, Select, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
@@ -7,7 +7,10 @@ import { useLocale } from "../../i18n/useLocale.js";
 import type { StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import type { BacktestSnapshot, StrategyRevisionRecord } from "../backtest/backtestApi.js";
 import { defaultParameters } from "../backtest/builtinTemplate.js";
-import type { PythonStudioGate } from "../backtest/pythonStudio.js";
+import {
+  persistPythonStudioState, pythonStudioPersisted, pythonStudioScope, restorePythonStudioState, restorePythonStudioStateFor,
+  type PythonStudioGate,
+} from "../backtest/pythonStudio.js";
 import { parseResearchObjectJson } from "../backtest/research/backtestResearchAdvancedModel.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
@@ -15,7 +18,8 @@ import { importedResearchRunSource } from "./importedDatasetSource.js";
 
 const PythonStudioPanel = lazy(() => import("../backtest/PythonStudioPanel.js"));
 
-type SavedManager = Pick<StrategyDataManager, "pythonStudioApi" | "previewImportedBars" | "createBuiltinRsiRevision" | "startSavedRevision">;
+type SavedManager = Pick<StrategyDataManager, "pythonStudioApi" | "savedPythonRevision" | "previewImportedBars" | "createBuiltinRsiRevision"
+  | "startSavedRevision">;
 type SavedKind = "bundle" | "builtin";
 
 function errorText(reason: unknown): string {
@@ -31,6 +35,8 @@ function plainParameters(value: Record<string, unknown>): Record<string, string 
  * Saved strategies in the research workspace (ADR-BACKTEST-015 P5c4b): a multi-file Python bundle frozen
  * in the Python studio, or the builtin RSI (Wilder) template. Each is a strategy revision, not an editor
  * draft; it runs over the imported candles with the workspace's run settings, and the workspace shows the run.
+ * The studio's gate is kept for the browser session: after a reload the frozen revision is loaded again by id
+ * before the studio opens, and its smoke counts only when it passed on the same data and range.
  */
 export function ResearchSavedStrategy({ manager, dataset, interval, settings, runBusy, onRunCreated }: {
   manager: SavedManager;
@@ -45,7 +51,7 @@ export function ResearchSavedStrategy({ manager, dataset, interval, settings, ru
   const [revisions, setRevisions] = useState<Partial<Record<SavedKind, StrategyRevisionRecord>>>({});
   const [parameterText, setParameterText] = useState<Partial<Record<SavedKind, string>>>({});
   const [outputModes, setOutputModes] = useState<Partial<Record<SavedKind, string>>>({});
-  const [gate, setGate] = useState<PythonStudioGate | null>(null);
+  const [studio, setStudio] = useState<{ gate: PythonStudioGate; scope: string } | null>(null);
   const [snapshot, setSnapshot] = useState<BacktestSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +64,33 @@ export function ResearchSavedStrategy({ manager, dataset, interval, settings, ru
       return null;
     }
   }, [dataset, interval, settings]);
+  const scope = source ? pythonStudioScope(source) : null;
+  // The frozen revision a reload left behind; the studio opens once its record is loaded again.
+  const [restoring, setRestoring] = useState<string | null>(() => restorePythonStudioState(true)?.revisionId ?? null);
+  const accept = useCallback((target: SavedKind, next: StrategyRevisionRecord) => {
+    setRevisions((current) => ({ ...current, [target]: next }));
+    setParameterText((current) => ({ ...current, [target]: JSON.stringify(defaultParameters(next.parameter_schema), null, 2) }));
+  }, []);
+  useEffect(() => {
+    if (!restoring) return;
+    const controller = new AbortController();
+    const done = () => { if (!controller.signal.aborted) setRestoring(null); };
+    void manager.savedPythonRevision(restoring, controller.signal).then((found) => {
+      if (found && !controller.signal.aborted) accept("bundle", found);
+      done();
+    }, (reason: unknown) => {
+      if (!controller.signal.aborted) setError(errorText(reason));
+      done();
+    });
+    return () => controller.abort();
+  }, [accept, manager, restoring]);
+  // The studio reports its gate under the data it was shown; a new range reports again, and the gate is saved as reported.
+  const onGateChange = useCallback((gate: PythonStudioGate) => { if (scope) setStudio({ gate, scope }); }, [scope]);
+  useEffect(() => {
+    if (studio) persistPythonStudioState(true, pythonStudioPersisted(studio.gate, studio.scope));
+  }, [studio]);
+  const gate = studio?.gate ?? null;
+  const bundleRevisionId = revisions.bundle?.revision_id ?? null;
   useEffect(() => {
     if (!source) return;
     const controller = new AbortController();
@@ -71,12 +104,14 @@ export function ResearchSavedStrategy({ manager, dataset, interval, settings, ru
   let parameters: Record<string, unknown> | null = null;
   try { parameters = parseResearchObjectJson(text, t("ux.parameters")); } catch { parameters = null; }
   const python = kind === "bundle";
+  // Read when the studio opens: what it last saved, for the revision it will show.
+  const restored = useMemo(() => {
+    if (!python || !scope || restoring || !bundleRevisionId) return null;
+    const saved = restorePythonStudioStateFor(scope);
+    return saved?.revisionId === bundleRevisionId ? saved : null;
+  }, [bundleRevisionId, python, restoring, scope]);
   const outputMode = revision && revision.output_modes.includes(outputModes[kind] ?? "") ? outputModes[kind]! : revision?.output_modes[0] ?? "";
   const ready = !!revision && !!parameters && !!source && (!python || (gate?.revisionId === revision.revision_id && gate.canCreateRun));
-  const accept = (next: StrategyRevisionRecord) => {
-    setRevisions((current) => ({ ...current, [kind]: next }));
-    setParameterText((current) => ({ ...current, [kind]: JSON.stringify(defaultParameters(next.parameter_schema), null, 2) }));
-  };
   return <section className="research-external-provider strategy-research-saved" data-testid="strategy-research-saved-strategy">
     <p className="research-panel-copy">{t("researchSaved.help")}</p>
     <Field label={t("researchSaved.kind")}>
@@ -86,15 +121,16 @@ export function ResearchSavedStrategy({ manager, dataset, interval, settings, ru
       </Select>
     </Field>
     {python ? <Suspense fallback={<p className="research-empty">{t("research.strategy.pythonLoading")}</p>}>
-      {source && <PythonStudioPanel api={studioApi} loading={busy} snapshot={snapshot} datasetId={dataset.dataset_id}
-        startTimeMs={source.startTimeMs} endTimeMs={source.endTimeMs} schemaParameters={plainParameters(parameters ?? {})}
-        selectedRevisionId={revisions.bundle?.revision_id ?? ""} onLoading={setBusy} onNotice={setNotice} onError={setError}
-        onRevisionReady={(next) => accept(next)} onGateChange={setGate} />}
+      {restoring ? <p className="research-empty">{t("research.strategy.pythonLoading")}</p>
+        : source && <PythonStudioPanel api={studioApi} loading={busy} snapshot={snapshot} datasetId={dataset.dataset_id}
+          startTimeMs={source.startTimeMs} endTimeMs={source.endTimeMs} schemaParameters={plainParameters(parameters ?? {})}
+          selectedRevisionId={bundleRevisionId ?? ""} restored={restored} onLoading={setBusy} onNotice={setNotice} onError={setError}
+          onRevisionReady={(next) => accept("bundle", next)} onGateChange={onGateChange} />}
     </Suspense> : <div className="research-button-row">
       <Button size="sm" disabled={busy} onClick={() => {
         setBusy(true);
         setError(null);
-        void manager.createBuiltinRsiRevision().then(accept, (reason: unknown) => setError(errorText(reason))).finally(() => setBusy(false));
+        void manager.createBuiltinRsiRevision().then((next) => accept("builtin", next), (reason: unknown) => setError(errorText(reason))).finally(() => setBusy(false));
       }}>{t(revision ? "researchSaved.builtinReady" : "researchSaved.builtinCreate")}</Button>
     </div>}
     {revision && <>
