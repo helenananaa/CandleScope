@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from app.market_dataset.snapshot import MarketEvent, MarketDatasetError
 from app.simulation.linear_perp_account_v2 import LinearPerpetualAccountV2
-from app.simulation.pine_v2_bar_kernel import CONTRACT
+from app.simulation.ohlc_path import V2_CONTRACT as CONTRACT
 from app.simulation.execution_realism import PINE_BAR_PATH_SCENARIO
 from .errors import BacktestError
 from .native_contracts import WorkbenchBarSettings

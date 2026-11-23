@@ -5,7 +5,7 @@ import { createBacktestApi, type BacktestApiClient } from "../backtestApi.js";
 import { isBacktestEntryEnabled } from "../backtestFlags.js";
 import { createBacktestStore, reportHidesApproximate } from "../backtestStore.js";
 import type { BacktestReport, BacktestRunRecord } from "../backtestTypes.js";
-import { runCreateMonitorExport } from "../backtestWorkspace.js";
+import { runCreateMonitorExport } from "./backtestWorkspace.js";
 
 function report(): BacktestReport {
   return {
@@ -104,9 +104,6 @@ function fakeApi(run: BacktestRunRecord, exported: Record<string, unknown>): Bac
       return [];
     },
     async getStudy() {
-      throw new Error("unused");
-    },
-    async createResearchLaunchContext() {
       throw new Error("unused");
     },
     async getResearchLaunchContext() {

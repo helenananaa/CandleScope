@@ -45,7 +45,8 @@ export function runStrategyResearchSmoke(root = repoRoot) {
     path.join(root, "frontend/src/features/strategy-research/strategyResearchBootstrap.tsx"),
     "utf8",
   );
-  if (!bootstrap.includes("<StrategyResearchApp intent={intent} />")) {
+  // The app may also receive a preloaded hand-off (P3c); what matters is that every page opens it.
+  if (!/<StrategyResearchApp intent=\{intent\}[\s/>]/.test(bootstrap)) {
     throw new Error("every page must open the strategy research app");
   }
   if (/LocalApp|BacktestApp\b|BacktestResearchDisabled|local-legacy|backtest-legacy|libraryEnabled/.test(bootstrap)) {

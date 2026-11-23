@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, freezePineChartContexts, restoreAdvancedInputs, type InputDataset } from "./nativeInputs.js";
+import { bookFileRequired, automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, freezePineChartContexts, restoreAdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { nativeApi } from "./nativeBacktestApi.js";
 
 const dataset: InputDataset = { dataset_id: "data", data_epoch: "epoch1", name: "ETH", symbol: "ETHUSDT",
@@ -121,4 +121,14 @@ test("automatic execution keeps uploaded tapes authoritative and ignores stale u
   });
   assert.equal(automaticHostExecution("CANDLESCOPE", settings, "TRADE_TAPE", true, {}), undefined);
   assert.equal(automaticHostExecution("CANDLESCOPE", settings, "BOOK_DEPTH", false, null), undefined);
+});
+
+test("book tiers need an uploaded trade and book file before CandleScope matching can run", () => {
+  for (const fidelity of ["BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"]) {
+    assert.equal(bookFileRequired("CANDLESCOPE", fidelity, null), true, fidelity);
+    assert.equal(bookFileRequired("CANDLESCOPE", fidelity, { symbol: "BTCUSDT", exchange: "binance", market_type: "usdm", events: [] }), false);
+  }
+  assert.equal(bookFileRequired("CANDLESCOPE", "TRADE_TAPE", null), false, "trades can be prepared automatically");
+  assert.equal(bookFileRequired("CANDLESCOPE", "BAR_APPROX", null), false);
+  assert.equal(bookFileRequired("NATIVE", "BOOK_DEPTH", null), false, "the script's own fills need no file");
 });

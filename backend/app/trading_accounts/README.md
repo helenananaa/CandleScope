@@ -36,7 +36,9 @@ orders, fills, trade IDs and journal links with a null position_side.
   Saving a legacy note starts complete coverage at that new save, not earlier.
   `expectedRevision` rejects stale edits with HTTP 409; identical retries are
   accepted. An optional `clientEntryId` makes creation retries idempotent.
-- `practice.py`: pure order matching over a candle price path.
+- `app/simulation/practice_account.py` (moved there in ADR-BACKTEST-015 P6e): the practice account
+  model shared with forward strategy runs — pure order matching over a candle price path,
+  buying power and margin. This package keeps the practice ledger and calls it.
 - `practice_runtime.py`: the loop that drives matching from DataManager 1m
   candles.
 - `stats.py`: pure closed-trade statistics for one account (definitions in its

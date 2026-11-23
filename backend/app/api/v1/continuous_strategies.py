@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
+from app.backtest.continuous_contracts import ACCOUNT_MODELS,INTERVALS,LANGUAGES,ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
@@ -126,8 +126,8 @@ async def capabilities(request:Request):
         access=_access(request);controller=access.controller()
         return _reply({"available":True,"execution_enabled":controller.execution_enabled,
             "runtime_mode":controller.runtime_mode,"protocol":PROTOCOL,
-            "modes":["HISTORY_LIVE","LIVE_ONLY"],"languages":["builtin","python"],
-            "intervals":["1m"],"account_models":["SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V1"],
+            "modes":["HISTORY_LIVE","LIVE_ONLY"],"languages":list(LANGUAGES),
+            "intervals":list(INTERVALS),"account_models":list(ACCOUNT_MODELS),
             "python_editor_authorized":is_trusted_operator_origin(origin_from(request.headers)),
             "provider_schema":PROVIDER_SCHEMA,"python_author_contract":AUTHOR_CONTRACT,
             "repair_available":bool(controller.execution_enabled and callable(getattr(controller,"repair",None))),

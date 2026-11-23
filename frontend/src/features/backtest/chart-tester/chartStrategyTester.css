@@ -36,6 +36,10 @@
 .continuous-mode .ui-field { display: flex; align-items: center; gap: var(--space-2); }
 .continuous-mode .ui-field-label { color: var(--text-secondary); font-size: var(--font-size-sm); white-space: nowrap; }
 .continuous-mode .ui-select { width: auto; }
+/* Forward tracking, opened from the chart: its title, where it starts, and the way back. */
+.strategy-forward-bar { align-items: center; gap: var(--space-2); }
+.strategy-forward-bar > strong { font-size: var(--font-size-sm); font-weight: 600; }
+.strategy-forward-bar > .ui-btn:last-child { margin-inline-start: auto; }
 
 .chart-strategy-resize-handle {
   position: absolute;

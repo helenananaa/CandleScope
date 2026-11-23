@@ -122,3 +122,21 @@ export function formatChartStrategyNumber(value: unknown, kind: "amount" | "pric
       ? { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number);
 }
+
+/** Bar-time label shared by the tester's result views. */
+export function dateTime(value: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+/** CSS tone for a signed money value. */
+export function signedClass(value: string): string {
+  const number = Number(value);
+  return Number.isFinite(number) ? (number > 0 ? "positive" : number < 0 ? "negative" : "flat") : "flat";
+}

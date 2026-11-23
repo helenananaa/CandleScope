@@ -158,6 +158,23 @@ export function parseResearchSourceRef(value: unknown): ResearchSourceRefV1 {
       interval: requireString(value, "interval", "INVALID_RESEARCH_SOURCE"),
     };
   }
+  if (kind === "EXCHANGE_SERIES") {
+    const startMs = value.startMs, endMs = value.endMs;
+    if (typeof startMs !== "number" || typeof endMs !== "number" || !Number.isSafeInteger(startMs)
+      || !Number.isSafeInteger(endMs) || startMs <= 0 || startMs >= endMs) {
+      throw new ResearchDataError("INVALID_RESEARCH_SOURCE", "exchange history needs a start before its end");
+    }
+    return {
+      schemaVersion: RESEARCH_SOURCE_SCHEMA,
+      kind: "EXCHANGE_SERIES",
+      exchange: requireString(value, "exchange", "INVALID_RESEARCH_SOURCE"),
+      marketType: requireString(value, "marketType", "INVALID_RESEARCH_SOURCE"),
+      symbol: requireString(value, "symbol", "INVALID_RESEARCH_SOURCE"),
+      interval: requireString(value, "interval", "INVALID_RESEARCH_SOURCE"),
+      startMs,
+      endMs,
+    };
+  }
   if (kind === "IMPORTED_DATASET") {
     const datasetId = value.datasetId;
     const dataEpoch = value.dataEpoch;
@@ -259,7 +276,8 @@ export function projectResearchCapabilities(input: {
   const qualityOk = input.quality?.status === "ok";
   const imported = kind === "IMPORTED_DATASET";
   const completed = kind === "COMPLETED_RUN";
-  const chart = kind === "CURRENT_CHART";
+  // Exchange history in the workspace prepares and freezes its range like a chart's history does.
+  const chart = kind === "CURRENT_CHART" || kind === "EXCHANGE_SERIES";
   const offline = runtimeMode === "LOCAL_OFFLINE";
   const hasFrozenTrades = input.hasFrozenTrades === true;
   const fidelityCeiling = hasFrozenTrades ? "TRADE_TAPE" : "BAR_APPROX";
@@ -405,7 +423,9 @@ export function ordinarySourceLabel(
     ? "research.source.currentChart"
     : kind === "IMPORTED_DATASET"
       ? "research.source.importedLibrary"
-      : "research.source.completedResult";
+      : kind === "EXCHANGE_SERIES"
+        ? "researchSource.exchangeSeries"
+        : "research.source.completedResult";
   return t(key, {}, locale);
 }
 

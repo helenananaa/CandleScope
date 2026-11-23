@@ -86,7 +86,7 @@ def freeze_control(native, plugin, wire, payload):
     if execution.get("calcOnEveryHistoryTick") and not wire.get("pine_print_tick_contract"):
         from .native_session import STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
         from .pine_history_tick_execution import CONTRACT as HISTORY_CONTRACT
-        from app.simulation.pine_bar_kernel import CONTRACT as PATH_CONTRACT
+        from app.simulation.ohlc_path import PATH_CONTRACT
         if (wire["execution_fidelity"]!="BAR_APPROX" or identity.get("external_stream_contract")!=STREAM_CONTRACT
                 or identity.get("execution_schedule_contract")!=SCHEDULE_CONTRACT
                 or identity.get("execution_tick_contract")!=TICK_CONTRACT):
@@ -95,7 +95,7 @@ def freeze_control(native, plugin, wire, payload):
                     execution_schedule_contract=SCHEDULE_CONTRACT,execution_tick_contract=TICK_CONTRACT)
     if wire["execution_fidelity"] == "BAR_APPROX" and wire.get("fill_recalculation"):
         from .strategy.pine_schedule import CONTRACT as SCHEDULE_CONTRACT
-        from app.simulation.pine_bar_kernel import CONTRACT as PATH_CONTRACT
+        from app.simulation.ohlc_path import PATH_CONTRACT
         if identity.get("execution_schedule_contract") != SCHEDULE_CONTRACT or not execution.get("calcOnOrderFills"):
             raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine BAR callbacks require explicit schedule support and calc_on_order_fills")
         wire.update(pine_bar_path_contract=PATH_CONTRACT, execution_schedule_contract=SCHEDULE_CONTRACT)

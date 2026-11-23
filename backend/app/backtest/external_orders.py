@@ -5,6 +5,7 @@ always the kernel ledger; this module never maintains a second account.
 """
 from decimal import Decimal
 from .errors import BacktestError
+from app.simulation.ohlc_path import PATH_CLOCKS
 
 ZERO = Decimal(0)
 LIVE = {"OPEN", "PARTIAL"}
@@ -26,7 +27,7 @@ class ExternalOrders:
         self.execution_reporter = kernel.execution_reporter
         kernel.execution_reporter = self.on_execution
         kernel.order_policy = self.prepare_order
-        if hasattr(kernel, "path_level_provider"):
+        if getattr(kernel, "bar_clock", None) in PATH_CLOCKS:
             kernel.path_level_provider = self.path_levels
         if hasattr(kernel, "_resting_filter_enabled"):
             kernel._resting_filter_enabled = False

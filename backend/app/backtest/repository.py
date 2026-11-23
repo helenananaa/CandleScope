@@ -9,6 +9,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
 
+from app.core.committed_updates import committed_updates_for
+
 from .schema import apply_schema
 from .run_updates import run_updates_for
 
@@ -33,12 +35,30 @@ def _locked(method: F) -> F:
     return cast(F, wrapped)
 
 
+def _study_change(method: F) -> F:
+    """Wake a study's watchers after the method commits (ADR-BACKTEST-015 P5c3).
+
+    The first argument names the study: its id, a fold or trial id under it
+    (``st_x:fold:1:candidate:2``), or a row carrying ``study_id``. A wakeup carries no
+    data and may be spurious; watchers read the committed study.
+    """
+    @wraps(method)
+    def wrapped(self: BacktestRepository, key: Any, *args: Any, **kwargs: Any) -> Any:
+        result = method(self, key, *args, **kwargs)
+        self.study_updates.notify(str(key["study_id"]) if isinstance(key, dict) else str(key).split(":fold:", 1)[0])
+        return result
+
+    return cast(F, wrapped)
+
+
 class BacktestRepository:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
         self.run_updates = run_updates_for(self.path)
+        # Study changes, written by the worker's reconcile loop, wake robustness experiment streams.
+        self.study_updates = committed_updates_for(self.path, "backtest-studies")
 
     @_locked
     def open(self, *, now_ms: int) -> None:
@@ -116,6 +136,278 @@ class BacktestRepository:
             (context_id,),
         ).fetchone()
         return dict(row) if row is not None else None
+
+    # -- strategy experiments (ADR-BACKTEST-015 P5b) -----------------------------
+
+    @_locked
+    def insert_strategy_experiment(self, row: dict[str, Any], members: list[dict[str, Any]],
+                                   study_id: str | None = None) -> None:
+        try:
+            self.connection.execute(
+                "INSERT INTO backtest_strategy_experiments(experiment_id, idempotency_key, request_hash, name, kind, "
+                "strategy_json, cancelled_at_ms, created_at_ms, updated_at_ms) VALUES (:experiment_id, :idempotency_key, "
+                ":request_hash, :name, :kind, :strategy_json, NULL, :created_at_ms, :created_at_ms)", row)
+            self.connection.executemany(
+                "INSERT INTO backtest_strategy_experiment_members(experiment_id, ordinal, input_json, kind, request_json) "
+                "VALUES (:experiment_id, :ordinal, :input_json, :kind, :request_json)", members)
+            if study_id is not None:
+                self.connection.execute(
+                    "INSERT INTO backtest_strategy_experiment_studies(experiment_id, study_id) VALUES (?, ?)",
+                    (row["experiment_id"], study_id))
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+
+    @_locked
+    def strategy_experiment_for_study(self, study_id: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT experiment_id FROM backtest_strategy_experiment_studies WHERE study_id = ?", (study_id,)).fetchone()
+        return None if row is None else str(row[0])
+
+    @_locked
+    def strategy_experiment_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT experiment_id, request_hash FROM backtest_strategy_experiments WHERE idempotency_key = ?",
+            (idempotency_key,)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def get_strategy_experiment(self, experiment_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+        row = self.connection.execute(
+            "SELECT e.*, s.study_id FROM backtest_strategy_experiments e "
+            "LEFT JOIN backtest_strategy_experiment_studies s ON s.experiment_id = e.experiment_id "
+            "WHERE e.experiment_id = ?", (experiment_id,)).fetchone()
+        if row is None:
+            return None
+        members = self.connection.execute(
+            "SELECT * FROM backtest_strategy_experiment_members WHERE experiment_id = ? ORDER BY ordinal",
+            (experiment_id,)).fetchall()
+        return dict(row), [dict(member) for member in members]
+
+    @_locked
+    def list_strategy_experiments(self, limit: int) -> list[str]:
+        rows = self.connection.execute(
+            "SELECT experiment_id FROM backtest_strategy_experiments ORDER BY created_at_ms DESC, experiment_id LIMIT ?",
+            (limit,)).fetchall()
+        return [str(row[0]) for row in rows]
+
+    @_locked
+    def set_strategy_experiment_member(self, experiment_id: str, ordinal: int, *, attempt: int,
+                                       preparation_id: str | None, run_id: str | None, error_json: str | None,
+                                       now_ms: int) -> None:
+        self.connection.execute(
+            "UPDATE backtest_strategy_experiment_members SET attempt = ?, preparation_id = ?, run_id = ?, error_json = ? "
+            "WHERE experiment_id = ? AND ordinal = ?", (attempt, preparation_id, run_id, error_json, experiment_id, ordinal))
+        self.connection.execute("UPDATE backtest_strategy_experiments SET updated_at_ms = ? WHERE experiment_id = ?",
+                                (now_ms, experiment_id))
+        self.connection.commit()
+
+    @_locked
+    def cancel_strategy_experiment(self, experiment_id: str, now_ms: int) -> None:
+        self.connection.execute(
+            "UPDATE backtest_strategy_experiments SET cancelled_at_ms = COALESCE(cancelled_at_ms, ?), updated_at_ms = ? "
+            "WHERE experiment_id = ?", (now_ms, now_ms, experiment_id))
+        self.connection.commit()
+
+    # -- strategy references (ADR-BACKTEST-015 P3c) -----------------------------
+
+    @_locked
+    def get_strategy_reference(self, kind: str, key: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT ref_key, value_json, updated_at_ms FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?",
+            (kind, key)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def list_strategy_references(self, kind: str, prefix: str, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT ref_key, value_json, updated_at_ms FROM backtest_strategy_references "
+            "WHERE kind = ? AND substr(ref_key, 1, ?) = ? ORDER BY updated_at_ms DESC, ref_key LIMIT ?",
+            (kind, len(prefix), prefix, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def put_strategy_references(self, kind: str, entries: list[tuple[str, str]], *, now_ms: int, capacity: int,
+                                prune: bool, keep_existing: bool) -> list[str]:
+        """One transaction. ``keep_existing`` (an import) never overwrites; at ``capacity`` a
+        pruned kind drops its oldest entries and any other kind refuses."""
+        from .errors import BacktestError
+
+        written = []
+        try:
+            for key, value in entries:
+                exists = self.connection.execute(
+                    "SELECT 1 FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?", (kind, key)).fetchone()
+                if exists and keep_existing:
+                    continue
+                if not exists:
+                    count = int(self.connection.execute(
+                        "SELECT COUNT(*) FROM backtest_strategy_references WHERE kind = ?", (kind,)).fetchone()[0])
+                    if count >= capacity:
+                        if not prune:
+                            raise BacktestError("REFERENCE_CAPACITY_EXCEEDED", f"the {kind} reference limit is reached")
+                        self.connection.execute(
+                            "DELETE FROM backtest_strategy_references WHERE kind = ? AND ref_key IN (SELECT ref_key "
+                            "FROM backtest_strategy_references WHERE kind = ? ORDER BY updated_at_ms, ref_key LIMIT ?)",
+                            (kind, kind, count - capacity + 1))
+                self.connection.execute(
+                    "INSERT INTO backtest_strategy_references(kind, ref_key, value_json, updated_at_ms) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(kind, ref_key) DO UPDATE SET value_json = excluded.value_json, "
+                    "updated_at_ms = excluded.updated_at_ms", (kind, key, value, now_ms))
+                written.append(key)
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        return written
+
+    @_locked
+    def delete_strategy_reference(self, kind: str, key: str) -> bool:
+        cursor = self.connection.execute(
+            "DELETE FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?", (kind, key))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    # -- strategy versions (ADR-BACKTEST-015 P3b) -------------------------------
+
+    @_locked
+    def record_strategy_version(self, version_hash: str, value: dict[str, Any], *, run_id: str | None,
+                                family: str | None, now_ms: int) -> str:
+        """Store a version once and link a run to it; a run keeps the version it was first linked to."""
+        try:
+            self.connection.execute(
+                "INSERT OR IGNORE INTO backtest_strategy_versions(version_hash, language, source_text, libraries_json, "
+                "runtime_json, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)",
+                (version_hash, value["language"], value["source"],
+                 json.dumps(value["libraries"], sort_keys=True, separators=(",", ":")),
+                 json.dumps(value["runtime"], sort_keys=True, separators=(",", ":")), now_ms))
+            if run_id is not None:
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO backtest_strategy_version_runs(run_id, version_hash, family, linked_at_ms) "
+                    "VALUES (?, ?, ?, ?)", (run_id, version_hash, family, now_ms))
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        if run_id is None:
+            return version_hash
+        return str(self.connection.execute(
+            "SELECT version_hash FROM backtest_strategy_version_runs WHERE run_id = ?", (run_id,)).fetchone()[0])
+
+    @_locked
+    def strategy_version_for_run(self, run_id: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT version_hash FROM backtest_strategy_version_runs WHERE run_id = ?", (run_id,)).fetchone()
+        return None if row is None else str(row[0])
+
+    @_locked
+    def get_strategy_version(self, version_hash: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM backtest_strategy_versions WHERE version_hash = ?", (version_hash,)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def strategy_version_runs(self, version_hash: str, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT run_id, family, linked_at_ms FROM backtest_strategy_version_runs WHERE version_hash = ? "
+            "ORDER BY linked_at_ms DESC, run_id LIMIT ?", (version_hash, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def strategy_version_names(self, version_hash: str) -> list[str]:
+        return [str(row[0]) for row in self.connection.execute(
+            "SELECT name FROM backtest_strategy_version_names WHERE version_hash = ? ORDER BY name", (version_hash,))]
+
+    @_locked
+    def name_strategy_version(self, name: str, version_hash: str, *, now_ms: int) -> None:
+        self.connection.execute(
+            "INSERT INTO backtest_strategy_version_names(name, version_hash, named_at_ms) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET version_hash = excluded.version_hash, named_at_ms = excluded.named_at_ms",
+            (name, version_hash, now_ms))
+        self.connection.commit()
+
+    @_locked
+    def list_strategy_version_names(self) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT name, version_hash, named_at_ms FROM backtest_strategy_version_names ORDER BY name")]
+
+    @_locked
+    def delete_strategy_version_name(self, name: str) -> bool:
+        cursor = self.connection.execute("DELETE FROM backtest_strategy_version_names WHERE name = ?", (name,))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    # -- strategy drafts (ADR-BACKTEST-015 P3a) ---------------------------------
+
+    @_locked
+    def get_strategy_draft(self, draft_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM backtest_strategy_drafts WHERE draft_id = ?", (draft_id,)
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def list_strategy_drafts(self, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT * FROM backtest_strategy_drafts ORDER BY updated_at_ms DESC, draft_id LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def count_strategy_drafts(self) -> int:
+        return int(self.connection.execute("SELECT COUNT(*) FROM backtest_strategy_drafts").fetchone()[0])
+
+    @_locked
+    def compare_and_set_strategy_draft(self, record: dict[str, Any], expected_revision: int | None) -> bool:
+        """Write ``record`` only if the stored revision is ``expected_revision`` (None: absent)."""
+        if expected_revision is None:
+            cursor = self.connection.execute(
+                "INSERT OR IGNORE INTO backtest_strategy_drafts(draft_id, revision, display_name, language, "
+                "source_text, cursor_json, created_at_ms, updated_at_ms) VALUES (:draft_id, :revision, "
+                ":display_name, :language, :source_text, :cursor_json, :created_at_ms, :updated_at_ms)", record)
+        else:
+            cursor = self.connection.execute(
+                "UPDATE backtest_strategy_drafts SET revision = :revision, display_name = :display_name, "
+                "language = :language, source_text = :source_text, cursor_json = :cursor_json, "
+                "updated_at_ms = :updated_at_ms WHERE draft_id = :draft_id AND revision = :expected",
+                {**record, "expected": expected_revision})
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    @_locked
+    def delete_strategy_draft(self, draft_id: str) -> bool:
+        cursor = self.connection.execute("DELETE FROM backtest_strategy_drafts WHERE draft_id = ?", (draft_id,))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    @_locked
+    def import_strategy_drafts(self, records: list[dict[str, Any]], *, capacity: int) -> dict[str, list[str]]:
+        """One transaction: add absent drafts and replace older ones; a newer stored copy is kept."""
+        from .errors import BacktestError
+
+        imported, kept = [], []
+        try:
+            for record in records:
+                stored = self.connection.execute(
+                    "SELECT revision FROM backtest_strategy_drafts WHERE draft_id = ?", (record["draft_id"],)
+                ).fetchone()
+                if stored is not None and int(stored[0]) >= int(record["revision"]):
+                    kept.append(record["draft_id"])
+                    continue
+                if stored is None and int(self.connection.execute(
+                        "SELECT COUNT(*) FROM backtest_strategy_drafts").fetchone()[0]) >= capacity:
+                    raise BacktestError("DRAFT_CAPACITY_EXCEEDED", "the strategy draft limit is reached")
+                self.connection.execute(
+                    "INSERT OR REPLACE INTO backtest_strategy_drafts(draft_id, revision, display_name, language, "
+                    "source_text, cursor_json, created_at_ms, updated_at_ms) VALUES (:draft_id, :revision, "
+                    ":display_name, :language, :source_text, :cursor_json, :created_at_ms, :updated_at_ms)", record)
+                imported.append(record["draft_id"])
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        return {"imported": imported, "kept": kept}
 
     @_locked
     def insert_strategy_revision(self, payload: dict[str, Any]) -> None:
@@ -583,6 +875,7 @@ class BacktestRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def claim_study_start(self, study_id: str, *, max_running: int) -> str:
         connection = self.connection
@@ -848,6 +1141,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def insert_study_fold(self, payload: dict[str, Any]) -> None:
         self.connection.execute(
@@ -874,6 +1168,7 @@ class BacktestRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def update_study_fold_state(self, fold_id: str, state: str) -> None:
         self.connection.execute(
@@ -918,6 +1213,7 @@ class BacktestRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    @_study_change
     @_locked
     def attach_train_run(self, train_trial_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -964,6 +1260,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def insert_selection_receipt(
         self,
@@ -1056,6 +1353,7 @@ class BacktestRepository:
             ).fetchone()
         return None if row is None else dict(row)
 
+    @_study_change
     @_locked
     def attach_fold_test_run(self, fold_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -1068,6 +1366,7 @@ class BacktestRepository:
         self.connection.commit()
         return cursor.rowcount == 1
 
+    @_study_change
     @_locked
     def insert_holdout(self, payload: dict[str, Any]) -> None:
         self.connection.execute(
@@ -1089,6 +1388,7 @@ class BacktestRepository:
         ).fetchone()
         return None if row is None else dict(row)
 
+    @_study_change
     @_locked
     def reveal_holdout(
         self,
@@ -1129,6 +1429,7 @@ class BacktestRepository:
             connection.rollback()
             raise
 
+    @_study_change
     @_locked
     def attach_holdout_run(self, study_id: str, *, run_id: str) -> bool:
         cursor = self.connection.execute(
@@ -1141,6 +1442,7 @@ class BacktestRepository:
         self.connection.commit()
         return cursor.rowcount == 1
 
+    @_study_change
     @_locked
     def update_holdout_state(self, study_id: str, state: str) -> None:
         self.connection.execute(
@@ -1149,6 +1451,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def save_oos_report(
         self,
@@ -1218,6 +1521,7 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    @_study_change
     @_locked
     def finish_study_if_terminal(self, study_id: str) -> None:
         row = self.connection.execute(
@@ -1250,6 +1554,7 @@ class BacktestRepository:
             )
             self.connection.commit()
 
+    @_study_change
     @_locked
     def update_study_state(self, study_id: str, state: str) -> None:
         self.connection.execute(
@@ -1257,6 +1562,27 @@ class BacktestRepository:
             (state, study_id),
         )
         self.connection.commit()
+
+    @_study_change
+    @_locked
+    def fail_study(self, study_id: str, *, code: str, message: str, now_ms: int) -> None:
+        """Mark a study FAILED and keep why, for the experiment that shows it."""
+        try:
+            self.connection.execute("UPDATE backtest_studies SET state = 'FAILED' WHERE study_id = ?", (study_id,))
+            self.connection.execute(
+                "INSERT INTO backtest_study_failures(study_id, code, message, failed_at_ms) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(study_id) DO UPDATE SET code = excluded.code, message = excluded.message, "
+                "failed_at_ms = excluded.failed_at_ms", (study_id, code[:64], message[:512], now_ms))
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+
+    @_locked
+    def study_failure(self, study_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT code, message, failed_at_ms FROM backtest_study_failures WHERE study_id = ?", (study_id,)).fetchone()
+        return dict(row) if row is not None else None
 
     @_locked
     def save_report(

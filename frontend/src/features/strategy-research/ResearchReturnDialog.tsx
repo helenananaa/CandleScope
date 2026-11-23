@@ -2,17 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Field, InlineAlert, Section, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { defaultBacktestApi } from "../backtest/backtestApi.js";
+import { useStrategyDataManager } from "../market-data/useStrategyDataManager.js";
 import { getChartStrategyDraftStore, createChartStrategyDraftId } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
-import { projectSelectedVersion, readResearchReturn, ResearchReturnUnsupported, type ResearchSelectedVersion } from "./researchSelectedVersion.js";
+import {
+  loadResearchReturn, projectSelectedVersion, ResearchReturnUnsupported, type ResearchReturnReference, type ResearchSelectedVersion,
+} from "./researchSelectedVersion.js";
 import { researchReturnError } from "./researchReturnError.js";
 
 export default function ResearchReturnDialog({ id, workspace, onClose, onApplied }: {
   id: string; workspace: ChartWorkspaceRuntime; onClose(): void; onApplied(cellId: string): void;
 }) {
   const locale = useLocale();
-  const [reference] = useState(() => readResearchReturn(id));
+  const manager = useStrategyDataManager();
+  // undefined while the reference is read from the backend; null when it is missing or invalid.
+  const [reference, setReference] = useState<ResearchReturnReference | null | undefined>(undefined);
+  useEffect(() => {
+    if (!manager) return;
+    let cancelled = false;
+    void loadResearchReturn(id, manager).then((value) => { if (!cancelled) setReference(value); });
+    return () => { cancelled = true; };
+  }, [id, manager]);
   const [version, setVersion] = useState<ResearchSelectedVersion | null>(null);
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const [cell, setCell] = useState("");
@@ -24,18 +34,19 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
     return () => { alive.current = false; };
   }, []);
   useEffect(() => {
+    if (!manager || reference === undefined) return;
     const controller = new AbortController();
     void (async () => {
       try {
         if (!reference) throw new ResearchReturnUnsupported("reference");
-        const selected = await defaultBacktestApi.getSelectedVersion!(reference.runId, controller.signal);
+        const selected = await manager.loadSelectedRunVersion(reference.runId, controller.signal);
         if (selected.version_hash !== reference.versionHash) throw new ResearchReturnUnsupported("version");
         projectSelectedVersion(selected);
         if (!controller.signal.aborted) setVersion(selected);
       } catch (failure) { if (!controller.signal.aborted) setError(researchReturnError(failure)); }
     })();
     return () => controller.abort();
-  }, [reference]);
+  }, [manager, reference]);
   const originCell = reference?.origin?.workspaceId === workspace.view.activeWorkspaceId ? reference.origin.cellId : "";
   const cellId = workspace.view.layoutCellIds.includes(cell) ? cell
     : workspace.view.layoutCellIds.includes(originCell) ? originCell : workspace.view.activeCellId;

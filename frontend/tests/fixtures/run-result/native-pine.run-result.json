@@ -1,0 +1,817 @@
+{
+  "authority": "SCRIPT",
+  "clock_policy": "FIXED",
+  "equity": [
+    {
+      "bar_time_ms": 0,
+      "equity": "10000",
+      "time_ms": 0
+    },
+    {
+      "bar_time_ms": 60000,
+      "equity": "10000",
+      "time_ms": 60000
+    },
+    {
+      "bar_time_ms": 120000,
+      "equity": "10000",
+      "time_ms": 120000
+    },
+    {
+      "bar_time_ms": 180000,
+      "equity": "10000",
+      "time_ms": 180000
+    },
+    {
+      "bar_time_ms": 240000,
+      "equity": "10000",
+      "time_ms": 240000
+    },
+    {
+      "bar_time_ms": 300000,
+      "equity": "10000",
+      "time_ms": 300000
+    },
+    {
+      "bar_time_ms": 360000,
+      "equity": "10000",
+      "time_ms": 360000
+    },
+    {
+      "bar_time_ms": 420000,
+      "equity": "10000",
+      "time_ms": 420000
+    },
+    {
+      "bar_time_ms": 480000,
+      "equity": "10000",
+      "time_ms": 480000
+    },
+    {
+      "bar_time_ms": 540000,
+      "equity": "10000",
+      "time_ms": 540000
+    },
+    {
+      "bar_time_ms": 600000,
+      "equity": "10000",
+      "time_ms": 600000
+    },
+    {
+      "bar_time_ms": 660000,
+      "equity": "10002.25",
+      "time_ms": 660000
+    },
+    {
+      "bar_time_ms": 720000,
+      "equity": "10001.5",
+      "time_ms": 720000
+    },
+    {
+      "bar_time_ms": 780000,
+      "equity": "9998",
+      "time_ms": 780000
+    },
+    {
+      "bar_time_ms": 840000,
+      "equity": "9994",
+      "time_ms": 840000
+    },
+    {
+      "bar_time_ms": 900000,
+      "equity": "9993",
+      "time_ms": 900000
+    },
+    {
+      "bar_time_ms": 960000,
+      "equity": "9993",
+      "time_ms": 960000
+    },
+    {
+      "bar_time_ms": 1020000,
+      "equity": "9993",
+      "time_ms": 1020000
+    },
+    {
+      "bar_time_ms": 1080000,
+      "equity": "9996",
+      "time_ms": 1080000
+    },
+    {
+      "bar_time_ms": 1140000,
+      "equity": "9995.5",
+      "time_ms": 1140000
+    },
+    {
+      "bar_time_ms": 1200000,
+      "equity": "9992",
+      "time_ms": 1200000
+    },
+    {
+      "bar_time_ms": 1260000,
+      "equity": "9988",
+      "time_ms": 1260000
+    },
+    {
+      "bar_time_ms": 1320000,
+      "equity": "9987",
+      "time_ms": 1320000
+    },
+    {
+      "bar_time_ms": 1380000,
+      "equity": "9987",
+      "time_ms": 1380000
+    },
+    {
+      "bar_time_ms": 1440000,
+      "equity": "9987",
+      "time_ms": 1440000
+    },
+    {
+      "bar_time_ms": 1500000,
+      "equity": "9987",
+      "time_ms": 1500000
+    },
+    {
+      "bar_time_ms": 1560000,
+      "equity": "9987",
+      "time_ms": 1560000
+    },
+    {
+      "bar_time_ms": 1620000,
+      "equity": "9989.25",
+      "time_ms": 1620000
+    },
+    {
+      "bar_time_ms": 1680000,
+      "equity": "9988.5",
+      "time_ms": 1680000
+    },
+    {
+      "bar_time_ms": 1740000,
+      "equity": "9985",
+      "time_ms": 1740000
+    },
+    {
+      "bar_time_ms": 1800000,
+      "equity": "9981",
+      "time_ms": 1800000
+    },
+    {
+      "bar_time_ms": 1860000,
+      "equity": "9980",
+      "time_ms": 1860000
+    },
+    {
+      "bar_time_ms": 1920000,
+      "equity": "9980",
+      "time_ms": 1920000
+    },
+    {
+      "bar_time_ms": 1980000,
+      "equity": "9980",
+      "time_ms": 1980000
+    },
+    {
+      "bar_time_ms": 2040000,
+      "equity": "9983",
+      "time_ms": 2040000
+    },
+    {
+      "bar_time_ms": 2100000,
+      "equity": "9982.5",
+      "time_ms": 2100000
+    },
+    {
+      "bar_time_ms": 2160000,
+      "equity": "9979",
+      "time_ms": 2160000
+    },
+    {
+      "bar_time_ms": 2220000,
+      "equity": "9975",
+      "time_ms": 2220000
+    },
+    {
+      "bar_time_ms": 2280000,
+      "equity": "9974",
+      "time_ms": 2280000
+    },
+    {
+      "bar_time_ms": 2340000,
+      "equity": "9974",
+      "time_ms": 2340000
+    },
+    {
+      "bar_time_ms": 2400000,
+      "equity": "9974",
+      "time_ms": 2400000
+    },
+    {
+      "bar_time_ms": 2460000,
+      "equity": "9974",
+      "time_ms": 2460000
+    },
+    {
+      "bar_time_ms": 2520000,
+      "equity": "9974",
+      "time_ms": 2520000
+    },
+    {
+      "bar_time_ms": 2580000,
+      "equity": "9976.25",
+      "time_ms": 2580000
+    },
+    {
+      "bar_time_ms": 2640000,
+      "equity": "9975.5",
+      "time_ms": 2640000
+    },
+    {
+      "bar_time_ms": 2700000,
+      "equity": "9972",
+      "time_ms": 2700000
+    },
+    {
+      "bar_time_ms": 2760000,
+      "equity": "9968",
+      "time_ms": 2760000
+    }
+  ],
+  "fidelity": null,
+  "fills": [
+    {
+      "bar_time_ms": 660000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": "L",
+      "time_ms": 660000
+    },
+    {
+      "bar_time_ms": 900000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "100",
+      "qty": "1",
+      "side": "SELL",
+      "tag": "Close entry(s) order L",
+      "time_ms": 900000
+    },
+    {
+      "bar_time_ms": 1080000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "108",
+      "qty": "1",
+      "side": "BUY",
+      "tag": "L",
+      "time_ms": 1080000
+    },
+    {
+      "bar_time_ms": 1320000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "102",
+      "qty": "1",
+      "side": "SELL",
+      "tag": "Close entry(s) order L",
+      "time_ms": 1320000
+    },
+    {
+      "bar_time_ms": 1620000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": "L",
+      "time_ms": 1620000
+    },
+    {
+      "bar_time_ms": 1860000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "100",
+      "qty": "1",
+      "side": "SELL",
+      "tag": "Close entry(s) order L",
+      "time_ms": 1860000
+    },
+    {
+      "bar_time_ms": 2040000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "108",
+      "qty": "1",
+      "side": "BUY",
+      "tag": "L",
+      "time_ms": 2040000
+    },
+    {
+      "bar_time_ms": 2280000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "102",
+      "qty": "1",
+      "side": "SELL",
+      "tag": "Close entry(s) order L",
+      "time_ms": 2280000
+    },
+    {
+      "bar_time_ms": 2580000,
+      "explanation": null,
+      "fee": null,
+      "order_id": null,
+      "price": "107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": "L",
+      "time_ms": 2580000
+    }
+  ],
+  "interval": "1m",
+  "open_position": {
+    "avg_price": "107",
+    "qty": "1",
+    "side": "LONG"
+  },
+  "pending_orders": [],
+  "plots": [
+    {
+      "id": "7",
+      "kind": "line",
+      "pane": "main",
+      "points": [
+        [
+          0,
+          null
+        ],
+        [
+          60000,
+          null
+        ],
+        [
+          120000,
+          107.0
+        ],
+        [
+          180000,
+          109.5
+        ],
+        [
+          240000,
+          109.5
+        ],
+        [
+          300000,
+          106.83333333333333
+        ],
+        [
+          360000,
+          103.0
+        ],
+        [
+          420000,
+          99.5
+        ],
+        [
+          480000,
+          97.91666666666667
+        ],
+        [
+          540000,
+          98.91666666666667
+        ],
+        [
+          600000,
+          102.08333333333333
+        ],
+        [
+          660000,
+          105.75
+        ],
+        [
+          720000,
+          107.91666666666667
+        ],
+        [
+          780000,
+          107.58333333333333
+        ],
+        [
+          840000,
+          104.83333333333333
+        ],
+        [
+          900000,
+          102.0
+        ],
+        [
+          960000,
+          101.33333333333333
+        ],
+        [
+          1020000,
+          103.33333333333333
+        ],
+        [
+          1080000,
+          107.0
+        ],
+        [
+          1140000,
+          109.5
+        ],
+        [
+          1200000,
+          109.5
+        ],
+        [
+          1260000,
+          106.83333333333333
+        ],
+        [
+          1320000,
+          103.0
+        ],
+        [
+          1380000,
+          99.5
+        ],
+        [
+          1440000,
+          97.91666666666667
+        ],
+        [
+          1500000,
+          98.91666666666667
+        ],
+        [
+          1560000,
+          102.08333333333333
+        ],
+        [
+          1620000,
+          105.75
+        ],
+        [
+          1680000,
+          107.91666666666667
+        ],
+        [
+          1740000,
+          107.58333333333333
+        ],
+        [
+          1800000,
+          104.83333333333333
+        ],
+        [
+          1860000,
+          102.0
+        ],
+        [
+          1920000,
+          101.33333333333333
+        ],
+        [
+          1980000,
+          103.33333333333333
+        ],
+        [
+          2040000,
+          107.0
+        ],
+        [
+          2100000,
+          109.5
+        ],
+        [
+          2160000,
+          109.5
+        ],
+        [
+          2220000,
+          106.83333333333333
+        ],
+        [
+          2280000,
+          103.0
+        ],
+        [
+          2340000,
+          99.5
+        ],
+        [
+          2400000,
+          97.91666666666667
+        ],
+        [
+          2460000,
+          98.91666666666667
+        ],
+        [
+          2520000,
+          102.08333333333333
+        ],
+        [
+          2580000,
+          105.75
+        ],
+        [
+          2640000,
+          107.91666666666667
+        ],
+        [
+          2700000,
+          107.58333333333333
+        ],
+        [
+          2760000,
+          104.83333333333333
+        ]
+      ],
+      "title": null
+    },
+    {
+      "id": "8",
+      "kind": "line",
+      "pane": "main",
+      "points": [
+        [
+          0,
+          null
+        ],
+        [
+          60000,
+          null
+        ],
+        [
+          120000,
+          null
+        ],
+        [
+          180000,
+          null
+        ],
+        [
+          240000,
+          107.7
+        ],
+        [
+          300000,
+          107.7
+        ],
+        [
+          360000,
+          106.1
+        ],
+        [
+          420000,
+          103.2
+        ],
+        [
+          480000,
+          100.75
+        ],
+        [
+          540000,
+          99.75
+        ],
+        [
+          600000,
+          100.35
+        ],
+        [
+          660000,
+          102.4
+        ],
+        [
+          720000,
+          104.8
+        ],
+        [
+          780000,
+          106.15
+        ],
+        [
+          840000,
+          105.95
+        ],
+        [
+          900000,
+          104.75
+        ],
+        [
+          960000,
+          103.5
+        ],
+        [
+          1020000,
+          103.2
+        ],
+        [
+          1080000,
+          104.4
+        ],
+        [
+          1140000,
+          106.3
+        ],
+        [
+          1200000,
+          107.7
+        ],
+        [
+          1260000,
+          107.7
+        ],
+        [
+          1320000,
+          106.1
+        ],
+        [
+          1380000,
+          103.2
+        ],
+        [
+          1440000,
+          100.75
+        ],
+        [
+          1500000,
+          99.75
+        ],
+        [
+          1560000,
+          100.35
+        ],
+        [
+          1620000,
+          102.4
+        ],
+        [
+          1680000,
+          104.8
+        ],
+        [
+          1740000,
+          106.15
+        ],
+        [
+          1800000,
+          105.95
+        ],
+        [
+          1860000,
+          104.75
+        ],
+        [
+          1920000,
+          103.5
+        ],
+        [
+          1980000,
+          103.2
+        ],
+        [
+          2040000,
+          104.4
+        ],
+        [
+          2100000,
+          106.3
+        ],
+        [
+          2160000,
+          107.7
+        ],
+        [
+          2220000,
+          107.7
+        ],
+        [
+          2280000,
+          106.1
+        ],
+        [
+          2340000,
+          103.2
+        ],
+        [
+          2400000,
+          100.75
+        ],
+        [
+          2460000,
+          99.75
+        ],
+        [
+          2520000,
+          100.35
+        ],
+        [
+          2580000,
+          102.4
+        ],
+        [
+          2640000,
+          104.8
+        ],
+        [
+          2700000,
+          106.15
+        ],
+        [
+          2760000,
+          105.95
+        ]
+      ],
+      "title": null
+    }
+  ],
+  "rejections": [],
+  "schema": "candlescope.run-result/1",
+  "source": "native-pine",
+  "summary": {
+    "fill_count": 9,
+    "final_equity": "9968",
+    "initial_equity": "10000",
+    "net_profit": "-32",
+    "trade_count": 4,
+    "winning_trades": 0
+  },
+  "trades": [
+    {
+      "entry_bar_time_ms": 660000,
+      "entry_explanation": null,
+      "entry_price": "107",
+      "entry_time_ms": 660000,
+      "exit_bar_time_ms": 900000,
+      "exit_explanation": null,
+      "exit_price": "100",
+      "exit_time_ms": 900000,
+      "fees": null,
+      "id": "trade-1",
+      "net_pnl": "-7",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 1080000,
+      "entry_explanation": null,
+      "entry_price": "108",
+      "entry_time_ms": 1080000,
+      "exit_bar_time_ms": 1320000,
+      "exit_explanation": null,
+      "exit_price": "102",
+      "exit_time_ms": 1320000,
+      "fees": null,
+      "id": "trade-2",
+      "net_pnl": "-6",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 1620000,
+      "entry_explanation": null,
+      "entry_price": "107",
+      "entry_time_ms": 1620000,
+      "exit_bar_time_ms": 1860000,
+      "exit_explanation": null,
+      "exit_price": "100",
+      "exit_time_ms": 1860000,
+      "fees": null,
+      "id": "trade-3",
+      "net_pnl": "-7",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 2040000,
+      "entry_explanation": null,
+      "entry_price": "108",
+      "entry_time_ms": 2040000,
+      "exit_bar_time_ms": 2280000,
+      "exit_explanation": null,
+      "exit_price": "102",
+      "exit_time_ms": 2280000,
+      "fees": null,
+      "id": "trade-4",
+      "net_pnl": "-6",
+      "qty": "1",
+      "side": "LONG"
+    }
+  ]
+}

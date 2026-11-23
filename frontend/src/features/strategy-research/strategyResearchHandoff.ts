@@ -9,8 +9,15 @@ import { createChartStrategyDraftId, getChartStrategyDraftStore } from "../backt
 export interface ResearchHandoff { schemaVersion: 2; source: CurrentChartSourceRefV1; draftId: string;
   origin: { draftId: string; draftRevision: number }; configuration: StrategyRunSettings; runId: string | null; }
 const PREFIX = "candlescope:research-handoff:";
+type HandoffReferences = {
+  saveStrategyReference(kind: "research-handoff", key: string, value: unknown): Promise<void>;
+  loadStrategyReference(kind: "research-handoff", key: string): Promise<unknown>;
+};
+
+/** The hand-off is stored in the backend (ADR-BACKTEST-015 P3c), so it outlives the page and the origin. */
 export async function saveResearchHandoff(input: { session: ChartSession; workspaceId: string; cellId: string;
   attachment: ChartStrategyAttachmentRecord; draft: StrategyDraftRecord; runId: string | null },
+  references: Pick<HandoffReferences, "saveStrategyReference">,
   store: StrategyDraftStore = getChartStrategyDraftStore()): Promise<string> {
   // Capture settings and the explicitly saved code before the first await.
   // The experiment must never subscribe/autosave to the originating draft ID.
@@ -40,14 +47,25 @@ export async function saveResearchHandoff(input: { session: ChartSession; worksp
   // Failed persistence leaves the chart and its original program untouched;
   // callers navigate only after both the independent draft and handoff exist.
   await store.save(copy);
-  window.localStorage.setItem(`${PREFIX}${id}`, JSON.stringify(record));
+  await references.saveStrategyReference("research-handoff", id, record);
   return `/strategy.html?handoff=${encodeURIComponent(id)}`;
+}
+/** The hand-off behind a `?handoff=` link: from the backend, else (a link from before P3c) browser storage. */
+export async function loadResearchHandoff(id: string, references: Pick<HandoffReferences, "loadStrategyReference">): Promise<ResearchHandoff | null> {
+  if (!/^[a-zA-Z0-9-]{8,80}$/.test(id)) return null;
+  const stored = await references.loadStrategyReference("research-handoff", id).catch(() => null);
+  return parseResearchHandoff(stored) ?? readResearchHandoff(id);
 }
 export function readResearchHandoff(id: string): ResearchHandoff | null {
   try {
     if (!/^[a-zA-Z0-9-]{8,80}$/.test(id)) return null;
-    const record = JSON.parse(window.localStorage.getItem(`${PREFIX}${id}`) ?? "null") as ResearchHandoff | null;
-    if (!record || record.schemaVersion !== 2 || typeof record.draftId !== "string" || !/^draft-[A-Za-z0-9_-]{8,152}$/.test(record.draftId)
+    return parseResearchHandoff(JSON.parse(window.localStorage.getItem(`${PREFIX}${id}`) ?? "null"));
+  } catch { return null; }
+}
+export function parseResearchHandoff(raw: unknown): ResearchHandoff | null {
+  try {
+    const record = raw as ResearchHandoff | null;
+    if (!record || typeof record !== "object" || record.schemaVersion !== 2 || typeof record.draftId !== "string" || !/^draft-[A-Za-z0-9_-]{8,152}$/.test(record.draftId)
       || !record.origin || typeof record.origin.draftId !== "string" || !/^draft-[A-Za-z0-9_-]{8,152}$/.test(record.origin.draftId)
       || record.origin.draftId === record.draftId || !Number.isSafeInteger(record.origin.draftRevision) || record.origin.draftRevision < 0
       || !validStrategyRunSettings(record.configuration)) return null;

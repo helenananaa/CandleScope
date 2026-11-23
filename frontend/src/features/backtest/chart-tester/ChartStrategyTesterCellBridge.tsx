@@ -1,6 +1,6 @@
 import type { ChartSettings } from "../../settings/chartAppearanceSettings.js";
 import { chartStrategySignalInput, withChartSignalInput } from "./chartStrategySignalInput.js";
-import { researchModeForTask, strategyResearchModeHref } from "../research/backtestResearchModes.js";
+import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
@@ -13,8 +13,8 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import type { ChartSurfaceVisibleRange } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
-import { defaultBacktestApi, type ChartContextResolution } from "../backtestApi.js";
-import { pollBacktestRunToTerminal } from "../backtestRunClient.js";
+import type { ChartContextResolution } from "../backtestApi.js";
+import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { ChartStrategyTesterRuntimeFactory } from "./ChartStrategyTesterRuntime.js";
 import {
   getChartStrategyDraftStore,
@@ -27,7 +27,6 @@ import type {
 import {
   chartStrategyQuickPresetIdForMarket,
   chartStrategyRunDiagnostics,
-  runChartStrategyBacktest,
 } from "./chartStrategyRunRequest.js";
 import {
   createChartStrategyTesterState,
@@ -37,28 +36,24 @@ import {
 import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
-import {
-  chartStrategyResultCache,
-  type ChartStrategyResultBundle,
-} from "./chartStrategyResultCache.js";
-import {
-  createChartStrategyResultMarkerSource,
-  type ChartStrategyResultMarkerSource,
-} from "./chartStrategyResultMarkerSource.js";
+import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
-import type { RecentRunCompareV1 } from "../backtestTypes.js";
+import type { RecentRunCompareV1, TradeExplanationV1 } from "../backtestTypes.js";
+import { useStrategyRunOverlay, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import type { StrategyMarkerEvidence, StrategyOverlaySource } from "../runResult/strategyOverlay.js";
+import type { ChartStrategyTesterMarkerSource } from "./ChartStrategyTesterRuntime.js";
 import {
   CHART_RUN_COMPARE_ENABLED,
   CHART_STRATEGY_AUTO_RUN_ENABLED,
+  CHART_STRATEGY_FOLLOW_ENABLED,
   CHART_TRADE_EXPLANATION_ENABLED,
 } from "./chartStrategyTesterFeature.js";
+import { fixedIntervalMs } from "../follow/scriptFollow.js";
+import { chartFollowStatus } from "./chartStrategyFollowStatus.js";
+import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { TradeExplanationSelection } from "./ChartStrategyResultViews.js";
 import type { StrategyDraftRecord } from "./StrategyDraftStore.js";
-import {
-  backtestResearchContextHref,
-  buildBacktestResearchLaunchContext,
-} from "../research/backtestResearchLaunch.js";
 import {
   CHART_STRATEGY_AUTO_RUN_DEBOUNCE_MS,
   chartStrategyAutoRunCoordinator,
@@ -87,7 +82,8 @@ export interface ChartStrategyTesterCellBridgeProps {
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
-  onMarkerSourceChange(source: ChartStrategyResultMarkerSource | null): void;
+  /** The run overlay this bridge draws on the chart: fixed-history and Pine runs (ADR-BACKTEST-015 P1c). */
+  onOverlaySourceChange?(source: StrategyOverlaySource | null): void;
   onLocateTrade(timeMs: number): void;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onAttachmentChange(attachment: ChartStrategyAttachmentRecord | null): void;
@@ -112,7 +108,7 @@ export default function ChartStrategyTesterCellBridge({
   bottomPanelHost,
   seriesStore,
   getCurrentVisibleRange,
-  onMarkerSourceChange,
+  onOverlaySourceChange,
   onLocateTrade,
   onReviewTrade,
   onAttachmentChange,
@@ -121,7 +117,7 @@ export default function ChartStrategyTesterCellBridge({
   onClosePanel,
 }: ChartStrategyTesterCellBridgeProps) {
   const attachment = useMemo(() => savedAttachment ? withChartSignalInput(savedAttachment, appearance ?? {}) : null, [savedAttachment, appearance]);
-  const locale = useLocale();
+  useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
   const [runMode, setRunMode] = useState<ContinuousMode>(() => resolveChartStrategyRunMode(loadChartStrategyPanelPreferences(cellScope), attachment));
@@ -133,7 +129,6 @@ export default function ChartStrategyTesterCellBridge({
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
-  const [advancedOpening, setAdvancedOpening] = useState(false);
   const [comparison, setComparison] = useState<RecentRunCompareV1 | null>(null);
   const [selectedExplanation, setSelectedExplanation] = useState<TradeExplanationSelection | null>(null);
   const [pendingDataDraftRevision, setPendingDataDraftRevision] = useState<number | null>(null);
@@ -193,63 +188,53 @@ export default function ChartStrategyTesterCellBridge({
     intervalSeconds: parseIntervalSeconds(session.interval),
     seriesKey: `chart-strategy:${cellScope}`,
   }), [cellScope, seriesStore, session.interval]);
-  const resultMarkerLabels = useMemo(() => {
-    void locale;
-    return {
-      actions: {
-        OPEN_LONG: t("backtest.openLong"),
-        CLOSE_LONG: t("backtest.closeLong"),
-        OPEN_SHORT: t("backtest.openShort"),
-        CLOSE_SHORT: t("backtest.closeShort"),
-        ADD_LONG: t("backtest.addLong"),
-        ADD_SHORT: t("backtest.addShort"),
-        REDUCE_LONG: t("backtest.reduceLong"),
-        REDUCE_SHORT: t("backtest.reduceShort"),
-        REVERSE_TO_LONG: t("backtest.reverseLong"),
-        REVERSE_TO_SHORT: t("backtest.reverseShort"),
-      },
-      rejection: t("backtest.reject"),
-    };
-  }, [locale]);
-  const resultMarkerSource = useMemo(() => createChartStrategyResultMarkerSource({
-    seriesStore: projectionSeriesStore,
-    labels: resultMarkerLabels,
-    onActivate(evidence) {
-      if (!CHART_TRADE_EXPLANATION_ENABLED) return;
-      setSelectedExplanation({
-        id: evidence.markerId,
-        title: evidence.kind === "REJECTION"
-          ? t("chartTester.explain.rejectionTitle")
-          : t("chartTester.explain.fillTitle"),
-        items: [{
-          label: evidence.kind === "REJECTION"
-            ? t("chartTester.explain.rejection")
-            : t("chartTester.explain.fill"),
-          explanation: evidence.explanation,
-        }],
-      });
-      onOpenPanel();
-    },
-  }), [onOpenPanel, projectionSeriesStore, resultMarkerLabels]);
-
-  const pendingMarkerDisposals = useRef(new Map<ChartStrategyResultMarkerSource, symbol>());
+  const activateEvidence = useCallback((evidence: Pick<StrategyMarkerEvidence, "markerId" | "kind"> & {
+    explanation: TradeExplanationV1 | Record<string, unknown>;
+  }) => {
+    if (!CHART_TRADE_EXPLANATION_ENABLED) return;
+    setSelectedExplanation({
+      id: evidence.markerId,
+      title: evidence.kind === "REJECTION"
+        ? t("chartTester.explain.rejectionTitle")
+        : t("chartTester.explain.fillTitle"),
+      items: [{
+        label: evidence.kind === "REJECTION"
+          ? t("chartTester.explain.rejection")
+          : t("chartTester.explain.fill"),
+        explanation: evidence.explanation as TradeExplanationV1,
+      }],
+    });
+    onOpenPanel();
+  }, [onOpenPanel]);
+  // The run drawn by the overlay belongs to the chart session it was reported for.
+  const overlaySessionKey = [session.exchange, session.marketType, session.symbol, session.interval].join("\u0000");
+  const [overlayRun, setOverlayRun] = useState<{ run: StrategyOverlayRun; sessionKey: string } | null>(null);
+  // A stable handler: a session switch must not make the panel re-report its previous run under the new session.
+  const overlaySessionKeyRef = useRef(overlaySessionKey);
+  useLayoutEffect(() => { overlaySessionKeyRef.current = overlaySessionKey; }, [overlaySessionKey]);
+  const handleOverlayRunChange = useCallback((run: StrategyOverlayRun | null) => {
+    setOverlayRun(run ? { run, sessionKey: overlaySessionKeyRef.current } : null);
+  }, []);
+  const strategyManager = useMarketDataWorkspaceResources()?.dataManager.strategy ?? null;
+  const runOverlay = useStrategyRunOverlay({
+    run: overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null,
+    interval: session.interval,
+    series: projectionSeriesStore,
+    onActivate: activateEvidence,
+  });
+  const runOverlaySource = runOverlay.source;
   useLayoutEffect(() => {
-    const pending = pendingMarkerDisposals.current;
-    pending.delete(resultMarkerSource);
-    resultMarkerSource.setVisibleRange(getCurrentVisibleRange());
-    onMarkerSourceChange(resultMarkerSource);
-    return () => {
-      onMarkerSourceChange(null);
-      // StrictMode replays setup after cleanup using the same memoized source.
-      const token = Symbol("marker-disposal");
-      pending.set(resultMarkerSource, token);
-      queueMicrotask(() => {
-        if (pending.get(resultMarkerSource) !== token) return;
-        pending.delete(resultMarkerSource);
-        resultMarkerSource.dispose();
-      });
-    };
-  }, [getCurrentVisibleRange, onMarkerSourceChange, resultMarkerSource]);
+    runOverlaySource.setVisibleRange(getCurrentVisibleRange());
+    onOverlaySourceChange?.(runOverlaySource);
+    return () => onOverlaySourceChange?.(null);
+  }, [getCurrentVisibleRange, onOverlaySourceChange, runOverlaySource]);
+  // The tester runtime hides a result the moment it goes STALE; that must reach the overlay in the same frame.
+  // Disposal stays with this bridge, so replacing the runtime's source never disposes the shared overlay source.
+  const testerMarkerSource = useMemo<ChartStrategyTesterMarkerSource>(() => ({
+    clear() {
+      runOverlaySource.clearOwner("run:host:");
+    },
+  }), [runOverlaySource]);
 
   useLayoutEffect(() => {
     const runtime = runtimeFactory.get(workspaceId, cellId);
@@ -271,7 +256,7 @@ export default function ChartStrategyTesterCellBridge({
       draftContentRevision,
       editorOpen: active && panelOpen,
     });
-    runtime?.setMarkerSource(resultMarkerSource);
+    runtime?.setMarkerSource(testerMarkerSource);
     const publish = (nextState: typeof runtimeState) => {
       if (!cancelled) setRuntimeState(nextState);
     };
@@ -283,7 +268,7 @@ export default function ChartStrategyTesterCellBridge({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [active, attachment, cellId, cellScope, draftContentRevision, panelOpen, resultMarkerSource, session, workspaceId]);
+  }, [active, attachment, cellId, cellScope, draftContentRevision, panelOpen, session, testerMarkerSource, workspaceId]);
 
   useEffect(() => {
     const identity = runtimeState.resultIdentity;
@@ -297,7 +282,8 @@ export default function ChartStrategyTesterCellBridge({
       setComparison(null);
       setSelectedExplanation(null);
     });
-    void chartStrategyResultCache.load(defaultBacktestApi, identity.runId, controller.signal)
+    if (!strategyManager) return undefined;
+    void strategyManager.loadResult(identity.runId, controller.signal)
       .then((bundle) => {
         if (cancelled) return;
         const runtime = runtimeFactory.get(workspaceId, cellId);
@@ -305,10 +291,8 @@ export default function ChartStrategyTesterCellBridge({
         if (!runtime || !current || current.resultIdentity?.runId !== identity.runId) return;
         setResult(bundle);
         runtime.setResultReference(bundle);
-        if (current.projectionVisible) resultMarkerSource.setResult(bundle.chart);
-        else resultMarkerSource.clear();
         if (CHART_RUN_COMPARE_ENABLED) {
-          void defaultBacktestApi.compareRecentRun(identity.runId, controller.signal)
+          void strategyManager.compareRecentRun(identity.runId, controller.signal)
             .then((value) => {
               if (!cancelled) setComparison(value);
             })
@@ -328,16 +312,70 @@ export default function ChartStrategyTesterCellBridge({
       cancelled = true;
       controller.abort();
     };
-  }, [cellId, resultMarkerSource, runtimeState.resultIdentity, runtimeState.status, workspaceId]);
+  }, [cellId, runtimeState.resultIdentity, runtimeState.status, strategyManager, workspaceId]);
 
-  useEffect(() => {
-    if (result && runtimeState.projectionVisible
-      && runtimeState.resultIdentity?.runId === result.run.run_id) {
-      resultMarkerSource.setResult(result.chart);
-    } else {
-      resultMarkerSource.clear();
+  // ADR-BACKTEST-015 P4b: a shown Python run keeps up with live bars. The backend continues the
+  // fixed run (same revision, configuration and start) over each newly closed bar; this cell holds
+  // that FOLLOW run while it shows the result and lets it go when the result is replaced or hidden.
+  const shownFixedRunId = result && runtimeState.projectionVisible && runtimeState.resultIdentity?.runId === result.run.run_id
+    ? result.run.run_id : null;
+  // Only a run of this chart's market and interval is followed: a session switch shows the old result for a moment.
+  const shownRunConfig = result?.run.config_json;
+  const shownRunOnChart = useMemo(() => {
+    try {
+      const config = JSON.parse(shownRunConfig ?? "null") as Record<string, unknown> | null;
+      return config !== null && config.exchange === session.exchange && config.market_type === session.marketType
+        && config.symbol === session.symbol && config.interval === session.interval;
+    } catch {
+      return false;
     }
-  }, [result, resultMarkerSource, runtimeState.projectionVisible, runtimeState.resultIdentity?.runId]);
+  }, [session.exchange, session.interval, session.marketType, session.symbol, shownRunConfig]);
+  // Only while the chart shows this result: a cell showing one of its Pine strategies lets the Python run go.
+  const shownOverlay = overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null;
+  const chartShowsHostResult = shownOverlay?.family === "host" || shownOverlay?.family === "follow";
+  const followableRunId = CHART_STRATEGY_FOLLOW_ENABLED && runMode === "HISTORY" && attachment?.language === "python"
+    && shownRunOnChart && chartShowsHostResult && fixedIntervalMs(session.interval) !== null ? shownFixedRunId : null;
+  const followHolder = useMemo(() => `chart-cell:${crypto.randomUUID()}`, []);
+  const [followed, setFollowed] = useState<{ fixedRunId: string; followId: string } | null>(null);
+  // The fixed run whose hold the backend refused: its result stays fixed, and the panel says so.
+  const [refusedRunId, setRefusedRunId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!followableRunId || !strategyManager) return undefined;
+    const identity = resolveKlineSeriesIdentity(session.exchange, session);
+    const body = { run_id: followableRunId, series: {
+      exchange: session.exchange, market_type: session.marketType, symbol: session.symbol, interval: session.interval,
+      identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
+        series_variant: identity.seriesVariant, price_adjustment: identity.priceAdjustment,
+        session_variant: identity.sessionVariant, volume_semantics: identity.volumeSemantics } } };
+    const controller = new AbortController();
+    void strategyManager.holdFollowRun(body, followHolder, (held) => {
+      if (!controller.signal.aborted) setFollowed({ fixedRunId: followableRunId, followId: held.followId });
+    }, controller.signal).catch(() => {
+      // Refused (a range beyond the FOLLOW budget, settings it cannot continue) or lost: the fixed result stays.
+      if (!controller.signal.aborted) { setFollowed(null); setRefusedRunId(followableRunId); }
+    });
+    return () => controller.abort();
+  }, [followHolder, followableRunId, session, strategyManager]);
+
+  // In CandleScope mode the overlay draws a completed, visible fixed-history result (host family) in
+  // history mode, and the continuous panel's forward run in the live modes (ADR-BACKTEST-015 P2d).
+  const [continuousOverlayRun, setContinuousOverlayRun] = useState<StrategyOverlayRun | null>(null);
+  const candleScopeOverlayRun = useMemo<StrategyOverlayRun | null>(() => {
+    if (runMode !== "HISTORY") return continuousOverlayRun;
+    if (!shownFixedRunId) return null;
+    return followableRunId && followed?.fixedRunId === shownFixedRunId
+      ? { family: "follow", runId: followed.followId, followsRunId: shownFixedRunId }
+      : { family: "host", runId: shownFixedRunId };
+  }, [continuousOverlayRun, followableRunId, followed, runMode, shownFixedRunId]);
+  const followRunId = candleScopeOverlayRun?.family === "follow" ? candleScopeOverlayRun.runId : null;
+  const followLive = runOverlay.live?.run.runId === followRunId ? runOverlay.live : null;
+  const followStatus = useMemo(() => chartFollowStatus({
+    following: followableRunId !== null,
+    refused: followableRunId !== null && refusedRunId === followableRunId,
+    shown: followRunId !== null && runOverlay.shown?.run.runId === followRunId,
+    live: followLive,
+    intervalMs: fixedIntervalMs(session.interval),
+  }), [followLive, followRunId, followableRunId, refusedRunId, runOverlay.shown, session.interval]);
 
   useEffect(() => {
     const draftId = attachment?.strategyDraftId;
@@ -382,8 +420,14 @@ export default function ChartStrategyTesterCellBridge({
     const controller = new AbortController();
     const untrack = runtime.trackAbortController(controller);
     setSourceDiagnostics([]);
-    const task = runChartStrategyBacktest({
-      api: defaultBacktestApi,
+    // Runs and their progress go through the workspace's strategy data manager (ADR-BACKTEST-015 P2c).
+    if (!strategyManager) {
+      untrack();
+      runtime.dispatch({ type: "REQUEST_FAILED", token,
+        error: { code: "STRATEGY_STREAM_UNAVAILABLE", message: t("chartTester.error.backend"), action: "retry" } });
+      return null;
+    }
+    const task = strategyManager.runChartStrategy({
       request,
       signal: controller.signal,
       materializeResolution,
@@ -496,7 +540,7 @@ export default function ChartStrategyTesterCellBridge({
     inFlightSubmittedRef.current = false;
     inFlightRef.current = task;
     return task;
-  }, [cellId, onAttachmentChange, workspaceId]);
+  }, [cellId, onAttachmentChange, strategyManager, workspaceId]);
 
   const cancelPendingAutoRun = useCallback(() => {
     cancelAutoDebounceRef.current?.();
@@ -655,19 +699,20 @@ export default function ChartStrategyTesterCellBridge({
     runtime.dispatch({ type: "REQUEST_STATUS", token, status: "RUNNING", activeRunId: runId });
     const controller = new AbortController();
     const untrack = runtime.trackAbortController(controller);
-    const task = pollBacktestRunToTerminal({
-      api: defaultBacktestApi,
-      runId,
-      signal: controller.signal,
-      onUpdate(run) {
-        runtime.dispatch({
-          type: "REQUEST_STATUS",
-          token,
-          status: run.state === "QUEUED" ? "QUEUED" : "RUNNING",
-          activeRunId: run.run_id,
-        });
-      },
-    }).then((run) => {
+    if (!strategyManager) {
+      untrack();
+      runtime.dispatch({ type: "REQUEST_FAILED", token,
+        error: { code: "STRATEGY_STREAM_UNAVAILABLE", message: t("chartTester.error.backend"), action: "retry" } });
+      return;
+    }
+    const task = strategyManager.followHostRun(runId, (run) => {
+      runtime.dispatch({
+        type: "REQUEST_STATUS",
+        token,
+        status: run.state === "QUEUED" ? "QUEUED" : "RUNNING",
+        activeRunId: run.run_id,
+      });
+    }, controller.signal).then((run) => {
       if (run.state === "COMPLETED") {
         const previousRunId = runtime.snapshot().resultIdentity?.runId ?? null;
         runtime.dispatch({
@@ -706,53 +751,12 @@ export default function ChartStrategyTesterCellBridge({
       if (inFlightRef.current === task) inFlightRef.current = null;
     });
     inFlightRef.current = task;
-  }, [cancelPendingAutoRun, cellId, workspaceId]);
+  }, [cancelPendingAutoRun, cellId, strategyManager, workspaceId]);
 
-  const openResearch = useCallback((entryTask: "PRECISE_EXECUTION" | "PARAMETER_ROBUSTNESS") => {
-    if (advancedOpening) return;
-    if (!attachment) {
-      window.location.assign(strategyResearchModeHref(researchModeForTask(entryTask)));
-      return;
-    }
-    setAdvancedOpening(true);
-    setResultError(null);
-    let payload;
-    try {
-      payload = buildBacktestResearchLaunchContext({
-        workspaceId,
-        cellId,
-        session,
-        attachment,
-        result,
-        resolution,
-        activeRunId: runtimeState.activeRunId,
-        baselineRunId: runtimeState.baselineRunId,
-        entryTask,
-      });
-    } catch (reason) {
-      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      setAdvancedOpening(false);
-      return;
-    }
-    void defaultBacktestApi.createResearchLaunchContext(payload).then((context) => {
-      window.location.assign(backtestResearchContextHref(context.context_id, entryTask));
-    }).catch((reason: unknown) => {
-      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      setAdvancedOpening(false);
-    });
-  }, [
-    advancedOpening,
-    attachment,
-    cellId,
-    resolution,
-    result,
-    runtimeState.activeRunId,
-    runtimeState.baselineRunId,
-    session,
-    workspaceId,
-  ]);
-  const handleOpenAdvanced = useCallback(() => openResearch("PRECISE_EXECUTION"), [openResearch]);
-  const handleOpenBatchStudy = useCallback(() => openResearch("PARAMETER_ROBUSTNESS"), [openResearch]);
+  // ADR-BACKTEST-015 P5d: research opens in the workspace. With a strategy, the panel hands it off
+  // (onOpenWorkspace with a mode); without one, the workspace opens on the field the action names.
+  const handleOpenAdvanced = useCallback(() => window.location.assign(strategyResearchModeHref("precise")), []);
+  const handleOpenBatchStudy = useCallback(() => window.location.assign(strategyResearchModeHref("robust")), []);
 
   if (!bottomPanelHost) return null;
   return createPortal(
@@ -788,7 +792,11 @@ export default function ChartStrategyTesterCellBridge({
       onLocateTrade={onLocateTrade}
       continuousChartActive={continuousChartActive}
       continuousMarketWindow={seriesStore}
-      continuousMarkerSource={resultMarkerSource}
+      onContinuousOverlayRunChange={setContinuousOverlayRun}
+      candleScopeOverlayRun={candleScopeOverlayRun}
+      onOverlayRunChange={handleOverlayRunChange}
+      overlayResult={runOverlay.shown}
+      followStatus={followStatus}
       onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
@@ -796,11 +804,15 @@ export default function ChartStrategyTesterCellBridge({
       onResumeObserving={handleResumeObserving}
       onSourceDirty={() => setSourceDiagnostics([])}
       onOpenAdvanced={handleOpenAdvanced}
-      onOpenWorkspace={async (draft, settings) => {
+      onOpenWorkspace={async (draft, settings, mode) => {
         if (!attachment) return;
-        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId,
-          attachment: settings ? { ...attachment, ...settings } : attachment,
-          draft, runId: settings ? null : result?.run.run_id ?? null })); }
+        if (!strategyManager) throw new Error(t("chartTester.error.backend"));
+        try {
+          const href = await saveResearchHandoff({ session, workspaceId, cellId,
+            attachment: settings ? { ...attachment, ...settings } : attachment,
+            draft, runId: settings ? null : result?.run.run_id ?? null }, strategyManager);
+          window.location.assign(mode ? `${href}&mode=${mode}` : href);
+        }
         catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); throw reason; }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}

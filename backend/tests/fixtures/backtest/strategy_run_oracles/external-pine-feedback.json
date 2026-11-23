@@ -1,0 +1,38 @@
+{
+  "description": "Pine engine decisions, CandleScope matching with account feedback (/backtests/external)",
+  "digests": {
+    "account": "sha256:153ad14b57a2222ffa53e93dc1bc213fe04fe1663cbe0bb05e4c35cecfc396a1",
+    "closed_trades": "sha256:6d5c0fd1b0e1554a9775dabc8f6a75746dcc60e4189331d8cb4081873a5eab01",
+    "equity": "sha256:8f9e001fab0af7b68f34308a71c9f1081a9d2b9e8c2117618ddf1e32c24e8def",
+    "fills": "sha256:422f710d79e292645faec55a0f26a1cbde9d3d9386fc8f334c4482fb9e8fdb3c",
+    "orders": "sha256:11b6106d6a3b826c3eb7038527807876f6d5cb0209a7098796c8b347bec0185d",
+    "plots": "sha256:182650198d1cf8e7dfb86b06ba8832635af47404769ff0ee501fcdba8f493188"
+  },
+  "path": "external-pine-feedback",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.strategy-run-oracle/1",
+  "summary": {
+    "account_authority": "candlescope",
+    "closed_trades": 4,
+    "fill_rows": [
+      "719999 BUY 1.0 @ 107.0 fee 0.107",
+      "959999 SELL 1.0 @ 100.0 fee 0.10",
+      "1139999 BUY 1.0 @ 108.0 fee 0.108",
+      "1379999 SELL 1.0 @ 102.0 fee 0.102",
+      "1679999 BUY 1.0 @ 107.0 fee 0.107",
+      "1919999 SELL 1.0 @ 100.0 fee 0.10",
+      "2099999 BUY 1.0 @ 108.0 fee 0.108",
+      "2339999 SELL 1.0 @ 102.0 fee 0.102",
+      "2639999 BUY 1.0 @ 107.0 fee 0.107"
+    ],
+    "fills": 9,
+    "final_equity": 9967.059,
+    "orders": 10
+  }
+}

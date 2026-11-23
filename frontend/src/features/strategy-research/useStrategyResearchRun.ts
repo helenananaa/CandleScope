@@ -21,7 +21,9 @@ import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { importedResearchRunSource } from "./importedDatasetSource.js";
+import type { PreparationJob } from "../data-preparation/api.js";
 import { StrategyResearchBatch } from "./strategyResearchBatch.js";
+import { ResearchExperiments } from "./researchExperiments.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
 import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -31,7 +33,9 @@ export function sessionFromResearchSource(
   imported: LocalDatasetManifest | null,
   interval: string | null,
 ): ChartSession | null {
-  if (source?.kind === "CURRENT_CHART") return { exchange: source.exchange, marketType: source.marketType, symbol: source.symbol, interval: source.interval };
+  if (source?.kind === "CURRENT_CHART" || source?.kind === "EXCHANGE_SERIES") {
+    return { exchange: source.exchange, marketType: source.marketType, symbol: source.symbol, interval: source.interval };
+  }
   if (source?.kind === "IMPORTED_DATASET" && imported !== null) {
     return {
       exchange: "local",
@@ -51,6 +55,11 @@ export function researchResultMatchesSource(
   if (!session || result.chart.symbol !== session.symbol || result.chart.interval !== session.interval) return false;
   if (source?.kind === "IMPORTED_DATASET") {
     return result.run.dataset_id === source.datasetId && result.run.data_epoch === source.dataEpoch;
+  }
+  if (source?.kind === "EXCHANGE_SERIES") {
+    // A run of this series inside the chosen range (warm-up and data availability may narrow it).
+    return result.config.exchange === session.exchange && result.config.market_type === session.marketType
+      && result.config.start_time_ms >= source.startMs && result.config.end_time_ms <= source.endMs;
   }
   return source?.kind === "CURRENT_CHART"
     && result.config.exchange === session.exchange && result.config.market_type === session.marketType;
@@ -75,15 +84,20 @@ export function useStrategyResearchRun(input: {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
   const dataManager = useMemo(() => new MarketDataManagerCore(), []);
   const managerLifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
+  // Batch tasks this browser ran before experiments (kept readable and resumable); new batches are experiments (P5b).
   const batch = useMemo(() => new StrategyResearchBatch(dataManager.strategy, getStrategyStorage()), [dataManager]);
+  const experiments = useMemo(() => new ResearchExperiments(dataManager.strategy), [dataManager]);
   useEffect(() => {
     batch.start();
-    return managerLifecycle.mount({ dispose() { batch.dispose(); dataManager.closeAll(); } });
-  }, [batch, dataManager, managerLifecycle]);
+    experiments.start();
+    return managerLifecycle.mount({ dispose() { batch.dispose(); experiments.dispose(); dataManager.closeAll(); } });
+  }, [batch, dataManager, experiments, managerLifecycle]);
   const [, setTesterVersion] = useState(0);
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsData, setNeedsData] = useState<ChartContextResolution | null>(null);
+  // The data preparation of the current run, for exchange history the workspace prepares on demand (P5a).
+  const [preparation, setPreparation] = useState<PreparationJob | null>(null);
   const [restoringRun, setRestoringRun] = useState(false);
   const pendingRequestRef = useRef<ChartStrategyRunRequest | null>(null);
   const lifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
@@ -124,9 +138,11 @@ export function useStrategyResearchRun(input: {
         quickPresetId: session.marketType === "spot" ? "CRYPTO_SPOT_STANDARD_V1" : "CRYPTO_PERP_STANDARD_V1",
         autoRun: false,
         ...configuration,
+        // Exchange history fixes its own range.
+        ...(source.kind === "EXCHANGE_SERIES" ? { rangeMode: "CUSTOM" as const, customRange: { startMs: source.startMs, endMs: source.endMs } } : {}),
       },
       draftContentRevision: input.draftContentRevision,
-      sourceKind: source.kind,
+      sourceKind: source.kind === "EXCHANGE_SERIES" ? "CURRENT_CHART" : source.kind,
       ...(source.kind === "IMPORTED_DATASET"
         ? { datasetId: source.datasetId, dataEpoch: source.dataEpoch }
         : {}),
@@ -159,7 +175,7 @@ export function useStrategyResearchRun(input: {
       const imported = input.imported;
       if (!validStrategyRunSettings(configuration)) throw new Error("Invalid backtest conditions");
       if (source === null) throw new Error("source required");
-      if (source.kind === "CURRENT_CHART" && input.runtimeMode === "LOCAL_OFFLINE") {
+      if ((source.kind === "CURRENT_CHART" || source.kind === "EXCHANGE_SERIES") && input.runtimeMode === "LOCAL_OFFLINE") {
         throw new ChartStrategyRunError(
           "CURRENT_CHART_UNBOUND",
           "live chart backtesting is unavailable in the offline runtime",
@@ -183,21 +199,31 @@ export function useStrategyResearchRun(input: {
           { next_step: "use imported library data" },
         );
       }
-      if (source.kind !== "CURRENT_CHART" && (source.kind !== "IMPORTED_DATASET" || imported === null)) {
+      if (source.kind !== "CURRENT_CHART" && source.kind !== "EXCHANGE_SERIES" && (source.kind !== "IMPORTED_DATASET" || imported === null)) {
         throw new ChartStrategyRunError(
           "SOURCE_UNSUPPORTED",
           "this workspace can only run imported library data",
           { next_step: "select imported library data" },
         );
       }
-      const researchSource = source.kind === "CURRENT_CHART" ? {
-        kind: "CURRENT_CHART" as const,
-        materializeResolution: materialize ?? null,
-      } : importedResearchRunSource(imported!, request.attachment, input.interval ?? source.interval);
+      // Exchange history runs over its own range and prepares missing bars as it goes, like a batch input.
+      const exchange = source.kind === "EXCHANGE_SERIES" ? source : null;
+      const runRequest: ChartStrategyRunRequest = exchange ? {
+        ...request,
+        session: { exchange: exchange.exchange, marketType: exchange.marketType, symbol: exchange.symbol, interval: exchange.interval },
+        attachment: { ...request.attachment, rangeMode: "CUSTOM", customRange: { startMs: exchange.startMs, endMs: exchange.endMs } },
+      } : request;
+      const researchSource = exchange && !materialize ? { kind: "MARKET_HISTORY" as const, endTimeMsExclusive: exchange.endMs }
+        : source.kind === "CURRENT_CHART" || exchange ? {
+          kind: "CURRENT_CHART" as const,
+          materializeResolution: materialize ?? null,
+        } : importedResearchRunSource(imported!, request.attachment, input.interval ?? source.interval);
+      setPreparation(null);
       const outcome = await dataManager.strategy.runResearch({
-        request,
+        request: runRequest,
         source: researchSource,
         signal: controller.signal,
+        ...(exchange ? { onPreparation(job: PreparationJob) { if (stillCurrent()) setPreparation(job); } } : {}),
         onResolution(resolution) {
           if (!stillCurrent()) return;
           tester.dispatch({
@@ -273,6 +299,7 @@ export function useStrategyResearchRun(input: {
   return {
     session,
     batch,
+    experiments,
     historyManager: dataManager.strategy,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
@@ -284,6 +311,8 @@ export function useStrategyResearchRun(input: {
     error,
     needsData: needsData !== null,
     dataResolution: needsData,
+    /** Shown while the run's exchange history is being prepared. */
+    preparation: ["RESOLVING", "QUEUED"].includes(snapshot.status) ? preparation : null,
     onRun,
     onConfirmNeedsData,
     tester,

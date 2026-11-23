@@ -143,23 +143,23 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     from app.simulation.sampled_book_kernel import SampledBookKernel
     kernel_type = {"BAR_APPROX":SimulationKernel,"BOOK_ASSISTED":BookAssistedKernel,
                    "TRADE_TAPE":TradeSimulationKernel,"BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[fidelity]
+    bar_clock = {}
     if wire.get("pine_bar_path_contract"):
-        from app.simulation.pine_bar_kernel import PineBarKernel, CONTRACT as PATH_CONTRACT
+        from app.simulation.ohlc_path import PATH_CONTRACT, PINE_PATH, PINE_V2, V2_CONTRACT
         if (fidelity != "BAR_APPROX" or wire["pine_bar_path_contract"] != PATH_CONTRACT
                 or not (wire.get("fill_recalculation") or wire.get("pine_history_tick_contract"))):
             raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine BAR path contract")
-        kernel_type = PineBarKernel
+        bar_clock = {"bar_clock": PINE_PATH}
         if wire.get("pine_v2_bar_contract"):
-            from app.simulation.pine_v2_bar_kernel import PineV2BarKernel, CONTRACT as V2_CONTRACT
             if wire["pine_v2_bar_contract"] != V2_CONTRACT:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine V2 BAR contract")
-            kernel_type = PineV2BarKernel
+            bar_clock = {"bar_clock": PINE_V2}
     print_kwargs = {}
     if (wire.get("pine_v2_print_contract") and fidelity == "TRADE_TAPE"
             and wire["pine_v2_settings"].get("execution_model_revision") == "EXECUTION_REALISM_V2"):
         from app.simulation.execution_realism import TRADE_FILL_POLICY_V2
         print_kwargs["fill_policy"] = TRADE_FILL_POLICY_V2
-    kernel = kernel_type(**print_kwargs, **({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
+    kernel = kernel_type(**print_kwargs, **bar_clock, **({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
                               **({key: (Decimal(value) if key in {"leverage", "participation_rate"} and value is not None else value)
                                   for key, value in wire["pine_v2_settings"].items()
                                   if key != "bar_path_scenario" or not wire.get("pine_v2_print_contract")} if wire.get("pine_v2_bar_contract") or wire.get("pine_v2_print_contract") else {}),
