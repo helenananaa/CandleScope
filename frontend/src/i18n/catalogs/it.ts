@@ -4138,5 +4138,11 @@ export const it = {
   "browser.download.end": "Fine (UTC, esclusa)",
   "browser.download.submit": "Scarica e importa",
   "browser.download.symbolLookupUnavailable": "La ricerca dei simboli non è disponibile. Inserisci il simbolo completo del mercato.",
+  "strategyCollection.retiredBadge": "Ritirato",
+  "strategyCollection.pyneRetired": "Pyne non è più supportato. Questa strategia salvata resta invariata, ma non viene mai eseguita e non è trattata come Pine.",
+  "strategyCollection.removeRetired": "Rimuovi {name} da questo grafico",
+  "chartTester.deleteDraft": "Elimina",
+  "chartTester.deleteRetiredDraft": "Elimina la bozza ritirata {name}",
+  "chartTester.deleteRetiredDraftFailed": "Impossibile eliminare la bozza ritirata. Riprova.",
 } as const satisfies MessageCatalog;
 

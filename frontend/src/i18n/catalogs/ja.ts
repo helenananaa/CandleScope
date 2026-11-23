@@ -4511,5 +4511,11 @@ export const ja = {
   "browser.download.end": "終了日時（UTC、含まない）",
   "browser.download.submit": "ダウンロードしてインポート",
   "browser.download.symbolLookupUnavailable": "銘柄を検索できません。取引所の完全な銘柄コードを入力してください。",
+  "strategyCollection.retiredBadge": "廃止",
+  "strategyCollection.pyneRetired": "Pyne は廃止されました。この保存済みストラテジーは変更せずに保持されますが、実行されることはなく、Pine としても扱われません。",
+  "strategyCollection.removeRetired": "{name} をこのチャートから削除",
+  "chartTester.deleteDraft": "削除",
+  "chartTester.deleteRetiredDraft": "廃止された下書き {name} を削除",
+  "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
 } as const satisfies MessageCatalog;

@@ -4164,5 +4164,11 @@ export const zhHK = {
   "browser.download.end": "結束時間（UTC，不含）",
   "browser.download.submit": "下載並匯入",
   "browser.download.symbolLookupUnavailable": "暫時無法讀取商品目錄，可輸入交易所的完整商品代碼。",
+  "strategyCollection.retiredBadge": "已停用",
+  "strategyCollection.pyneRetired": "Pyne 已停用。此已儲存的策略會原樣保留，但不會執行，也不會被當作 Pine。",
+  "strategyCollection.removeRetired": "從此圖表移除 {name}",
+  "chartTester.deleteDraft": "刪除",
+  "chartTester.deleteRetiredDraft": "刪除已停用的草稿 {name}",
+  "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
 } as const satisfies MessageCatalog;

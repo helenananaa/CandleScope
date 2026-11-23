@@ -10,6 +10,14 @@ export interface StrategySwitcherItem {
   running?: boolean;
 }
 
+/** A retired Pyne strategy from a build before PR #105: shown, never selectable or runnable. */
+export interface RetiredStrategySwitcherItem {
+  id: string;
+  name: string;
+  /** Without it the entry is listed only. */
+  onRemove?(): void;
+}
+
 export interface StrategySwitcherAction {
   id: string;
   label: string;
@@ -18,9 +26,30 @@ export interface StrategySwitcherAction {
   title?: string;
 }
 
+/** The menu's retired Pyne entries: a name and a Retired label, never a strategy to pick or run. */
+export function RetiredStrategySwitcherSection({ items, onRemove }: {
+  items: readonly RetiredStrategySwitcherItem[];
+  onRemove(item: RetiredStrategySwitcherItem): void;
+}) {
+  if (items.length === 0) return null;
+  return <>
+    <hr />
+    <p className="strategy-switcher-heading">{t("strategyCollection.retiredBadge")}</p>
+    {items.map((item) => <div key={item.id} className="strategy-switcher-retired" data-retired="true">
+      <span><strong>{item.name}</strong><small>{t("strategyCollection.retiredBadge")}</small></span>
+      {item.onRemove && <button type="button" role="menuitem" aria-label={t("strategyCollection.removeRetired", { name: item.name })}
+        onClick={() => onRemove(item)}>
+        <span>{t("strategyCollection.remove")}</span>
+      </button>}
+    </div>)}
+    <p className="strategy-switcher-note">{t("strategyCollection.pyneRetired")}</p>
+  </>;
+}
+
 /** Names the strategy on this chart and is the only place to pick, add or manage strategies. */
-export function StrategySwitcher({ items, activeId, actions, onSelect, renaming = false, onRename }: {
+export function StrategySwitcher({ items, retired = [], activeId, actions, onSelect, renaming = false, onRename }: {
   items: readonly StrategySwitcherItem[];
+  retired?: readonly RetiredStrategySwitcherItem[];
   activeId: string;
   actions: readonly StrategySwitcherAction[];
   onSelect(id: string): void;
@@ -78,6 +107,7 @@ export function StrategySwitcher({ items, activeId, actions, onSelect, renaming 
         <span><strong>{item.name}</strong>{item.meta && <small>{item.meta}</small>}</span>
         {item.id === activeId && <Icon name="check" size={13} />}
       </button>)}
+      <RetiredStrategySwitcherSection items={retired} onRemove={(item) => choose(() => item.onRemove?.())} />
       {actions.length > 0 && <hr />}
       {actions.map((action) => <button key={action.id} type="button" role="menuitem" disabled={action.disabled} title={action.title}
         onClick={() => choose(action.onSelect)}>

@@ -30,7 +30,7 @@ import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, FileDrop, IconB
 import { researchStateTone } from "../research/researchStateTone.js";
 import { chartContextStatusLabel, researchStateLabel } from "../research/researchLabels.js";
 import { reportAnalytics } from "./nativeReportAnalytics.js";
-import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
+import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, nativeStrategySwitcherRetired, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
@@ -103,7 +103,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
 
   return <>
     {!props.strategies && <div className="native-strategy-collection">
-      <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} activeId={collection.activeId} onSelect={strategies.select}
+      <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} retired={nativeStrategySwitcherRetired(strategies)} activeId={collection.activeId} onSelect={strategies.select}
         actions={nativeStrategySwitcherActions(strategies)} renaming={strategies.renaming} onRename={strategies.rename} />
     </div>}
     {strategies.storageError && <InlineAlert tone="danger">{strategies.storageError}</InlineAlert>}

@@ -4133,4 +4133,10 @@ export const hi = {
   "browser.download.end": "अंत (UTC, शामिल नहीं)",
   "browser.download.submit": "डाउनलोड करें और आयात करें",
   "browser.download.symbolLookupUnavailable": "सिंबल खोज उपलब्ध नहीं है। बाज़ार का पूरा सिंबल दर्ज करें।",
+  "strategyCollection.retiredBadge": "बंद",
+  "strategyCollection.pyneRetired": "Pyne अब बंद है। यह सहेजी गई रणनीति बिना बदलाव के रखी जाती है, लेकिन कभी नहीं चलती और इसे Pine नहीं माना जाता।",
+  "strategyCollection.removeRetired": "{name} को इस चार्ट से हटाएँ",
+  "chartTester.deleteDraft": "हटाएँ",
+  "chartTester.deleteRetiredDraft": "बंद ड्राफ़्ट {name} हटाएँ",
+  "chartTester.deleteRetiredDraftFailed": "बंद ड्राफ़्ट हटाया नहीं जा सका। फिर से कोशिश करें।",
 } as const satisfies MessageCatalog;

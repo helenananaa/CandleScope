@@ -4780,5 +4780,11 @@ export const ptBR = {
   "browser.download.end": "Fim (UTC, exclusivo)",
   "browser.download.submit": "Baixar e importar",
   "browser.download.symbolLookupUnavailable": "A busca de símbolos está indisponível. Digite o símbolo completo do mercado.",
+  "strategyCollection.retiredBadge": "Descontinuado",
+  "strategyCollection.pyneRetired": "O Pyne foi descontinuado. Esta estratégia salva é mantida sem alterações, mas nunca é executada e não é tratada como Pine.",
+  "strategyCollection.removeRetired": "Remover {name} deste gráfico",
+  "chartTester.deleteDraft": "Excluir",
+  "chartTester.deleteRetiredDraft": "Excluir o rascunho descontinuado {name}",
+  "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
 } as const satisfies MessageCatalog;

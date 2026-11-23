@@ -36,6 +36,7 @@ import {
 import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
+import type { RetiredStrategyRecord } from "./retiredPyneStrategy.js";
 import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -72,6 +73,9 @@ export interface ChartStrategyTesterCellBridgeProps {
   session: ChartSession;
   appearance?: Partial<ChartSettings> | undefined;
   attachment: ChartStrategyAttachmentRecord | null;
+  /** A retired Pyne attachment from a build before PR #105: listed, never run. */
+  retiredAttachment?: RetiredStrategyRecord | undefined;
+  onRemoveRetiredAttachment?(): void;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
   onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
@@ -97,6 +101,8 @@ export default function ChartStrategyTesterCellBridge({
   cellId,
   session,
   attachment: savedAttachment,
+  retiredAttachment,
+  onRemoveRetiredAttachment,
   appearance,
   nativeStrategies,
   strategyTesterMode,
@@ -766,6 +772,8 @@ export default function ChartStrategyTesterCellBridge({
       cellScope={`${workspaceId}\u0000${cellId}`}
       session={session}
       attachment={attachment}
+      retiredAttachment={retiredAttachment}
+      {...(onRemoveRetiredAttachment ? { onRemoveRetiredAttachment } : {})}
       nativeStrategies={nativeStrategies}
       signalChart={attachment?.signalChart ?? chartStrategySignalInput(appearance ?? {})}
       strategyTesterMode={strategyTesterMode}

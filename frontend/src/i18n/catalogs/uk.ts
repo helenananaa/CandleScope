@@ -4143,4 +4143,10 @@ export const uk = {
   "browser.download.end": "Кінець (UTC, не включно)",
   "browser.download.submit": "Завантажити й імпортувати",
   "browser.download.symbolLookupUnavailable": "Пошук інструментів недоступний. Введіть повний код інструмента ринку.",
+  "strategyCollection.retiredBadge": "Знято з підтримки",
+  "strategyCollection.pyneRetired": "Pyne більше не підтримується. Ця збережена стратегія зберігається без змін, але ніколи не запускається й не вважається Pine.",
+  "strategyCollection.removeRetired": "Прибрати {name} з цього графіка",
+  "chartTester.deleteDraft": "Видалити",
+  "chartTester.deleteRetiredDraft": "Видалити зняту з підтримки чернетку {name}",
+  "chartTester.deleteRetiredDraftFailed": "Не вдалося видалити зняту з підтримки чернетку. Спробуйте ще раз.",
 } as const satisfies MessageCatalog;

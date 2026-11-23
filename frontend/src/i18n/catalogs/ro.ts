@@ -4138,4 +4138,10 @@ export const ro = {
   "browser.download.end": "Sfârșit (UTC, exclusiv)",
   "browser.download.submit": "Descărcați și importați",
   "browser.download.symbolLookupUnavailable": "Căutarea simbolurilor nu este disponibilă. Introduceți simbolul complet al pieței.",
+  "strategyCollection.retiredBadge": "Retras",
+  "strategyCollection.pyneRetired": "Pyne a fost retras. Această strategie salvată este păstrată neschimbată, dar nu rulează niciodată și nu este tratată ca Pine.",
+  "strategyCollection.removeRetired": "Eliminați {name} din acest grafic",
+  "chartTester.deleteDraft": "Ștergeți",
+  "chartTester.deleteRetiredDraft": "Ștergeți schița retrasă {name}",
+  "chartTester.deleteRetiredDraftFailed": "Schița retrasă nu a putut fi ștearsă. Încercați din nou.",
 } as const satisfies MessageCatalog;

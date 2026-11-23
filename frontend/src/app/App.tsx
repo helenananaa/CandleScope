@@ -705,6 +705,7 @@ function LiveWorkspaceApp() {
                       strategyPanelOpen={strategyPanelOpen}
                       onStrategyPanelOpenChange={setStrategyPanelOpen}
                       onStrategyAttachmentChange={workspace.actions.updateCellStrategyAttachment}
+                      onRetiredStrategyAttachmentRemove={workspace.actions.removeCellRetiredStrategyAttachment}
                       onNativeStrategiesChange={workspace.actions.updateCellNativeStrategies}
                       onStrategyTesterModeChange={workspace.actions.updateCellStrategyTesterMode}
                       onOpenReplayLauncher={openReplayLauncher}

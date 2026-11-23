@@ -76,6 +76,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       updateCellNativeStrategies: () => undefined,
       updateCellStrategyTesterMode: () => undefined,
       updateCellStrategyAttachment: () => undefined,
+      removeCellRetiredStrategyAttachment: () => undefined,
       configureCells: () => undefined,
       createWindow: () => undefined,
       closeWindow: () => undefined,

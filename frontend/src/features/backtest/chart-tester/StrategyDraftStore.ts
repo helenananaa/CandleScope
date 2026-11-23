@@ -1,3 +1,8 @@
+import {
+  RETIRED_PYNE_STRATEGY_LANGUAGE, isRetiredPyneStrategyLanguage, sortRetiredDrafts,
+  type RetiredStrategyDraft,
+} from "./retiredPyneStrategy.js";
+
 export const STRATEGY_DRAFT_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORE_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORAGE_KEY = "candlescope-strategy-drafts-v1";
@@ -34,6 +39,10 @@ export interface StrategyDraftStoreAdapter {
   /** May return the record as stored (the backend can assign a later revision); the store adopts it. */
   save(record: StrategyDraftRecord): Promise<unknown>;
   remove(id: string): Promise<void>;
+  /** Retired Pyne drafts from builds before PR #105. Listed only: `load` and `list` never return them. */
+  listRetired?(): Promise<RetiredStrategyDraft[]>;
+  /** Deletes one retired draft at the user's request; every other stored draft stays as it was. */
+  removeRetired?(id: string): Promise<void>;
 }
 
 export interface StrategyDraftStorageLike {
@@ -108,31 +117,63 @@ interface StoredDraftEnvelope {
   drafts: Record<string, StrategyDraftRecord>;
 }
 
-function readEnvelope(storage: StrategyDraftStorageLike): StoredDraftEnvelope {
+/** The envelope as stored. Entries this build does not read, such as retired Pyne drafts, stay in it. */
+interface RawDraftEnvelope {
+  schemaVersion: typeof STRATEGY_DRAFT_STORE_SCHEMA_VERSION;
+  drafts: Record<string, unknown>;
+}
+
+function readRawEnvelope(storage: StrategyDraftStorageLike): RawDraftEnvelope | null {
   try {
     const raw = storage.getItem(STRATEGY_DRAFT_STORAGE_KEY);
-    if (!raw) return { schemaVersion: STRATEGY_DRAFT_STORE_SCHEMA_VERSION, drafts: {} };
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const source = parsed as Record<string, unknown>;
     if (source.schemaVersion !== STRATEGY_DRAFT_STORE_SCHEMA_VERSION
       || !source.drafts || typeof source.drafts !== "object" || Array.isArray(source.drafts)) {
-      throw new Error();
+      return null;
     }
-    const drafts = Object.fromEntries(Object.entries(source.drafts as Record<string, unknown>)
-      .map(([id, value]) => [id, normalizeRecord(value)] as const)
-      .filter((entry): entry is [string, StrategyDraftRecord] => (
-        entry[1] !== null && entry[0] === entry[1].id
-      )));
-    return { schemaVersion: STRATEGY_DRAFT_STORE_SCHEMA_VERSION, drafts };
+    return parsed as RawDraftEnvelope;
   } catch {
-    return { schemaVersion: STRATEGY_DRAFT_STORE_SCHEMA_VERSION, drafts: {} };
+    return null;
   }
+}
+
+function readEnvelope(storage: StrategyDraftStorageLike): StoredDraftEnvelope {
+  const raw = readRawEnvelope(storage);
+  const drafts = Object.fromEntries(Object.entries(raw?.drafts ?? {})
+    .map(([id, value]) => [id, normalizeRecord(value)] as const)
+    .filter((entry): entry is [string, StrategyDraftRecord] => (
+      entry[1] !== null && entry[0] === entry[1].id
+    )));
+  return { schemaVersion: STRATEGY_DRAFT_STORE_SCHEMA_VERSION, drafts };
+}
+
+function retiredDraft(id: string, value: unknown): RetiredStrategyDraft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  if (!isRetiredPyneStrategyLanguage(source.language) || source.id !== id || !DRAFT_ID_PATTERN.test(id)) return null;
+  const displayName = typeof source.displayName === "string" ? source.displayName.trim().slice(0, 120) : "";
+  const updatedAt = Number(source.updatedAt);
+  return {
+    id,
+    displayName: displayName || id,
+    language: RETIRED_PYNE_STRATEGY_LANGUAGE,
+    updatedAt: Number.isSafeInteger(updatedAt) && updatedAt >= 0 ? updatedAt : null,
+  };
 }
 
 export function createLocalStorageStrategyDraftAdapter(
   storage: StrategyDraftStorageLike,
 ): StrategyDraftStoreAdapter {
+  // Writes change only the named draft; everything else in the envelope is written back as stored.
+  const write = async (change: (drafts: Record<string, unknown>) => void) => {
+    const envelope = readRawEnvelope(storage) ?? { schemaVersion: STRATEGY_DRAFT_STORE_SCHEMA_VERSION, drafts: {} };
+    const drafts = { ...envelope.drafts };
+    change(drafts);
+    await storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify({ ...envelope, drafts }));
+  };
   return {
     async load(id) {
       const record = readEnvelope(storage).drafts[id];
@@ -144,14 +185,23 @@ export function createLocalStorageStrategyDraftAdapter(
     async save(record) {
       const normalized = normalizeRecord(record);
       if (!normalized) throw new TypeError("invalid strategy draft record");
-      const envelope = readEnvelope(storage);
-      envelope.drafts[normalized.id] = normalized;
-      await storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
+      if (retiredDraft(normalized.id, readRawEnvelope(storage)?.drafts[normalized.id])) {
+        throw new TypeError("retired strategy draft cannot be replaced");
+      }
+      await write((drafts) => { drafts[normalized.id] = normalized; });
     },
     async remove(id) {
-      const envelope = readEnvelope(storage);
-      delete envelope.drafts[id];
-      await storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
+      if (!readEnvelope(storage).drafts[id]) return;
+      await write((drafts) => { delete drafts[id]; });
+    },
+    async listRetired() {
+      return sortRetiredDrafts(Object.entries(readRawEnvelope(storage)?.drafts ?? {})
+        .map(([id, value]) => retiredDraft(id, value))
+        .filter((draft): draft is RetiredStrategyDraft => draft !== null));
+    },
+    async removeRetired(id) {
+      if (!retiredDraft(id, readRawEnvelope(storage)?.drafts[id])) return;
+      await write((drafts) => { delete drafts[id]; });
     },
   };
 }
@@ -339,6 +389,18 @@ export class StrategyDraftStore {
     await this.adapter.remove(id);
     this.views.delete(id);
     this.emit(id);
+  }
+
+  /** Retired Pyne drafts, newest first: shown as retired, never loaded, imported or run. */
+  async retired(): Promise<RetiredStrategyDraft[]> {
+    if (!this.adapter.listRetired) return [];
+    return sortRetiredDrafts(await this.adapter.listRetired().catch(() => [] as RetiredStrategyDraft[]));
+  }
+
+  /** Deletes a retired draft when the user asks to. */
+  async removeRetired(id: string): Promise<void> {
+    if (!this.adapter.removeRetired) throw new Error("retired strategy drafts are not stored here");
+    await this.adapter.removeRetired(id);
   }
 
   private emit(id: string): void {

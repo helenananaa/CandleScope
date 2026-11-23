@@ -7,6 +7,8 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { bool, choice, empty, nullable, number, object, optional, record, text } from "../../app-control/commandSchema.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
+import { retiredStrategyName, type RetiredStrategyDraft, type RetiredStrategyRecord } from "./retiredPyneStrategy.js";
+import { RetiredStrategyDraftList } from "./RetiredStrategyDraftList.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
   Suspense,
@@ -92,12 +94,13 @@ import { Icon } from "../../../components/icons/Icon.js";
 import {
   nativeStrategySwitcherActions,
   nativeStrategySwitcherItems,
+  nativeStrategySwitcherRetired,
   useNativeStrategyCollection,
 } from "../native/useNativeStrategyCollection.js";
 
 import StrategyDock from "./StrategyDock.js";
 import { StrategyDockPane, StrategyDockSlot } from "./StrategyDockSlots.js";
-import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.js";
+import { StrategySwitcher, type RetiredStrategySwitcherItem, type StrategySwitcherItem } from "./StrategySwitcher.js";
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
@@ -195,6 +198,9 @@ export interface ChartStrategyTesterPanelProps {
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
+  /** A Pyne strategy this chart had attached before PR #105: listed as retired, never run. */
+  retiredAttachment?: RetiredStrategyRecord | undefined;
+  onRemoveRetiredAttachment?(): void;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
   onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
@@ -248,6 +254,7 @@ export interface ChartStrategyTesterPanelProps {
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
+const RETIRED_ATTACHMENT_ID = "__retired_attachment__";
 
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
   const [localMode, setMode] = useState(() => resolveStrategyTesterMode(props.strategyTesterMode, !!props.attachment));
@@ -294,7 +301,15 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     .filter((action) => mode === "NATIVE" || action.id === "add" || action.id === "compare")
     .map((action) => ({ ...action, ...(strategyList && action.id === "add" ? { label: t("strategyList.addPine") } : {}),
       onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
-  const identity = <StrategySwitcher items={items} actions={actions}
+  const retired: RetiredStrategySwitcherItem[] = [
+    ...nativeStrategySwitcherRetired(strategies),
+    ...(props.retiredAttachment ? [{
+      id: RETIRED_ATTACHMENT_ID,
+      name: retiredStrategyName(props.retiredAttachment) || t("strategyCollection.default"),
+      ...(props.onRemoveRetiredAttachment ? { onRemove: props.onRemoveRetiredAttachment } : {}),
+    }] : []),
+  ];
+  const identity = <StrategySwitcher items={items} retired={retired} actions={actions}
     activeId={mode === "NATIVE" ? strategies.collection.activeId : HOST_STRATEGY_ID}
     onSelect={(id) => {
       if (id === HOST_STRATEGY_ID) { switchMode("CANDLESCOPE"); return; }
@@ -409,6 +424,9 @@ export function CandleScopeStrategyTesterPanel({
   const [focusOnMount, setFocusOnMount] = useState(false);
   const [runReady, setRunReady] = useState(false);
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
+  // Pyne drafts from builds before PR #105: listed as retired, never opened or run; the user may delete them.
+  const [retiredDrafts, setRetiredDrafts] = useState<RetiredStrategyDraft[]>([]);
+  const [retiredDeleteFailed, setRetiredDeleteFailed] = useState(false);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const pendingSaveRef = useRef<{
     draft: StrategyDraftRecord | null;
@@ -520,7 +538,15 @@ export function CandleScopeStrategyTesterPanel({
     // In the strategy list this is the Python strategy: Pine strategies are their own list entries (P4c).
     void draftStore.recent(8).then((records) => setRecentDrafts(liveFollow ? records.filter((record) => record.language === "python") : records))
       .catch(() => setRecentDrafts([]));
+    void draftStore.retired().then(setRetiredDrafts, () => setRetiredDrafts([]));
   }, [draftStore, liveFollow]);
+
+  const deleteRetiredDraft = useCallback((id: string) => {
+    setRetiredDeleteFailed(false);
+    void draftStore.removeRetired(id)
+      .catch(() => setRetiredDeleteFailed(true))
+      .finally(refreshRecent);
+  }, [draftStore, refreshRecent]);
 
   useEffect(() => {
     refreshRecent();
@@ -722,7 +748,7 @@ export function CandleScopeStrategyTesterPanel({
   const pendingDataMatchesSource = runState.status === "NEEDS_DATA"
     && pendingDataDraftRevision === strategyDraftContentRevision(source);
   useControlCommands(() => ({ id: `host-chart-strategy:${cellScope}`, title: "Chart host strategy draft and run", context: () => ({ session, attachment, draftId: activeDraft?.id, source, runState, active }),
-    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })) }), commands: [
+    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })), retiredDrafts }), commands: [
       command("view", "Select host editor/tab and focus preference.", object({ tab: optional(choice(["script", "overview", "trades", "settings"])), focused: optional(bool), height: optional(number(0, 4096)) }), (input) => { if (input.tab) setActiveTab(input.tab); if (input.focused !== undefined) setFocusMode(input.focused); if (input.height !== undefined) setHeight(clampPanelHeight(input.height)); }),
       command("createDraft", "Create a persisted host strategy draft using the UI draft store.", object({ name: text(128), source: text(48000, 0) }), ({ name, source }) => createDraft(name, source, false), { available: () => !runBusy && active }),
       command("template", "Create a draft from a known host template.", object({ templateId: text(128) }), ({ templateId }) => { const item = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId); if (!item) throw new Error("TEMPLATE_UNAVAILABLE"); return createDraft(item.displayName, item.source, false); }, { available: () => !runBusy && active }),
@@ -964,6 +990,8 @@ export function CandleScopeStrategyTesterPanel({
                     ))}
                   </div>
                 )}
+                <RetiredStrategyDraftList drafts={retiredDrafts} locale={locale} deleteFailed={retiredDeleteFailed}
+                  onDelete={deleteRetiredDraft} />
               </section>
             </div>
             <footer className="chart-strategy-start-footer">

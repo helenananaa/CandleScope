@@ -4139,4 +4139,10 @@ export const fr = {
   "browser.download.end": "Fin (UTC, exclue)",
   "browser.download.submit": "Télécharger et importer",
   "browser.download.symbolLookupUnavailable": "La recherche de symboles est indisponible. Saisissez le symbole complet du marché.",
+  "strategyCollection.retiredBadge": "Retiré",
+  "strategyCollection.pyneRetired": "Pyne n’est plus pris en charge. Cette stratégie enregistrée est conservée telle quelle, mais elle ne s’exécute jamais et n’est pas traitée comme du Pine.",
+  "strategyCollection.removeRetired": "Retirer {name} de ce graphique",
+  "chartTester.deleteDraft": "Supprimer",
+  "chartTester.deleteRetiredDraft": "Supprimer le brouillon retiré {name}",
+  "chartTester.deleteRetiredDraftFailed": "Impossible de supprimer le brouillon retiré. Réessayez.",
 } as const satisfies MessageCatalog;

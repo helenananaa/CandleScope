@@ -4133,5 +4133,11 @@ export const de = {
   "browser.download.end": "Ende (UTC, exklusiv)",
   "browser.download.submit": "Herunterladen und importieren",
   "browser.download.symbolLookupUnavailable": "Die Symbolsuche ist nicht verfügbar. Geben Sie das vollständige Marktsymbol ein.",
+  "strategyCollection.retiredBadge": "Eingestellt",
+  "strategyCollection.pyneRetired": "Pyne wird nicht mehr unterstützt. Diese gespeicherte Strategie bleibt unverändert erhalten, wird aber nie ausgeführt und nicht als Pine behandelt.",
+  "strategyCollection.removeRetired": "{name} aus diesem Chart entfernen",
+  "chartTester.deleteDraft": "Löschen",
+  "chartTester.deleteRetiredDraft": "Eingestellten Entwurf {name} löschen",
+  "chartTester.deleteRetiredDraftFailed": "Der eingestellte Entwurf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
 } as const satisfies MessageCatalog;
 
