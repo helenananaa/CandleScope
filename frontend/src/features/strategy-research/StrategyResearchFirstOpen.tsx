@@ -1,3 +1,5 @@
+import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
+import { useLocale } from "../../i18n/useLocale.js";
 import { useEffect, useState } from "react";
 import { Button, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
@@ -5,6 +7,7 @@ import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguage
 import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export function StrategyResearchFirstOpen({
   runtimeMode,
@@ -12,13 +15,21 @@ export function StrategyResearchFirstOpen({
   draftId,
   saving,
   onSelectTemplate,
+  onSelectPine,
 }: {
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   onOpenLibrary(): void;
   draftId: string | null;
   saving: boolean;
   onSelectTemplate(templateId: string): void;
+  /**
+   * ADR-BACKTEST-015 P5c4: strategies are named by language. Pine is its own entry (the Pine panel and its
+   * starter), so the templates here are Python's and this card opens Pine.
+   */
+  onSelectPine?(): void;
 }) {
+  useLocale();
+  const templates = onSelectPine ? RESEARCH_STRATEGY_TEMPLATES.filter((template) => template.language === "python") : RESEARCH_STRATEGY_TEMPLATES;
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +45,10 @@ export function StrategyResearchFirstOpen({
     <div className="strategy-research-first-open" data-testid="strategy-research-first-open" data-strategy-draft={draftId ?? ""}>
       <header className="strategy-research-first-open-head">
         <h2>{t("chartTester.startTitle")}</h2>
-        <p>{t("strategy.firstOpenLead")}</p>
+        {browserHost() ? <p>
+          {t("browser.strategy.intro")}{" "}
+          <BrowserDesktopLink feature="strategy" />
+        </p> : <p>{t("strategy.firstOpenLead")}</p>}
       </header>
       {selected && (
         <div className="strategy-research-resume" role="status">
@@ -43,7 +57,7 @@ export function StrategyResearchFirstOpen({
         </div>
       )}
       <div className="strategy-research-templates" data-testid="strategy-research-templates">
-        {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
+        {templates.map((template) => (
           <button
             key={template.id}
             type="button"
@@ -58,6 +72,12 @@ export function StrategyResearchFirstOpen({
             <small>{strategyLanguageLabel(template.language)}</small>
           </button>
         ))}
+        {onSelectPine && <button type="button" className="strategy-template-card" data-testid="strategy-research-pine-strategy"
+          disabled={saving} onClick={onSelectPine}>
+          <strong>{t("researchStrategy.pine")}</strong>
+          <span>{t("researchStrategy.pineDetail")}</span>
+          <small>{strategyLanguageLabel("pine")}</small>
+        </button>}
       </div>
       {saving && <p className="strategy-research-note" role="status">{t("chartTester.autosave.saving")}</p>}
       <div className="strategy-research-first-open-actions" data-testid="strategy-research-current-chart-unavailable">

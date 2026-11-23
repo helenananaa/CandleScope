@@ -107,8 +107,8 @@ function physicalOptions<TOptions extends KlineRequestOptions>(
 
 function readBoundary(options: KlineRequestOptions): readonly unknown[] {
   const context = options.clientContext;
-  return context && (context.epoch || context.scope || context.realtimeVersion)
-    ? ["read-boundary", context.epoch ?? 0, context.scope ?? null, context.realtimeVersion ?? 0]
+  return context && (context.epoch || context.scope || context.realtimeVersion || context.transportGeneration)
+    ? ["read-boundary", context.epoch ?? 0, context.scope ?? null, context.realtimeVersion ?? 0, context.transportGeneration ?? 0]
     : [];
 }
 
@@ -154,6 +154,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandGeneration ?? null,
       ...readBoundary(options),
       ...(options.materializedOnly ? ["materialized-only"] : []),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "history",
@@ -177,6 +178,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
             options: {
               ...(options.countBack === undefined ? {} : { countBack: options.countBack }),
               ...(options.materializedOnly === undefined ? {} : { materializedOnly: options.materializedOnly }),
+              ...(options.compositionContract === undefined ? {} : { compositionContract: options.compositionContract }),
               ...(options.maxWaitMs === undefined ? {} : { maxWaitMs: options.maxWaitMs }),
               ...(options.intent === undefined ? {} : { intent: options.intent }),
               ...(options.demandScope === undefined ? {} : { demandScope: options.demandScope }),
@@ -210,6 +212,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "before",
@@ -249,6 +252,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "range",

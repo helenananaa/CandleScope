@@ -2,6 +2,7 @@
 export class BackfillRecoveryQueue<Job extends { epoch: number; eventKeys: Set<string> }> {
   private readonly states = new Map<string, { epoch: number; queue: Job[]; keys: Set<string>; done: Promise<void> }>();
   private readonly seen = new Map<string, number>();
+  private readonly nextRead = new Map<string, { epoch: number; at: number }>();
 
   constructor(private readonly handlers: {
     merge(queued: Job, incoming: Job): boolean;
@@ -12,10 +13,11 @@ export class BackfillRecoveryQueue<Job extends { epoch: number; eventKeys: Set<s
     cooldown(job: Job): number;
     onError(error: unknown): void;
     now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
   }) {}
 
   get activeKeys(): ReadonlySet<string> { return new Set(this.states.keys()); }
-  cancel(key: string): void { this.states.delete(key); }
+  cancel(key: string): void { this.states.delete(key); this.nextRead.delete(key); }
   async whenIdle(key: string): Promise<void> { await this.states.get(key)?.done; }
 
   enqueue(key: string, job: Job): void {
@@ -40,9 +42,21 @@ export class BackfillRecoveryQueue<Job extends { epoch: number; eventKeys: Set<s
       do {
         let verify: Job | undefined;
         while (owns() && state.queue.length) {
+          const scheduled = this.nextRead.get(key);
+          const delay = scheduled?.epoch === state.epoch
+            ? scheduled.at - (this.handlers.now ?? Date.now)() : 0;
+          if (delay > 0) {
+            await (this.handlers.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
+            if (!owns()) break;
+          }
+          // Leave queued jobs mergeable throughout the cooldown. Chunk events
+          // carry new revision ids, so event-id deduplication alone cannot
+          // prevent repeated reads of the same unfinished target range.
           const job = state.queue.shift()!;
+          let unresolved = true;
           try {
             const resolved = await this.handlers.read(job);
+            unresolved = !resolved;
             if (owns() && this.handlers.isCurrent(job)) {
               if (resolved) verify = undefined;
               else if (this.handlers.needsVerification(job)) verify = job;
@@ -51,6 +65,11 @@ export class BackfillRecoveryQueue<Job extends { epoch: number; eventKeys: Set<s
           finally {
             if (owns()) {
               const expires = (this.handlers.now ?? Date.now)() + Math.max(1_000, this.handlers.cooldown(job));
+              this.nextRead.delete(key);
+              this.nextRead.set(key, { epoch: state.epoch,
+                at: (this.handlers.now ?? Date.now)() + (unresolved
+                  ? Math.min(3_000, Math.max(0, this.handlers.cooldown(job))) : 0) });
+              while (this.nextRead.size > 1_024) this.nextRead.delete(this.nextRead.keys().next().value!);
               for (const event of job.eventKeys) {
                 state.keys.delete(event);
                 this.seen.set(`${key}|${job.epoch}|${event}`, expires);

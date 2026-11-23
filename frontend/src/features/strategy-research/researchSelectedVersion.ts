@@ -58,10 +58,16 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
   };
   for (const [field, value] of Object.entries(exact)) requireValue(c[field] === value, field);
   for (const field of ["funding_rate", "latency_ms", "latency_events", "cooldown_events"]) requireValue(c[field] == null || decimal(c[field]) === "0", field);
-  requireValue(decimal(c.leverage) === "1", "leverage");
+  // ADR-BACKTEST-015 P6e: a run on the practice account model keeps its rules and leverage.
+  const practice = c.account_rules === "PRACTICE_V1";
+  requireValue(practice || c.account_rules == null, "account_rules");
+  const leverage = decimal(c.leverage);
+  requireValue(practice ? leverage !== null && Number(leverage) >= 1 && Number(leverage) <= 125
+    && (c.market_type !== "spot" || leverage === "1") : leverage === "1", "leverage");
   const outputMode = c.output_mode;
   requireValue(isPythonBarOutputMode(outputMode), "output_mode");
   const legacy = c.execution_model_revision == null;
+  requireValue(!practice || legacy, "execution_model_revision");
   requireValue(legacy || c.execution_model_revision === "EXECUTION_REALISM_V2", "execution_model_revision");
   requireValue(legacy ? c.participation_rate == null : decimal(c.participation_rate) === "0.1", "participation_rate");
   requireValue(c.bar_path_scenario == null || (!legacy && c.bar_path_scenario === "OHLC_WORST_CASE_STOP_FIRST_V1"), "bar_path_scenario");
@@ -87,25 +93,43 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
     customRange: { startMs: Number(startMs), endMs: Number(endMs) }, fidelityPreference: "FAST",
     quickPresetId: String(c.quick_preset_id), autoRun: false, executionOverrides,
     initialization: { runId: version.run_id, versionHash: version.version_hash, outputMode, warmupBars: Number(warmupBars),
-      preferredRunMode: "HISTORY_LIVE", ...(legacy ? { executionModel: "LEGACY" } : {}) },
+      preferredRunMode: "HISTORY_LIVE", ...(practice ? { executionModel: "PRACTICE" } : legacy ? { executionModel: "LEGACY" } : {}) },
   } };
 }
 
-export async function saveResearchReturn(reference: ResearchReturnReference, storage: StrategyStorage | null = getStrategyStorage()): Promise<string> {
-  if (!storage) throw new Error("RESEARCH_RETURN_STORAGE_UNAVAILABLE");
+type ReturnReferences = {
+  saveStrategyReference(kind: "research-return", key: string, value: unknown): Promise<void>;
+  loadStrategyReference(kind: "research-return", key: string): Promise<unknown>;
+};
+
+/**
+ * Keep the selected version for the chart to pick up. It is stored in the backend
+ * (ADR-BACKTEST-015 P3c), so a changed desktop UI port or another origin still finds it.
+ */
+export async function saveResearchReturn(reference: ResearchReturnReference, references: Pick<ReturnReferences, "saveStrategyReference">): Promise<string> {
   const id = crypto.randomUUID();
-  await storage.setItem(PREFIX + id, JSON.stringify(reference));
+  await references.saveStrategyReference("research-return", id, reference);
   return `/?research-version=${encodeURIComponent(id)}`;
+}
+/** The reference behind a `?research-version=` link: from the backend, else (a link from before P3c) app storage. */
+export async function loadResearchReturn(id: string, references: Pick<ReturnReferences, "loadStrategyReference">): Promise<ResearchReturnReference | null> {
+  if (!/^[\w-]{8,80}$/.test(id)) return null;
+  const stored = await references.loadStrategyReference("research-return", id).catch(() => null);
+  return parseResearchReturn(stored) ?? readResearchReturn(id);
 }
 export function readResearchReturn(id: string, storage: StrategyStorage | null = getStrategyStorage()): ResearchReturnReference | null {
   try {
     if (!storage || !/^[\w-]{8,80}$/.test(id)) return null;
     const raw = storage.getItem(PREFIX + id);
     if (!raw || raw.length > 2048) return null;
-    const value = JSON.parse(raw) as ResearchReturnReference;
-    if (value?.schema !== 1 || !/^bt_[\w-]+$/.test(value.runId) || !hash.test(value.versionHash)
-      || (value.origin !== null && (!value.origin || typeof value.origin.workspaceId !== "string"
-        || typeof value.origin.cellId !== "string"))) return null;
-    return value;
+    return parseResearchReturn(JSON.parse(raw));
   } catch { return null; }
+}
+export function parseResearchReturn(raw: unknown): ResearchReturnReference | null {
+  const value = raw as ResearchReturnReference | null;
+  if (!value || typeof value !== "object" || value.schema !== 1 || typeof value.runId !== "string" || !/^bt_[\w-]+$/.test(value.runId)
+    || typeof value.versionHash !== "string" || !hash.test(value.versionHash)
+    || (value.origin !== null && (!value.origin || typeof value.origin.workspaceId !== "string"
+      || typeof value.origin.cellId !== "string"))) return null;
+  return value;
 }

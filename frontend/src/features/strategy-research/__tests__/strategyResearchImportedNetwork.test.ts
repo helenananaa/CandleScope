@@ -21,6 +21,7 @@ const IMPORTED_SURFACE_FILES = [
   "../StrategyResearchChart.tsx",
   "../StrategyResearchApp.tsx",
   "../../local-data/useLocalChartRuntime.ts",
+  "../../local-data/localChartMarketData.ts",
   "../../local-data/useLocalIndicatorRuntime.ts",
 ];
 

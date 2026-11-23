@@ -28,17 +28,16 @@ def build_cost_sensitivity_matrix(
     if getattr(kernel, "execution_model_revision", None) != EXECUTION_REALISM_V2:
         return {}
     frozen = list(getattr(kernel, "frozen_intents", []))
-    by_sequence = {
-        int(item["sequence"]): [dict(intent) for intent in item.get("intents") or []]
-        for item in frozen
-    }
+    by_sequence: dict[int, list[dict]] = {}
+    for item in frozen:
+        by_sequence.setdefault(int(item["sequence"]), []).extend(dict(intent) for intent in item.get("intents") or [])
 
     def strategy(_visible: tuple[MarketEvent, ...], event: MarketEvent) -> list[dict]:
         return [dict(intent) for intent in by_sequence.get(event.sequence, [])]
 
     base_rate = Decimal(str(getattr(kernel, "participation_rate")))
     fused = None
-    if (fast_bar and type(kernel) is SimulationKernel
+    if (fast_bar and type(kernel) is SimulationKernel and kernel.bar_clock == "BAR"
             and getenv("BACKTEST_FUSED_BAR_SENSITIVITY_ENABLED", "1").strip() == "1"):
         replays = [
             _clone_kernel(kernel, _bar_sensitivity=True,
@@ -230,9 +229,13 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
             **common,
         )
     kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
-    from .pine_chart_kernel import PineChartBarKernel
-    if isinstance(kernel, PineChartBarKernel):
-        kind = type(kernel)
+    from .ohlc_path import CHART_CLOCKS
+    if kernel.bar_clock == "PRACTICE":
+        common.update(bar_clock="PRACTICE", leverage=kernel.leverage)
+    if kernel.bar_clock in CHART_CLOCKS:
+        # Chart clocks replay on their own path; the OHLC path clock replays as BAR, as before.
+        kind = SimulationKernel
+        common["bar_clock"] = kernel.bar_clock
     return kind(
         price_tick=kernel.price_tick,
         qty_step=kernel.qty_step,

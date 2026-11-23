@@ -1,13 +1,16 @@
-import { Fragment, useCallback, useId, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { Icon } from "../../components/icons/Icon.js";
 import { Badge, Button, EmptyState, IconButton, InlineAlert, Select, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import ContinuousRunAccount from "../backtest/continuous/ContinuousRunAccount.js";
+import { useStrategyDataManager } from "../market-data/useStrategyDataManager.js";
 import AddAccountDialog from "./AddAccountDialog.js";
 import ManualFillForm from "./ManualFillForm.js";
 import PracticeOrderTicket, { type PlanDraft } from "./PracticeOrderTicket.js";
 import TradeJournalDrawer, { type JournalTarget } from "./TradeJournalDrawer.js";
 import TradingStatsView from "./TradingStatsView.js";
+import { forwardAccounts, forwardRunFromOption, rememberForwardRun, rememberedForwardRun, type ForwardAccount } from "./forwardAccounts.js";
 import { planLevelParts, planLevels } from "./journalRender.js";
 import { tradingApi } from "./tradingApi.js";
 import {
@@ -43,6 +46,26 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
   const [adding, setAdding] = useState(false);
   const [journal, setJournal] = useState<JournalTarget | null>(null);
   const tabsId = useId();
+  // Forward runs are listed beside practice accounts, each with its own read-only ledger (ADR-BACKTEST-015 P6e).
+  const continuous = useStrategyDataManager()?.continuous ?? null;
+  const [forwardRuns, setForwardRuns] = useState<ForwardAccount[]>([]);
+  const [forwardId, setForwardId] = useState<string | null>(rememberedForwardRun);
+  useEffect(() => {
+    if (!continuous) return;
+    const abort = new AbortController();
+    void continuous.catalog(abort.signal).then((catalog) => {
+      if (!abort.signal.aborted) setForwardRuns(forwardAccounts(catalog.runs));
+    }).catch(() => { /* Without the forward run list the page lists practice accounts only. */ });
+    return () => abort.abort();
+  }, [continuous]);
+  const forward = forwardRuns.find((run) => run.runId === forwardId) ?? null;
+  const chooseAccount = (option: string) => {
+    const runId = forwardRunFromOption(option);
+    setJournal(null);
+    setForwardId(runId);
+    rememberForwardRun(runId);
+    if (runId === null) runtime.actions.select(option);
+  };
 
   const refresh = runtime.actions.refresh;
   const openReplay = useCallback((trade: Trade) => {
@@ -65,7 +88,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
         type: "market",
         qty: trade.openQty,
         reduceOnly: true,
-        ...(trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
+        ...(selected.settings.positionMode === "HEDGE" && trade.marketType === "futures"
+          ? { positionSide: trade.direction === "long" ? "LONG" : "SHORT", positionEffect: "close", tradeId: trade.id } : {}),
+        ...(trade.exchange === context.exchange && trade.marketType === context.marketType && trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
       });
       await refresh();
     } catch (cause) {
@@ -100,19 +125,25 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
     entries.reduce((latest, entry) => Math.max(latest, entry.updatedAtMs), 0)}`;
 
   return (
-    <div className="trading-panel" data-account-kind={selected?.kind ?? "none"}>
+    <div className="trading-panel" data-account-kind={forward ? "forward" : selected?.kind ?? "none"}>
       <header className="trading-panel-header">
-        {runtime.view.accounts.length > 0 ? (
+        {runtime.view.accounts.length > 0 || forwardRuns.length > 0 ? (
           <Select
             size="sm"
             className="trading-account-select"
             aria-label={t("trading.account")}
-            value={selected?.id ?? ""}
-            onChange={(event) => { setJournal(null); runtime.actions.select(event.target.value); }}
+            value={forward?.option ?? selected?.id ?? ""}
+            onChange={(event) => chooseAccount(event.target.value)}
           >
+            {!forward && !selected && <option value="" disabled>{t("trading.title")}</option>}
             {runtime.view.accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
+            {forwardRuns.length > 0 && (
+              <optgroup label={t("trading.forward.group")}>
+                {forwardRuns.map((run) => <option key={run.option} value={run.option}>{run.label}</option>)}
+              </optgroup>
+            )}
           </Select>
         ) : (
           <strong className="trading-panel-title">{t("trading.title")}</strong>
@@ -123,7 +154,20 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
         )}
       </header>
 
-      {selected === null ? (
+      {forward && continuous ? (
+        <>
+          <div className="trading-mode">
+            <Badge tone="accent">{t("trading.mode.forward")}</Badge>
+            <Badge tone={forward.practice ? "accent" : "neutral"}>
+              {t(forward.practice ? "trading.forward.rules.practice" : "trading.forward.rules.test")}
+            </Badge>
+          </div>
+          <p className="trading-forward-note">{t("trading.forward.readonly")}</p>
+          <div className="trading-forward-ledger" data-forward-run={forward.runId}>
+            <ContinuousRunAccount key={forward.runId} manager={continuous} runId={forward.runId} />
+          </div>
+        </>
+      ) : selected === null ? (
         <EmptyState
           className="trading-empty"
           title={t("trading.title")}
@@ -138,8 +182,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             </Badge>
             {summary && selected.kind === "practice" && (
               <span className="trading-equity">
-                {t("trading.equity")} <strong>{formatAmount(summary.equity)}</strong>
-                <span data-tone={pnlTone(summary.unrealizedPnl)}> {formatSigned(summary.unrealizedPnl)}</span>
+                {t("trading.equity")} <strong>{summary.valuationStatus === "unknown" ? "—" : formatAmount(summary.equity)}</strong>
+                {summary.valuationStatus === "stale" && <small>{t("pane.q.estimated")}</small>}
+                <span data-tone={pnlTone(summary.unrealizedPnl)}> {summary.valuationStatus === "unknown" ? "—" : formatSigned(summary.unrealizedPnl)}</span>
               </span>
             )}
             {summary && selected.kind === "manual" && (
@@ -221,8 +266,8 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={order.id} className="trading-row" data-compact="true">
                     <div className="trading-row-main">
                       <strong>{order.symbol}</strong>
-                      <DirectionBadge direction={order.side === "buy" ? "long" : "short"}>
-                        {t(`trading.orderTag.${order.tag === "stop_loss" ? "stopLoss" : order.tag === "take_profit" ? "takeProfit" : order.type}` as const)}
+                      <DirectionBadge direction={(order.positionSide ? order.positionSide === "LONG" : order.side === "buy") ? "long" : "short"}>
+                        {order.positionSide && t(order.positionSide === "LONG" ? "trading.long" : "trading.short")} {t(`trading.orderTag.${order.tag === "stop_loss" ? "stopLoss" : order.tag === "take_profit" ? "takeProfit" : order.type}` as const)}
                       </DirectionBadge>
                       <span>{formatQty(order.qty)} @ {formatPrice(order.limitPrice ?? order.stopPrice)}</span>
                     </div>
@@ -324,7 +369,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
       {adding && (
         <AddAccountDialog onCreate={runtime.actions.createAccount} onClose={() => setAdding(false)} />
       )}
-      {journal && selected && (
+      {journal && selected && !forward && (
         <TradeJournalDrawer
           key={`${selected.id}:${JSON.stringify(journal)}:${journal.kind === "plan" ? `${context.exchange}:${context.marketType}:${context.symbol}` : ""}`}
           account={selected}

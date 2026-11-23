@@ -35,6 +35,7 @@ from app.api.v1.indicator_range_batch import (
     IndicatorRangeBatchJob,
     compute_indicator_range_batch_async,
 )
+from .chart_indicator_input import ChartIndicatorInput, resolve_chart_indicator_input
 from app.api.v1.chart_calculation import ChartCalculation
 from app.indicator.calculation_contract import CalculationRangeRequest, projection_position, reference_for
 from app.indicator.calculation_owner import CalculationOwnerError
@@ -132,6 +133,7 @@ class ComputeRequest(BaseModel):
     securityMode: str | None = Field(
         None, description="'safe', 'research', or 'unsafe' for scripts"
     )
+    chartInput: ChartIndicatorInput | None = None
     replayContext: IndicatorReplayContext | None = None
 
 
@@ -162,6 +164,7 @@ class IndicatorComputeBatchContext(BaseModel):
     marketType: str = Field(..., description="Market type context")
     symbol: str = Field(..., description="Trading symbol")
     interval: str = Field(..., description="K-line interval")
+    chartInput: ChartIndicatorInput | None = None
     replayContext: IndicatorReplayContext | None = None
 
 
@@ -1398,6 +1401,8 @@ async def compute_batch(
         request, context.replayContext, exchange=context.exchange,
         market_type=context.marketType, symbol=context.symbol,
     )
+    shared_ohlcv, chart_options = await resolve_chart_indicator_input(request, context.chartInput, context, req.ohlcv)
+    execution_options = {**execution_options, **chart_options}
     prepared: list[
         tuple[
             str,
@@ -1421,7 +1426,7 @@ async def compute_batch(
             symbol=context.symbol,
             interval=context.interval,
             market_type=context.marketType,
-            ohlcv=req.ohlcv,
+            ohlcv=shared_ohlcv,
             script=item.script,
             securityMode=item.securityMode,
         )
@@ -1438,7 +1443,7 @@ async def compute_batch(
     shared_bars: list[BarData] | None = None
     shared_bars_error: dict[str, Any] | None = None
     if any(item[3] == "builtin" and item[5] is None for item in prepared):
-        shared_bars, shared_bars_error = _parse_builtin_ohlcv(req.ohlcv)
+        shared_bars, shared_bars_error = _parse_builtin_ohlcv(shared_ohlcv)
 
     payloads = await asyncio.gather(*(
         _compute_batch_item(
@@ -1485,6 +1490,12 @@ async def compute(req: ComputeRequest, request: Request = None):
         request, req.replayContext, exchange=req.exchange,
         market_type=req.market_type, symbol=req.symbol,
     )
+    if req.chartInput is not None:
+        context = IndicatorComputeBatchContext(exchange=req.exchange, marketType=req.market_type,
+            symbol=req.symbol, interval=req.interval, chartInput=req.chartInput)
+        rows, chart_options = await resolve_chart_indicator_input(request, req.chartInput, context, req.ohlcv)
+        req = req.model_copy(update={"ohlcv": rows})
+        execution_options = {**execution_options, **chart_options}
     route, indicator_name, route_error = _resolve_compute_route(req)
     if route_error is not None:
         return route_error
@@ -1773,6 +1784,11 @@ async def _compute_script(
             "INDICATOR_LANGUAGE_REQUIRED",
             "Script language must not be empty.",
         )
+
+    if (execution_options or {}).get("chartInput") and language != "pine":
+        return build_error_payload("INDICATOR_CHART_INPUT_UNSUPPORTED",
+            "Pyne is retired and cannot be executed." if language == "pyne" else
+            f"The {language} runtime has no ordered chart clock contract; choose a supported chart indicator runtime.")
 
     security_mode = effective_script_security_mode(
         req.securityMode,

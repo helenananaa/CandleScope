@@ -21,7 +21,7 @@ def _write(path: Path, value: object) -> Path:
     return path
 
 
-def test_default_routes_offer_only_pine(
+def test_default_routes_offer_supported_script_languages(
     tmp_path: Path,
 ) -> None:
     routes = load_indicator_runtime_routes_from_environment(
@@ -29,10 +29,6 @@ def test_default_routes_offer_only_pine(
     )
 
     assert routes.source is None
-    assert routes.for_language("pine").mode == "sidecar"
-    assert routes.for_language("pine").runtime_id == "candlescope.pine-compat"
-    assert routes.for_language("pine").mode == "sidecar"
-    assert routes.for_language("pine").runtime_id == "candlescope.pine-compat"
     assert routes.to_wire() == {
         "schemaVersion": 1,
         "routes": [
@@ -40,6 +36,11 @@ def test_default_routes_offer_only_pine(
                 "language": "pine",
                 "mode": "sidecar",
                 "runtimeId": "candlescope.pine-compat",
+            },
+            {
+                "language": "python",
+                "mode": "sidecar",
+                "runtimeId": "candlescope.python-indicator",
             },
         ],
     }

@@ -17,8 +17,12 @@ The existing committed-wakeup helper coalesces notifications. The manager limits
 subscriptions to 16 and reads at most once per second per subscription, with
 read-free 15 s heartbeats. Same-account readers may share a 5 ms batch only before a WAL snapshot starts; late readers acquire a new snapshot. Delivered views are independently copied, and the last reader releases its task. Closing views releases subscriptions, not background
 matching. Reconnect always obtains a complete state; the stream is not a
-resumable fill log. Cross-process writer notification, hedge positions and full
-issue #177 qualification are outside this first stage.
+resumable fill log. New practice accounts default to HEDGE for futures. ONE_WAY remains selectable. HEDGE accounts accept an explicit
+LONG/SHORT positionSide and open/close positionEffect for futures orders.
+The same path matcher processes both legs in price/time order. Gross margin
+uses the sum of both marked notionals divided by leverage. Each close and
+its bracket are scoped to one position lifecycle. Schema v4 preserves older
+orders, fills, trade IDs and journal links with a null position_side.
 
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).
@@ -32,7 +36,9 @@ issue #177 qualification are outside this first stage.
   Saving a legacy note starts complete coverage at that new save, not earlier.
   `expectedRevision` rejects stale edits with HTTP 409; identical retries are
   accepted. An optional `clientEntryId` makes creation retries idempotent.
-- `practice.py`: pure order matching over a candle price path.
+- `app/simulation/practice_account.py` (moved there in ADR-BACKTEST-015 P6e): the practice account
+  model shared with forward strategy runs — pure order matching over a candle price path,
+  buying power and margin. This package keeps the practice ledger and calls it.
 - `practice_runtime.py`: the loop that drives matching from DataManager 1m
   candles.
 - `stats.py`: pure closed-trade statistics for one account (definitions in its

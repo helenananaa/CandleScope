@@ -34,31 +34,48 @@ function workerMain() {
       send(JSON.stringify({ error: error instanceof Error ? error.message.slice(0, 512) : "Frontend script failed" }));
     }
   };
+  send("ready");
 }
 
 /** Blob workers inherit this restrictive document CSP. No same-origin token. */
 export function frontendScriptSandboxDocument(): string {
   const worker = JSON.stringify(`(${workerMain.toString()})();`).replaceAll("<", "\\u003c");
   return `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>
+let activeStop = null;
 addEventListener('message', function start(event) {
   if (event.source !== parent || !event.ports[0]) return;
-  removeEventListener('message', start);
   const port = event.ports[0];
+  if (activeStop) { port.postMessage('{"error":"Frontend script isolation is busy"}'); port.close(); return; }
   const url = URL.createObjectURL(new Blob([${worker}], {type: 'text/javascript'}));
   let worker;
-  const stop = () => { if (worker) worker.terminate(); URL.revokeObjectURL(url); };
-  port.onmessage = () => { stop(); port.postMessage('stopped'); port.close(); };
+  let ready = false, started = false;
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (worker) worker.terminate();
+    URL.revokeObjectURL(url);
+    removeEventListener('pagehide', stop);
+    activeStop = null;
+  };
+  activeStop = stop;
+  port.onmessage = (message) => {
+    if (message.data === 'run' && ready && !started) {
+      started = true;
+      worker.postMessage(event.data);
+    } else if (message.data === 'stop') { stop(); port.postMessage('stopped'); port.close(); }
+  };
   addEventListener('pagehide', stop, {once: true});
   try {
     worker = new Worker(url);
     worker.onmessage = (reply) => {
+      if (!ready && reply.data === 'ready') { ready = true; port.postMessage('ready'); return; }
       stop();
       port.postMessage(typeof reply.data === 'string' && reply.data.length <= 1048576
         ? reply.data : '{"error":"Invalid frontend script output"}');
       port.close();
     };
     worker.onerror = () => { stop(); port.postMessage('{"error":"Frontend script worker failed"}'); port.close(); };
-    worker.postMessage(event.data);
   } catch (_) { stop(); port.postMessage('{"error":"Frontend script isolation unavailable"}'); port.close(); }
 });
 </script>`;

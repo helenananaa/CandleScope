@@ -75,7 +75,7 @@ export function boundVisibleBacktestMarkers(
   return sampled;
 }
 
-function normalizedTimeRange(
+export function normalizedTimeRange(
   value: ChartSurfaceVisibleRange | null,
 ): { from: number; to: number } | null {
   const from = Number(value?.time?.from);

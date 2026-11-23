@@ -1,5 +1,6 @@
+import { BrowserDesktopLink, desktopReleaseUrl } from "../../../app/BrowserDesktopLink.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
-import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
+import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -101,9 +102,13 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import { overlayRunForNative, shownOverlayRun, type ShownRunResult, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED, CHART_STRATEGY_FOLLOW_ENABLED } from "./chartStrategyTesterFeature.js";
+import { chartFollowStatusLabel, chartFollowStatusTone, type ChartFollowStatus } from "./chartStrategyFollowStatus.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
-import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -186,6 +191,7 @@ function autoRunPauseKey(reason: ChartStrategyAutoRunPauseReason) {
 }
 
 export interface ChartStrategyTesterPanelProps {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
@@ -213,7 +219,21 @@ export interface ChartStrategyTesterPanelProps {
   continuousChartActive?: boolean;
   continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
-  continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
+  /** The continuous panel's forward run, for the bridge to overlay in the continuous run modes. */
+  onContinuousOverlayRunChange?(run: StrategyOverlayRun | null): void;
+  /** The run the chart overlay shows: the native panel's in native mode, otherwise the CandleScope-mode run. */
+  onOverlayRunChange?(run: StrategyOverlayRun | null): void;
+  /** The CandleScope-mode run to overlay, supplied by the cell bridge: the visible fixed-history result, or the forward run. */
+  candleScopeOverlayRun?: StrategyOverlayRun | null;
+  /** The run result the bridge loaded for the overlay; shared result views read it (behind a flag). */
+  overlayResult?: ShownRunResult | null;
+  /**
+   * ADR-BACKTEST-015 P4c: the chart keeps its strategy current (FOLLOW) and forward tracking is opened
+   * explicitly, instead of choosing among historical, history + live and live only. Off: the run-mode select.
+   */
+  liveFollow?: boolean;
+  /** What the live run keeping the shown result current is doing, when the chart follows one. */
+  followStatus?: ChartFollowStatus | null;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -223,7 +243,8 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings): void | Promise<void>;
+  /** Hand the strategy to the research workspace; `mode` opens a field there (ADR-BACKTEST-015 P5d). */
+  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings, mode?: "precise" | "robust"): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -239,25 +260,40 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     command("mode", "Switch strategy mode and mount its existing panel.", object({ mode: choice(["NATIVE", "CANDLESCOPE"]) }), ({ mode }) => { setMode(mode); props.onStrategyTesterModeChange?.(mode); setVisited((items) => new Set([...items, mode])); }),
   ] }));
   useLocale();
+  const onOverlayRunChange = props.onOverlayRunChange;
+  const [nativeOverlayRun, setNativeOverlayRun] = useState<StrategyOverlayRun | null>(null);
+  const handleNativeRunChange = useCallback((run: Parameters<typeof overlayRunForNative>[0]) => {
+    setNativeOverlayRun(overlayRunForNative(run));
+  }, []);
+  const shown = shownOverlayRun(mode, nativeOverlayRun, props.candleScopeOverlayRun ?? null);
+  useEffect(() => { onOverlayRunChange?.(shown); }, [onOverlayRunChange, shown]);
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
     setMode(next);
     props.onStrategyTesterModeChange?.(next);
     setVisited((items) => new Set([...items, mode, next]));
   };
-  // The host-matching tester is one more strategy on this chart, not a separate mode to learn.
+  // ADR-BACKTEST-015 P4c: one list of the chart's strategies, each named by its language; the engine follows from it.
+  const strategyList = props.liveFollow ?? CHART_STRATEGY_FOLLOW_ENABLED;
   const items: StrategySwitcherItem[] = [
     ...nativeStrategySwitcherItems(strategies),
     {
       id: HOST_STRATEGY_ID,
-      name: props.attachment?.displayName ?? t("native.hostMode"),
-      meta: props.attachment ? t("native.hostMode") : "",
+      ...(strategyList ? {
+        name: props.attachment?.displayName ?? t("strategyList.python"),
+        meta: props.attachment ? strategyLanguageLabel(props.attachment.language) : "",
+      } : {
+        // The host-matching tester is one more strategy on this chart, not a separate mode to learn.
+        name: props.attachment?.displayName ?? t("native.hostMode"),
+        meta: props.attachment ? t("native.hostMode") : "",
+      }),
       running: ["RESOLVING", "QUEUED", "RUNNING"].includes(props.runState.status),
     },
   ];
   const actions = nativeStrategySwitcherActions(strategies)
     .filter((action) => mode === "NATIVE" || action.id === "add" || action.id === "compare")
-    .map((action) => ({ ...action, onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
+    .map((action) => ({ ...action, ...(strategyList && action.id === "add" ? { label: t("strategyList.addPine") } : {}),
+      onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
   const identity = <StrategySwitcher items={items} actions={actions}
     activeId={mode === "NATIVE" ? strategies.collection.activeId : HOST_STRATEGY_ID}
     onSelect={(id) => {
@@ -270,17 +306,19 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     {(mode === "NATIVE" || visited.has("NATIVE")) && <StrategyDockPane hidden={mode !== "NATIVE"}>
       <Suspense fallback={<p className="strategy-dock-empty">{t("native.loading")}</p>}>
         <NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props}
-          onSelectPython={() => {
+          strategyList={strategyList}
+          {...(strategyList ? {} : { onSelectPython: () => {
             void openPythonStrategyDraft(props.draftStore, props.attachment?.strategyDraftId ?? null).then((record) => {
               props.onAttachmentChange(attachmentForDraft(record, props.session));
               switchMode("CANDLESCOPE");
             });
-          }}
-          strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked />
+          } })}
+          strategies={strategies} active={props.active !== false && mode === "NATIVE"} shownOnChart={mode === "NATIVE"} docked
+          {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange } : {})} />
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
-      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t("indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
+      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
       {availability === "unavailable" && <StrategyDockSlot name="notice"><InlineAlert>{t("native.platformHelp")}</InlineAlert></StrategyDockSlot>}
       <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
         continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
@@ -312,7 +350,7 @@ export function CandleScopeStrategyTesterPanel({
   continuousChartActive,
   continuousMarketWindow,
   onRunModeChange,
-  continuousMarkerSource,
+  onContinuousOverlayRunChange,
   onReviewTrade,
   active = true,
   onPrepareData,
@@ -323,8 +361,16 @@ export function CandleScopeStrategyTesterPanel({
   onOpenAdvanced,
   onOpenBatchStudy,
   onOpenWorkspace,
+  overlayResult = null,
+  liveFollow = CHART_STRATEGY_FOLLOW_ENABLED,
+  followStatus = null,
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
+  // ADR-BACKTEST-015 P1c: the shared views show the host run only when the loaded result is this run's,
+  // or the FOLLOW run that keeps it current (P4b).
+  const sharedResult = CHART_RUN_RESULT_VIEWS_ENABLED
+    && (overlayResult?.run.family === "host" || overlayResult?.run.family === "follow") ? overlayResult : null;
+  const sharedRunId = sharedResult?.run.followsRunId ?? sharedResult?.run.runId ?? null;
   const [focusMode, setFocusMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -332,6 +378,11 @@ export function CandleScopeStrategyTesterPanel({
   const [runModePreference, setRunModePreference] = useState(() => loadChartStrategyPanelPreferences(cellScope));
   const runMode = resolveChartStrategyRunMode(runModePreference, attachment);
   useLayoutEffect(() => { onRunModeChange?.(runMode); }, [onRunModeChange, runMode]);
+  const chooseRunMode = (next: ContinuousMode) => {
+    setRunModePreference((current) => ({ ...current, runMode: next,
+      ...(attachment?.strategyDraftId ? { runModeDraftId: attachment.strategyDraftId } : {}),
+      ...(next !== "HISTORY" ? { forwardStart: next } : {}) }));
+  };
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -466,8 +517,10 @@ export function CandleScopeStrategyTesterPanel({
   }, [currentAttachment, onEntryStateChange, runReady, runState.status, saveState, visibleIssues.length]);
 
   const refreshRecent = useCallback(() => {
-    void draftStore.recent(8).then(setRecentDrafts).catch(() => setRecentDrafts([]));
-  }, [draftStore]);
+    // In the strategy list this is the Python strategy: Pine strategies are their own list entries (P4c).
+    void draftStore.recent(8).then((records) => setRecentDrafts(liveFollow ? records.filter((record) => record.language === "python") : records))
+      .catch(() => setRecentDrafts([]));
+  }, [draftStore, liveFollow]);
 
   useEffect(() => {
     refreshRecent();
@@ -514,6 +567,10 @@ export function CandleScopeStrategyTesterPanel({
   }, [attachRecord, draftStore]);
 
   const run = useCallback(() => {
+    if (browserHost()) {
+      window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (!activeDraft || !currentAttachment) return;
     if (activeDraft.language === "python" && !pythonTrustedConfirmed) return;
     if (!validStrategyRunSettings({ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode })) {
@@ -605,16 +662,19 @@ export function CandleScopeStrategyTesterPanel({
   }
 
   const handoffOperation = useRef<Promise<void> | null>(null);
-  const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
+  const openWorkspace = useCallback((settings?: StrategyRunSettings, mode?: "precise" | "robust"): Promise<void> => {
     if (handoffOperation.current) return handoffOperation.current;
     if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
-    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings));
+    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings, mode));
     handoffOperation.current = operation;
     void operation.catch(() => setSaveState("ERROR")).finally(() => {
       if (handoffOperation.current === operation) handoffOperation.current = null;
     });
     return operation;
   }, [activeDraft, onOpenWorkspace, persistCurrentDraft]);
+  // Research opens in the workspace with this strategy and its result (ADR-BACKTEST-015 P5d); the research tool is gone.
+  const openAdvanced = onOpenWorkspace && activeDraft ? () => { void openWorkspace(undefined, "precise").catch(() => undefined); } : onOpenAdvanced;
+  const openBatchStudy = onOpenWorkspace && activeDraft ? () => { void openWorkspace(undefined, "robust").catch(() => undefined); } : onOpenBatchStudy;
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -674,9 +734,10 @@ export function CandleScopeStrategyTesterPanel({
       command("prepare", "Confirm preparation for the current matching missing-data draft.", empty, onPrepareData, { available: () => pendingDataMatchesSource && active }),
       command("stopObserving", "Stop observing a server run through the UI lifecycle action.", empty, onStopObserving, { interrupt: true }),
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
-      command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
-      command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
+      command("openAdvanced", "Open this strategy in the research workspace (run settings and details).", empty, () => openAdvanced?.(), { available: () => !!openAdvanced }),
+      command("openBatchStudy", "Open this strategy's robustness check in the research workspace.", empty, () => openBatchStudy?.(), { available: () => !!openBatchStudy }),
       command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
+      command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -759,7 +820,7 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <div className="continuous-mode">
+      {!liveFollow && <div className="continuous-mode">
         <Field label={t("continuous.mode")}>
           <Select size="sm" value={runMode} onChange={(event) => {
             const next = event.target.value as ContinuousMode;
@@ -769,7 +830,14 @@ export function CandleScopeStrategyTesterPanel({
             <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
           </Select>
         </Field>
-      </div>
+      </div>}
+      {liveFollow && runMode !== "HISTORY" && currentAttachment && <div className="continuous-mode strategy-forward-bar" data-testid="strategy-forward-bar">
+        <strong>{t("strategyForward.title")}</strong>
+        <SegmentedControl size="sm" label={t("strategyForward.start")} value={runMode}
+          options={[{ value: "HISTORY_LIVE", label: t("strategyForward.fromDate") }, { value: "LIVE_ONLY", label: t("strategyForward.fromNow") }]}
+          onChange={(value) => chooseRunMode(value)} />
+        <Button size="sm" variant="ghost" onClick={() => chooseRunMode("HISTORY")}>{t("strategyForward.back")}</Button>
+      </div>}
       {runMode === "HISTORY" || !currentAttachment ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <Tabs id={tabsId} className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={activeTab} onChange={setActiveTab}
@@ -784,6 +852,12 @@ export function CandleScopeStrategyTesterPanel({
               <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{chartStrategyMaxDrawdown(result.report)}</b></span>
               <span><small>{t("chartTester.result.winRate")}</small><b>{chartStrategyWinRate(result.report.metrics.win_rate, locale)}</b></span>
             </button>
+          )}
+          {result && followStatus && (
+            <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
+              data-follow-state={followStatus.state} data-testid="chart-strategy-follow-status">
+              <i aria-hidden="true" />{chartFollowStatusLabel(followStatus)}
+            </span>
           )}
           {saveVisible && <span className={`chart-strategy-autosave state-${saveState.toLowerCase()}`}>{saveLabel}</span>}
           {saveState === "ERROR" && (
@@ -802,7 +876,8 @@ export function CandleScopeStrategyTesterPanel({
           {canResume && (
             <Button size="sm" variant="ghost" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</Button>
           )}
-          {currentAttachment && (
+          {currentAttachment && (browserHost()
+            ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary ui-btn-sm" /> :
             <Button
               size="sm"
               variant="primary"
@@ -823,7 +898,10 @@ export function CandleScopeStrategyTesterPanel({
                 items={[
                   ...(onOpenWorkspace ? [{ id: "workspace", label: t("ux.openWorkspace"), disabled: !activeDraft || !active,
                     onSelect: () => { void openWorkspace().catch(() => undefined); } }] : []),
-                  ...(onOpenAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: onOpenAdvanced }] : []),
+                  ...(openAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: openAdvanced }] : []),
+                  // Forward tracking keeps its own record from its start; the chart itself follows live bars.
+                  ...(liveFollow ? [{ id: "forward", label: t("strategyForward.title"), disabled: activeDraft?.language !== "python" || !active,
+                    onSelect: () => chooseRunMode(runModePreference.forwardStart ?? "HISTORY_LIVE") }] : []),
                   { id: "focus", label: t("chartTester.focusMode"), ...(focusMode ? { icon: <Icon name="check" size={13} /> } : {}),
                     onSelect: () => setFocusMode((focused) => !focused) },
                 ]} />
@@ -893,8 +971,8 @@ export function CandleScopeStrategyTesterPanel({
                 {t("chartTester.start.paste")}
               </Button>
               <p className="chart-strategy-privacy">{t("chartTester.privacy")}</p>
-              {onOpenAdvanced ? (
-                <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</Button>
+              {openAdvanced ? (
+                <Button size="sm" variant="ghost" onClick={openAdvanced}>{t("chartTester.openAdvanced")}</Button>
               ) : (
                 <a href={strategyResearchModeHref("precise")} className={buttonClassName({ variant: "ghost", size: "sm" })}>{t("chartTester.openAdvanced")}</a>
               )}
@@ -924,7 +1002,7 @@ export function CandleScopeStrategyTesterPanel({
               </Suspense>
             </section>
             <aside className="chart-strategy-problems" aria-label={t("chartTester.problemsAria")}>
-              <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+              <StrategyLanguageControls language={activeDraft.language} languageFixed={liveFollow} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
                 setPythonApproval(null);
                 void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
               }} />
@@ -974,14 +1052,14 @@ export function CandleScopeStrategyTesterPanel({
                 result={result}
                 locale={locale}
                 stale={stale}
-                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+                {...(openAdvanced ? { onOpenAdvanced: openAdvanced } : {})}
               />
               <ChartStrategyResultOverview
                 result={result}
                 stale={stale}
                 comparison={comparison}
                 onOpenTrades={() => setActiveTab("trades")}
-                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+                {...(openAdvanced ? { onOpenAdvanced: openAdvanced } : {})}
               />
             </>
           ) : (
@@ -1064,8 +1142,8 @@ export function CandleScopeStrategyTesterPanel({
                   ? t("chartTester.settings.fast")
                   : t("chartTester.settings.precise")}</dd></div>
               </dl>
-              {onOpenBatchStudy && (
-                <Button size="sm" variant="ghost" onClick={onOpenBatchStudy}>
+              {openBatchStudy && (
+                <Button size="sm" variant="ghost" onClick={openBatchStudy}>
                   {t("chartTester.settings.batchStudy")}
                 </Button>
               )}
@@ -1073,7 +1151,14 @@ export function CandleScopeStrategyTesterPanel({
           </div>
         )}
 
-        <div hidden={!currentAttachment || activeTab !== "trades"}>{result
+        <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult && sharedRunId === result.run.run_id
+            ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+              <RunResultSummary result={sharedResult.result} locale={locale} />
+              <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}
+                active={active && activeTab === "trades"} onLocateTrade={onLocateTrade}
+                {...(onReviewTrade ? { onReviewTrade } : {})} onSelectExplanation={onSelectExplanation} />
+            </div>
+            : result
             ? <ChartStrategyTradeList key={result.run.run_id} active={active && activeTab === "trades"}
               result={result}
               locale={locale}
@@ -1095,10 +1180,11 @@ export function CandleScopeStrategyTesterPanel({
       )}
       </> : <Suspense fallback={<p className="strategy-dock-empty">{t("continuous.loading")}</p>}>
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
+          signalChart={currentAttachment?.signalChart}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}
-          {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
+          {...(onContinuousOverlayRunChange ? { onOverlayRunChange: onContinuousOverlayRunChange } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           saveDraft={async () => { await persistCurrentDraft(); }}
           onDetach={detachStrategy}
@@ -1115,7 +1201,7 @@ export function CandleScopeStrategyTesterPanel({
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}
           editor={(initialize) => activeDraft ? <>
-            <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+            <StrategyLanguageControls language={activeDraft.language} languageFixed={liveFollow} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
               setPythonApproval(null); void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
             }} />
             <StrategyScriptWorkspace source={source} language={activeDraft.language} cursor={cursor} issues={visibleIssues} focusIssue={focusIssue}

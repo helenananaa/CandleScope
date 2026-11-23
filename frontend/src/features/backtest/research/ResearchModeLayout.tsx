@@ -1,17 +1,9 @@
-import { useContext, type ReactNode } from "react";
-import { ResearchModeRailContext } from "./researchModeRailContext.js";
+import type { ReactNode } from "react";
 
 /**
- * Puts the page's mode rail at the left edge, from under the header down, beside the view's
- * interval bar (`top`) and workspace, so the rail keeps its place in every mode.
+ * A research view's interval bar (`top`) above its workspace. The mode rail that sat beside them is
+ * gone (ADR-BACKTEST-015 P5c4): the research tools are fields of the one workspace.
  */
 export function ResearchModeLayout({ top = null, children }: { top?: ReactNode; children: ReactNode }) {
-  const rail = useContext(ResearchModeRailContext);
-  if (rail === null || rail === undefined) return <>{top}{children}</>;
-  return (
-    <div className="research-mode-layout">
-      {rail}
-      <div className="research-mode-body">{top}{children}</div>
-    </div>
-  );
+  return <>{top}{children}</>;
 }

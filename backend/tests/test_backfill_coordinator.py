@@ -5423,3 +5423,198 @@ def test_deferred_chunk_cannot_fence_metadata_needed_by_its_active_sibling() -> 
             await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('max_concurrency', [1, 2])
+def test_deferred_other_series_cannot_fence_the_occupied_global_dispatch_slot(max_concurrency) -> None:
+    """Quota protection cannot prevent the only running business job finishing."""
+    from app.exchanges.public_admission import (
+        PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
+    )
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule
+
+    async def run() -> None:
+        quota = RateLimitRule('cross-series-dispatch', 'cross-series-dispatch', 10, 60)
+        metadata_finished = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                interval = kwargs['intervals'][0]
+                calls.append(interval)
+                if len(calls) == 1:
+                    raise _quota_deferral(0.08, bucket_key=quota.bucket_key)
+                if interval == '89m':
+                    metadata = PublicDemand(TrafficClass.BACKGROUND, purpose='market_metadata')
+                    metadata.inherit(current_demand())
+                    with public_demand(metadata):
+                        permit = await get_public_admission().acquire([quota],
+                            HistoricalRequest('binance', 'spot', '/markets', 'BTCUSDT'))
+                    permit.finish(status_code=200)
+                    metadata_finished.set()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            chunk_bars=1, max_concurrency=max_concurrency)
+        first = _request(0, 0, request_id='deferred-97m')
+        first.interval, first.reason, first.priority = '97m', 'visible_seed_gap', 25
+        second = _request(0, 0, request_id='active-89m')
+        second.interval, second.reason, second.priority = '89m', 'initial_history', 10
+        tasks = [asyncio.create_task(coord.request_and_wait(first))]
+        try:
+            await _wait_until(lambda: coord.snapshot()['deferred_chunks'] == 1)
+            tasks.append(asyncio.create_task(coord.request_and_wait(second)))
+            try:
+                await asyncio.wait_for(metadata_finished.wait(), 1)
+            except TimeoutError as error:
+                raise AssertionError({'calls': calls, 'business': coord.snapshot(),
+                    'physical': get_public_admission().snapshot()}) from error
+            outcomes = await asyncio.wait_for(asyncio.gather(*tasks), 1)
+            assert all(outcome.status == 'completed' for outcome in outcomes)
+            assert calls == ['97m', '89m', '97m']
+            assert get_public_admission().snapshot()['protected'] == 0
+        finally:
+            for task in tasks:
+                task.cancel()
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('owners', [3, 4])
+def test_each_equal_priority_chart_gets_a_turn_before_an_older_chart_repeats(owners) -> None:
+    async def run() -> None:
+        calls = []
+        first_started, release_first = asyncio.Event(), asyncio.Event()
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs['symbol'])
+                if len(calls) == 1:
+                    first_started.set()
+                    await release_first.wait()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            base_delay_seconds=0, max_concurrency=1, chunk_bars=1)
+        symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'][:owners]
+        tasks = []
+        try:
+            for index, symbol in enumerate(symbols):
+                request = _request(0, 9 * 60_000, request_id='chart-' + str(index))
+                request.symbol, request.reason, request.priority = symbol, 'initial_history', 10
+                request.metadata['demand_scope'] = 'chart:' + str(index)
+                tasks.append(asyncio.create_task(coord.request_and_wait(request)))
+                if index == 0:
+                    await first_started.wait()
+            await _wait_until(lambda: coord.snapshot()['submitted'] == owners)
+            release_first.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(*tasks), 3)
+            assert all(outcome.status == 'completed' for outcome in outcomes)
+            assert calls[:owners] == symbols
+            assert all(calls.count(symbol) == 10 for symbol in symbols)
+        finally:
+            release_first.set()
+            for task in tasks:
+                task.cancel()
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("explicit_first", [False, True])
+def test_default_identity_aliases_join_one_active_warm_and_history_repair(explicit_first) -> None:
+    """The WS default identity and HTTP shorthand have one physical owner."""
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    async def run():
+        started, release = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs)
+                started.set()
+                await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=2, base_delay_seconds=0)
+        explicit = _request(0, 0, request_id="explicit-warm")
+        explicit.reason, explicit.requester = "visible_seed_gap", "warm_start_custom_tail"
+        explicit.metadata["series_identity"] = KlineSeriesIdentity.for_exchange("binance").to_dict()
+        ordinary = _request(0, 0, request_id="ordinary-history")
+        ordinary.reason, ordinary.requester = "initial_history", "chart"
+        first, second = (explicit, ordinary) if explicit_first else (ordinary, explicit)
+        try:
+            first_id = coord.request(first)
+            await started.wait()
+            second_id = coord.request(second)
+            assert second_id == first_id
+            snapshot = coord.snapshot()
+            assert len(snapshot["active"]) == 1
+            assert snapshot["pending"] == []
+            assert snapshot["deduped"] == 1
+            release.set()
+            first_result, second_result = await asyncio.wait_for(asyncio.gather(
+                coord.wait_for_request(first_id), coord.wait_for_request(second_id)), 1)
+            assert first_result is second_result
+            assert first_result.status == "completed"
+            assert len(calls) == 1
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("changed", [
+    {"provider_id": "another-provider"}, {"venue": "another-venue"},
+    {"asset_class": "equity"}, {"series_variant": "synthetic"},
+    {"price_adjustment": "split_adjusted"}, {"session_variant": "regular"},
+    {"volume_semantics": "contracts"},
+])
+def test_repair_identity_alias_normalization_keeps_each_semantic_dimension_isolated(changed) -> None:
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    async def run():
+        release = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs)
+                await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=2, base_delay_seconds=0)
+        ordinary, distinct = _request(0, 0), _request(0, 0)
+        distinct.metadata["series_identity"] = {
+            **KlineSeriesIdentity.for_exchange("binance").to_dict(), **changed,
+        }
+        try:
+            first_id, second_id = coord.request(ordinary), coord.request(distinct)
+            assert first_id != second_id
+            await _wait_until(lambda: len(calls) == 2)
+            assert len(coord.snapshot()["active"]) == 2
+            assert coord.snapshot()["deduped"] == 0
+            release.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(
+                coord.wait_for_request(first_id), coord.wait_for_request(second_id)), 1)
+            assert all(outcome.status == "completed" for outcome in outcomes)
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())

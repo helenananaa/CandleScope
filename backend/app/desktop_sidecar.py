@@ -45,7 +45,10 @@ def _arm_shutdown_deadline() -> None:
 
 def _parent_chunks() -> Iterator[bytes]:
     if os.name != "nt":
-        while chunk := sys.stdin.buffer.read1(4096):
+        # The daemon can still be waiting when application startup fails.
+        # A raw descriptor read holds no Python buffered I/O lock at exit.
+        fd = sys.stdin.fileno()
+        while chunk := os.read(fd, 4096):
             yield chunk
         return
 
@@ -172,6 +175,8 @@ def serve(host: str, port: int) -> None:
     finally:
         if sock is not None:
             sock.close()
+    if server.lifespan.startup_failed:
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

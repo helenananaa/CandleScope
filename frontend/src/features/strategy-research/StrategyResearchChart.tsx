@@ -2,7 +2,12 @@ import { formatIntervalLabel } from "../../utils/intervals.js";
 import { Button, InlineAlert } from "../../components/ui/index.js";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
-import SingleChartPanes from "../../components/SingleChartPanes.js";
+import MarketChartSurface from "../market-chart-platform/MarketChartSurface.js";
+import { useLiveReferenceMarketChartSource } from "../market-chart-platform/useLiveReferenceMarketChartSource.js";
+import type { ChartSession } from "../chart-session/chartSessionTypes.js";
+import type { KlineBar } from "../market-data/marketDataTypes.js";
+import { localChartMarketData } from "../local-data/localChartMarketData.js";
+import { researchChartAppearance } from "./researchChartAppearance.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
@@ -24,12 +29,14 @@ import {
 } from "../chart-session/visibleRangeStorage.js";
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
+import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backendSyntheticFeature.js";
 import {
   formatResearchRows,
 } from "../research-data/researchDataFormat.js";
 import LocalAnalysisPanel from "../local-data/LocalAnalysisPanel.js";
 import LocalIntervalSelector from "../local-data/LocalIntervalSelector.js";
 import { createLocalAnalysisMarkerSource } from "../local-data/localAnalysisMarkerSource.js";
+import type { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
 import type { LocalAnalysisEventStore } from "../local-data/localAnalysisStore.js";
 import type {
   LocalAnalysisEvent,
@@ -40,6 +47,7 @@ import {
   buildLocalChartDataMeta,
   useLocalChartRuntime,
 } from "../local-data/useLocalChartRuntime.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
 import { useLocalIndicatorRuntime } from "../local-data/useLocalIndicatorRuntime.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 import type { ActiveIndicatorPersistence } from "../indicators/activeIndicatorStore.js";
@@ -93,6 +101,7 @@ function StrategyResearchChartPanes({
   manifest,
   interval,
   runtime,
+  bars,
   dataMeta,
   eventStore,
   focusRequest,
@@ -111,10 +120,14 @@ function StrategyResearchChartPanes({
   onDrawingInteractionReadyChange,
   onRemoveIndicator,
   onCrosshairMove,
+  overlaySource = null,
 }: {
+  /** The research run drawn on this chart (ADR-BACKTEST-015 P1c). */
+  overlaySource?: StrategyOverlaySource | null;
   manifest: LocalDatasetManifest;
   interval: string;
   runtime: ReturnType<typeof useLocalChartRuntime>;
+  bars: KlineBar[];
   dataMeta: ReturnType<typeof buildLocalChartDataMeta>;
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
@@ -135,11 +148,41 @@ function StrategyResearchChartPanes({
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
   const focusTime = runtime.focusTime;
-  const markerSource = useMemo(() => createLocalAnalysisMarkerSource({
+  const analysisMarkerSource = useMemo(() => createLocalAnalysisMarkerSource({
     eventStore,
     seriesStore: runtime.seriesStore,
     interval,
   }), [eventStore, interval, runtime.seriesStore]);
+  const markerSources = useMemo(
+    () => [analysisMarkerSource, overlaySource?.markers],
+    [analysisMarkerSource, overlaySource],
+  );
+  // The dataset's paged reader, drawn through the shared chart surface (ADR-BACKTEST-015 P5d3). It is a
+  // reference: a run reads the backend snapshot of the dataset, not this chart.
+  const session = useMemo<ChartSession>(() => ({
+    exchange: "local", marketType: "local_dataset", symbol: manifest.symbol, interval,
+  }), [interval, manifest.symbol]);
+  const { seriesStore, loading, loadingMore, error, hasMoreLeft, loadMoreLeft, retry } = runtime;
+  const marketData = useMemo(() => localChartMarketData(
+    { seriesStore, loading, loadingMore, error, hasMoreLeft, loadMoreLeft, retry },
+    { session, bars, dataMeta },
+  ), [bars, dataMeta, error, hasMoreLeft, loadMoreLeft, loading, loadingMore, retry, seriesStore, session]);
+  const source = useLiveReferenceMarketChartSource({
+    sourceId: "research-imported",
+    session,
+    datasetKey: importedChartDatasetKey(manifest, interval),
+    marketData,
+    syntheticOrigin: { kind: "LOCAL_DATASET", dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch },
+    paused: false,
+  });
+  useEffect(() => {
+    overlaySource?.setSeries(runtime.seriesStore);
+    return () => overlaySource?.setSeries(null);
+  }, [overlaySource, runtime.seriesStore]);
+  const handleVisibleRange = useCallback((range: unknown) => {
+    onVisibleRangeChange(range);
+    overlaySource?.setVisibleRange(range as Parameters<StrategyOverlaySource["setVisibleRange"]>[0]);
+  }, [onVisibleRangeChange, overlaySource]);
   useEffect(() => {
     if (focusRequest === null) return undefined;
     let active = true;
@@ -165,76 +208,56 @@ function StrategyResearchChartPanes({
           {runtime.error}
         </InlineAlert>
       )}
-      <ChartErrorBoundary>
-        <SingleChartPanes
-          ref={chartSurfaceRef}
-          seriesStore={runtime.seriesStore}
-          symbol={manifest.symbol}
-          drawingKeyBase={importedDrawingKeyBase(manifest)}
-          interval={interval}
-          loading={runtime.loading || runtime.loadingMore}
-          dataMeta={dataMeta}
-          onCrosshairMove={onCrosshairMove}
-          onNeedMoreLeft={runtime.loadMoreLeft}
-          canLoadMoreLeft={runtime.hasMoreLeft}
-          canRestoreLatestWindow={false}
-          datasetKey={importedChartDatasetKey(manifest, interval)}
-          upColor={settings.upColor}
-          downColor={settings.downColor}
-          chartType={settings.chartType}
-          renkoBoxSizeMode={settings.renkoBoxSizeMode}
-          renkoAtrLength={settings.renkoAtrLength}
-          renkoBoxSize={settings.renkoBoxSize}
-          pointFigureBoxSizeMode={settings.pointFigureBoxSizeMode}
-          pointFigureAtrLength={settings.pointFigureAtrLength}
-          pointFigureBoxSize={settings.pointFigureBoxSize}
-          pointFigureReversalAmount={settings.pointFigureReversalAmount}
-          kagiReversalMode={settings.kagiReversalMode}
-          kagiAtrLength={settings.kagiAtrLength}
-          kagiReversalAmount={settings.kagiReversalAmount}
-          lineBreakNumberOfLines={settings.lineBreakNumberOfLines}
-          theme={resolvedTheme}
-          customBg={settings.customBg}
-          timezone={settings.timezone ?? manifest.timezone}
-          savedVisibleRange={savedVisibleRange}
-          onViewportRangeChange={indicators.actions.ensureVisibleIndicatorRange}
-          onVisibleRangeChange={onVisibleRangeChange}
-          followLatest={false}
-          externalMarkerSource={markerSource}
-          drawingTool={drawingTool}
-          onDrawingToolChange={drawings.actions.setDrawingTool}
-          onDrawingInteractionReadyChange={onDrawingInteractionReadyChange}
-          penColor={drawings.view.penColor}
-          penSize={drawings.view.penSize}
-          textFontSize={drawings.view.textFontSize}
-          textBold={drawings.view.textBold}
-          textItalic={drawings.view.textItalic}
-          fibLevels={drawings.view.fibLevels}
-          fibInverted={drawings.view.fibInverted}
-          positionSize={drawings.view.positionSize}
-          drawingSnapEnabled={drawings.view.drawingSnapEnabled}
-          drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
-          drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
-          onSelectedDrawingChange={drawings.actions.handleSelectedDrawingChange}
-          mainOverlayLines={indicators.view.mainOverlayLines}
-          subPanes={indicators.view.subPanes}
-          indicatorMarkers={indicators.view.markers}
-          indicatorFills={indicators.view.fills}
-          indicatorHlines={indicators.view.hlines}
-          indicatorBgcolors={indicators.view.bgcolors}
-      indicatorDrawings={indicators.view.drawings}
-          indicatorBarcolors={indicators.view.barcolors}
-          invertScale={invertScale}
-          onInvertScaleChange={onInvertScaleChange}
-          priceScaleMode={priceScaleMode}
-          onPriceScaleModeChange={onPriceScaleModeChange}
-          onRemoveSubPane={(pane) => {
-            if (pane.owner?.kind === "indicator") {
-              onRemoveIndicator(pane.owner.id);
-            }
-          }}
-        />
-      </ChartErrorBoundary>
+      <MarketChartSurface
+        source={source}
+        markerSources={markerSources}
+        chartLayerSource={overlaySource?.layer ?? null}
+        errorBoundary={ChartErrorBoundary}
+        chartProps={{
+          ref: chartSurfaceRef,
+          symbol: source.session.symbol,
+          interval: source.session.interval,
+          datasetKey: source.datasetKey,
+          drawingKeyBase: importedDrawingKeyBase(manifest),
+          onCrosshairMove,
+          ...researchChartAppearance(settings, resolvedTheme),
+          timezone: settings.timezone ?? manifest.timezone,
+          savedVisibleRange,
+          onViewportRangeChange: indicators.actions.ensureVisibleIndicatorRange,
+          onVisibleRangeChange: handleVisibleRange,
+          followLatest: false,
+          drawingTool,
+          onDrawingToolChange: drawings.actions.setDrawingTool,
+          onDrawingInteractionReadyChange,
+          penColor: drawings.view.penColor,
+          penSize: drawings.view.penSize,
+          textFontSize: drawings.view.textFontSize,
+          textBold: drawings.view.textBold,
+          textItalic: drawings.view.textItalic,
+          fibLevels: drawings.view.fibLevels,
+          fibInverted: drawings.view.fibInverted,
+          positionSize: drawings.view.positionSize,
+          drawingSnapEnabled: drawings.view.drawingSnapEnabled,
+          drawingContinuousEnabled: drawings.view.drawingContinuousEnabled,
+          drawingAutoSelectEnabled: drawings.view.drawingAutoSelectEnabled,
+          onSelectedDrawingChange: drawings.actions.handleSelectedDrawingChange,
+          mainOverlayLines: indicators.view.mainOverlayLines,
+          subPanes: indicators.view.subPanes,
+          indicatorMarkers: indicators.view.markers,
+          indicatorFills: indicators.view.fills,
+          indicatorHlines: indicators.view.hlines,
+          indicatorBgcolors: indicators.view.bgcolors,
+          indicatorDrawings: indicators.view.drawings,
+          indicatorBarcolors: indicators.view.barcolors,
+          invertScale,
+          onInvertScaleChange,
+          priceScaleMode,
+          onPriceScaleModeChange,
+          onRemoveSubPane: (pane) => {
+            if (pane.owner?.kind === "indicator") onRemoveIndicator(pane.owner.id);
+          },
+        }}
+      />
     </div>
   );
 }
@@ -263,7 +286,9 @@ export function StrategyResearchImportedWorkspace({
   onSettingsChange,
   resolvedTheme,
   children,
+  overlaySource = null,
 }: {
+  overlaySource?: StrategyOverlaySource | null;
   manifest: LocalDatasetManifest;
   interval: string;
   indicatorPresets: readonly IndicatorPreset[];
@@ -311,6 +336,11 @@ export function StrategyResearchImportedWorkspace({
     seriesVersion,
   ]);
   const indicators = useLocalIndicatorRuntime({
+    chart: chartIndicatorSelection(BACKEND_SYNTHETIC_SERIES_ENABLED ? {
+      symbol: manifest.symbol, interval, exchange: "local", marketType: "local_dataset",
+      syntheticSeriesKey: String(chartRuntime.seriesStore.seriesKey ?? "unavailable"),
+      syntheticOrigin: { kind: "LOCAL_DATASET", dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch },
+    } : null, chartRuntime.seriesStore, settings),
     manifest,
     interval,
     bars,
@@ -437,6 +467,7 @@ export function StrategyResearchImportedWorkspace({
       manifest={manifest}
       interval={interval}
       runtime={chartRuntime}
+      bars={bars}
       dataMeta={dataMeta}
       eventStore={eventStore}
       focusRequest={focusRequest}
@@ -455,6 +486,7 @@ export function StrategyResearchImportedWorkspace({
       onDrawingInteractionReadyChange={setDrawingInteractionReady}
       onRemoveIndicator={removeIndicator}
       onCrosshairMove={onCrosshairMove}
+      overlaySource={overlaySource}
     />
   );
   const indicatorPanel = (

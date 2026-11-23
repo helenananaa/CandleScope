@@ -1049,6 +1049,12 @@
     display: none;
   }
 }
+/* Phone layout (app/phoneLayout.ts): one chart has nothing to link with. */
+@media (max-width: 640px) {
+  .multi-chart-grid.layout-single .multi-chart-cell-link {
+    display: none;
+  }
+}
 /* ── 布局选择（顶栏） ────────────────────────────────────── */
 .workspace-layout-picker {
   position: relative;

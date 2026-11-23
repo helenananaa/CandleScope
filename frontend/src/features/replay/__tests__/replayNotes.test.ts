@@ -125,6 +125,39 @@ const versionsResponse = () => ({ protocol: "replay.v3", schema_version: "replay
   run_id: "run", track_id: "track", note_id: "note", context: context(), asOfMs: 100,
   versions: [{ ...note(), revisionCount: 3 }, { ...note(), revisionCount: 2 }], nextBeforeRevision: 2 });
 
+test("at the selected Review event only retrospective notes, versions and drafts are visible", () => {
+  const storage = new Storage();
+  const live = context();
+  const review = { ...live, reviewId: "review", reviewRevision: 1, reviewNote: true };
+  const original = replayNoteDraftBinding(storage, live, 100, null);
+  original.storage.setItem(original.key, "plan draft");
+  const saved = storage.getItem(original.key);
+  const descriptor = visibleReplayNoteDrafts(storage, live, 100)[0]!;
+  assert.deepEqual(visibleReplayNoteDrafts(storage, review, 100), []);
+  assert.throws(() => replayNoteDraftBinding(storage, review, 100, null, descriptor));
+  assert.throws(() => replayNoteCopyBinding(storage, review, 100, original));
+  assert.equal(storage.getItem(original.key), saved);
+
+  const supplement = replayNoteDraftBinding(storage, review, 100, null);
+  supplement.storage.setItem(supplement.key, "retrospective draft");
+  assert.deepEqual(visibleReplayNoteDrafts(storage, review, 100).map(draft => draft.key), [supplement.key]);
+  const next = { ...review, timelineSequence: 2 };
+  assert.equal(replayNoteDraftBinding(storage, next, 100, null, descriptor).storage.getItem(original.key), "plan draft");
+  for (const [view, value, allowed] of [
+    [review, note(), false], [review, { ...note(), reviewNote: true }, true], [next, note(), true],
+  ] as const) {
+    const list = () => parseReplayNotesResponse({ ...response(), context: view, notes: [value] });
+    const history = () => parseReplayNoteVersions({ ...versionsResponse(), context: view, versions: [value], nextBeforeRevision: null });
+    if (allowed) {
+      assert.deepEqual(list().notes, [value]);
+      assert.deepEqual(history().versions, [value]);
+    } else {
+      assert.throws(list);
+      assert.throws(history);
+    }
+  }
+});
+
 test("version pages reject future text, duplicate/out-of-order versions and invalid continuation", () => {
   assert.equal(parseReplayNoteVersions(versionsResponse()).nextBeforeRevision, 2);
   for (const invalid of [

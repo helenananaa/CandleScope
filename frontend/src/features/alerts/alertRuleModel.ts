@@ -96,11 +96,105 @@ export const ALERT_RIGHT_TYPE_OPTIONS = [
   { value: "indicator" },
 ] as const;
 
+/**
+ * Any builtin indicator output can be an alert value field, written as the
+ * canonical key `ind:<NAME>:<output>:<param>=<value>,...` with every
+ * calculation parameter in key order (the backend rejects other spellings).
+ * `rsi`, `macdHist` and `ma20` remain aliases for their default parameters.
+ */
+export const ALERT_INDICATOR_FIELD_PREFIX = "ind:";
+
+export type AlertIndicatorParamValue = string | number;
+
+export interface AlertIndicatorField {
+  name: string;
+  output: string;
+  params: Record<string, AlertIndicatorParamValue>;
+}
+
+const ALERT_INDICATOR_ALIASES: Record<string, AlertIndicatorField> = {
+  rsi: { name: "RSI", output: "rsi", params: { period: 14, source: "close" } },
+  macdHist: { name: "MACD", output: "hist", params: { fast: 12, signal: 9, slow: 26, source: "close" } },
+  ma20: { name: "MA", output: "ma", params: { period: 20, source: "close" } },
+};
+
+// Positional order of numeric parameters in a label such as MACD(12, 26, 9).
+const INDICATOR_LABEL_PARAM_ORDER: Record<string, string[]> = {
+  MACD: ["fast", "slow", "signal"],
+  BOLL: ["period", "mult"],
+};
+
+export function isAlertIndicatorField(value: unknown): value is string {
+  return typeof value === "string"
+    && (Object.hasOwn(ALERT_INDICATOR_ALIASES, value) || value.startsWith(ALERT_INDICATOR_FIELD_PREFIX));
+}
+
+export function parseAlertIndicatorField(value: unknown): AlertIndicatorField | null {
+  if (typeof value !== "string") return null;
+  const alias = Object.hasOwn(ALERT_INDICATOR_ALIASES, value) ? ALERT_INDICATOR_ALIASES[value] : undefined;
+  if (alias) return { ...alias, params: { ...alias.params } };
+  if (!value.startsWith(ALERT_INDICATOR_FIELD_PREFIX)) return null;
+  const parts = value.slice(ALERT_INDICATOR_FIELD_PREFIX.length).split(":");
+  if (parts.length !== 3 || !parts[0] || !parts[1]) return null;
+  const params: Record<string, AlertIndicatorParamValue> = {};
+  for (const item of parts[2]!.split(",").filter(Boolean)) {
+    const separator = item.indexOf("=");
+    if (separator <= 0) return null;
+    const text = item.slice(separator + 1);
+    const number = Number(text);
+    params[item.slice(0, separator)] = text !== "" && Number.isFinite(number) && String(number) === text ? number : text;
+  }
+  return { name: parts[0]!, output: parts[1]!, params };
+}
+
+export function alertIndicatorFieldKey(field: AlertIndicatorField): string {
+  const params = Object.keys(field.params).sort()
+    .map((key) => `${key}=${String(field.params[key])}`)
+    .join(",");
+  return `${ALERT_INDICATOR_FIELD_PREFIX}${field.name}:${field.output}:${params}`;
+}
+
+/** The canonical key of a field, resolving aliases; other values pass through. */
+export function canonicalAlertField(value: string): string {
+  const alias = Object.hasOwn(ALERT_INDICATOR_ALIASES, value) ? ALERT_INDICATOR_ALIASES[value] : undefined;
+  return alias ? alertIndicatorFieldKey(alias) : value;
+}
+
+export function alertIndicatorFieldLabel(field: AlertIndicatorField): string {
+  const order = INDICATOR_LABEL_PARAM_ORDER[field.name] ?? Object.keys(field.params).sort();
+  const args = order
+    .filter((key) => typeof field.params[key] === "number")
+    .map((key) => String(field.params[key]));
+  const source = field.params.source;
+  if (typeof source === "string" && source !== "close") args.push(source);
+  const base = args.length ? `${field.name}(${args.join(", ")})` : field.name;
+  return field.output === field.name.toLowerCase() ? base : `${base} ${field.output}`;
+}
+
 export function labelForSource(value: unknown): string {
   const key = typeof value === "string" ? value : "";
   const messageKey = SOURCE_LABEL_KEYS[key];
   if (messageKey) return t(messageKey);
-  return SOURCE_FIXED_LABELS[key] || key || "?";
+  if (SOURCE_FIXED_LABELS[key]) return SOURCE_FIXED_LABELS[key]!;
+  const indicator = key.startsWith(ALERT_INDICATOR_FIELD_PREFIX) ? parseAlertIndicatorField(key) : null;
+  return indicator ? alertIndicatorFieldLabel(indicator) : (key || "?");
+}
+
+/** Indicator fields an expression references, in first-use order. */
+export function referencedAlertIndicatorFields(expression: AlertExpressionDraft): string[] {
+  const fields: string[] = [];
+  const visit = (node: AlertExpressionDraft) => {
+    if (node.type === "group") {
+      node.children.forEach(visit);
+      return;
+    }
+    if (isAlertIndicatorField(node.left)) fields.push(node.left);
+    if ((node.rightType === "field" || node.rightType === "indicator") && isAlertIndicatorField(node.rightValue)) {
+      fields.push(node.rightValue);
+    }
+  };
+  visit(expression);
+  return [...new Set(fields)];
 }
 
 export function labelForComparator(value: unknown): string {

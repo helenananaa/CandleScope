@@ -20,11 +20,14 @@ import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
-import { TrustedDesktopExtensionHost } from "./trusted-extension-host.mjs";
+import { UnifiedDesktopHost } from "./unified-entry-host.mjs";
 import { WorkflowControlHost } from "./workflow-control-host.mjs";
 import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
-if (process.argv.includes("--extensions-safe-mode")) process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
+const disableUnifiedFlag = process.argv.find((argument) => argument.startsWith("--disable-unified-plugin="));
+if (process.argv.includes("--extensions-safe-mode") || disableUnifiedFlag) {
+  process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
+}
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(desktopDir, "../..");
@@ -61,7 +64,7 @@ let supervisor = null;
 let shutdownComplete = false;
 let shutdownPromise = null;
 const strategyStorage = new DesktopStrategyStorage(path.join(app.getPath("userData"), "strategy-storage-v1.json"));
-let desktopExtensions = null;
+let unifiedPlugins = null;
 let workflowControl = null;
 const registeredWorkflowContents = new WeakSet();
 const workflowScopes = ["observe", "workspace.edit", "app.edit", ...(process.argv.includes("--control-trust") ? ["app.trust"] : []), ...(process.argv.includes("--control-live") ? ["app.live"] : [])];
@@ -143,7 +146,8 @@ function createSupervisor() {
       ))) : {}),
       ...(app.isPackaged ? {
         PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
-        CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST: path.join(runtimeRoot, "python-runtime", "plugins", "manifest.json"),
+        CANDLESCOPE_BUNDLED_UNIFIED_PYTHON: path.join(runtimeRoot, "python-runtime", "plugins", "unified-python.json"),
+        CANDLESCOPE_BUNDLED_UNIFIED_PINE: path.join(runtimeRoot, "python-runtime", "plugins", "unified-pine.json"),
         CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),
       } : {}),
       CANDLESCOPE_PINE_CHART_TRANSPORT: pineChartTransport,
@@ -154,6 +158,9 @@ function createSupervisor() {
       CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_DESKTOP_PLUGIN_SESSION: managementSession.sessionToken,
       CANDLESCOPE_DESKTOP_PLUGIN_CSRF: managementSession.csrfToken,
+      ...(disableUnifiedFlag ? {
+        CANDLESCOPE_DISABLE_UNIFIED_PLUGIN: disableUnifiedFlag.slice("--disable-unified-plugin=".length),
+      } : {}),
       PYTHONPATH: [
         path.join(runtimeRoot, "python-runtime", "site-packages"),
         path.join(runtimeRoot, "packages", "candlescope-plugin-sdk", "src"),
@@ -258,25 +265,33 @@ async function boot() {
     };
   });
 
-  desktopExtensions = new TrustedDesktopExtensionHost({
-    safeMode: process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE === "1",
-    markerPath: path.join(app.getPath("userData"), "extension-desktop-loading.json"),
-    context: { electron: { app, BrowserWindow, dialog, ipcMain, screen, shell },
-      host: { manager, workspaceBus, appWorkBudget, seriesSnapshots } },
-  });
-  if (supervisor && process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE !== "1") {
-    try {
-      const response = await fetch(`http://127.0.0.1:${backendPort}/api/v2/plugins/manage/extensions/desktop`, {
-        headers: { "X-CandleScope-Plugin-Session": managementSession.sessionToken, Origin: new URL(appUrl).origin },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error(`Desktop extension plan unavailable: ${response.status}`);
-      await desktopExtensions.start(await response.json());
-    } catch (error) { desktopExtensions.errors.runtime = String(error); }
-    if (Object.keys(desktopExtensions.errors).length) console.error("Desktop extension startup", desktopExtensions.errors);
+  if (supervisor) {
+    unifiedPlugins = new UnifiedDesktopHost({
+      markerPath: path.join(app.getPath("userData"), "unified-desktop-loading.json"),
+      context: { electron: { app, BrowserWindow, dialog, ipcMain, screen, shell }, host: { manager, workspaceBus, appWorkBudget, seriesSnapshots } },
+      request: async (route, body) => {
+        const response = await fetch(`http://127.0.0.1:${backendPort}/api/v2/plugins/manage/unified${route}`, {
+          method: "POST", headers: { "Content-Type": "application/json", "X-CandleScope-Plugin-Session": managementSession.sessionToken,
+            "X-CandleScope-CSRF": managementSession.csrfToken,
+            Origin: new URL(appUrl).origin }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error(`Plugin lifecycle unavailable: ${response.status}`);
+        return response.json();
+      },
+    });
+    await unifiedPlugins.start();
   }
-
-  trustedIpc.handle(DESKTOP_IPC.extensionDiagnostics, () => desktopExtensions.diagnostics());
+  trustedIpc.handle(DESKTOP_IPC.extensionDiagnostics, () => {
+    const diagnostics = unifiedPlugins?.diagnostics();
+    return {
+      safeMode: Boolean(diagnostics?.safeMode) || process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE === "1",
+      active: diagnostics?.active.map(({ identity }) => ({
+        id: identity.pluginId, version: identity.version,
+        digest: identity.packageSha256, generation: identity.generation,
+      })) ?? [],
+      errors: diagnostics?.errors ?? {},
+    };
+  });
   trustedIpc.on(DESKTOP_IPC.managementSession, (event) => {
     event.returnValue = supervisor ? {
       apiBase: `http://127.0.0.1:${backendPort}/api/v2/plugins`,
@@ -480,7 +495,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
+  shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => unifiedPlugins?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

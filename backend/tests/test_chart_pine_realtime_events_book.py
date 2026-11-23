@@ -5,18 +5,20 @@ import os
 import pytest
 
 from tests.test_chart_book_snapshot import host as book_host,MODES
-from tests.test_pine_event_realtime import SOURCE,event_worker
+from tests.test_pine_event_realtime import SOURCE
 
 pytestmark=pytest.mark.skipif(not os.environ.get("PINE_EVENT_TEST_PYTHON"),reason="requires installed realtime event worker")
 
 
 @pytest.mark.parametrize("mode",MODES)
-def test_chart_book_event_windows_keep_exact_physical_account_costs_and_recovery(book_host,event_worker,tmp_path,monkeypatch,mode):
+def test_chart_book_event_windows_keep_exact_physical_account_costs_and_recovery(book_host,qualified_pine,tmp_path,monkeypatch,mode):
     from tests import test_chart_book_snapshot as fixtures
     from app.local_data.service import LocalImportOptions
     from app.backtest.strategy.pine_engine import PineEngineProvider
     from app.simulation.dual_clock_book import execution_type
     runtime,base=book_host
+    # ADR-BACKTEST-015 P6d: new Host Pine book runs are refused; these runs are created as stored before that.
+    fixtures.stored_before_p6d(monkeypatch)
     runtime.worker.shutdown()
     service=runtime.service
     service._colocated_worker=True

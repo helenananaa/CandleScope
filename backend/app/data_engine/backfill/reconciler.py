@@ -28,15 +28,16 @@ from dataclasses import replace
 import logging
 import time
 from itertools import pairwise
-from typing import Callable, Awaitable, Any
+from typing import Callable, Awaitable, Any, Sequence
 
 from app.core.executors import run_preparation
 from app.data_engine.aggregation.semantics import valid_ohlcv
-from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval_spec
+from app.data_engine.interval_policy import ClosedKlineRowStream, aggregate_kline_rows, parse_interval_spec
 from app.data_engine.kline_quality import source_is_trusted_final, source_rank
 from app.data_engine.storage.revisions import StaleAcquisition, fenced_acquisition, prepare_derived_inputs
 from app.data_engine.storage.derived_history_fence import computation_scope
-from app.data_engine.series_identity import KlineSeriesIdentity
+from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
+from app.data_engine.series_key import SeriesKey
 from app.data_engine.custom_materialization import (
     MaterializationLease,
     custom_materialization_registry,
@@ -52,6 +53,7 @@ from .models import (
     DeduplicationStrategy,
     FetchedBar,
     FetchResult,
+    FetchReceipt,
     IntervalDecomposition,
     ReconcileResult,
     StorageBackend,
@@ -71,6 +73,25 @@ CustomAggregator = Callable[[list[FetchedBar], str, str, int, int], FetchedBar |
 DedupFn = Callable[[FetchedBar, dict], bool]  # (new_bar, existing_row) → keep_new?
 WriteBatchCallback = Callable[[str, str, int], Awaitable[None]]  # symbol, interval, count
 ReconcileDoneCallback = Callable[[ReconcileResult], Awaitable[None]]
+
+
+def _split_rest_edges(
+    bars: list[FetchedBar],
+    ranges: Sequence[tuple[int, int]],
+) -> list[list[FetchedBar]]:
+    """Group REST rows by the edge they were fetched for; other rows stay together."""
+    if not ranges:
+        return [bars]
+    edges: list[list[FetchedBar]] = [[] for _ in ranges]
+    other: list[FetchedBar] = []
+    for bar in bars:
+        for index, (start, end) in enumerate(ranges):
+            if start <= bar.open_time <= end:
+                edges[index].append(bar)
+                break
+        else:
+            other.append(bar)
+    return [group for group in (*edges, other) if group]
 
 
 class Reconciler:
@@ -161,6 +182,7 @@ class Reconciler:
         self,
         fetch_results: list[FetchResult],
         plan: BackfillPlan,
+        *, native_receipts=(),
     ) -> ReconcileResult:
         """Run the full reconciliation pipeline.
 
@@ -193,6 +215,7 @@ class Reconciler:
             handled_archive_receipts: set[str] = set()
             # 1. Collect all bars grouped by (exchange, market_type, symbol, interval)
             grouped = self._group_bars(fetch_results)
+            rest_ranges = self._collect_rest_ranges(fetch_results)
             total_received = sum(len(bars) for bars in grouped.values())
             result.bars_received = total_received
             record_empty = getattr(self._storage, "record_native_empty_seconds", None)
@@ -228,6 +251,7 @@ class Reconciler:
                     exchange=exchange,
                     market_type=market_type,
                     archive_receipts=archive_receipts_by_key,
+                    rest_ranges=rest_ranges.get((exchange, market_type, symbol, interval), ()),
                 )
                 result.bars_written += written
                 result.bars_skipped += skipped
@@ -270,6 +294,12 @@ class Reconciler:
                     with computation_scope(views):
                         gen, wrt, failures, written_ranges = await self._generate_custom_bars(
                             decomp, grouped, plan.derived_source_windows,
+                            **({"binding_check": plan.mixed_binding.validate if plan.mixed_binding is not None else None,
+                                "owner_check": plan.mixed_binding.validate_owner if plan.mixed_binding is not None else None,
+                                "confirmed_empty": bool(fetch_results or native_receipts) and all(
+                                r.source_complete is True and not r.retryable and not r.errors
+                                and (r.bars_count == 0 if isinstance(r,FetchReceipt) else not r.bars) and bool(r.empty_reason)
+                                for r in (*fetch_results,*native_receipts))} if getattr(decomp, "composition_policy", None) is not None else {}),
                         )
                     result.custom_bars_generated += gen
                     result.custom_bars_written += wrt
@@ -329,11 +359,23 @@ class Reconciler:
             tuple[str, str, str, str],
             dict[int, FetchedBar],
         ] = {}
+        identities: dict[tuple[str, str, str, str], KlineSeriesIdentity] = {}
+        defaults: dict[str, KlineSeriesIdentity] = {}
         for fr in fetch_results:
             if fr.status == BackfillStatus.FAILED:
                 continue
             for bar in fr.bars:
                 key = (bar.exchange, bar.market_type, bar.symbol, bar.interval)
+                canonical = bar.series_identity
+                if canonical is None:
+                    canonical = defaults.get(bar.exchange)
+                    if canonical is None:
+                        canonical = resolve_kline_series_identity(bar.exchange, None)
+                        defaults[bar.exchange] = canonical
+                # Validate before timestamp deduplication can discard evidence
+                # of a foreign identity, including fully overlapping batches.
+                if identities.setdefault(key, canonical) != canonical:
+                    raise ValueError("reconciliation group contains multiple K-line series identities")
                 by_open_time = indexed.setdefault(key, {})
                 existing = by_open_time.get(bar.open_time)
                 if existing is None or Reconciler._prefer_grouped_bar(existing, bar):
@@ -357,6 +399,29 @@ class Reconciler:
         if incoming_is_archive != existing_is_archive:
             return not incoming_is_archive
         return True
+
+    @staticmethod
+    def _collect_rest_ranges(
+        fetch_results: list[FetchResult],
+    ) -> dict[tuple[str, str, str, str], list[tuple[int, int]]]:
+        """REST edges declared by archive-routed tasks, by series."""
+        ranges: dict[tuple[str, str, str, str], list[tuple[int, int]]] = {}
+        for fetch_result in fetch_results:
+            if fetch_result.status == BackfillStatus.FAILED:
+                continue
+            declared = fetch_result.metadata.get("rest_ranges")
+            if not isinstance(declared, list):
+                continue
+            task = fetch_result.task
+            key = (task.exchange, task.market_type, task.symbol, task.interval)
+            for item in declared:
+                try:
+                    start, end = int(item[0]), int(item[1])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if start <= end:
+                    ranges.setdefault(key, []).append((start, end))
+        return ranges
 
     @staticmethod
     def _collect_archive_receipts(
@@ -413,6 +478,7 @@ class Reconciler:
         exchange: str = "binance",
         market_type: str = "spot",
         archive_receipts: dict[str, dict[str, Any]] | None = None,
+        rest_ranges: Sequence[tuple[int, int]] = (),
     ) -> tuple[
         int,
         int,
@@ -431,7 +497,9 @@ class Reconciler:
             return 0, 0, 0, [], [], 0, 0, set()
 
         series_identity = bars[0].series_identity
-        if any(bar.series_identity != series_identity for bar in bars):
+        default_identity = resolve_kline_series_identity(exchange, None)
+        canonical_identity = series_identity or default_identity
+        if any((bar.series_identity or default_identity) != canonical_identity for bar in bars):
             raise ValueError(
                 "reconciliation group contains multiple K-line series identities"
             )
@@ -499,8 +567,18 @@ class Reconciler:
                 else batch_size
             )
             effective_batch_size = max(1, effective_batch_size)
-            for i in range(0, len(source_bars), effective_batch_size):
-                batch = source_bars[i : i + effective_batch_size]
+            # A routed run holds one range permission per REST edge, so a
+            # batch must not join two edges that archive days separate.
+            segments = (
+                [source_bars]
+                if source.startswith("backfill_archive_")
+                else _split_rest_edges(source_bars, rest_ranges)
+            )
+            for batch in (
+                segment[i : i + effective_batch_size]
+                for segment in segments
+                for i in range(0, len(segment), effective_batch_size)
+            ):
                 dicts = [b.to_storage_dict() for b in batch]
                 archive_write_started = (
                     time.monotonic()
@@ -849,6 +927,7 @@ class Reconciler:
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],
         source_windows: list[BackfillTask],
+        *, confirmed_empty: bool = False, binding_check=None, owner_check=None,
     ) -> tuple[int, int, list[dict[str, Any]], list[WrittenRange]]:
         """Reduce canonical source windows after any fetched rows have committed."""
         target = decomp.custom_interval
@@ -880,17 +959,56 @@ class Reconciler:
         failures: list[dict[str, Any]] = []
         written_ranges: list[WrittenRange] = []
         for (exchange, market_type, symbol), windows in by_target.items():
-            canonical_rows = {}
-            for interval, start_ms, end_ms, identity in windows:
-                rows = await self._read_component_window(
-                    symbol, interval, start_ms, end_ms, exchange, market_type, identity,
+            policy = getattr(decomp, "composition_policy", None)
+            expected = None
+            rejected_windows = False
+            if policy is not None:
+                from .mixed_plan import checked_mixed_windows, MAX_TARGETS
+                if not callable(binding_check):
+                    raise StaleAcquisition("mixed materialization has no owner binding fence")
+                binding_check()
+                if not self._cfg.mixed_custom_history or self._custom_aggregator is not None:
+                    raise StaleAcquisition("mixed materialization rollout or reducer binding changed")
+                bounds = decomp.composition_target_range
+                spec = parse_interval_spec(target)
+                if (not isinstance(bounds, tuple) or len(bounds) != 2 or spec is None
+                        or any(type(v) is not int for v in bounds)
+                        or not 0 <= bounds[0] < bounds[1]
+                        or spec.floor_ms(bounds[0]) != bounds[0] or spec.floor_ms(bounds[1]) != bounds[1]
+                        or (bounds[1] - bounds[0]) // spec.nominal_ms > MAX_TARGETS):
+                    raise StaleAcquisition("mixed materialization target range is invalid")
+                expected = set(range(*bounds, spec.nominal_ms))
+                checked = await checked_mixed_windows(self._storage,
+                    SeriesKey(symbol, target, exchange=exchange, market_type=market_type), policy, windows)
+                rejected_windows = len(checked) != len(windows)
+                windows = checked
+            if policy is not None:
+                custom_bars, observed_rows = await self._stream_component_windows(
+                    windows, symbol, target, exchange, market_type, bounds, owner_check or binding_check,
                 )
-                canonical_rows.update({(interval, row["open_time"]): row for row in rows})
-
-            custom_bars = await run_preparation(
-                self._reduce_custom_rows, list(canonical_rows.values()), symbol, target,
-                exchange, market_type, int(time.time() * 1000),
-            )
+            else:
+                canonical_rows = {}
+                for interval, start_ms, end_ms, identity in windows:
+                    rows = await self._read_component_window(
+                        symbol, interval, start_ms, end_ms, exchange, market_type, identity,
+                    )
+                    canonical_rows.update({(interval, row["open_time"]): row for row in rows})
+                custom_bars = await run_preparation(
+                    self._reduce_custom_rows, list(canonical_rows.values()), symbol, target,
+                    exchange, market_type, int(time.time() * 1000),
+                )
+            if policy is not None:
+                core = {"open", "high", "low", "close", "volume"}
+                enhanced = frozenset(policy.fields) - core
+                custom_bars = [bar for bar in custom_bars
+                               if bar.open_time in expected and enhanced <= bar.enhanced_fields]
+                missing = expected - {bar.open_time for bar in custom_bars}
+                if missing and not (confirmed_empty and observed_rows == 0 and not rejected_windows):
+                    failures.append(dict(exchange=exchange, market_type=market_type, symbol=symbol,
+                        interval=target, phase="mixed_coverage", write_error=False,
+                        error=f"{len(missing)} target buckets lack trusted composition fields/coverage; replan from canonical inputs"))
+            if policy is not None:
+                binding_check()
             generated += len(custom_bars)
             count, write_failures, ranges = await self._write_custom_materialization(
                 exchange=exchange, market_type=market_type, symbol=symbol,
@@ -901,6 +1019,95 @@ class Reconciler:
             written_ranges.extend(ranges)
 
         return generated, written, failures, written_ranges
+
+    async def _stream_component_windows(
+        self, windows, symbol, target, exchange, market_type, bounds, owner_check,
+    ):
+        """Fold/release each qualified canonical page before requesting another.
+
+        Existing outer history-backfill work admission covers source work and
+        bounded outputs. K130 owns field sums; the common row adapter owns the
+        strict close/grid proof. No historical target is written until all
+        source pages complete and the existing D126 materialization fence runs.
+        """
+        from .mixed_plan import MAX_SOURCE_ROWS, MAX_TARGETS
+        normalized = []
+        # Merge duplicate/overlapping windows of the same canonical source.
+        # Different source grids may not overlap: their coverage is ambiguous.
+        grouped = {}
+        for interval, first, last, identity in windows:
+            spec = parse_interval_spec(interval)
+            if (spec is None or any(type(v) is not int for v in (first, last))
+                    or first > last or spec.floor_ms(first) != first or spec.floor_ms(last) != last
+                    or first < bounds[0] or spec.next_ms(last) > bounds[1]):
+                raise StaleAcquisition("mixed canonical source window violates its grid/range")
+            grouped.setdefault((interval, identity), []).append((first, last))
+        for (interval, identity), spans in grouped.items():
+            spec = parse_interval_spec(interval)
+            first, last = sorted(spans)[0]
+            for start, end in sorted(spans)[1:]:
+                if start <= spec.next_ms(last):
+                    last = max(last, end)
+                else:
+                    normalized.append((first, last, interval, identity))
+                    first, last = start, end
+            normalized.append((first, last, interval, identity))
+        normalized.sort(key=lambda item: item[0])
+        for left, right in pairwise(normalized):
+            if parse_interval_spec(left[2]).next_ms(left[1]) > right[0]:
+                raise StaleAcquisition("mixed canonical source windows overlap")
+
+        stream = ClosedKlineRowStream(target_interval=target, source_interval=None,
+                                       now_ms=int(time.time() * 1000))
+        output = []
+        observed_rows = peak_rows = 0
+        for first, last, interval, identity in normalized:
+            cursor = first
+            expected_identity = {
+                "exchange": exchange, "market_type": market_type,
+                "symbol": symbol, "interval": interval,
+                **resolve_kline_series_identity(exchange, identity).to_dict(),
+            }
+            while cursor <= last:
+                owner_check()
+                page = await self._storage.query_canonical_page(
+                    symbol, interval, cursor, last, limit=256,
+                    exchange=exchange, market_type=market_type, **_identity_kwargs(identity),
+                )
+                self._metrics.inc("custom_canonical_input_reads")
+                self._metrics.inc("custom_canonical_input_rows", len(page))
+                times = [row.get("open_time") for row in page]
+                observed_rows += len(page)
+                if (len(page) > 256 or observed_rows > MAX_SOURCE_ROWS
+                        or any(type(t) is not int or not cursor <= t <= last for t in times)
+                        or any(a >= b for a, b in pairwise(times))):
+                    raise StaleAcquisition("mixed canonical page violates its bounded read contract")
+                if any(any(row.get(name) != value for name, value in expected_identity.items()) for row in page):
+                    raise StaleAcquisition("mixed canonical page differs from its source identity")
+                # Do not repair malformed canonical data or manufacture known
+                # fields. Unknown/untrusted rows leave their actual coverage gap.
+                selected = [row for row in page if source_is_trusted_final(row.get("source"))]
+                output.extend(await run_preparation(stream.push, selected))
+                owner_check()
+                self._metrics.inc("custom_canonical_stream_pages")
+                self._metrics.inc("custom_canonical_stream_rows", len(selected))
+                peak_rows = max(peak_rows, len(page))
+                self._metrics.set("custom_canonical_stream_peak_page_rows", peak_rows)
+                if len(output) > MAX_TARGETS:
+                    raise StaleAcquisition("mixed canonical outputs exceed their target budget")
+                count = len(page)
+                cursor = times[-1] + 1 if times else last + 1
+                # Neither the next SQL read nor another source window retains
+                # this page, its filtered view or its source row dictionaries.
+                del page, selected, times
+                if count < 256:
+                    break
+        output.extend(stream.finish())
+        if len(output) > MAX_TARGETS:
+            raise StaleAcquisition("mixed canonical outputs exceed their target budget")
+        self._metrics.inc("custom_canonical_stream_targets", len(output))
+        return [self._fetched_from_row(row, symbol, target, exchange, market_type,
+                                      "backfill_aggregated") for row in output], observed_rows
 
     async def _read_component_window(
         self, symbol: str, interval: str, start_ms: int, end_ms: int,
@@ -998,11 +1205,13 @@ class Reconciler:
     ) -> None:
         if not failures:
             return
-        result.write_errors += len(failures)
-        result.failed_batches.extend(failures)
+        writes = [failure for failure in failures if failure.get("write_error", True)]
+        result.write_errors += len(writes)
+        result.failed_batches.extend(writes)
         for failure in failures:
+            prefix = "Write batch failed for " if failure.get("write_error", True) else "History coverage incomplete for "
             result.errors.append(
-                "Write batch failed for "
+                prefix +
                 f"{failure['exchange']}:{failure['market_type']}:"
                 f"{failure['symbol']}@{failure['interval']} "
                 f"({failure['phase']}): {failure['error']}"

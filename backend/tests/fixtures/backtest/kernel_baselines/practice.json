@@ -1,0 +1,107 @@
+{
+  "accounts": {
+    "practice.linear-perp-one-way-v1": {
+      "digests": {
+        "checkpoint": "sha256:cfd2ae221e1ceab8e1e7cc95c3bfcb66a89ce17a6abbf9aca97bc692df86b725",
+        "decision_hash": "18ffbf69d7bcd4223376093525e50a2d5f3a0a963987fc01f0e8ace60d35acfb",
+        "equity_curve": "sha256:96261ebdeac2920aeb230b5b598e6775003f53c1aa3b4d9e7a95a028450f6a5b",
+        "fill_hash": "4c38a28313b957fe7efb12075df2bc74807fda2593592e7f6bccf8d1a4fe6ee1",
+        "final_snapshot": "sha256:a5c1b617ef471e819f097db11a8f08aeaedc2532b55db7a2f97ac86c59b21b0c",
+        "ledger_hash": "0f1f9b5387c41a898aed2a2fa4f0382a59ef16f337fbf10df6c7a1c6d7a8f5e8",
+        "orders": "sha256:f843aade7e2dae7425af98cc8a2f630d386431542711cf64cf8d4cb090edd698",
+        "rejected": "sha256:bbcf644176ec4cd3d32233ddf436dd3bc44afecfeb47c50c0f47560a93356937",
+        "report_hash": "sha256:b07621e75e782baaad92cb23eadc082dbe1b79ee818766d454234e08e40b4fdc"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "bar_clock": "PRACTICE",
+        "fill_policy": "PRACTICE_CANDLE_PATH_V1",
+        "fill_rows": [
+          "359999 SELL 1 @ 102.989700 PRACTICE_MARKET",
+          "479999 BUY 1 @ 98.00 PRACTICE_LIMIT",
+          "659999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "839999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "899999 SELL 1 @ 100.989900 PRACTICE_MARKET",
+          "1019999 BUY 1 @ 103.010300 PRACTICE_STOP",
+          "1079999 BUY 1 @ 107.010700 PRACTICE_MARKET",
+          "1259999 BUY 1 @ 109.50 PRACTICE_LIMIT",
+          "1259999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "1319999 SELL 1 @ 102.989700 PRACTICE_MARKET",
+          "1319999 SELL 1 @ 102.989700 PRACTICE_MARKET",
+          "1379999 BUY 1 @ 102.50 PRACTICE_LIMIT",
+          "1619999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "1799999 SELL 1 @ 106.239375 PRACTICE_STOP",
+          "1859999 SELL 1 @ 100.989900 PRACTICE_MARKET",
+          "1919999 BUY 1 @ 100.50 PRACTICE_LIMIT",
+          "2039999 BUY 1 @ 107.010700 PRACTICE_MARKET",
+          "2219999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "2279999 SELL 1 @ 102.989700 PRACTICE_MARKET",
+          "2399999 BUY 1 @ 99.00 PRACTICE_LIMIT",
+          "2579999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "2759999 SELL 1 @ 106.239375 PRACTICE_STOP",
+          "2819999 BUY 1 @ 104.00 PRACTICE_LIMIT",
+          "2819999 SELL 1 @ 100.989900 PRACTICE_MARKET",
+          "2819999 SELL 1 @ 100.989900 PRACTICE_MARKET"
+        ],
+        "fills": 25,
+        "final_equity": "10002.801250",
+        "orders": 39,
+        "rejected": 18
+      }
+    },
+    "practice.linear-perp-one-way-v2": {
+      "refused": "MarketDatasetError: FIDELITY_UNSUPPORTED"
+    },
+    "practice.spot-cash-v1": {
+      "digests": {
+        "checkpoint": "sha256:7f6d5ee5648acf01890c9bf42f705fb76fff9b4673f76422014b9ec04b6e95ad",
+        "decision_hash": "df58df17728e860c802ce615962fb09e9878f836463a7371bfb3ea7eb3781ec4",
+        "equity_curve": "sha256:c08d1a5f9d528200a11c97e123d3dcc729f207f50f2902d73de985e849446e63",
+        "fill_hash": "07f1829d18ae53e465f9a40e07af92b17b9e8bb2bf8f742c8f3ee61dc9a8c940",
+        "final_snapshot": "sha256:7c90b2abf0ee76dceab78ec99023e042007660af907bbf2738522dcb33114b84",
+        "ledger_hash": "43d3554cefd30c8f875597aa52ccc5064b8fa4dd8dc04634df974ca1d96c186d",
+        "orders": "sha256:476aa09fbba2538f6b65ddfd7cd45037473a563e65f37aa38f1f3c0496666107",
+        "rejected": "sha256:2cfcc0562d5842b6870fd3f2b3ea97cf9ebc2cdd6cd6bd5ed31ab41c0fea3ddf",
+        "report_hash": "sha256:b745bd415252cd44ebaf33562b42532fb1d2d7e3c7c9fe988db4aa30995c1462"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "bar_clock": "PRACTICE",
+        "fill_policy": "PRACTICE_CANDLE_PATH_V1",
+        "fill_rows": [
+          "479999 BUY 1 @ 98.00 PRACTICE_LIMIT",
+          "659999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "839999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "839999 SELL 1 @ 106.239375 PRACTICE_STOP",
+          "1079999 BUY 1 @ 107.010700 PRACTICE_MARKET",
+          "1259999 BUY 1 @ 109.50 PRACTICE_LIMIT",
+          "1259999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "1319999 SELL 1 @ 102.989700 PRACTICE_MARKET",
+          "1619999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "1799999 SELL 1 @ 106.239375 PRACTICE_STOP",
+          "2039999 BUY 1 @ 107.010700 PRACTICE_MARKET",
+          "2219999 SELL 1 @ 107.989200 PRACTICE_STOP",
+          "2399999 BUY 1 @ 99.00 PRACTICE_LIMIT",
+          "2579999 BUY 1 @ 106.010600 PRACTICE_MARKET",
+          "2759999 SELL 1 @ 106.239375 PRACTICE_STOP",
+          "2819999 BUY 1 @ 104.00 PRACTICE_LIMIT",
+          "2819999 SELL 1 @ 100.989900 PRACTICE_MARKET"
+        ],
+        "fills": 17,
+        "final_equity": "10005.112125",
+        "orders": 23,
+        "rejected": 7
+      }
+    }
+  },
+  "checkpoint_bar": 20,
+  "clock": "practice",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.kernel-baseline/1"
+}

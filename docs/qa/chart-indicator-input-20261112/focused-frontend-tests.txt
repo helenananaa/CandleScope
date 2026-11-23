@@ -1,0 +1,34 @@
+
+[frontend] functional: 4 files, concurrency=4
+✔ native scene survives unified parsing and state clearing removes drawable history (6.881541ms)
+✔ native scene projects actual time/price coordinates, repaints tables and detaches (12.883584ms)
+✔ native scene ordered coordinates preserve same-time bricks and explicit bar_time clocks (1.632709ms)
+✔ display source index keeps display order, exact source groups, and time identity (5.53675ms)
+✔ timed entries fan out in display order with exact matches and last-write-wins (1.8385ms)
+✔ pane descriptors apply line, marker, bgcolor, and volume fanout policies (1.980917ms)
+✔ an empty derived index preserves pane structure while clearing timed data (0.747292ms)
+✔ barcolor groups fan out to every exact display target and drop missing targets (0.414083ms)
+✔ structural reprojection replaces reused orders with the new lineage objects (0.305459ms)
+✔ last display target lookup compares only the current and next exact source time (0.276458ms)
+✔ ordered chart inputs preserve every brick and expose real script clocks (7.172959ms)
+✔ chart lines bypass raw-time filtering and map to each exact brick; market panes retain their source axis (7.499ms)
+✔ an unavailable chart input is explicit and never reports readiness or raw-bar fallback (0.233833ms)
+✔ backend computation defaults on and supports an explicit rollout rollback (2.453083ms)
+✔ same-time bricks survive immutable admission and ordinal tail replacement (6.516375ms)
+✔ rejects wrong identity, missing revisions and old-generation patches (8.378583ms)
+✔ shared transport, independent leases and late-frame fencing (4.740958ms)
+✔ complete-window chunks publish atomically and keep more than 5000 bricks (280.56525ms)
+✔ mixed-generation chunks fail closed without publishing a partial series (1.184584ms)
+✔ backend renderer adapter consumes supplied prices without a local transform (8.122333ms)
+✔ frozen and saved-result charts select backend references without sending browser prices (24.970541ms)
+✔ replay cursor changes invalidate same-window series and unavailable prefixes never select local math (5.372709ms)
+✔ browser-owned historical prefixes register once, re-register on reconnect and fence rewinds (838.745125ms)
+✔ disposal during captured-prefix registration cannot acquire a late transport (12.531167ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2151.711667

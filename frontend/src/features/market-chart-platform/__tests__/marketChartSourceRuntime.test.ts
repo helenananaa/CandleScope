@@ -11,7 +11,9 @@ import {
 } from "../marketChartSourceRuntime.js";
 import { MarketChartSourceSlot } from "../marketChartSourceSlot.js";
 import { MarketChartSourceEffectGuard } from "../marketChartSourceLifecycle.js";
-import { bindMarketChartSurfaceProps } from "../marketChartSurfaceModel.js";
+import { backendSyntheticSourceFor, bindMarketChartSurfaceProps } from "../marketChartSurfaceModel.js";
+import { localChartMarketData } from "../../local-data/localChartMarketData.js";
+import { buildLocalChartDataMeta } from "../../local-data/useLocalChartRuntime.js";
 
 const session: ChartSession = {
   exchange: "binance",
@@ -208,4 +210,39 @@ test("surface binding takes session, series, status, and paging only from source
   assert.equal(bound.canRestoreLatestWindow, false);
   assert.equal(bound.suspended, true);
   assert.deepEqual(bound.subPanes, [ownPane, chartPane]);
+});
+
+test("an imported dataset is an offline reference that keeps its dataset origin (P5d3)", () => {
+  const store = new SeriesWindowStore({ intervalSeconds: 900, seriesKey: "local:local-1:epoch-1:15m" });
+  store.applyRange([
+    { time: 900, open: 1, high: 2, low: 0.5, close: 1.5, volume: 3 },
+    { time: 1_800, open: 1.5, high: 2.5, low: 1, close: 2, volume: 4 },
+  ], { source: "local_dataset" });
+  const imported: ChartSession = { exchange: "local", marketType: "local_dataset", symbol: "BTC-USDT", interval: "15m" };
+  const loadMoreLeft = async () => {};
+  const marketData = localChartMarketData(
+    { seriesStore: store, loading: false, loadingMore: true, error: null, hasMoreLeft: true, loadMoreLeft, retry() {} },
+    { session: imported, bars: store.snapshot({ force: true }), dataMeta: buildLocalChartDataMeta(store, "ready") },
+  );
+  const origin = { kind: "LOCAL_DATASET", dataset_id: "local-1", data_epoch: "epoch-1" } as const;
+  const source = createLiveReferenceSource({ sourceId: "research-imported", session: imported,
+    datasetKey: "local:local-1:epoch-1:15m", marketData, syntheticOrigin: origin });
+
+  assert.throws(() => assertExecutableMarketChartSource(source), /LIVE_REFERENCE_IS_NOT_IMMUTABLE_EXECUTION_INPUT/);
+  assert.deepEqual(backendSyntheticSourceFor(source), { ...imported, syntheticOrigin: origin, syntheticSeriesKey: store.seriesKey });
+  assert.equal(marketData.view.display.displayData?.close, 2);
+  const bound = bindMarketChartSurfaceProps({ source, chartProps: {
+    symbol: "WRONG", interval: "5m", datasetKey: "wrong", upColor: "#00ff00", downColor: "#ff0000", theme: "dark", customBg: "#000000",
+  } });
+  assert.equal(bound.symbol, "BTC-USDT");
+  assert.equal(bound.datasetKey, "local:local-1:epoch-1:15m");
+  assert.equal(bound.seriesStore, store);
+  assert.equal(bound.loading, true, "paging older bars shows as loading");
+  assert.equal(bound.onNeedMoreLeft, loadMoreLeft);
+  assert.equal(bound.canLoadMoreLeft, true);
+  assert.equal(bound.canLoadMoreRight, false);
+  assert.equal("onNeedMoreRight" in bound, false, "an imported dataset has no newer bars to follow");
+
+  source.update({ session: imported, datasetKey: "local:local-1:epoch-1:15m", marketData });
+  assert.equal(backendSyntheticSourceFor(source), source.session, "without an origin the reference is a live series");
 });

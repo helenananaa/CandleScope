@@ -91,6 +91,14 @@ def _checkpoint(value, event_time_ms, data_revision):
     return PreparedCheckpoint(raw,event_time_ms,data_revision)
 
 
+def _catalog(definition):
+    """What a list of runs shows for one run (ADR-BACKTEST-015 P6e): its market and account rules.
+    Both are frozen in the run's definition, so they are derived once, when the run is written."""
+    configuration = ((definition or {}).get("configuration") if isinstance(definition, dict) else None) or {}
+    return {"market": {key: configuration.get(key) for key in ("exchange", "market_type", "symbol", "interval")},
+            "account_rules": configuration.get("account_rules")}
+
+
 def _summary(row):
     if row is None:
         raise fail("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
@@ -145,6 +153,16 @@ class ContinuousStrategyStore:
                 from .continuous_auto_repair import create_schema as create_auto_schema, AutoRepairPolicy
                 if version < 5:create_auto_schema(self.db)
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
+                # Run lists read this table instead of decoding definitions. It stays outside the
+                # versioned schema: an older app opens the database unchanged and ignores it, and
+                # runs it creates in the meantime are filled in on the next open.
+                self.db.execute("""CREATE TABLE IF NOT EXISTS run_catalog (
+                    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+                    catalog_json TEXT NOT NULL)""")
+                for row in self.db.execute("SELECT id,definition_json FROM runs WHERE id NOT IN "
+                        "(SELECT run_id FROM run_catalog)").fetchall():
+                    self.db.execute("INSERT INTO run_catalog VALUES(?,?)",
+                                    (row["id"], json.dumps(_catalog(json.loads(row["definition_json"])))))
             self.auto_repair = AutoRepairPolicy(self)
             self.creations = ContinuousCreationJournal(self)
             self.epochs = ContinuousEpochs(self)
@@ -238,6 +256,22 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             return [_summary(row) for row in self.db.execute("SELECT "+SUMMARY_COLUMNS+" FROM runs ORDER BY id")]
 
+    def list_catalog(self):
+        """Run summaries with what a list of runs shows (ADR-BACKTEST-015 P6e): each run's market and
+        account rules, from the catalog written with the run. Listing never decodes a definition."""
+        columns = ",".join("r."+name for name in SUMMARY_COLUMNS.split(","))
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            rows = self.db.execute("SELECT "+columns+",c.catalog_json FROM runs r "
+                                   "LEFT JOIN run_catalog c ON c.run_id=r.id ORDER BY r.id").fetchall()
+        listed = []
+        for row in rows:
+            value = _summary(row)
+            value.update(json.loads(row["catalog_json"]) if row["catalog_json"] else _catalog(None))
+            listed.append(value)
+        return listed
+
     def restore_candidates(self):
         """One SQLite read for active runs and the committed-before-start window."""
         with self.lock:
@@ -294,6 +328,7 @@ class ContinuousStrategyStore:
                 raise fail("BUDGET_EXCEEDED", "Continuous strategy run capacity reached")
             self.db.execute("INSERT INTO runs VALUES(?,?,?,1,1,'PAUSED',0,?,?,1,NULL,?)",
                             (run_id, definition_json, mode, event_time_ms, data_revision, int(time.time()*1000)))
+            self.db.execute("INSERT INTO run_catalog VALUES(?,?)", (run_id, json.dumps(_catalog(definition))))
             self._insert_checkpoint(run_id, 1, 1, 0, event_time_ms, data_revision, state)
             self._enforce_total_budget()
             if creation_key is not None:self.creations._commit_creation(creation_key)

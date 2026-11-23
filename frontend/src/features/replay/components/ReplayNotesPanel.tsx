@@ -4,7 +4,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts, type ReplayNoteDraft } from "../replayNoteDraft.js";
-import { replayNoteView, type ReplayNote, type ReplayNotesResponse } from "../replayNotes.js";
+import { replayNoteContextVisibleAt, replayNoteView, type ReplayNote, type ReplayNotesResponse } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayNoteLinkPicker, ReplayNoteLinks } from "./ReplayNoteLinks.js";
 import ReplayNoteCaptureControls, { type ReplayNoteChartCapture } from "./ReplayNoteCaptureControls.js";
@@ -113,10 +113,8 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     && cursorMs !== null && candidate.asOfMs <= cursorMs ? candidate : null;
   const settled = current !== null && loaded?.revisionKey === revisionKey
     && current.asOfMs === cursorMs && current.context.virtualTimeMs === cursorMs;
-  const visibleTarget = target && current && cursorMs !== null && target.binding.context.runId === runId
-    && target.binding.context.trackId === trackId && target.binding.context.dataEpoch === current.context.dataEpoch
-    && target.binding.context.timelineSequence <= current.context.timelineSequence
-    && target.binding.context.virtualTimeMs <= cursorMs ? target : null;
+  const visibleTarget = target && current && cursorMs !== null
+    && replayNoteContextVisibleAt(target.binding.context, current.context, cursorMs) ? target : null;
   const edit = (note: ReplayNote | null, recovered?: ReplayNoteDraft) => {
     if (!current || cursorMs === null) return;
     try {
@@ -144,9 +142,8 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs, ...(note.links?.map(link => link.eventTimeMs) ?? []), ...(note.screenshots?.map(capture => capture.marketTimeMs) ?? [])]) ?? []),
       ...(historyScope && historyTimes.scope === historyScope ? historyTimes.values : [])]);
   }, [current, historyScope, historyTimes, onTimes]);
-  const visibleDrafts = drafts.filter(draft => current && cursorMs !== null && draft.context.virtualTimeMs <= cursorMs
-    && draft.context.timelineSequence <= current.context.timelineSequence
-    && draft.context.dataEpoch === current.context.dataEpoch);
+  const visibleDrafts = drafts.filter(draft => current && cursorMs !== null
+    && replayNoteContextVisibleAt(draft.context, current.context, cursorMs));
   const body = <div className="replay-notes-body">
     <div className="replay-notes-toolbar">
       <Button size="sm" variant="primary" disabled={!settled || visibleTarget !== null} onClick={() => edit(null)}>

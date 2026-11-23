@@ -28,9 +28,28 @@ def freeze_execution(native, payload, bars, *, allow_bar_callbacks=False):
     else:
         if data["symbol"] != payload["context"]["symbol"].split(":")[-1]:
             raise BacktestError("DATA_SNAPSHOT_MISMATCH", "execution symbol differs from chart")
+        check_execution_market(data, payload)
         events = tuple(MarketEvent(sequence=i+1, event_time_ms=item["time_ms"], role=item["role"], payload=item["payload"]) for i,item in enumerate(data["events"]))
     validate_execution(events, bars, payload["interval"], mode)
     return [{"sequence": e.sequence, "event_time_ms": e.event_time_ms, "role": e.role, "payload": dict(e.payload)} for e in events]
+
+
+# Binance USD-M perpetuals are "futures" on the chart and "usdm" in research chart-book files.
+_MARKET_ALIASES = {"futures": "usdm"}
+
+
+def check_execution_market(data, payload):
+    """A file that names its exchange and market (a research chart-book file) must be for the run's
+    market. Imported data runs as "local": its venue is unknown, so only the symbol is checked."""
+    exchange, market = data.get("exchange"), data.get("market_type")
+    run_exchange = str(payload.get("exchange") or "binance").lower()
+    if run_exchange == "local" or (exchange is None and market is None):
+        return
+    run_market = str(payload.get("market_type") or "usdm").lower()
+    if exchange is not None and exchange.lower() != run_exchange or market is not None and \
+            _MARKET_ALIASES.get(market.lower(), market.lower()) != _MARKET_ALIASES.get(run_market, run_market):
+        raise BacktestError("DATA_SNAPSHOT_MISMATCH",
+                            f"the execution data is for {exchange or run_exchange} {market or run_market}, not this chart's market")
 
 
 def validate_execution(events, bars, interval, mode):
@@ -101,7 +120,7 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
     from .pine_print_account import events as physical_events, apply_account, observe_market, record_decision, AUXILIARY
     events = physical_events(wire)
     kernel.source_kind = assert_trade_stream(tuple(e for e in events if e.role == "TRADES"))
-    state=state or {}
+    state={} if state is None else state
     target=len(wire["bars"]) if target is None else target
     bar_cursor,last_sequence=state.get("bar_cursor",0),state.get("last_sequence",0)
     event_cursor=state.get("event_cursor",0)
@@ -114,8 +133,11 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         kernel._last_event = decision_event
         observe_market(kernel, decision_event)
         intents = strategy((), decision_event)
-        record_decision(kernel, {"sequence": last_sequence, "watermark_ms": time_ms, "intents": intents, "signal_bar": bar_cursor})
-        kernel._enqueue_many(intents, current_sequence=last_sequence)
+        from app.simulation.chart_decisions import decision_plans
+        for plan in decision_plans(intents):
+            record_decision(kernel, {"sequence": last_sequence, "watermark_ms": time_ms, "intents": list(plan), "signal_bar": bar_cursor,
+                **({"provider_decision": plan.decision} if getattr(plan, "decision", None) is not None else {})})
+            kernel._enqueue_many(plan, current_sequence=last_sequence)
         if wire.get("closing_ticks"):
             from .pine_workbench import bar_event
             from app.simulation.closing_tick import match_closing_tick
@@ -150,4 +172,4 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         decide()
     if target==len(wire["bars"]):
         kernel.finalize_orders()
-    return {"bar_cursor":bar_cursor,"last_sequence":last_sequence,"event_cursor":event_cursor}
+    return {**state,"bar_cursor":bar_cursor,"last_sequence":last_sequence,"event_cursor":event_cursor}

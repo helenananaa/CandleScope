@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import sys
 from contextvars import copy_context
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -34,6 +35,11 @@ async def _run(
     drain_on_cancel: bool = False,
     **kwargs: Any,
 ) -> T:
+    if sys.platform == "emscripten":
+        # This interpreter is already isolated in a Web Worker. SQLite and
+        # preparation calls cannot submit to a native thread pool here.
+        await asyncio.sleep(0)
+        return func(*args, **kwargs)
     target = args[0] if operation_is_dispatch_wrapper(func, args) else func
     operation = str(getattr(target, "__qualname__", None) or getattr(target, "__name__", None) or type(target).__name__)
     context = copy_context()

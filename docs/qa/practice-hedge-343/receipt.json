@@ -1,0 +1,452 @@
+{
+  "schema": "candlescope.practice-hedge-native/1",
+  "sourceCommit": "9f022a0574bbb9fa235926560c55414b559a224f",
+  "transport": "Packaged UI and HTTP API, two controlled 1m series seeded in an isolated market database",
+  "steps": [
+    {
+      "name": "launch",
+      "at": "2026-11-19T07:18:17.836Z",
+      "evidence": {
+        "pid": 44122,
+        "packaged": true
+      }
+    },
+    {
+      "name": "held",
+      "at": "2026-11-19T07:18:46.136Z",
+      "evidence": {
+        "entries": [
+          [
+            "LONG",
+            "63609.2",
+            "market_feed"
+          ],
+          [
+            "SHORT",
+            "63609.2",
+            "practice_feed"
+          ],
+          [
+            "LONG",
+            "3000",
+            "market_feed"
+          ]
+        ],
+        "positions": [
+          {
+            "id": "fil_03005a9e5cda789d8ae4",
+            "accountId": "acc_92bf981a6f5789f81038",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "direction": "long",
+            "positionSide": "LONG",
+            "status": "open",
+            "openedAtMs": 1795072725886,
+            "closedAtMs": null,
+            "openQty": "0.002",
+            "maxQty": "0.002",
+            "entryQty": "0.002",
+            "exitQty": "0",
+            "avgEntryPrice": "63615.56092",
+            "avgExitPrice": null,
+            "realizedPnl": "0",
+            "fees": "0.06361556092",
+            "netPnl": "-0.06361556092",
+            "markPrice": "63609.2",
+            "unrealizedPnl": "-0.01272184",
+            "legs": [
+              {
+                "fillId": "fil_03005a9e5cda789d8ae4",
+                "side": "buy",
+                "role": "open",
+                "qty": "0.002",
+                "price": "63615.56092",
+                "fee": "0.06361556092",
+                "tsMs": 1795072725886,
+                "liquidity": "taker",
+                "orderId": "ord_a92a6305f8b80aea3103"
+              }
+            ],
+            "markAtMs": 1795072725886,
+            "markSource": "practice"
+          },
+          {
+            "id": "fil_5457926f13752e05d680",
+            "accountId": "acc_92bf981a6f5789f81038",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "direction": "short",
+            "positionSide": "SHORT",
+            "status": "open",
+            "openedAtMs": 1795072726033,
+            "closedAtMs": null,
+            "openQty": "0.001",
+            "maxQty": "0.001",
+            "entryQty": "0.001",
+            "exitQty": "0",
+            "avgEntryPrice": "63602.83908",
+            "avgExitPrice": null,
+            "realizedPnl": "0",
+            "fees": "0.03180141954",
+            "netPnl": "-0.03180141954",
+            "markPrice": "63609.2",
+            "unrealizedPnl": "-0.00636092",
+            "legs": [
+              {
+                "fillId": "fil_5457926f13752e05d680",
+                "side": "sell",
+                "role": "open",
+                "qty": "0.001",
+                "price": "63602.83908",
+                "fee": "0.03180141954",
+                "tsMs": 1795072726033,
+                "liquidity": "taker",
+                "orderId": "ord_db2dbf722a169e3d3561"
+              }
+            ],
+            "markAtMs": 1795072725886,
+            "markSource": "practice"
+          },
+          {
+            "id": "fil_17d5d2679d372d390c09",
+            "accountId": "acc_92bf981a6f5789f81038",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "ETHUSDT",
+            "direction": "long",
+            "positionSide": "LONG",
+            "status": "open",
+            "openedAtMs": 1795072726074,
+            "closedAtMs": null,
+            "openQty": "0.01",
+            "maxQty": "0.01",
+            "entryQty": "0.01",
+            "exitQty": "0",
+            "avgEntryPrice": "3000.3",
+            "avgExitPrice": null,
+            "realizedPnl": "0",
+            "fees": "0.0150015",
+            "netPnl": "-0.0150015",
+            "markPrice": "3000",
+            "unrealizedPnl": "-0.003",
+            "legs": [
+              {
+                "fillId": "fil_17d5d2679d372d390c09",
+                "side": "buy",
+                "role": "open",
+                "qty": "0.01",
+                "price": "3000.3",
+                "fee": "0.0150015",
+                "tsMs": 1795072726074,
+                "liquidity": "taker",
+                "orderId": "ord_a82dc66c4f64995db61c"
+              }
+            ],
+            "markAtMs": 1795072726074,
+            "markSource": "practice"
+          }
+        ],
+        "usedMargin": "22.08276"
+      }
+    },
+    {
+      "name": "saved",
+      "at": "2026-11-19T07:19:00.639Z",
+      "evidence": {
+        "account": "acc_92bf981a6f5789f81038",
+        "balance": "999999.78014723944",
+        "fills": [
+          {
+            "id": "fil_c419429f581800e8f3c3",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "side": "sell",
+            "positionSide": "LONG",
+            "positionEffect": "close",
+            "qty": "0.002",
+            "price": "63592.6401",
+            "fee": "0.0635926401",
+            "feeCurrency": "USDT",
+            "liquidity": "taker",
+            "orderId": "ord_e25a590207f1e397dc62",
+            "tsMs": 1795072740402,
+            "source": "practice",
+            "note": ""
+          },
+          {
+            "id": "fil_17d5d2679d372d390c09",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "ETHUSDT",
+            "side": "buy",
+            "positionSide": "LONG",
+            "positionEffect": "open",
+            "qty": "0.01",
+            "price": "3000.3",
+            "fee": "0.0150015",
+            "feeCurrency": "USDT",
+            "liquidity": "taker",
+            "orderId": "ord_a82dc66c4f64995db61c",
+            "tsMs": 1795072726074,
+            "source": "practice",
+            "note": ""
+          },
+          {
+            "id": "fil_5457926f13752e05d680",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "side": "sell",
+            "positionSide": "SHORT",
+            "positionEffect": "open",
+            "qty": "0.001",
+            "price": "63602.83908",
+            "fee": "0.03180141954",
+            "feeCurrency": "USDT",
+            "liquidity": "taker",
+            "orderId": "ord_db2dbf722a169e3d3561",
+            "tsMs": 1795072726033,
+            "source": "practice",
+            "note": ""
+          },
+          {
+            "id": "fil_03005a9e5cda789d8ae4",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "side": "buy",
+            "positionSide": "LONG",
+            "positionEffect": "open",
+            "qty": "0.002",
+            "price": "63615.56092",
+            "fee": "0.06361556092",
+            "feeCurrency": "USDT",
+            "liquidity": "taker",
+            "orderId": "ord_a92a6305f8b80aea3103",
+            "tsMs": 1795072725886,
+            "source": "practice",
+            "note": ""
+          }
+        ],
+        "short": "fil_5457926f13752e05d680",
+        "note": "je_ba7cf1df9e92dce8a638"
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T07:19:00.698Z",
+      "evidence": {
+        "ownedPids": [
+          44122,
+          44123,
+          44124,
+          44125,
+          44134,
+          44135,
+          44140,
+          44141,
+          44155,
+          44157
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T07:19:08.130Z",
+      "evidence": {
+        "elapsedMs": 7432
+      }
+    },
+    {
+      "name": "launch",
+      "at": "2026-11-19T07:19:20.544Z",
+      "evidence": {
+        "pid": 44272,
+        "packaged": true
+      }
+    },
+    {
+      "name": "both-markets-held-without-orders",
+      "at": "2026-11-19T07:19:29.846Z",
+      "evidence": {
+        "beforeMarks": {
+          "BTCUSDT": 1795072743407,
+          "ETHUSDT": 1795072743400
+        },
+        "positions": [
+          {
+            "id": "fil_5457926f13752e05d680",
+            "accountId": "acc_92bf981a6f5789f81038",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "direction": "short",
+            "positionSide": "SHORT",
+            "status": "open",
+            "openedAtMs": 1795072726033,
+            "closedAtMs": null,
+            "openQty": "0.001",
+            "maxQty": "0.001",
+            "entryQty": "0.001",
+            "exitQty": "0",
+            "avgEntryPrice": "63602.83908",
+            "avgExitPrice": null,
+            "realizedPnl": "0",
+            "fees": "0.03180141954",
+            "netPnl": "-0.03180141954",
+            "markPrice": "63592.8",
+            "unrealizedPnl": "0.01003908",
+            "legs": [
+              {
+                "fillId": "fil_5457926f13752e05d680",
+                "side": "sell",
+                "role": "open",
+                "qty": "0.001",
+                "price": "63602.83908",
+                "fee": "0.03180141954",
+                "tsMs": 1795072726033,
+                "liquidity": "taker",
+                "orderId": "ord_db2dbf722a169e3d3561"
+              }
+            ],
+            "markAtMs": 1795072769727,
+            "markSource": "practice"
+          },
+          {
+            "id": "fil_17d5d2679d372d390c09",
+            "accountId": "acc_92bf981a6f5789f81038",
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "ETHUSDT",
+            "direction": "long",
+            "positionSide": "LONG",
+            "status": "open",
+            "openedAtMs": 1795072726074,
+            "closedAtMs": null,
+            "openQty": "0.01",
+            "maxQty": "0.01",
+            "entryQty": "0.01",
+            "exitQty": "0",
+            "avgEntryPrice": "3000.3",
+            "avgExitPrice": null,
+            "realizedPnl": "0",
+            "fees": "0.0150015",
+            "netPnl": "-0.0150015",
+            "markPrice": "1802.77",
+            "unrealizedPnl": "-11.9753",
+            "legs": [
+              {
+                "fillId": "fil_17d5d2679d372d390c09",
+                "side": "buy",
+                "role": "open",
+                "qty": "0.01",
+                "price": "3000.3",
+                "fee": "0.0150015",
+                "tsMs": 1795072726074,
+                "liquidity": "taker",
+                "orderId": "ord_a82dc66c4f64995db61c"
+              }
+            ],
+            "markAtMs": 1795072769387,
+            "markSource": "practice"
+          }
+        ],
+        "feeds": [
+          {
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "BTCUSDT",
+            "status": "live",
+            "detail": "",
+            "observedMs": 1795072769727,
+            "lastPrice": "63592.8",
+            "lagMs": 4,
+            "timing": {
+              "queueMs": 0,
+              "queryMs": 3,
+              "applyMs": 0,
+              "bars": 1,
+              "fills": 0,
+              "measuredAtMs": 1795072769730,
+              "wakeMs": 1,
+              "lagMs": 4
+            }
+          },
+          {
+            "exchange": "binance",
+            "marketType": "futures",
+            "symbol": "ETHUSDT",
+            "status": "live",
+            "detail": "",
+            "observedMs": 1795072769387,
+            "lastPrice": "1802.77",
+            "lagMs": 5,
+            "timing": {
+              "queueMs": 0,
+              "queryMs": 3,
+              "applyMs": 1,
+              "bars": 1,
+              "fills": 0,
+              "measuredAtMs": 1795072769391,
+              "wakeMs": 1,
+              "lagMs": 5
+            }
+          }
+        ],
+        "reconnectedLedger": "20d57d74df3943969f631da465613a97"
+      }
+    },
+    {
+      "name": "restored-and-closed-short",
+      "at": "2026-11-19T07:19:43.239Z",
+      "evidence": {
+        "position": "fil_17d5d2679d372d390c09",
+        "fillsBefore": 4,
+        "balance": "999999.751927399795"
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T07:19:43.300Z",
+      "evidence": {
+        "ownedPids": [
+          44272,
+          44273,
+          44274,
+          44275,
+          44302,
+          44307,
+          44329,
+          44330,
+          44331,
+          44333
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T07:19:48.532Z",
+      "evidence": {
+        "elapsedMs": 5232
+      }
+    }
+  ],
+  "errors": [],
+  "scope": "macOS installed LIVE app, isolated local practice ledger, BTC and ETH futures",
+  "passed": true,
+  "package": {
+    "trackedFiles": 1160,
+    "rendererAssets": 170,
+    "asarSha256": "8ad68b2cb01013df320ac59f2eda88b1f8679cdbc316ce649c3d2b5485a9597e",
+    "strictSignatureBeforeAndAfter": true
+  },
+  "independentDecimalReference": {
+    "savedBalance": "999999.78014723944",
+    "finalBalance": "999999.751927399795",
+    "grossMarginWithThreePositions": "22.08276",
+    "fillCount": 5
+  }
+}

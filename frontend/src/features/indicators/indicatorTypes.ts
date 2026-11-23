@@ -62,6 +62,8 @@ export interface IndicatorDefinition {
   is_builtin?: boolean;
   kind?: IndicatorKind | string;
   renderHints?: Record<string, unknown>;
+  /** Runtime only: spans of the cached result computed from a partial seed. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
 }
 
 interface IndicatorParameterBase {
@@ -90,6 +92,8 @@ export type IndicatorParameterSchema =
 
 export interface IndicatorOhlcvBar {
   time: number;
+  /** Original script clock for ordered chart rows. */
+  sourceTime?: number;
   open: number;
   high: number;
   low: number;
@@ -125,6 +129,7 @@ export type IndicatorAnnotationPoint =
   | (IndicatorAnnotationPointFields & { value: number; time?: number });
 
 export interface IndicatorLine {
+  inputAxis?: "display-ordinal";
   nativeScene?: Record<string, unknown>;
   data: IndicatorValuePoint[];
   id?: string;
@@ -148,9 +153,34 @@ export interface IndicatorLine {
   colorData?: IndicatorColorPoint[] | null;
   /** Internal renderer hint. Historical snapshot/patch/range paths reset it. */
   renderUpdate?: "tail" | "full" | null;
+  /** Owner indicator's partial-seed spans, attached by pane projection for legends. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
+}
+
+/**
+ * Whether a builtin range result had its full convergence warmup before the
+ * first returned bar (ADR-INDICATOR-001 §4). `partial` values were computed
+ * from the earliest locally stored bar and are recomputed when older history
+ * is persisted.
+ */
+export interface IndicatorSeedState {
+  state: "converged" | "partial";
+  warmupBars: number;
+  seedBars: number;
+}
+
+/**
+ * Bars whose values came from a partial seed: from the start of a range
+ * reported `partial` through the last bar before the convergence warmup was
+ * reached. `seedBars` counts stored bars before `start`.
+ */
+export interface IndicatorPartialSeedRange extends IndicatorRange {
+  warmupBars: number;
+  seedBars: number;
 }
 
 export interface IndicatorDrawing {
+  inputAxis?: "display-ordinal";
   id: string;
   indicatorId?: string;
   pane: string;
@@ -160,6 +190,7 @@ export interface IndicatorDrawing {
 }
 
 export interface IndicatorMarker {
+  inputAxis?: "display-ordinal";
   data: IndicatorAnnotationPoint[];
   indicatorId?: string;
   id?: string;
@@ -172,6 +203,7 @@ export interface IndicatorMarker {
 }
 
 export interface IndicatorFill {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -187,6 +219,7 @@ export interface IndicatorFill {
 }
 
 export interface IndicatorHLine {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -199,6 +232,7 @@ export interface IndicatorHLine {
 }
 
 export interface IndicatorBgColor {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -209,6 +243,7 @@ export interface IndicatorBgColor {
 }
 
 export interface IndicatorBarColor {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -216,6 +251,7 @@ export interface IndicatorBarColor {
 }
 
 export interface IndicatorSignal {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -340,6 +376,8 @@ export interface IndicatorPayloadEnvelope {
   signals: IndicatorSignal[];
   param_schema: IndicatorParameterSchema[];
   range?: IndicatorRange;
+  /** Builtin range payloads only; absent elsewhere. */
+  seed?: IndicatorSeedState;
   dataRevision?: IndicatorRevision;
   __httpStatus?: number;
   history_state?: "ready" | "pending" | "exhausted";
@@ -463,7 +501,13 @@ export interface IndicatorReplayContext {
   sourceSequence?: number;
 }
 
+export interface IndicatorChartInput {
+  request: import("../market-data/synthetic/syntheticSeries.js").SyntheticRequest;
+  seriesId: string; generation: string; revision: number;
+}
+
 export interface IndicatorComputeRequest {
+  chartInput?: IndicatorChartInput;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   mode?: string;
   language?: string;
@@ -613,6 +657,8 @@ export interface IndicatorCacheMetadata {
   revision?: IndicatorRevision | null;
   dataRevision?: IndicatorRevision | null;
   cascadeRight?: boolean;
+  /** Seed state of the payload being cached; applies to `range`. */
+  seed?: IndicatorSeedState | null;
 }
 
 export interface IndicatorCacheEntry {
@@ -628,6 +674,8 @@ export interface IndicatorCacheEntry {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  /** Present only while some cached values came from a partial seed. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
   lastAccessMs: number;
 }
@@ -642,6 +690,7 @@ export interface IndicatorCacheResult {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
 }
 
@@ -654,6 +703,7 @@ export interface IndicatorCacheResultMetadata {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
 }
 

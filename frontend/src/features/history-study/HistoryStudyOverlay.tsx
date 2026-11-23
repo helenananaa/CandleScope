@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, InlineAlert, Input } from "../../components/ui/index.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -6,6 +7,8 @@ import { indicatorSignature, type ControlCellObservation } from "../app-control/
 import { historyStudyCommands } from "./historyStudyCommands.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
+import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
@@ -113,6 +116,20 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   }, [active, changePlaying, editor, onMove, playback, playing]);
   const version = Number(store.version);
   const rows = store.snapshot();
+  usePluginChartSource(`${workspaceId}:${cellId}`, !busy && !error && rows.length ? {
+    observe: () => Number(store.version) === version ? {
+      mode: "history-study", runId: input.id, trackId: cellId, seriesId: store.seriesKey ?? `study:${input.id}`,
+      symbol: series.symbol, interval: series.interval,
+      dataRevision: `${input.id}:${revision}:${version}`, visibleThroughMs: cursorMs,
+    } : null,
+    bars: ({ visibleThroughMs }) => rows.slice(-MAX_PLUGIN_CHART_BARS).flatMap(bar => {
+      const open = Number(bar.time) * 1000;
+      const end = open + (store.intervalSeconds ?? 0) * 1000 - 1;
+      return end <= visibleThroughMs && bar.is_closed === true ? observePluginBar(open, end, true, bar) : [];
+    }),
+    subscribe: listener => store.subscribe(listener),
+  } : null);
+
   const renderedVersion = useRef(version);
   useLayoutEffect(() => { renderedVersion.current = version; }, [version]);
   const linkedSurface = useMemo(() => createStudyLinkSurface(playback, () => renderedVersion.current, surface.actions), [playback, surface.actions]);
@@ -129,7 +146,8 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     committedAt: null, optimistic: false, historyComplete: true, dataRevision: input.id }), [input.id, rows, store.seriesKey, version]);
   const persistence = useMemo(() => ({ controlled: true, load: () => definitions.map(item => ({ ...item })), save: () => undefined }), [definitions]);
   const unsupported = definitions.map(indicator => ({ indicator, support: providedBarsIndicatorSupport(indicator) })).filter(item => !item.support.supported);
-  const indicators = useProvidedBarsIndicatorRuntime({ bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
+  const indicators = useProvidedBarsIndicatorRuntime({
+    chart: chartIndicatorSelection(capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs), store, { chartType: normalizeMainChartType(style.chartType) }), bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
     exchange: series.exchange, marketType: series.marketType, symbol: series.symbol, interval: series.interval,
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });
@@ -163,6 +181,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
       {(error || notesError) ? <InlineAlert tone="danger" className="quick-replay-notice"
         {...(error ? { action: <Button size="sm" onClick={onRetry}>{t("study.retry")}</Button> } : {})}>{t("study.error")}</InlineAlert> : null}
       <ChartErrorBoundary><SingleChartPanes ref={surface.ref} seriesStore={store} symbol={series.symbol} interval={series.interval}
+        backendSyntheticSource={capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs)}
         drawingKeyBase={`history-study:${input.id}`} drawingReadOnly drawingsHidden={drawingsHidden ?? false}
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}

@@ -1,11 +1,13 @@
 import { PineObjectPrimitive } from "../chart-adapter/pineObjectPrimitive.js";
 import type { IndicatorDrawing } from "../features/indicators/indicatorTypes.js";
 import { useChartDisplaySubscription } from "../features/market-data/useChartDisplaySubscription.js";
+import { useBackendSyntheticSeries } from "../features/market-data/synthetic/useBackendSyntheticSeries.js";
 import { createProjectionCommitGate } from "../chart-adapter/projectionCommitGate.js";
 import type { ChartDisplayScheduler } from "../features/market-data/chartDisplaySubscription.js";
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { ChartLoadingStatus } from "./ChartLoadingStatus.js";
 import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
@@ -79,7 +81,7 @@ import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource
 import { attachExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import type { ExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import { attachPluginChartLayerSource } from "../chart-adapter/pluginChartLayerRenderer.js";
-import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
+import type { ChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { renderBgcolors } from "../chart-adapter/bgcolorPrimitiveRenderer";
 import {
   buildMainSeriesProjectionPatch,
@@ -205,6 +207,7 @@ import { useDrawingFontMetricRevision } from "../features/drawings/text/drawingF
 import {
   axisTimeKey,
   bindSurfaceViewportSourceAnchor,
+  buildSurfaceViewportCacheKey,
   buildDisplaySourceTimeIndex,
   buildSurfaceViewportSnapshot,
   findDisplayIndexForAxisAnchor,
@@ -280,6 +283,7 @@ import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRu
 import type { LoadMoreLeft } from "../features/market-data/useChartLoadMoreLeft.js";
 import { TransferredViewportHistory } from "./transferredViewportHistory";
 import type { KlineBar } from "../features/market-data/marketDataTypes.js";
+import type { BackendSyntheticSource } from "../features/market-data/synthetic/syntheticSeries.js";
 import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 import type { PriceBoxSizeMode } from "../features/settings/chartAppearanceSettings.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
@@ -291,6 +295,7 @@ export interface SingleChartPanesProps {
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
+  backendSyntheticSource?: BackendSyntheticSource | null;
   contractVolume?: boolean;
   symbol: string;
   drawingKeyBase?: string;
@@ -303,6 +308,8 @@ export interface SingleChartPanesProps {
   loading?: boolean;
   indicatorStatusText?: string | null;
   onCrosshairMove?: ((value: MainSeriesCrosshairValue | null) => void) | null;
+  /** A click on the main pane (not on a marker): the clicked bar's time and the price under the pointer. */
+  onChartPointClick?: ((point: { time: ChartTime; price: number }) => void) | null;
   onNeedMoreLeft?: LoadMoreLeft | null;
   onNeedMoreRight?: (() => Promise<boolean>) | null;
   onRestoreLatestWindow?: (() => Promise<boolean>) | null;
@@ -364,7 +371,7 @@ export interface SingleChartPanesProps {
   indicatorMarkers?: IndicatorMarker[];
   externalMarkerSource?: ExternalMarkerSource | null;
   externalPriceLineSource?: ExternalPriceLineSource | null;
-  pluginChartLayerSource?: PluginChartLayerSource | null;
+  pluginChartLayerSource?: ChartLayerSource | null;
   indicatorFills?: IndicatorFill[];
   indicatorHlines?: IndicatorHLine[];
   indicatorBgcolors?: IndicatorBgColor[];
@@ -818,6 +825,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   suspended = false,
   displayScheduler,
   seriesStore = null,
+  backendSyntheticSource = null,
   contractVolume = false,
   symbol,
   drawingKeyBase = "",
@@ -831,6 +839,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   loading = false,
   indicatorStatusText = null,
   onCrosshairMove,
+  onChartPointClick = null,
   onNeedMoreLeft,
   onNeedMoreRight = null,
   onRestoreLatestWindow = null,
@@ -902,7 +911,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onPriceScaleModeChange,
   onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
-  const displaySubscription = useChartDisplaySubscription(seriesStore, suspended, displayScheduler);
+  const sourceDisplaySubscription = useChartDisplaySubscription(seriesStore, suspended, displayScheduler);
   const extensionTheme = useSyncExternalStore(subscribeExtensions, () => getExtensionState().theme, () => null);
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
@@ -1350,6 +1359,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     };
   }, [datasetKey, drawingSeriesGeneration, externalMarkerSource, usesDerivedAxis]);
   useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onChartPointClick || usesDerivedAxis) return undefined;
+    const handlePointClick = (param: ChartClickParam) => {
+      if (typeof param.hoveredObjectId === "string" || (param.paneIndex ?? 0) !== 0) return;
+      const price = param.point ? mainSeriesRef.current?.coordinateToPrice(param.point.y) : null;
+      if (param.time === undefined || typeof price !== "number" || !Number.isFinite(price)) return;
+      onChartPointClick({ time: param.time as ChartTime, price });
+    };
+    chart.subscribeClick(handlePointClick);
+    return () => {
+      try { chart.unsubscribeClick(handlePointClick); } catch { /* chart may already be disposing */ }
+    };
+  }, [datasetKey, drawingSeriesGeneration, onChartPointClick, usesDerivedAxis]);
+  useEffect(() => {
     const series = mainSeriesRef.current;
     if (!pluginChartLayerSource || !series || usesDerivedAxis) return undefined;
     try {
@@ -1412,6 +1435,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     resolvedChartType,
   ]);
   const syntheticChartNotice = buildSyntheticChartNotice(resolvedChartType, projectionSettings, locale);
+  const backendSynthetic = useBackendSyntheticSeries({
+    source: backendSyntheticSource, reader: seriesStore, chartType: resolvedChartType,
+    settings: projectionSettings, display: sourceDisplaySubscription,
+  });
+  const displaySubscription = backendSynthetic.display;
+  const backendBindingRef = useRef(backendSynthetic.binding);
+  backendBindingRef.current = backendSynthetic.binding;
   const projectionSettingsKey = JSON.stringify(projectionSettings);
   const surfaceConfigKey = resolvedAxisMode === "derived-ordinal"
     ? `${resolvedAxisMode}:${resolvedChartType}:${projectionSettingsKey}`
@@ -2179,6 +2209,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const jumpToLatest = useCallback(() => {
     const lastIndex = displayRowsRef.current.length - 1;
     if (lastIndex < 0) return;
+    // Explicit follow-latest retires the remembered historical intent too;
+    // revisiting this dataset must not resurrect it after late history arrives.
+    const rememberedKey = buildSurfaceViewportCacheKey(datasetKeyRef.current, surfaceConfigKeyRef.current);
+    if (rememberedKey) surfaceViewportCacheRef.current.delete(rememberedKey);
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2207,11 +2241,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     latestWindowScrollGateRef.current.request(store, store.version, () => {
       if (datasetKeyRef.current !== requestedDatasetKey || seriesStoreRef.current !== store
         || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return;
-      if (followLatestRef.current && displayRowsRef.current.length > 0) {
-        jumpToLatest();
-      } else {
-        chartRef.current?.timeScale().scrollToRealTime?.();
-      }
+      jumpToLatest();
     });
   }, [jumpToLatest]);
 
@@ -2503,7 +2533,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         return true;
       }
       chart.setCrosshairPosition(price, displayRow.time, series);
-      paneCrosshairStore.publish(sourceTime);
+      paneCrosshairStore.publish(displayRow.time);
       const includeVolume = !isOrdinalAxisTime(displayRow.time)
         || isLastDisplayTargetForSourceTime(displayRowsRef.current, displayIndex);
       publishMainLegendCrosshair(buildMainSeriesCrosshairValue(
@@ -2726,6 +2756,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       initialChartType,
       initialRows,
       requestedProjectionSettingsRef.current || {},
+      backendBindingRef.current,
     );
     initialProjectionStore.reset(initialRows);
     publishDrawingProjectionStore(initialProjectionStore);
@@ -2878,7 +2909,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         reportCrosshairMove(null);
         return;
       }
-      paneCrosshairStore.publish(sourceTime);
+      paneCrosshairStore.publish(axisTime);
       const includeVolume = initialDescriptor.axisMode === "time"
         || isLastDisplayTargetForSourceTime(displayRowsRef.current, displayIndex);
       const crosshairValue = buildMainSeriesCrosshairValue(
@@ -3529,6 +3560,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         resolvedChartType,
         rows,
         projectionSettings,
+        backendBindingRef.current,
       );
       const projectionPatch = nextProjectionStore.reset(rows);
       const displayRows = nextProjectionStore.displaySnapshot();
@@ -3961,6 +3993,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       activeChartType,
       rows,
       projectionSettings,
+      backendBindingRef.current,
     );
     const existingProjectionStore = projectionStoreRef.current;
     const canReuseProjection = existingProjectionStore?.configurationKey
@@ -4914,8 +4947,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       const series = pane.id === "main" ? mainSeriesRef.current : selectIndicatorPaneAnnotationTarget(indicatorSeriesRef.current, pane.id,
         panePlaceholderSeriesRef.current.seriesByPane.get(pane.paneIndex)?.series ?? null);
       if (!series) continue;
-      const primitive = new PineObjectPrimitive();
-      primitive.update(scenes, sourceRowsRef.current, (time) => {
+      const sourceCoordinate = (time: number) => {
         const display = displayRowsRef.current;
         if (!display.length) return null;
         const sourceTime = (index: number) => { const row = display[index]!; return typeof row.time === "number" ? row.time : row.time.sourceTime; };
@@ -4932,9 +4964,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (a === null) return null;
         const step = display[left + 1] ? sourceTime(left + 1) - sourceTime(left) : (parseIntervalSeconds(interval) || 60);
         return a + (time - sourceTime(left)) / Math.max(1, step) * (b === null ? chart.timeScale().options().barSpacing : b - a);
-      });
-      series.attachPrimitive(primitive);
-      attached.push({ series, primitive });
+      };
+      for (const ordinal of [false, true]) {
+        const group = scenes.filter(scene => (scene.inputAxis === "display-ordinal") === ordinal);
+        if (!group.length) continue;
+        const primitive = new PineObjectPrimitive();
+        const bars = ordinal ? displayRowsRef.current.map(row => ({ ...row,
+          time: typeof row.time === "object" ? row.time.order + 1 : row.time })) : sourceRowsRef.current;
+        const coordinate = ordinal ? (key: number) => {
+          const rows = displayRowsRef.current;
+          const index = key - 1, anchor = Math.max(0, Math.min(rows.length - 1, Math.floor(index)));
+          const row = rows[anchor]; if (!row) return null;
+          const x = chart.timeScale().timeToCoordinate(row.time);
+          return x === null ? null : x + (index - anchor) * chart.timeScale().options().barSpacing;
+        } : sourceCoordinate;
+        primitive.update(group, bars, coordinate, sourceCoordinate);
+        series.attachPrimitive(primitive);
+        attached.push({ series, primitive });
+      }
     }
     return () => { for (const { series, primitive } of attached) series.detachPrimitive(primitive); };
   }, [dataMeta, indicatorDatasetOwned, indicatorDrawings, interval, paneDescriptors, seriesReady]);
@@ -5637,12 +5684,19 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       {indicatorStatusText && !loading && (
         <div className="chart-indicator-status" role="status">{indicatorStatusText}</div>
       )}
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
-          <span className="loading-text">{t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}</span>
+      {backendSynthetic.binding && backendSynthetic.status !== "ready" && !loading && (
+        <div className="chart-indicator-status" role="status">
+          {t(backendSynthetic.status === "preparing" ? "chart.syntheticPreparing" : "chart.syntheticUnavailable", {}, locale)}
         </div>
       )}
+      <ChartLoadingStatus
+        loading={loading}
+        text={t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}
+        datasetKey={datasetKey}
+        dataMeta={dataMeta}
+        seriesStore={seriesStore}
+        paintedDatasetKey={drawingSurfaceDataKey}
+      />
     </div>
     </div>
   );

@@ -83,6 +83,9 @@ function getStore(): PerformanceStore | null {
 function performanceMark(name: PerformanceMarkName, detail: unknown): void {
   if (!canUseWindow() || !window.performance?.mark) return;
   try {
+    // The report uses the latest mark for each name. Keep the browser's
+    // separate timeline bounded too; live observers still receive each mark.
+    window.performance.clearMarks?.(name);
     window.performance.mark(name, detail ? { detail } : undefined);
   } catch {
     try {
@@ -154,6 +157,7 @@ export function measurePerf(
   const durationMs = Math.max(0, Math.round(end.at - start.at));
   if (canUseWindow() && window.performance?.measure) {
     try {
+      window.performance.clearMeasures?.(name);
       window.performance.measure(name, startName, endName);
     } catch {
       // Browser may reject repeated names or missing marks; local report still has the value.

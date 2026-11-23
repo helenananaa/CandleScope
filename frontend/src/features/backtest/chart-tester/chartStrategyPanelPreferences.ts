@@ -9,6 +9,8 @@ export interface ChartStrategyPanelPreferences {
   activeTab: ChartStrategyPanelTab;
   runMode?: ContinuousMode;
   runModeDraftId?: string;
+  /** Where forward tracking starts when it is opened again from the chart (ADR-BACKTEST-015 P4c). */
+  forwardStart?: Exclude<ContinuousMode, "HISTORY">;
 }
 
 export const CHART_STRATEGY_MIN_PANEL_HEIGHT = 260;
@@ -49,6 +51,7 @@ export function loadChartStrategyPanelPreferences(
       ...(parsed?.runMode === "HISTORY_LIVE" || parsed?.runMode === "LIVE_ONLY" ? { runMode: parsed.runMode } : {}),
       ...(typeof parsed?.runModeDraftId === "string" && parsed.runModeDraftId.length > 0
         && parsed.runModeDraftId.length <= 160 ? { runModeDraftId: parsed.runModeDraftId } : {}),
+      ...(parsed?.forwardStart === "HISTORY_LIVE" || parsed?.forwardStart === "LIVE_ONLY" ? { forwardStart: parsed.forwardStart } : {}),
     };
   } catch {
     return fallback;
@@ -67,6 +70,7 @@ export function saveChartStrategyPanelPreferences(
       activeTab: preferences.activeTab,
       ...(preferences.runMode ? { runMode: preferences.runMode } : {}),
       ...(preferences.runModeDraftId ? { runModeDraftId: preferences.runModeDraftId } : {}),
+      ...(preferences.forwardStart ? { forwardStart: preferences.forwardStart } : {}),
     }));
   } catch {
     // Preference storage is best-effort and must not block a Run or its result.

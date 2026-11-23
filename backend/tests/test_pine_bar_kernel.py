@@ -5,7 +5,7 @@ import pytest
 
 from app.market_dataset.snapshot import MarketEvent, MarketDatasetError
 from app.simulation.kernel import SimulationKernel
-from app.simulation.pine_bar_kernel import PineBarKernel, MODEL
+from app.simulation.ohlc_path import PATH_MODEL as MODEL, PINE_PATH
 
 
 def bar(open_=100, high=110, low=80, close=105, begin=0):
@@ -20,7 +20,7 @@ def enqueue(kernel, kind, side="BUY", **extra):
 
 @pytest.mark.parametrize("open_,winner", [(100, "LIMIT_TOUCH"), (90, "STOP_TOUCH")])
 def test_oco_follows_nearest_extreme_instead_of_worst_case(open_, winner):
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "MARKET")
     def reporter(event):
         if event.get("fill") and len(kernel.fills) == 1:
@@ -41,14 +41,14 @@ def test_oco_follows_nearest_extreme_instead_of_worst_case(open_, winner):
     ("STOP", "SELL", {"stop_price": "110"}, 100),
 ])
 def test_gapped_orders_fill_at_open(kind, side, fields, expected):
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, kind, side, **fields)
     kernel.walk_bar(bar(), lambda _: None)
     assert kernel.fills[0].price == expected and kernel.fills[0].event_time_ms == 0
 
 
 def test_stop_limit_activation_waits_for_later_limit_retrace():
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "STOP_LIMIT", stop_price="108", limit_price="103")
     kernel.walk_bar(bar(), lambda _: None)
     assert len(kernel.fills) == 1
@@ -57,7 +57,7 @@ def test_stop_limit_activation_waits_for_later_limit_retrace():
 
 
 def test_market_created_by_crossing_callback_waits_for_vertex():
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "LIMIT", limit_price="95")
     def report(event):
         if event.get("fill") and len(kernel.fills) == 1:
@@ -69,10 +69,10 @@ def test_market_created_by_crossing_callback_waits_for_vertex():
 
 
 def test_restore_continues_path_sequence_and_rejects_wrong_matcher():
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     kernel.walk_bar(bar(), lambda _: enqueue(kernel, "MARKET"))
     saved = deepcopy(kernel.snapshot())
-    restored = PineBarKernel(slippage_bps=D(0))
+    restored = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     restored.restore(saved)
     for candidate in (kernel, restored):
         candidate.walk_bar(bar(begin=60000), lambda _: None)
@@ -81,11 +81,11 @@ def test_restore_continues_path_sequence_and_rejects_wrong_matcher():
     with pytest.raises(MarketDatasetError, match="own matcher"):
         SimulationKernel().restore(saved)
     with pytest.raises(MarketDatasetError, match="checkpoint differs"):
-        PineBarKernel().restore({**saved, "pine_bar_path": {"contract": "wrong", "sequence": 4}})
+        SimulationKernel(bar_clock=PINE_PATH).restore({**saved, "pine_bar_path": {"contract": "wrong", "sequence": 4}})
 
 
 def test_callback_order_cannot_fill_on_same_vertex():
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "MARKET")
     def report(event):
         if event.get("fill") and len(kernel.fills) == 1:
@@ -98,7 +98,7 @@ def test_callback_order_cannot_fill_on_same_vertex():
 
 def test_trailing_activation_and_favorable_watermark_precede_reverse_stop():
     from app.backtest.external_orders import ExternalOrders
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     orders = ExternalOrders(kernel, price_tick="1", fidelity="PINE_BAR_PATH")
     orders.configure(1)
     kernel._enqueue_many(orders.translate([{"action": "entry", "id": "L", "direction": "long", "qty": 1}], 0), current_sequence=0)
@@ -117,13 +117,13 @@ def test_trailing_activation_and_favorable_watermark_precede_reverse_stop():
 
 
 def test_flat_vertices_are_next_ticks_and_stop_limit_cannot_fill_before_activation():
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "STOP_LIMIT", stop_price="108", limit_price="95")
     kernel.walk_bar(bar(high=110, low=90, close=105), lambda _: None)
     # Low is first on the equal-distance policy: 95 is crossed before the
     # stop activates, and no later price returns to 95.
     assert kernel.fills == [] and kernel.orders[0].activated
-    kernel = PineBarKernel(slippage_bps=D(0))
+    kernel = SimulationKernel(bar_clock=PINE_PATH, slippage_bps=D(0))
     enqueue(kernel, "MARKET")
     def report(event):
         if event.get("fill") and len(kernel.fills) == 1:
@@ -135,4 +135,4 @@ def test_flat_vertices_are_next_ticks_and_stop_limit_cannot_fill_before_activati
 
 def test_path_cannot_accidentally_run_the_legacy_whole_bar_matcher():
     with pytest.raises(MarketDatasetError, match="explicit execution clock"):
-        PineBarKernel().run([bar()], lambda *_: [])
+        SimulationKernel(bar_clock=PINE_PATH).run([bar()], lambda *_: [])

@@ -1,4 +1,5 @@
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, Field, InlineAlert, Textarea } from "../../components/ui/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -163,6 +164,56 @@ function Modal({ title, onClose, children, testId }: React.PropsWithChildren<{
   );
 }
 
+function UnifiedCommandForm({ command, runtime }: { command: PluginCommandContribution; runtime: PluginPlatformRuntime }) {
+  const [source, setSource] = useState(() => JSON.stringify(command.exampleInput ?? {}, null, 2));
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    setError("");
+    setResult(null);
+    let input: unknown;
+    try {
+      input = JSON.parse(source, (_key, value: unknown) => {
+        if (typeof value === "number" && !Number.isFinite(value)) throw new Error();
+        return value;
+      });
+    } catch {
+      setError(t("native.parametersInvalid"));
+      return;
+    }
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      setError(t("native.parametersInvalid"));
+      return;
+    }
+    setRunning(true);
+    try {
+      const value = await runtime.actions.invokeCommand(command.id, input as Record<string, JsonValue>);
+      setResult(JSON.stringify(value, null, 2));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t("plugin.host.operationFailed"));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return <form className="plugin-unified-command" onSubmit={(event) => { event.preventDefault(); void run(); }}>
+    <Field label={t("native.parameters")}>
+      <Textarea rows={8} value={source} spellCheck={false} disabled={running}
+        onChange={(event) => { setSource(event.target.value); setResult(null); setError(""); }} />
+    </Field>
+    <Button type="submit" size="sm" variant="primary" disabled={running || !runtime.view.managementAvailable}>
+      {running ? t("plugin.host.running") : t("plugin.host.runCommand")}
+    </Button>
+    {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+    {result !== null && <>
+      <small role="status">{t("plugin.notice.commandCompleted")}</small>
+      <pre className="plugin-unified-command-result">{result}</pre>
+    </>}
+  </form>;
+}
+
 function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
   const locale = useLocale();
   const [query, setQuery] = useState("");
@@ -211,7 +262,10 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
         </nav>
         <div className="plugin-command-form">
           {!selected && <p>{t("plugin.host.selectCommand")}</p>}
-          {selected && (
+          {selected?.unifiedTarget && (
+            <UnifiedCommandForm key={`${selected.id}/${selected.unifiedTarget.instanceId}`} command={selected} runtime={runtime} />
+          )}
+          {selected && !selected.unifiedTarget && (
             <>
               {nativeSchema && (
                 <PluginNativeField
@@ -460,7 +514,7 @@ function ViewSurface({ runtime, contribution }: {
     : undefined;
   const projectionMismatch = candidate !== undefined && projection === undefined;
   const primaryCommand = contribution.configuration.primaryCommand
-    ? runtime.view.registries.commandPalette.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
+    ? runtime.view.registries.commandPalette.find((item) => !item.unifiedTarget && item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
       ?? runtime.view.registries.topToolbar.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
       ?? runtime.view.registries.chartContextMenu.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
     : null;

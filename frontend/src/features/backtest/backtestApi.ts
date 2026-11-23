@@ -1,5 +1,7 @@
-import { readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
+import { readNdjsonUntilTerminal, readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
+import { parseStrategyExperimentFrame, type StrategyExperiment } from "./experiment/strategyExperiment.js";
 import { API_BASE } from "../../services/apiConfig.js";
+import { readStrategyRunStatusStream, type StrategyRunProgress, type StrategyRunStatus } from "./runResult/strategyRun.js";
 import type { ResearchSelectedVersion } from "../strategy-research/researchSelectedVersion.js";
 import { preparationRequest, waitForPreparation, type PreparationJob } from "../data-preparation/api.js";
 import type {
@@ -187,6 +189,7 @@ export interface BacktestApiClient {
     parameters: Record<string, unknown>;
     pine_contexts?: unknown[];
       output_mode?: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
+    signal_chart?: import("../../shared/strategyRunSettings.js").ChartSignalDefinition;
     python_bar_execution?: import("../../shared/strategyRunSettings.js").PythonBarExecution;
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;
@@ -221,6 +224,52 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
+  /**
+   * The run facade (ADR-BACKTEST-015 P2), one entry for every run family. Values are
+   * unvalidated wire values: see `parseStrategyRunStatus`, `parseRunResult` and
+   * `parseStrategyRunCapabilities`.
+   */
+  getStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  getStrategyRunResult?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  cancelStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  /** A commit-driven status stream for one fixed run; resolves with its terminal status. */
+  watchStrategyRun?(runId: string, signal?: AbortSignal,
+    onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void): Promise<StrategyRunStatus>;
+  strategyRunCapabilities?(signal?: AbortSignal): Promise<unknown>;
+  /**
+   * Chart FOLLOW runs (ADR-BACKTEST-015 P4b): a chart cell holds a live run through a lease.
+   * `holdStrategyFollow` creates or joins the run (`{ follow_id, created, from_ms, lease_ms }`);
+   * the run stops once no cell renews its lease. Values are unvalidated wire values.
+   */
+  holdStrategyFollow?(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  /**
+   * Experiments (ADR-BACKTEST-015 P5b): one strategy run over several inputs, held by the backend.
+   * Values are unvalidated wire values; the strategy data manager parses them.
+   */
+  createStrategyExperiment?(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  getStrategyExperiment?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  listStrategyExperiments?(limit: number, signal?: AbortSignal): Promise<unknown>;
+  cancelStrategyExperiment?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  retryStrategyExperimentMember?(experimentId: string, ordinal: number, signal?: AbortSignal): Promise<unknown>;
+  revealStrategyExperimentHoldout?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  adoptStrategyStudy?(studyId: string, signal?: AbortSignal): Promise<unknown>;
+  /** The experiment's commit-driven stream; reports each experiment and resolves with the first one no member is active in. */
+  watchStrategyExperiment?(experimentId: string, onExperiment: (value: StrategyExperiment) => void,
+    signal?: AbortSignal): Promise<StrategyExperiment>;
+  renewStrategyFollow?(followId: string, holder: string, signal?: AbortSignal): Promise<unknown>;
+  releaseStrategyFollow?(followId: string, holder: string): Promise<void>;
+  /** Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b); unvalidated wire values. */
+  getStrategyVersion?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
+  getStrategyVersionDraft?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
+  strategyVersionNames?(signal?: AbortSignal): Promise<{ names: Array<{ name: string; version_hash: string; named_at_ms: number }> }>;
+  nameStrategyVersion?(name: string, versionHash: string, signal?: AbortSignal): Promise<{ name: string; version_hash: string }>;
+  unnameStrategyVersion?(name: string, signal?: AbortSignal): Promise<{ name: string; removed: boolean }>;
+  /** Small references the strategy pages keep (ADR-BACKTEST-015 P3c); values are unvalidated JSON. */
+  getStrategyReference?(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<unknown>;
+  listStrategyReferences?(kind: StrategyReferenceKind, prefix: string, signal?: AbortSignal): Promise<Array<{ key: string; value: unknown; updated_at_ms: number }>>;
+  putStrategyReference?(kind: StrategyReferenceKind, key: string, value: unknown, signal?: AbortSignal): Promise<void>;
+  removeStrategyReference?(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<void>;
+  importStrategyReferences?(kind: StrategyReferenceKind, entries: Array<{ key: string; value: unknown }>, signal?: AbortSignal): Promise<{ imported: string[]; kept: string[] }>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
     signal?: AbortSignal): Promise<{ revision: number }>;
@@ -243,6 +292,8 @@ export interface BacktestApiClient {
   copyStrategyRevision(revisionId: string, name: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   archiveStrategyRevision(revisionId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   createReviewBridge(runId: string, startTimeMs: number, endTimeMs: number, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  /** A new run of the same strategy and input with changed settings (ADR-BACKTEST-015 P5c). */
+  deriveRun?(runId: string, overrides: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   getReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   revealReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   inspectPythonBundle(zipBase64: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
@@ -250,10 +301,6 @@ export interface BacktestApiClient {
   getPythonBundle(bundleId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   createPythonRevision(bundleId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   getPythonRuntimeReceipt(revisionId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
-  createResearchLaunchContext(
-    body: BacktestResearchLaunchContextInput,
-    signal?: AbortSignal,
-  ): Promise<BacktestResearchLaunchContext>;
   getResearchLaunchContext(
     contextId: string,
     signal?: AbortSignal,
@@ -310,6 +357,9 @@ export interface BacktestSnapshot {
   identity?: Record<string, unknown>;
 }
 
+/** What the strategy pages keep in the backend instead of browser storage (ADR-BACKTEST-015 P3c). */
+export type StrategyReferenceKind = "continuous-run" | "research-handoff" | "research-return";
+
 export class BacktestApiError extends Error {
   constructor(
     readonly code: string,
@@ -350,7 +400,19 @@ function requestOptions(options: RequestInit, signal?: AbortSignal): RequestInit
   return signal === undefined ? options : { ...options, signal };
 }
 
-export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiClient {
+/** The run facade is served beside `/backtests` (ADR-BACKTEST-015 P2). */
+function strategyRunsBase(base: string) {
+  return base.endsWith("/backtests") ? `${base.slice(0, -"/backtests".length)}/strategy-runs` : `${API_BASE}/strategy-runs`;
+}
+
+export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = strategyRunsBase(base)): BacktestApiClient {
+  // Versions are served beside the run facade.
+  const sibling = (name: string) => runsBase.endsWith("/strategy-runs")
+    ? `${runsBase.slice(0, -"/strategy-runs".length)}/${name}` : `${API_BASE}/${name}`;
+  const versionsBase = sibling("strategy-versions");
+  const referencesBase = sibling("strategy-references");
+  const followsBase = sibling("strategy-follows");
+  const experimentsBase = sibling("strategy-experiments");
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -517,6 +579,126 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         ),
       );
     },
+    async getStrategyRun(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}`, requestOptions({}, signal)));
+    },
+    async getStrategyRunResult(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/result`, requestOptions({}, signal)));
+    },
+    async watchStrategyRun(runId, signal, onStatus) {
+      const response = await fetch(`${runsBase}/${encodeURIComponent(runId)}/events`, requestOptions({
+        headers: { Accept: "application/x-ndjson" },
+      }, signal));
+      if (!response.ok) await readJson(response);
+      if (!response.body || !response.headers.get("content-type")?.startsWith("application/x-ndjson")) {
+        throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "The backend did not return a run status stream");
+      }
+      return readStrategyRunStatusStream({ body: response.body, runId, ...(signal ? { signal } : {}), ...(onStatus ? { onStatus } : {}) });
+    },
+    async cancelStrategyRun(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/cancel`, requestOptions({ method: "POST" }, signal)));
+    },
+    async getStrategyVersion(versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/${encodeURIComponent(versionHash)}`, requestOptions({}, signal)));
+    },
+    async getStrategyVersionDraft(versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/${encodeURIComponent(versionHash)}/draft`, requestOptions({}, signal)));
+    },
+    async strategyVersionNames(signal) {
+      return readJson(await fetch(`${versionsBase}/names`, requestOptions({}, signal)));
+    },
+    async nameStrategyVersion(name, versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/names/${encodeURIComponent(name)}`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version_hash: versionHash }),
+      }, signal)));
+    },
+    async unnameStrategyVersion(name, signal) {
+      return readJson(await fetch(`${versionsBase}/names/${encodeURIComponent(name)}`, requestOptions({ method: "DELETE" }, signal)));
+    },
+    async getStrategyReference(kind, key, signal) {
+      const response = await fetch(`${referencesBase}/${kind}/entry?key=${encodeURIComponent(key)}`, requestOptions({}, signal));
+      if (response.status === 404) return null;
+      return (await readJson<{ value: unknown }>(response)).value;
+    },
+    async listStrategyReferences(kind, prefix, signal) {
+      return (await readJson<{ entries: Array<{ key: string; value: unknown; updated_at_ms: number }> }>(await fetch(
+        `${referencesBase}/${kind}?prefix=${encodeURIComponent(prefix)}&limit=512`, requestOptions({}, signal)))).entries;
+    },
+    async putStrategyReference(kind, key, value, signal) {
+      await readJson(await fetch(`${referencesBase}/${kind}/entry`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }),
+      }, signal)));
+    },
+    async removeStrategyReference(kind, key, signal) {
+      await readJson(await fetch(`${referencesBase}/${kind}/entry?key=${encodeURIComponent(key)}`, requestOptions({ method: "DELETE" }, signal)));
+    },
+    async importStrategyReferences(kind, entries, signal) {
+      return readJson(await fetch(`${referencesBase}/${kind}/import`, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }),
+      }, signal)));
+    },
+    async strategyRunCapabilities(signal) {
+      return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
+    },
+    async createStrategyExperiment(body, signal) {
+      return readJson(await fetch(experimentsBase, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }, signal)));
+    },
+    async getStrategyExperiment(experimentId, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}`, requestOptions({}, signal)));
+    },
+    async listStrategyExperiments(limit, signal) {
+      return readJson(await fetch(`${experimentsBase}?limit=${limit}`, requestOptions({}, signal)));
+    },
+    async cancelStrategyExperiment(experimentId, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/cancel`, requestOptions({ method: "POST" }, signal)));
+    },
+    async retryStrategyExperimentMember(experimentId, ordinal, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/members/${ordinal}/retry`,
+        requestOptions({ method: "POST" }, signal)));
+    },
+    async adoptStrategyStudy(studyId, signal) {
+      return readJson(await fetch(`${experimentsBase}/studies/${encodeURIComponent(studyId)}`, requestOptions({ method: "POST" }, signal)));
+    },
+    async revealStrategyExperimentHoldout(experimentId, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/reveal-holdout`,
+        requestOptions({ method: "POST" }, signal)));
+    },
+    async watchStrategyExperiment(experimentId, onExperiment, signal) {
+      const response = await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/events`, requestOptions({
+        headers: { Accept: "application/x-ndjson" },
+      }, signal));
+      if (!response.ok) await readJson(response);
+      if (!response.body || !response.headers.get("content-type")?.startsWith("application/x-ndjson")) {
+        throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "The backend did not return an experiment stream");
+      }
+      return readNdjsonUntilTerminal<StrategyExperiment>({
+        body: response.body, ...(signal ? { signal } : {}),
+        parse(line) {
+          const frame = parseStrategyExperimentFrame(JSON.parse(line));
+          if (frame === null) return null;
+          if ("error" in frame) throw new StrategyRunStreamError(frame.error.code, frame.error.message);
+          onExperiment(frame.experiment);
+          return frame.experiment.terminal ? frame.experiment : null;
+        },
+      });
+    },
+    async holdStrategyFollow(body, signal) {
+      return readJson(await fetch(followsBase, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }, signal)));
+    },
+    async renewStrategyFollow(followId, holder, signal) {
+      return readJson(await fetch(`${followsBase}/${encodeURIComponent(followId)}/lease`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ holder }),
+      }, signal)));
+    },
+    async releaseStrategyFollow(followId, holder) {
+      // keepalive: a cell closing with the page still lets its run go.
+      await readJson(await fetch(`${followsBase}/${encodeURIComponent(followId)}/lease?holder=${encodeURIComponent(holder)}`,
+        { method: "DELETE", keepalive: true }));
+    },
     async getResultReplay(cursor, signal) {
       const query = new URLSearchParams({
         snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
@@ -650,6 +832,12 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         requestOptions({}, signal),
       ));
     },
+    async deriveRun(runId, overrides, idempotencyKey, signal) {
+      return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/derive`, requestOptions({
+        method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ overrides }),
+      }, signal)));
+    },
     async cloneRun(runId, parameter, value, idempotencyKey, signal) {
       return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/clone`, requestOptions({
         method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
@@ -705,13 +893,7 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         requestOptions({}, signal),
       ));
     },
-    async createResearchLaunchContext(body, signal) {
-      return readJson(await fetch(`${base}/research/contexts`, requestOptions({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }, signal)));
-    },
+
     async getResearchLaunchContext(contextId, signal) {
       return readJson(await fetch(
         `${base}/research/contexts/${encodeURIComponent(contextId)}`,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { sandboxPluginAssetUrl } from "./pluginPlatformApi.js";
 import {
   newSandboxInstanceId,
@@ -180,18 +180,12 @@ export default function SandboxPluginFrame({
           <button type="button" onClick={reload}>{t("plugin.host.sandboxReload", {}, locale)}</button>
         </div>
       ) : (
-        <iframe
+        <OpaquePluginFrame
           key={`${contribution.id}:${generation}`}
-          ref={iframeRef}
-          className="plugin-sandbox-frame"
+          frameRef={iframeRef}
           src={assetUrl}
           title={contribution.title}
-          sandbox="allow-scripts"
-          allow=""
-          credentialless=""
-          loading="eager"
-          referrerPolicy="no-referrer"
-          style={{ height }}
+          height={height}
           onLoad={connect}
           onFocus={() => sessionRef.current?.setFocused(true)}
           onBlur={() => sessionRef.current?.setFocused(false)}
@@ -200,4 +194,14 @@ export default function SandboxPluginFrame({
       <span className="plugin-sandbox-announcement" aria-live="polite">{announcement}</span>
     </div>
   );
+}
+
+/** One opaque iframe gateway for both package manifests during migration. */
+export function OpaquePluginFrame({ src, title, height = 360, frameRef, onLoad, onFocus, onBlur }: {
+  src: string; title: string; height?: number; frameRef?: Ref<HTMLIFrameElement>;
+  onLoad?: () => void; onFocus?: () => void; onBlur?: () => void;
+}) {
+  return <iframe ref={frameRef} className="plugin-sandbox-frame" src={src} title={title}
+    sandbox="allow-scripts" allow="" credentialless="" loading="eager" referrerPolicy="no-referrer"
+    style={{ height }} onLoad={onLoad} onFocus={onFocus} onBlur={onBlur} />;
 }

@@ -1,0 +1,49 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-frontend-architecture-shared-projection-before-owned",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {}
+    },
+    "exceptionDetails": {
+      "exceptionId": 1,
+      "text": "Uncaught (in promise) Error: a shared committed range remained absent from another mounted view",
+      "lineNumber": 31,
+      "columnNumber": 139538,
+      "scriptId": "4",
+      "stackTrace": {
+        "callFrames": [
+          {
+            "functionName": "Jt",
+            "scriptId": "4",
+            "url": "http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js",
+            "lineNumber": 30,
+            "columnNumber": 139537
+          },
+          {
+            "functionName": "Sr",
+            "scriptId": "4",
+            "url": "http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js",
+            "lineNumber": 30,
+            "columnNumber": 139658
+          }
+        ]
+      },
+      "exception": {
+        "type": "object",
+        "subtype": "error",
+        "className": "Error",
+        "description": "Error: a shared committed range remained absent from another mounted view\n    at Jt (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:31:139538)\n    at Sr (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:31:139659)\n    at async nj (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:33:3479)\n    at async window.__indicatorFlowCheck (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:37:428006)",
+        "objectId": "46033208008360651.1.1"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": false,
+  "error": "Error: {\"exceptionId\":1,\"text\":\"Uncaught (in promise) Error: a shared committed range remained absent from another mounted view\",\"lineNumber\":31,\"columnNumber\":139538,\"scriptId\":\"4\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"Jt\",\"scriptId\":\"4\",\"url\":\"http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js\",\"lineNumber\":30,\"columnNumber\":139537},{\"functionName\":\"Sr\",\"scriptId\":\"4\",\"url\":\"http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js\",\"lineNumber\":30,\"columnNumber\":139658}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: a shared committed range remained absent from another mounted view\\n    at Jt (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:31:139538)\\n    at Sr (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:31:139659)\\n    at async nj (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:33:3479)\\n    at async window.__indicatorFlowCheck (http://127.0.0.1:54651/assets/indicator-flow-browser-4bjDl3bq.js:37:428006)\",\"objectId\":\"46033208008360651.1.1\"}}",
+  "browserExitCode": 0
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.core.config import getenv as app_getenv
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -971,6 +972,62 @@ class BacktestService:
         config["python_trusted_confirmed"] = confirmed
         return self.create_run(config, idempotency_key=idempotency_key)
 
+    # Settings a derived run may change (ADR-BACKTEST-015 P5c): parameters, fill accuracy, account,
+    # costs and risk limits. The input (dataset, snapshot, range, interval) and the strategy stay.
+    DERIVABLE_RUN_SETTINGS = frozenset({
+        "parameters", "fidelity_mode", "source_event_kind", "execution_data",
+        "initial_balance", "equity_percent", "leverage", "sizing_policy", "fixed_qty", "fixed_notional",
+        "taker_fee_bps", "maker_fee_bps", "slippage_bps", "fee_source", "funding_mode", "funding_rate",
+        "latency_ms", "latency_events", "participation_rate", "order_end_policy", "cost_sensitivity_mode",
+        "max_leverage", "max_notional", "max_abs_position_qty", "max_active_orders", "max_drawdown_percent",
+        "daily_loss_limit", "max_cumulative_fees", "max_order_risk", "risk_per_stop_percent", "stop_distance",
+        "account_rules",
+    })
+
+    def derive_run(
+        self,
+        run_id: str,
+        *,
+        overrides: Mapping[str, object],
+        idempotency_key: str,
+        trusted: bool = False,
+    ) -> dict[str, object]:
+        """A new run of the same strategy and input with changed settings (``clone_run_parameter`` generalized)."""
+        from app.core.operator_origin import effective_python_runtime_mode
+
+        if not isinstance(overrides, Mapping) or not overrides:
+            raise BacktestError("IDENTITY_MUTATION", "a derived run changes at least one setting")
+        unknown = sorted(set(overrides) - self.DERIVABLE_RUN_SETTINGS)
+        if unknown:
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"a derived run cannot change: {', '.join(unknown)}")
+        origin = self.get_run(run_id)
+        config = json.loads(str(origin["config_json"]))
+        before = json.dumps(config, sort_keys=True)
+        for key, value in overrides.items():
+            if key == "parameters":
+                if not isinstance(value, Mapping):
+                    raise BacktestError("SCHEMA_UNKNOWN_FIELD", "parameters must be an object")
+                parameters = dict(config.get("parameters") or {})
+                missing = sorted(set(value) - set(parameters))
+                if missing:
+                    raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"unknown parameters: {', '.join(missing)}")
+                config["parameters"] = {**parameters, **value}
+            else:
+                config[key] = value
+        if json.dumps(config, sort_keys=True) == before:
+            raise BacktestError("IDENTITY_MUTATION", "a derived run changes at least one setting")
+        if {"taker_fee_bps", "maker_fee_bps", "slippage_bps"} & set(overrides) and "fee_source" not in overrides:
+            config["fee_source"] = "user-defined"
+        config.pop("study_id", None)
+        mode, confirmed = effective_python_runtime_mode(
+            config.get("python_runtime_mode"),
+            bool(config.get("python_trusted_confirmed")),
+            trusted=trusted,
+        )
+        config["python_runtime_mode"] = mode
+        config["python_trusted_confirmed"] = confirmed
+        return self.create_run(config, idempotency_key=idempotency_key)
+
     def create_review_bridge(
         self, run_id: str, payload: Mapping[str, object], *, now_ms: int | None = None
     ) -> dict[str, object]:
@@ -1163,7 +1220,7 @@ class BacktestService:
             stored_payload['chart_book_data_hash']=normalized_execution['chart_book_data_hash']
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
+        for name in ("chart_event_contract", "pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -1315,7 +1372,23 @@ class BacktestService:
                 "run identity conflicted during creation",
             )
         self._audit(run_id, "create", {"config_hash": digest})
+        self._record_run_version(record, stamp)
         return record
+
+    def _record_run_version(self, record: Mapping[str, Any], now_ms: int) -> None:
+        """Link a new run to the content-addressed version of its code (ADR-BACKTEST-015 P3b).
+
+        Best effort: the run is already committed, and the run facade links any run it
+        finds without a version, so an indexing failure never fails run creation.
+        """
+        from .strategy_versions import StrategyVersions, host_material
+        try:
+            StrategyVersions(self.repository).record(
+                host_material(self.repository, self.strategy_registry, record),
+                run_id=str(record["run_id"]), family="host", now_ms=now_ms)
+        except Exception:
+            logging.getLogger(__name__).warning("Strategy version for run %s was not recorded", record.get("run_id"),
+                                                exc_info=True)
 
     def get_run(self, run_id: str) -> dict[str, object]:
         record = self.repository.get_run_by_id(run_id)
@@ -1617,8 +1690,9 @@ class BacktestService:
         return self.get_run(run_id)
 
     def create_study(
-        self, payload: Mapping[str, object], *, now_ms: int | None = None
+        self, payload: Mapping[str, object], *, now_ms: int | None = None, trusted: bool = False
     ) -> dict[str, object]:
+        """Create a Study. ``trusted`` is whether the caller's origin may run local Python trusted."""
         if not self.settings.enabled or not self.settings.study_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_STUDY_ENABLED is 0")
         requested_protocol = str(payload.get("study_protocol_revision") or "")
@@ -1626,7 +1700,7 @@ class BacktestService:
             raise BacktestError("FIDELITY_UNSUPPORTED", "unknown Study protocol")
         is_v2 = requested_protocol == STUDY_PROTOCOL_V2
         if is_v2:
-            payload = self._normalize_study_v2(payload)
+            payload = self._normalize_study_v2(payload, trusted=trusted)
         required = ("start_ms", "end_ms", "train_ms", "test_ms")
         missing = [name for name in required if payload.get(name) is None]
         if missing:
@@ -1693,8 +1767,57 @@ class BacktestService:
             return self.ensure_study_v2_plan(study_id)
         return self.ensure_study_trials(study_id)
 
-    def _normalize_study_v2(self, payload: Mapping[str, object]) -> dict[str, object]:
+    def _study_v2_strategy(self, payload: Mapping[str, object], candidates: list[dict[str, Any]], *,
+                           trusted: bool) -> dict[str, object]:
+        """What a Study V2 runs (ADR-BACKTEST-015 P5c3): a builtin that outputs SIGNAL, or a frozen
+        Python strategy that does.
+
+        Python runs every candidate in the runtime decided here, with the caller's trust, and frozen in
+        the study: its runs, created later by the worker, never decide it again. Returns those fields.
+        """
+        revision_id = str(payload["strategy_revision_id"])
+        persisted = self.repository.get_strategy_revision(revision_id)
+        if persisted is not None and persisted["base_revision_id"] == "python-source-v1":
+            if persisted["archived_at_ms"] is not None:
+                raise BacktestError("IDENTITY_MUTATION", "archived strategy revision cannot create a new Study")
+            capabilities = json.loads(str(persisted["capabilities_json"]))
+            if "SIGNAL" not in (capabilities.get("output_modes") or ()):
+                raise BacktestError("PROVIDER_PROTOCOL_VIOLATION", "Study V2 runs strategies that output SIGNAL")
+            from app.core.operator_origin import effective_python_runtime_mode
+            mode, confirmed = effective_python_runtime_mode(
+                payload.get("python_runtime_mode"), bool(payload.get("python_trusted_confirmed")), trusted=trusted)
+            if mode == "TRUSTED_LOCAL" and not confirmed:
+                raise BacktestError("PYTHON_TRUST_REQUIRED", "confirm running this Python strategy on this computer")
+            return {"python_runtime_mode": mode, "python_trusted_confirmed": confirmed}
+        if self.enforce_registered_revisions:
+            try:
+                descriptor = self.strategy_registry.require(revision_id)
+            except StrategyProviderError as exc:
+                raise BacktestError(exc.code, str(exc)) from exc
+            for candidate in candidates:
+                probe = descriptor.factory()
+                try:
+                    probe.prepare(
+                        {
+                            "roles": ["BARS"],
+                            "parameters": {
+                                **dict(payload.get("parameters") or {}),
+                                **candidate,
+                            },
+                            "outputMode": "SIGNAL",
+                        }
+                    )
+                except StrategyProviderError as exc:
+                    raise BacktestError(exc.code, str(exc)) from exc
+                finally:
+                    probe.close()
+        return {}
+
+    def _normalize_study_v2(self, payload: Mapping[str, object], *, trusted: bool = False) -> dict[str, object]:
         normalized = dict(payload)
+        # Python runtime fields are decided below, never taken as sent.
+        normalized.pop("python_runtime_mode", None)
+        normalized.pop("python_trusted_confirmed", None)
         hypothesis = str(payload.get("hypothesis") or "").strip()
         if not hypothesis:
             raise BacktestError(
@@ -1764,30 +1887,7 @@ class BacktestService:
         candidates = sample_candidates_v2(
             space, sampler=sampler, seed=seed, candidate_budget=candidate_budget
         )
-        if self.enforce_registered_revisions:
-            try:
-                descriptor = self.strategy_registry.require(
-                    str(payload["strategy_revision_id"])
-                )
-            except StrategyProviderError as exc:
-                raise BacktestError(exc.code, str(exc)) from exc
-            for candidate in candidates:
-                probe = descriptor.factory()
-                try:
-                    probe.prepare(
-                        {
-                            "roles": ["BARS"],
-                            "parameters": {
-                                **dict(payload.get("parameters") or {}),
-                                **candidate,
-                            },
-                            "outputMode": "SIGNAL",
-                        }
-                    )
-                except StrategyProviderError as exc:
-                    raise BacktestError(exc.code, str(exc)) from exc
-                finally:
-                    probe.close()
+        python_runtime = self._study_v2_strategy(payload, candidates, trusted=trusted)
         total_run_budget = len(folds) * (len(candidates) + 1) + int(holdout_ms > 0)
         requested_total = int(payload.get("total_run_budget") or total_run_budget)
         if requested_total != total_run_budget:
@@ -1893,6 +1993,7 @@ class BacktestService:
             "benchmark_model": BENCHMARK_MODEL,
             "output_mode": "SIGNAL",
             "gap_policy": "REJECT",
+            **python_runtime,
         }
         for name, expected in (
             ("account_model", "LINEAR_PERP_ONE_WAY_V2"),
@@ -2466,11 +2567,30 @@ class BacktestService:
             "max_cumulative_fees": config.get("max_cumulative_fees", "10000"),
             "max_drawdown_stop_pct": config.get("max_drawdown_stop_pct", "50"),
         }
+        if config.get("python_runtime_mode"):
+            payload["python_runtime_mode"] = str(config["python_runtime_mode"])
+            payload["python_trusted_confirmed"] = bool(config.get("python_trusted_confirmed"))
+            self._smoke_study_window(payload)
         return self.create_run(
             payload,
             idempotency_key=idempotency_key,
             enforce_active_budget=False,
         )
+
+    def _smoke_study_window(self, run: Mapping[str, Any]) -> None:
+        """A Python run needs a smoke of its revision on its snapshot, in its runtime mode; each
+        study window is its own snapshot, so the study smokes it once before its first run there."""
+        mode = str(run["python_runtime_mode"])
+        smoke = self.repository.strategy_smoke_for_snapshot(
+            str(run["strategy_revision_id"]), str(run["dataset_id"]), str(run["snapshot_hash"]))
+        if smoke is not None and json.loads(str(smoke["details_json"])).get("runtimeMode") == mode:
+            return
+        start = int(run["start_time_ms"])
+        self.smoke_strategy_revision(str(run["strategy_revision_id"]), {
+            "dataset_id": run["dataset_id"], "snapshot_hash": run["snapshot_hash"], "start_time_ms": start,
+            "end_time_ms": min(int(run["end_time_ms"]), start + 7 * 86_400_000), "parameters": dict(run["parameters"]),
+            "python_runtime_mode": mode, "python_trusted_confirmed": bool(run["python_trusted_confirmed"]),
+        })
 
     def _seal_study_v2_oos(
         self,
@@ -2751,6 +2871,8 @@ class BacktestService:
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -2805,6 +2927,26 @@ class BacktestService:
                 configure_legacy_account(getattr(kernel, "execution", kernel), {
                     "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
+            chart_clock = None
+            if config.get("signal_chart"):
+                self._assert_frame_inputs(provider, bar={}, trade=None)
+                from .strategy.chart_signals import ChartSignalClock
+                if config.get("chart_event_contract"):
+                    from .pine_chart_events import HostChartEventCallbacks
+                    chart_clock = HostChartEventCallbacks(session, adapter, planner, kernel,
+                        definition=config["signal_chart"], market=observation_market or {"venue":"local","symbol":str(record["dataset_id"])},
+                        warmup=warmup_events,features=lambda bar:self._observation_features(provider,bar=bar,trade=None),
+                        every_tick=bool(config.get("pine_realtime_ticks")),fills=bool(config.get("pine_fill_callbacks")),
+                        bar_state="historical" if record["fidelity_mode"]=="BAR_APPROX" else "realtime",
+                        control=lambda:self._assert_execution_control(run_id,deadline=deadline,expected_generation=expected_generation))
+                else:
+                    chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                        market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                        warmup=warmup_events,
+                        features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                        context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                        account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                        control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -2846,7 +2988,9 @@ class BacktestService:
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(kernel)
             historical_callbacks = None
-            if config.get("pine_bar_path_contract"):
+            if config.get("chart_event_contract"):
+                historical_callbacks = chart_clock
+            elif config.get("pine_bar_path_contract"):
                 from .pine_chart_bar import ChartHistoricalBarCallbacks,ChartHistoricalTicks
                 callback_type=ChartHistoricalTicks if config.get("pine_history_ticks") else ChartHistoricalBarCallbacks
                 historical_callbacks = callback_type(session, adapter, planner, kernel,
@@ -2857,7 +3001,7 @@ class BacktestService:
                         expected_generation=expected_generation))
             python_batch = None
             generic_bar = None
-            if getattr(self, "_colocated_worker", False) and historical_callbacks is None:
+            if getattr(self, "_colocated_worker", False) and historical_callbacks is None and chart_clock is None:
                 from .strategy.python_market_batch import PythonMarketBatchProvider
                 if type(getattr(provider, "provider", None)) is PythonMarketBatchProvider:
                     python_batch = provider.provider
@@ -2885,6 +3029,8 @@ class BacktestService:
                     )
                 phase = "WARMUP" if observed < warmup_events else "EVALUATION"
                 observed += 1
+                if chart_clock is not None:
+                    return chart_clock.observe(event)
                 if historical_callbacks is not None:
                     return historical_callbacks.observe(event)
                 if generic_bar is not None:
@@ -2985,7 +3131,8 @@ class BacktestService:
                 return kernel.run(
                     remaining_events(),strategy,warmup_events=0,finalize=True,
                     checkpoint_callback=checkpoint_after,
-                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"fill_callback": historical_callbacks.on_path_fill if config.get("chart_event_contract") else historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"chart_event_callbacks":chart_clock} if config.get("chart_event_contract") else {}),
                     **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
                     **({"close_callback": closing.process} if closing is not None else {}))
             def reset_window_bookkeeping():
@@ -3072,10 +3219,13 @@ class BacktestService:
                 | kernel.account.coverage(),
                 "fill_model": {
                     "name": (
-                        kernel.fill_policy if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
+                        kernel.fill_policy if config.get("pine_bar_path_contract") or config.get("account_rules") else BAR_FILL_POLICY_V2
                         if kernel.execution_model_revision == EXECUTION_REALISM_V2
                         else "BAR_NEXT_BAR_WORST_CASE_V1"
                     ),
+                    **({"account_rules": config["account_rules"], "leverage": str(config.get("leverage") or "1"),
+                        "path": "PREVIOUS_CLOSE_THEN_OPEN_LOW_HIGH_CLOSE_IF_UP",
+                        "market_orders": "AT_DECISION_CLOSE"} if config.get("account_rules") else {}),
                     "slippage_bps": str(kernel.slippage_bps),
                     "taker_fee_bps": str(kernel.taker_fee_bps),
                     "maker_fee_bps": str(kernel.maker_fee_bps),
@@ -3161,7 +3311,7 @@ class BacktestService:
                 config = {}
             planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             from .pine_event_requests import chart_realtime_context
-            realtime_context=chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
+            realtime_context={} if config.get("chart_event_contract") else chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
                 max_bytes=self.settings.worker_memory_mb*1024*1024)
             adapter.start(
                 {
@@ -3174,6 +3324,8 @@ class BacktestService:
                     "executionClock": EXECUTION_CLOCK,
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -3220,6 +3372,26 @@ class BacktestService:
                 configure_legacy_account(getattr(kernel, "execution", kernel), {
                     "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
+            chart_clock = None
+            if config.get("signal_chart"):
+                self._assert_frame_inputs(provider, bar={}, trade=None)
+                from .strategy.chart_signals import ChartSignalClock
+                if config.get("chart_event_contract"):
+                    from .pine_chart_events import HostChartEventCallbacks
+                    chart_clock = HostChartEventCallbacks(session, adapter, planner, kernel,
+                        definition=config["signal_chart"], market=observation_market or {"venue":"local","symbol":str(record["dataset_id"])},
+                        warmup=warmup_events,features=lambda bar:self._observation_features(provider,bar=bar,trade=None),
+                        every_tick=bool(config.get("pine_realtime_ticks")),fills=bool(config.get("pine_fill_callbacks")),
+                        bar_state="historical" if record["fidelity_mode"]=="BAR_APPROX" else "realtime",
+                        control=lambda:self._assert_execution_control(run_id,deadline=deadline,expected_generation=expected_generation))
+                else:
+                    chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                        market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                        warmup=warmup_events,
+                        features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                        context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                        account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                        control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3255,7 +3427,9 @@ class BacktestService:
             collected_chart_bars = []
 
             callbacks = None
-            if config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
+            if config.get("chart_event_contract"):
+                callbacks = chart_clock
+            elif config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
                 from .pine_callbacks import ChartFillCallbacks
                 from .pine_realtime_ticks import ChartRealtimeTicks
                 callback_type=ChartRealtimeTicks if config.get("pine_realtime_ticks") else ChartFillCallbacks
@@ -3284,6 +3458,8 @@ class BacktestService:
                 self._maybe_inject_fault(
                     "before_decision", run_id=run_id, sequence=bar.sequence
                 )
+                if chart_clock is not None:
+                    return chart_clock.observe(bar)
                 phase = "WARMUP" if bar.sequence <= warmup_events else "EVALUATION"
                 bar_payload = dict(bar.payload)
                 self._assert_frame_inputs(provider, bar=bar_payload, trade=None)
@@ -3369,9 +3545,10 @@ class BacktestService:
                 rows,cutoff=trial_events(remaining_events,adapter.input_plan,pending)
                 return kernel.run(rows,strategy,warmup_events=0,finalize=True,checkpoint_callback=checkpoint_after,
                     **({"end_time_ms":cutoff} if cutoff is not None else
-                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
-                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
-                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
+                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES or config.get("chart_event_contract") else {}),
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and (not config.get("pine_realtime_ticks") or config.get("chart_event_contract") and config.get("pine_fill_callbacks")) else {}),
+                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") or config.get("chart_event_contract") else {}),
+                    **({"combined_callbacks":True} if config.get("chart_event_contract") and config.get("pine_fill_callbacks") else {}),
                     **({"close_callback": closing.process} if closing is not None else {}))
             def reset_window_bookkeeping():
                 nonlocal planner,last_order_count,last_fill_count
@@ -3547,6 +3724,8 @@ class BacktestService:
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -4294,10 +4473,30 @@ class BacktestService:
         if time.monotonic() > deadline:
             raise BacktestError("BUDGET_EXCEEDED", "backtest run exceeded time ceiling")
 
+    def _refuse_host_pine_book(self, payload: Mapping[str, object], fidelity: str) -> None:
+        """ADR-BACKTEST-015 P6d: Pine with order-book data runs only through CandleScope matching.
+
+        The Pine panel's CandleScope matching (``/backtests/external/runs``) owns every book
+        fidelity for Pine. New Host Pine engine runs with frozen book data are refused;
+        runs stored before this keep executing, resuming and reading as they were.
+        """
+        if fidelity not in BOOK_MODES:
+            return
+        revision_id = str(payload.get("strategy_revision_id") or "")
+        revision = self.repository.get_strategy_revision(revision_id) if revision_id else None
+        if revision_id == PINE_ENGINE_REVISION or (
+                revision is not None and revision["base_revision_id"] == PINE_ENGINE_REVISION):
+            raise BacktestError(
+                "FIDELITY_UNSUPPORTED",
+                "Pine with order-book data runs through CandleScope matching in the Pine panel "
+                "(/backtests/external/runs); the Host Pine engine takes no book data",
+            )
+
     def _identity_from_payload(self, payload: Mapping[str, object]) -> RunIdentity:
         fidelity = str(payload.get("fidelity_mode") or "")
         if fidelity not in FIDELITY_MATRIX:
             raise BacktestError("FIDELITY_UNSUPPORTED", f"unknown fidelity {fidelity}")
+        self._refuse_host_pine_book(payload, fidelity)
         book_data_hash=None
         if fidelity in BOOK_MODES:
             _,book_data_hash=normalize_data(payload.get('execution_data'),max_events=self.settings.max_trade_events,
@@ -4728,6 +4927,12 @@ class BacktestService:
                     "leverage": str(leverage),
                 }
             )
+        if payload.get("account_rules") is not None:
+            execution_config.update(_practice_account_rules(
+                payload, fidelity=fidelity, account_model=account_model, contract_data_mode=contract_data_mode,
+                funding_mode=funding_mode, funding_rate=funding_rate, leverage=leverage,
+                realism=execution_realism.enabled, execution_config=execution_config,
+                pine=persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION))
         if host_policy is not None:
             execution_config.update(host_policy.identity())
         if fidelity in DUAL_MODES:
@@ -4736,6 +4941,23 @@ class BacktestService:
             execution_config["contract_data_mode"] = contract_data_mode
         execution_config.update(execution_realism.identity(fidelity_mode=fidelity))
         execution_config.update(metrics_identity)
+        if payload.get("signal_chart") is not None:
+            from app.data_engine.synthetic_series.signals import normalize_signal_chart, SyntheticError
+            try:
+                signal_chart = normalize_signal_chart(payload["signal_chart"])
+            except SyntheticError as exc:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
+            if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require a closed BAR source clock")
+            if execution_config.get("pine_history_ticks"):
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Special charts use actual prints for tick recalculation")
+            if any(execution_config.get(name) for name in ("pine_fill_callbacks","pine_realtime_ticks")):
+                if json.loads(compiled_pine["executionSource"])["identity"].get("chart_signal_events") != "candlescope.chart-signal-events/1":
+                    raise BacktestError("FIDELITY_UNSUPPORTED","Install the chart event runtime")
+                execution_config["chart_event_contract"] = "candlescope.chart-signal-events/1"
+            if execution_config.get("python_execution_protocol") == "MARKET_BATCH_V1":
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require sequential provider observations")
+            execution_config["signal_chart"] = signal_chart
         return account_model, execution_config, signal_identity
 
     def _audit(self, run_id: str, action: str, details: Mapping[str, object]) -> None:
@@ -4799,7 +5021,7 @@ class BacktestService:
         provider, provider_json, provider_size = checkpoint_session(session)
         self._assert_provider_state_budget(provider, encoded_size=provider_size)
         history = None
-        if (type(kernel) is SimulationKernel
+        if (type(kernel) is SimulationKernel and kernel.bar_clock == "BAR"
                 and app_getenv("BACKTEST_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1"):
             from .checkpoint_history import HistoryEncoder, ENCODING
             if kernel._checkpoint_history is None:
@@ -5498,6 +5720,29 @@ def _execution_kernel_kwargs(config: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _practice_account_rules(payload, *, fidelity, account_model, contract_data_mode, funding_mode, funding_rate,
+                            leverage, realism, execution_config, pine) -> dict[str, str]:
+    """ADR-BACKTEST-015 P6e3: the practice account model, shared with practice accounts.
+
+    It matches bars on a one-way perpetual or spot account at the account's leverage,
+    without funding, execution realism, historical contract events, Pine bar paths or
+    closing ticks (``app/simulation/practice_clock``).
+    """
+    from app.simulation.practice_clock import PRACTICE_ACCOUNT_RULES
+
+    if payload.get("account_rules") != PRACTICE_ACCOUNT_RULES:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"account_rules must be {PRACTICE_ACCOUNT_RULES}")
+    if (fidelity != "BAR_APPROX" or account_model not in {"LINEAR_PERP_ONE_WAY_V1", "SPOT_CASH_V1"}
+            or contract_data_mode != "LEGACY_FIXED_V1" or funding_mode != "OFF" or funding_rate != 0 or realism or pine
+            or any(execution_config.get(name) for name in (
+                "pine_bar_path_contract", "pine_process_on_close", "pine_fill_callbacks", "pine_history_ticks"))):
+        raise BacktestError(
+            "FIDELITY_UNSUPPORTED",
+            "practice account rules match bars for built-in and Python strategies on a one-way perpetual or "
+            "spot account, without funding, execution realism or historical contract events")
+    return {"account_rules": PRACTICE_ACCOUNT_RULES, "leverage": str(leverage)}
+
+
 def _execution_fill_model(config: Mapping[str, object]) -> dict[str, object]:
     if config.get("execution_model_revision") != EXECUTION_REALISM_V2:
         return {}
@@ -5682,15 +5927,18 @@ def _strategy_execution_reporter(session):
 
 
 def _build_bar_kernel(config, execution_reporter):
-    """One BAR kernel configuration for fixed and continuing strategy execution."""
-    bar_kernel_type = SimulationKernel
-    if config.get("pine_bar_path_contract"):
-        from app.simulation.pine_chart_kernel import PineChartBarKernel
-        bar_kernel_type = PineChartBarKernel
-        if config.get("pine_v2_bar_contract"):
-            from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
-            bar_kernel_type = PineV2BarKernel
-    kernel = bar_kernel_type(
+    """One BAR kernel configuration for fixed and continuing strategy execution.
+
+    A Pine script with a frozen path contract runs on the Host bar kernel's chart clock, or
+    its V2 path clock when the V2 contract is frozen too (ADR-BACKTEST-015 P6).
+    """
+    from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_V2
+    from app.simulation.practice_clock import PRACTICE, PRACTICE_ACCOUNT_RULES
+    bar_clock = (PINE_V2 if config.get("pine_v2_bar_contract") else PINE_CHART) if config.get("pine_bar_path_contract") else BAR_CLOCK
+    if config.get("account_rules") == PRACTICE_ACCOUNT_RULES:
+        bar_clock = PRACTICE
+    kernel = SimulationKernel(
+        bar_clock=bar_clock,
         process_orders_on_close=bool(config.get("pine_process_on_close")),
         account_model=str(
             config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"

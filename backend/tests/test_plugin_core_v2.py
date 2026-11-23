@@ -301,6 +301,7 @@ def test_environment_bootstrap_is_enabled_by_default_and_can_be_disabled(
         environ={"LOCALAPPDATA": str(tmp_path / "local"), "HOME": str(tmp_path / "home")},
     )
     assert isinstance(enabled_by_default, CorePluginPlatform)
+    assert not enabled_by_default.allow_legacy_execution
     assert (
         enabled_by_default.root
         == ((tmp_path / "local" / "CandleScope" / "plugin-platform-v2") if os.name == "nt" else (tmp_path / "home" / ".candlescope" / "plugin-platform-v2")).resolve()

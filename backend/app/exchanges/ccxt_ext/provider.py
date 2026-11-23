@@ -224,7 +224,8 @@ class CcxtProvider:
         from app.data_engine.storage import market_sources
 
         captured = []
-        token = REST_CAPTURE.set(captured) if config.ccxt_fork_kline_enabled else None
+        capture = config.ccxt_fork_kline_enabled and config.market_source_capture_enabled
+        token = REST_CAPTURE.set(captured) if capture else None
         try:
             pool = self._rest_pool(venue, config)
             strategy = HISTORY_STRATEGIES.get((venue, req.descriptor.stream_type))

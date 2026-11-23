@@ -13,6 +13,8 @@ import json
 import os
 from pathlib import Path
 import queue
+import subprocess
+import sys
 import time
 from types import SimpleNamespace
 
@@ -42,6 +44,43 @@ def bars(count, *, forming=False):
     return tuple(replace(bar,time=(bar.time//60)*60) for bar in runtime_bars(count,forming=forming))
 
 TRACE = ContextVar('chart_calculation_wire_trace', default=None)
+
+
+def process_exited(pid):
+    """Observe termination without sending a signal to a Windows process.
+
+    Windows retains terminated PIDs while handles remain open; a signalled
+    process handle confirms exit even then. os.kill(pid, 0) is POSIX-only.
+    """
+    if os.name == 'nt':
+        import _winapi
+        try:
+            handle = _winapi.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        except OSError as exc:
+            if exc.winerror == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists
+                return True
+            raise
+        try:
+            return _winapi.WaitForSingleObject(handle, 0) == _winapi.WAIT_OBJECT_0
+        finally:
+            _winapi.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+def test_process_exit_probe_distinguishes_live_and_retained_exited_process():
+    # Keep the Popen object/Windows process handle alive after wait().
+    with subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.buffer.read()'],
+                          stdin=subprocess.PIPE) as process:
+        try:
+            assert not process_exited(process.pid)
+        finally:
+            process.stdin.close()
+            process.wait(timeout=10)
+        assert process.returncode == 0 and process_exited(process.pid)
 
 
 class Source(DataManager):
@@ -126,10 +165,9 @@ def wire(tmp_path,request,storage,monkeypatch):
         await host.stop()
         await source.shutdown()
         for process in {process.pid:process for process in processes}.values():
-            try: os.kill(process.pid,0); absent=False
-            except ProcessLookupError: absent=True
-            process_receipts.append({'pid':process.pid,'returncode':process.returncode,'absent':absent})
-        assert all(item['returncode'] == 0 and item['absent'] for item in process_receipts)
+            process_receipts.append({'pid':process.pid,'returncode':process.returncode,
+                                     'exited':process_exited(process.pid)})
+        assert all(item['returncode'] == 0 and item['exited'] for item in process_receipts), process_receipts
     app = FastAPI(lifespan=lifespan)
     app.state.data_manager = source
     app.state.indicator_runtime_service = service

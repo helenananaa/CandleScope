@@ -13,7 +13,7 @@ from tests.test_trading_accounts import bar, T0, FUTURES, INSTRUMENT
 def make_fixture(tmp_path):
     store = TradingStore(tmp_path/'accounts.db')
     service = TradingAccountService(store, snapshot_dir=tmp_path/'images', clock=lambda:T0)
-    aid = service.create_account({'kind':'practice','name':'fixture','settings':{'initialBalance':'1000','slippageBps':'0'}})['id']
+    aid = service.create_account({'kind':'practice','name':'fixture','settings':{'positionMode':'ONE_WAY','initialBalance':'1000','slippageBps':'0'}})['id']
     core=DataManagerCore();manager=core.bind_trading(service)
     manager.heartbeat_seconds=.03;manager.min_snapshot_interval_seconds=0
     return store,service,aid,core,manager
@@ -167,7 +167,7 @@ def test_http_routes_use_manager_and_release_before_headers_or_first_frame(tmp_p
 def test_multi_account_and_symbol_views_preserve_existing_decimal_financials(tmp_path):
     async def run():
         store,service,aid,core,manager=make_fixture(tmp_path)
-        other=service.create_account({'kind':'practice','name':'other'})['id']
+        other=service.create_account({'kind':'practice','name':'other','settings':{'positionMode':'ONE_WAY'}})['id']
         try:
             for symbol,price in [('BTCUSDT','100'),('ETHUSDT','200')]:
                 service.place_order(aid,{**INSTRUMENT,'symbol':symbol,'side':'buy','type':'market','qty':'0.1234567890123456789','referencePrice':price})

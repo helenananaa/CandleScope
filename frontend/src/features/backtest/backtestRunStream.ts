@@ -48,16 +48,8 @@ export async function readStrategyRunStream(input: {
   onUpdate?: (update: StrategyRunUpdate) => void;
   maxFrameCharacters?: number;
 }): Promise<BacktestRunRecord> {
-  input.signal?.throwIfAborted();
-  const reader = input.body.getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const limit = input.maxFrameCharacters ?? 8 * 1024 * 1024;
-  let buffer = "";
   let identity: string | null = null;
-  const abort = () => { void reader.cancel(input.signal?.reason).catch(() => {}); };
-  input.signal?.addEventListener("abort", abort, { once: true });
   const parse = (line: string): BacktestRunRecord | null => {
-    if (line.length > limit) invalid("Strategy result frame exceeds the consumer limit");
     let raw: unknown;
     try { raw = JSON.parse(line); } catch { invalid(); }
     const frame = object(raw);
@@ -111,6 +103,33 @@ export async function readStrategyRunStream(input: {
     input.onUpdate?.({ type: frame.type, run: record, progress });
     return null;
   };
+  return readNdjsonUntilTerminal({ body: input.body, parse, ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.maxFrameCharacters ? { maxFrameCharacters: input.maxFrameCharacters } : {}) });
+}
+
+/**
+ * Read newline-delimited JSON frames until `parse` returns a terminal value.
+ * EOF before a terminal frame is `STRATEGY_STREAM_INCOMPLETE`; aborting cancels the body.
+ */
+export async function readNdjsonUntilTerminal<T>(input: {
+  body: ReadableStream<Uint8Array>;
+  signal?: AbortSignal;
+  maxFrameCharacters?: number;
+  /** One trimmed, non-empty frame; null keeps reading. */
+  parse(line: string): T | null;
+}): Promise<T> {
+  input.signal?.throwIfAborted();
+  const reader = input.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const limit = input.maxFrameCharacters ?? 8 * 1024 * 1024;
+  const tooLarge = () => invalid("Strategy result frame exceeds the consumer limit");
+  let buffer = "";
+  const abort = () => { void reader.cancel(input.signal?.reason).catch(() => {}); };
+  input.signal?.addEventListener("abort", abort, { once: true });
+  const parse = (line: string) => {
+    if (line.length > limit) tooLarge();
+    return input.parse(line);
+  };
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -118,18 +137,18 @@ export async function readStrategyRunStream(input: {
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let newline: number;
       while ((newline = buffer.indexOf("\n")) >= 0) {
-        if (newline > limit) invalid("Strategy result frame exceeds the consumer limit");
+        if (newline > limit) tooLarge();
         const line = buffer.slice(0, newline).trim();
         buffer = buffer.slice(newline + 1);
         if (!line) continue;
         const terminal = parse(line);
-        if (terminal) return terminal;
+        if (terminal !== null) return terminal;
       }
-      if (buffer.length > limit) invalid("Strategy result frame exceeds the consumer limit");
+      if (buffer.length > limit) tooLarge();
       if (done) {
         if (buffer.trim()) {
           const terminal = parse(buffer.trim());
-          if (terminal) return terminal;
+          if (terminal !== null) return terminal;
         }
         throw new StrategyRunStreamError("STRATEGY_STREAM_INCOMPLETE", "The strategy result stream ended before completion");
       }

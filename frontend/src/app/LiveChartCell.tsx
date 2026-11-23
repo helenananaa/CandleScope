@@ -84,7 +84,9 @@ import type { ForegroundPreloadGate } from "../features/market-data/foregroundPr
 import { useAdvancedMarketDataRuntime } from "../features/advanced-market-data/useAdvancedMarketDataRuntime.js";
 import { useDrawingRuntime } from "../features/drawings/useDrawingRuntime.js";
 import type { DrawingToolSelectionRuntime } from "../features/drawings/drawingToolState.js";
-import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
+import { useChartIndicatorRuntime } from "../features/indicators/useChartIndicatorRuntime.js";
+import { chartIndicatorSelection } from "../features/indicators/chartIndicatorInput.js";
+import { backendSyntheticSourceFor } from "../features/market-chart-platform/marketChartSurfaceModel.js";
 import { indicatorSignature, type ControlCellObservation } from "../features/app-control/controlModel.js";
 import { useControlCommands } from "../features/app-control/useControlCommands.js";
 import { chartCommands } from "../features/app-control/chartCommands.js";
@@ -101,6 +103,8 @@ import { useTradeFlowRuntime } from "../features/trade-flow/useTradeFlowRuntime.
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { WatchlistSubscriptionContext } from "../features/watchlist/watchlistSubscriptionRuntime.js";
 import { usePluginPlatformRuntime } from "../features/plugins/usePluginPlatformRuntime.js";
+import { buildSeriesWindowKey } from "../features/market-data/window/seriesWindowKey.js";
+import { livePluginChartSource, usePluginChartSource } from "../features/plugins/unifiedChartContext.js";
 import { pluginCommands, PluginControlSession } from "../features/app-control/pluginCommands.js";
 import { useExtensionService } from "../features/extensions/hooks.js";
 import PluginPlatformSurfaces, { PluginUiErrorBoundary } from "../features/plugins/PluginPlatformSurfaces.js";
@@ -124,12 +128,13 @@ import { loadUserPrefs, updateUserPref } from "../features/chart-session/chartSe
 import { preloadDrawingEngineHost } from "../features/drawings/drawingEngineLoader.js";
 import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.js";
 import ChartCellCanvas from "./ChartCellCanvas.js";
+import { combineChartLayerSources } from "../features/plugins/pluginChartLayerSource.js";
+import type { StrategyOverlaySource } from "../features/backtest/runResult/strategyOverlay.js";
 import LazyFeatureSurfaces from "./LazyFeatureSurfaces.js";
 import StatusBar from "./StatusBar.js";
 import TopBar from "./TopBar.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
-import type { ChartStrategyResultMarkerSource } from "../features/backtest/chart-tester/chartStrategyResultMarkerSource.js";
 import { Icon } from "../components/icons/Icon.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
@@ -460,12 +465,13 @@ function LiveChartCell({
     }),
     [cell.id, chartSurface.actions, linkCoordinator, study.masked],
   );
+  const livePluginContext = !obscured && !study.pending && !study.masked && !study.busy && !replay.key;
   const plugins = usePluginPlatformRuntime({
     exchange: chartSession.view.exchange,
     marketType: chartSession.view.marketType,
     symbol: chartSession.view.symbol,
     interval: chartSession.view.interval,
-  });
+  }, livePluginContext);
   useExtensionService(`charts.${cell.id}`, { session: chartSession, surface: chartSurface });
   const initialViewportCountBackCap = initialViewportCountBackCapForCellCount(
     layoutCellIds.length,
@@ -529,6 +535,17 @@ function LiveChartCell({
     paused: obscured,
   });
   const sourceMarketData = liveReferenceSource.marketData;
+  const pluginStore = sourceMarketData.view.seriesStore;
+  const pluginChartSource = useMemo(() => pluginStore
+    ? livePluginChartSource(pluginStore, liveSourceSession.symbol, liveSourceSession.interval) : null,
+    [pluginStore, liveSourceSession.symbol, liveSourceSession.interval]);
+  const pluginChartId = `${workspaceId}:${cell.id}`;
+  usePluginChartSource(pluginChartId, livePluginContext && !sourceMarketData.view.loading && !sourceMarketData.view.error
+    && !sourceMarketData.view.meta.optimistic && sourceMarketData.view.meta.status === "ready"
+    && sourceMarketData.view.meta.seriesKey === pluginStore?.seriesKey
+    && pluginStore?.seriesKey === buildSeriesWindowKey(liveSourceSession)
+    ? pluginChartSource : null);
+
 
   const workTier = obscured ? "hidden" : active ? "focused" : "visible-secondary";
   const workScheduler = marketWorkspaceResources?.workScheduler;
@@ -623,7 +640,8 @@ function LiveChartCell({
     [cell.id, windowId, workspaceId],
   );
 
-  const indicators = useIndicatorRuntime({
+  const indicators = useChartIndicatorRuntime({
+    chart: chartIndicatorSelection(backendSyntheticSourceFor(liveReferenceSource), sourceMarketData.view.seriesStore, combinedSettings),
     // Workspace schema v8 persists an explicit indicator list for every cell.
     // An empty list is therefore intentional (and is required by capacity
     // scenarios such as S3), not a signal to inject the legacy VOL default.
@@ -717,6 +735,7 @@ function LiveChartCell({
     },
     orderBookOpen,
     capability: activeExchangeCapability,
+    capabilityLoading: chartSession.status.exchangeCatalogStatus === "loading",
   });
   const tradeFlow = useTradeFlowRuntime({
     identity: {
@@ -873,15 +892,21 @@ function LiveChartCell({
   const handleLinkedViewportRangeChange = useChartViewportLink(linkCoordinator, cell.id, cellStorageScope);
   const [strategyPanelVisited, setStrategyPanelVisited] = useState(false);
   useEffect(() => { if (active && strategyPanelOpen) setStrategyPanelVisited(true); }, [active, strategyPanelOpen]);
-  const strategyMarkerSourceRef = useRef<ChartStrategyResultMarkerSource | null>(null);
   const strategyTradeFocusRef = useRef<{ trade: StrategyTradeFocus; interval: string } | null>(null);
-  const [strategyMarkerSource, setStrategyMarkerSource] = useState<ChartStrategyResultMarkerSource | null>(null);
-  const handleStrategyMarkerSourceChange = useCallback((source: ChartStrategyResultMarkerSource | null) => {
-    strategyMarkerSourceRef.current = source;
+  // ADR-BACKTEST-015 P1c/P2d: the strategy bridge owns the run overlay for every run family; this cell only draws it.
+  const [runOverlaySource, setRunOverlaySource] = useState<StrategyOverlaySource | null>(null);
+  const runOverlaySourceRef = useRef<StrategyOverlaySource | null>(null);
+  const handleOverlaySourceChange = useCallback((source: StrategyOverlaySource | null) => {
+    runOverlaySourceRef.current = source;
     const focus = strategyTradeFocusRef.current;
     if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
-    setStrategyMarkerSource(source);
+    setRunOverlaySource(source);
   }, []);
+  const strategyMarkerSource = runOverlaySource?.markers ?? null;
+  const combinedChartLayerSource = useMemo(
+    () => combineChartLayerSources([plugins.view.chartLayerSource, runOverlaySource?.layer]),
+    [plugins.view.chartLayerSource, runOverlaySource],
+  );
   const upstreamViewportRangeChangeRef = useRef(
     model.chartWorkspace.chart.chartProps.onViewportRangeChange,
   );
@@ -890,11 +915,12 @@ function LiveChartCell({
   }, [model.chartWorkspace.chart.chartProps.onViewportRangeChange]);
   const handleChartViewportRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
     upstreamViewportRangeChangeRef.current?.(range);
-    strategyMarkerSourceRef.current?.setVisibleRange(range);
+    runOverlaySourceRef.current?.setVisibleRange(range);
   }, []);
   const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
     strategyTradeFocusRef.current = trade ? { trade, interval: liveSourceSession.interval } : null;
-    strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
+    // Fixed-history results are drawn by the run overlay, so the reviewed trade is highlighted there.
+    runOverlaySourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     if (!trade) return;
     chartSurface.actions.setLinkedVisibleTimeRange(strategyTradeRange(trade, parseIntervalSeconds(liveSourceSession.interval) ?? 60));
     chartSurface.actions.setLinkedCrosshairTime(trade.entryTimeMs / 1000);
@@ -1179,7 +1205,7 @@ function LiveChartCell({
             pluginMarkerSource={plugins.view.markerSource}
             accountMarkerSource={tradingOverlay.markerSource}
             accountPriceLineSource={tradingOverlay.priceLineSource}
-            pluginChartLayerSource={plugins.view.chartLayerSource}
+            pluginChartLayerSource={combinedChartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
             drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
@@ -1190,6 +1216,7 @@ function LiveChartCell({
               <QuickReplayOverlay
                 key={replay.key}
                 request={quickReplay}
+                pluginChartId={pluginChartId}
                 active={active && !obscured}
                 savedCursorSec={cell.quickReplay?.cursorSec}
                 savedStep={cell.quickReplay?.step}
@@ -1247,6 +1274,7 @@ function LiveChartCell({
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
               nativeStrategies={cell.nativeStrategies}
+              appearance={combinedSettings}
               strategyTesterMode={cell.strategyTesterMode}
               onStrategyTesterModeChange={(value) => onStrategyTesterModeChange(cell.id, value)}
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
@@ -1256,7 +1284,7 @@ function LiveChartCell({
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
-              onMarkerSourceChange={handleStrategyMarkerSourceChange}
+              onOverlaySourceChange={handleOverlaySourceChange}
               onLocateTrade={handleLocateStrategyTrade}
               onReviewTrade={handleReviewStrategyTrade}
               onAttachmentChange={handleStrategyAttachmentChange}

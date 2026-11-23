@@ -1053,8 +1053,21 @@ def _create_exchange(
         options["fetchMarkets"] = {
             "types": ["spot", "swap"] if base_type == "swap" else [base_type]
         }
+    elif sys.platform == "emscripten" and entry.exchange_id == "bybit":
+        options["fetchMarkets"] = {"types": [subtype or ("linear" if base_type in {"swap", "future"} else base_type)]}
+    elif sys.platform == "emscripten" and entry.exchange_id == "bitget" and base_type in {"spot", "swap"}:
+        options["fetchMarkets"] = {"types": ["spot" if base_type == "spot" else "swap"]}
     elif entry.exchange_id == "binance" and base_type == "spot":
         options["fetchMarkets"] = {"types": ["spot"]}
+    if sys.platform == "emscripten" and websocket and entry.exchange_id == "binance":
+        # Pinned CCXT gives each of a client's first 50 subscriptions a socket
+        # of its own, and a browser opens the sockets to one host one after
+        # another. A tab with a chart beside a watchlist then spent a dozen
+        # handshakes before its first live candle. Use one socket per client;
+        # Binance carries up to 1024 streams on it.
+        families = ("spot", "margin", "future", "delivery")
+        options["streamLimits"] = dict.fromkeys(families, 1)
+        options["subscriptionLimitByStream"] = dict.fromkeys(families, 1000)
     if config.proxy_mode == "pool":
         # Catalog callers do not carry a TransportRequest. Bind their client
         # explicitly rather than accidentally opening a direct connection.
@@ -1070,6 +1083,14 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
+    if sys.platform == "emscripten" and entry.exchange_id in {"bybit", "bitget"}:
+        values["timeout"] = max(30_000, config.http_timeout * 1000)
+    if entry.exchange_id == "binance" and base_type == "spot":
+        # REST and WS join the same ~18 MB spot catalog bootstrap. Keep
+        # either client capable of loading it on an ordinary slower link.
+        values["timeout"] = max(30_000, config.http_timeout * 1000)
+        if websocket:
+            values["urls"] = {"api": {"ws": {"spot": "wss://stream.binance.com:443/ws"}}}
     if entry.exchange_id == "okx" and not websocket:
         from app.exchanges.okx_intervals import OKX_UTC_INTERVALS
 
@@ -1111,6 +1132,10 @@ def _create_exchange(
             fork_kline_enabled=True,
         ), config, market_type)
     exchange = exchange_class(values)
+    if sys.platform == "emscripten" and entry.exchange_id in {"bybit", "bitget"}:
+        # Public bars need instrument metadata. Currency deposit/withdrawal
+        # networks use separate endpoints and are not needed to load this market.
+        exchange.has["fetchCurrencies"] = False
     if websocket and entry.exchange_id == "bybit":
         parse_ws_ohlcv = exchange.parse_ws_ohlcv
 

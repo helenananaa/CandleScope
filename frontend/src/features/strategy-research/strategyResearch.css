@@ -220,6 +220,10 @@
   padding: var(--space-2);
   background: var(--surface-1);
 }
+/* The sticky bar stays opaque when stale: the tab content scrolls under it. */
+.strategy-research-result-panel > .chart-strategy-result-context.stale {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--surface-1));
+}
 .strategy-research-result-bar {
   display: flex;
   flex-wrap: wrap;
@@ -247,6 +251,25 @@
 .strategy-research-drawer .ui-drawer-body { display: grid; align-content: start; gap: var(--space-5); }
 .strategy-history,
 .strategy-research-batch-jobs { display: grid; gap: var(--space-3); min-width: 0; }
+/* A run's details: signal trace, data quality, export and replay review (ADR-BACKTEST-015 P5c). */
+.strategy-research-run-details { display: grid; gap: var(--space-4); min-width: 0; padding-block: var(--space-2); }
+.strategy-research-detail-section { display: grid; gap: var(--space-2); min-width: 0; }
+.strategy-research-detail-section h4 { margin: 0; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); }
+.strategy-research-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.strategy-research-detail-editor { font: var(--font-size-xs)/1.5 var(--font-mono); tab-size: 2; }
+.strategy-research-detail-readout {
+  max-height: 240px;
+  margin: 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  font: var(--font-size-xs)/1.5 var(--font-mono);
+  white-space: pre;
+}
+/* One experiment: its own line, then one row per input (ADR-BACKTEST-015 P5b). */
+.strategy-research-experiment { display: grid; gap: var(--space-2); min-width: 0; }
 .strategy-history h3,
 .strategy-research-batch-jobs h3 {
   margin: 0;
@@ -395,18 +418,18 @@
   background: var(--surface-0);
   cursor: pointer;
 }
-.strategy-result-replay-candles {
-  display: block;
-  width: 100%;
-  max-height: 340px;
+.strategy-result-replay-surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 340px;
+  overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   background: var(--surface-1);
 }
-.strategy-result-replay-candles[data-drawing-active] { cursor: crosshair; }
-.strategy-result-replay-drawings { color: var(--accent-blue); pointer-events: none; }
-.strategy-result-replay-drawings line { stroke: currentColor; stroke-width: 2; }
-.strategy-result-replay-drawings circle { fill: currentColor; }
+.strategy-result-replay-surface > * { flex: 1; min-height: 0; }
+.strategy-result-replay-surface[data-drawing-active] canvas { cursor: crosshair; }
 .strategy-result-replay-ohlc {
   margin: 0;
   color: var(--text-secondary);
@@ -685,4 +708,34 @@
 .strategy-research-shell .research-top-bar :is(.logo, .workspace-navigation) {
   display: none;
 }
+
+/* Phone layout (app/phoneLayout.ts): one column that scrolls as a whole. The first-open chooser
+   takes its own height instead of scrolling inside the chart area, and the script panel spans
+   the width below it. */
+@media (max-width: 640px) {
+  .strategy-research-shell .chart-with-toolbar:has(.strategy-research-first-open) { flex: 0 0 auto; }
+  .strategy-research-chart-slot:has(> .strategy-research-first-open) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .strategy-research-first-open { margin: 0; padding: var(--space-4); }
+  .strategy-research-templates { grid-template-columns: 1fr; }
+  .strategy-research-right-rail { flex: 1 1 auto; min-height: 0; }
+  .strategy-research-engine-switch .ui-segment { min-width: 0; white-space: normal; }
+}
+
+/* ADR-BACKTEST-015 P5c3: the robustness check and its verdict. */
+.strategy-research-robustness { display: grid; gap: var(--space-2); }
+.strategy-research-robustness > .ui-field, .strategy-research-robustness .ui-disclosure { margin-top: var(--space-2); }
+.strategy-research-robustness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.strategy-research-robustness-summary { display: grid; gap: var(--space-1); margin: var(--space-2) 0; }
+.strategy-research-robustness-summary p { margin: 0; }
+.strategy-research-robustness-folds { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--font-size-sm); }
 }

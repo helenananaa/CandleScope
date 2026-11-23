@@ -669,7 +669,8 @@ def import_history_archive(
 
     with _ARCHIVE_IMPORT_WRITE_LOCK:
         with _connect() as conn:
-            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity)):
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
+                               native_rows=rows, source=source):
                 existing = conn.execute(
                     "SELECT content_sha256, import_version, row_count "
                     "FROM history_archive_imports WHERE object_key = ?",
@@ -1559,6 +1560,26 @@ def scan_klines_gaps(
 # ═══════════════════════════════════════════════════════════════
 
 
+def _query_bars_range_presence(symbol, interval, ranges, *, exchange, market_type, series_identity=None):
+    if (not isinstance(ranges, tuple) or not 1 <= len(ranges) <= 256
+            or any(not isinstance(bounds, tuple) or len(bounds) != 2
+                   or any(type(v) is not int for v in bounds)
+                   or not 0 <= bounds[0] < bounds[1] <= (1 << 63) - 1 for bounds in ranges)):
+        raise ValueError("one to 256 bounded half-open windows required")
+    where, params, _ = _series_where(exchange=exchange, market_type=market_type,
+        symbol=symbol, interval=interval, series_identity=series_identity)
+    slots = ",".join(f"({index},?,?)" for index in range(len(ranges)))
+    values = [value for bounds in ranges for value in bounds]
+    with _connect() as conn:
+        rows = conn.execute(f"""
+            WITH requested(slot, lo, hi) AS (VALUES {slots})
+            SELECT slot, EXISTS(SELECT 1 FROM klines WHERE {' AND '.join(where)}
+                AND open_time>=requested.lo AND open_time<requested.hi) AS present
+            FROM requested ORDER BY slot
+            """, (*values, *params)).fetchall()
+    return [bool(row["present"]) for row in rows]
+
+
 class KlinesRepoAdapter:
     """Wraps the module-level klines_repo functions into an object
     that satisfies the ``data_manager.models.StorageBackend`` protocol.
@@ -1579,6 +1600,48 @@ class KlinesRepoAdapter:
     def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
         from .kline_sources import closed_components
         return closed_components(series, start_ms, end_ms)
+
+    def fold_source_window(self, *args):
+        from .source_window_summary import fold_source_window
+        return fold_source_window(*args)
+
+    def capture_source_window(self, *args):
+        from .kline_sources import capture_source_window
+        return capture_source_window(*args)
+
+    def validate_source_window(self, version, *, target_interval=None):
+        from contextlib import closing
+        from .kline_sources import source_window_current, source_window_allows_target
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            return (source_window_allows_target(conn, version, target_interval)
+                    if target_interval is not None else source_window_current(conn, version))
+
+    def validate_source_preview(self, version, watermark, *, target_interval):
+        # Preserve explicit/custom validators and their barriers.
+        if getattr(self.validate_source_window, '__func__', None) is not KlinesRepoAdapter.validate_source_window:
+            return self.validate_source_window(version, target_interval=target_interval), None
+        from contextlib import closing
+        from .kline_sources import source_preview_current
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            return source_preview_current(conn, version, watermark, target_interval)
+
+    def validate_component_preview(self, components, **target) -> str:
+        """Read source proofs and canonical invalidation in one bounded view."""
+        from contextlib import closing
+        from .kline_sources import validate_component_preview
+        with closing(self.revision_store.connect()) as conn,conn:
+            conn.execute('BEGIN')
+            return validate_component_preview(conn,components,**target)
+
+    def source_window_preview_binding(self):
+        """Opt in only the original source-window and leaf proof validators."""
+        if (getattr(self.validate_component_preview, '__func__', None) is not KlinesRepoAdapter.validate_component_preview
+                or getattr(self.validate_source_window, '__func__', None) is not KlinesRepoAdapter.validate_source_window):
+            return None
+        return (self.revision_store, KlinesRepoAdapter.validate_component_preview,
+                KlinesRepoAdapter.validate_source_window)
 
     def __init__(
         self,
@@ -1752,6 +1815,21 @@ class KlinesRepoAdapter:
                 params,
             ).fetchone()
         return int(row["cnt"] if row is not None else 0)
+
+    def query_bars_range_presence(
+        self, symbol: str, interval: str, ranges: tuple[tuple[int, int], ...], *,
+        exchange: str | None = None, market_type: str | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> list[bool]:
+        """Probe up to 256 half-open windows in one canonical read.
+
+        Presence includes every provenance/quality. It selects a conservative
+        history route, never proves completeness, finality or field parity.
+        No raw candles are retained, and all identity values are bound params.
+        """
+        return _query_bars_range_presence(symbol, interval, ranges,
+            exchange=exchange or self._exchange, market_type=market_type or self._market_type,
+            series_identity=series_identity or self._series_identity)
 
     def verify_contiguous_range(
         self,
@@ -2075,6 +2153,31 @@ class AsyncKlinesRepoAdapter:
     @property
     def revision_store(self):
         return RevisionStore(lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
+
+    async def query_bars_range_presence(
+        self, symbol: str, interval: str, ranges: tuple[tuple[int, int], ...], *,
+        exchange: str | None = None, market_type: str | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> list[bool]:
+        return await run_storage(_query_bars_range_presence, symbol, interval, ranges,
+            exchange=exchange or self._exchange, market_type=market_type or self._market_type,
+            series_identity=series_identity)
+
+    async def query_canonical_page(
+        self, symbol: str, interval: str, start_ms: int, end_ms: int, *, limit: int = 256,
+        exchange: str | None = None, market_type: str | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> list[dict]:
+        """Bounded full canonical rows, inclusive opens, for history planning.
+
+        Unlike the chart projection this retains actual close_time and source;
+        consumers must still validate grid, quality and revision consistency.
+        """
+        if type(limit) is not int or not 1 <= limit <= 256:
+            raise ValueError("canonical page limit must be between 1 and 256")
+        return await run_storage(query_klines, symbol, interval, start_ms, end_ms, limit, "ASC",
+            exchange=exchange or self._exchange, market_type=market_type or self._market_type,
+            series_identity=series_identity)
 
     async def get_latest_time(
         self,

@@ -281,6 +281,107 @@ CREATE TABLE IF NOT EXISTS backtest_research_launch_contexts (
 
 CREATE INDEX IF NOT EXISTS idx_backtest_research_context_created
     ON backtest_research_launch_contexts(created_at_ms DESC);
+
+-- ADR-BACKTEST-015 P3a: the strategy editor's mutable working copies live here, not in
+-- browser storage. Runs never reference a draft; they reference a frozen version.
+CREATE TABLE IF NOT EXISTS backtest_strategy_drafts (
+    draft_id TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL,
+    display_name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    source_text TEXT NOT NULL,
+    cursor_json TEXT,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_drafts_updated
+    ON backtest_strategy_drafts(updated_at_ms DESC, draft_id);
+
+-- ADR-BACKTEST-015 P3b: content-addressed versions, the runs that executed them (of
+-- every run family) and the names users give them.
+CREATE TABLE IF NOT EXISTS backtest_strategy_versions (
+    version_hash TEXT PRIMARY KEY,
+    language TEXT NOT NULL,
+    source_text TEXT NOT NULL,
+    libraries_json TEXT NOT NULL,
+    runtime_json TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_version_runs (
+    run_id TEXT PRIMARY KEY,
+    version_hash TEXT NOT NULL REFERENCES backtest_strategy_versions(version_hash),
+    family TEXT NOT NULL,
+    linked_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_version_runs
+    ON backtest_strategy_version_runs(version_hash, linked_at_ms DESC, run_id);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_version_names (
+    name TEXT PRIMARY KEY,
+    version_hash TEXT NOT NULL REFERENCES backtest_strategy_versions(version_hash),
+    named_at_ms INTEGER NOT NULL
+);
+
+-- ADR-BACKTEST-015 P3c: small references the strategy pages keep (which forward run a
+-- chart follows; chart <-> research hand-offs), formerly in origin-scoped browser storage.
+CREATE TABLE IF NOT EXISTS backtest_strategy_references (
+    kind TEXT NOT NULL,
+    ref_key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (kind, ref_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_references_updated
+    ON backtest_strategy_references(kind, updated_at_ms DESC);
+
+-- ADR-BACKTEST-015 P5b: an experiment is one strategy run over several inputs. Each member is
+-- submitted as a strategy data preparation (exchange history) or a run (a frozen snapshot);
+-- its state is read from that preparation or run, never copied here.
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiments (
+    experiment_id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    strategy_json TEXT NOT NULL,
+    cancelled_at_ms INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_experiments_created
+    ON backtest_strategy_experiments(created_at_ms DESC);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiment_members (
+    experiment_id TEXT NOT NULL REFERENCES backtest_strategy_experiments(experiment_id),
+    ordinal INTEGER NOT NULL,
+    input_json TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 0,
+    preparation_id TEXT,
+    run_id TEXT,
+    error_json TEXT,
+    PRIMARY KEY (experiment_id, ordinal)
+);
+
+-- ADR-BACKTEST-015 P5c3: a robustness experiment is a Study V2; its runs are the study's.
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiment_studies (
+    experiment_id TEXT PRIMARY KEY REFERENCES backtest_strategy_experiments(experiment_id),
+    study_id TEXT NOT NULL UNIQUE REFERENCES backtest_studies(study_id)
+);
+
+-- Why a study failed (a smoke, a run or a selection), as the worker saw it.
+CREATE TABLE IF NOT EXISTS backtest_study_failures (
+    study_id TEXT PRIMARY KEY REFERENCES backtest_studies(study_id),
+    code TEXT NOT NULL,
+    message TEXT NOT NULL,
+    failed_at_ms INTEGER NOT NULL
+);
 """
 
 

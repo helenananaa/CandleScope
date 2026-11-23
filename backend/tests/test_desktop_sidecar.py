@@ -226,3 +226,44 @@ print('numpy ready', flush=True)
         if child.poll() is None:
             child.kill()
             child.communicate()
+
+
+def test_startup_failure_exits_cleanly_while_parent_pipe_remains_open(tmp_path):
+    code = """
+import asyncio
+import uvicorn
+from app.desktop_sidecar import serve
+
+async def app(scope, receive, send):
+    assert scope['type'] == 'lifespan'
+    await receive()
+    await asyncio.sleep(.1)
+    await send({'type': 'lifespan.startup.failed', 'message': 'intentional startup failure'})
+
+original = uvicorn.Config
+uvicorn.Config = lambda _, **options: original(app, **options)
+serve('127.0.0.1', 0)
+"""
+    child = subprocess.Popen(
+        [sys.executable, "-c", code],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={
+            **os.environ,
+            "BACKTEST_ENABLED": "0",
+            "CANDLESCOPE_DESKTOP_BOUND_PORT": "",
+            "CANDLESCOPE_DESKTOP_ENDPOINT_FILE": str(tmp_path / "endpoint.json"),
+            "CANDLESCOPE_DESKTOP_INSTANCE_ID": "startup-failure-test",
+        },
+    )
+    try:
+        child.wait(timeout=10)  # Keep the monitor blocked on the real parent pipe.
+        output, error = child.communicate()
+        assert child.returncode == 3, (output + error).decode(errors="replace")
+        assert b"intentional startup failure" in error
+        assert b"Fatal Python error" not in error
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()

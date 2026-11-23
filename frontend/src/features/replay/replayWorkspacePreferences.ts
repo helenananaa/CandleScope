@@ -8,6 +8,7 @@ import {
   MARKET_RAIL_MIN_SIDEBAR_HEIGHT,
   MARKET_RAIL_MIN_WIDTH,
 } from "../../shared/marketRailLayout.js";
+import { isPhoneLayout } from "../../app/phoneLayout.js";
 
 export const REPLAY_RAIL_VIEW_IDS = {
   watchlist: "replay-watchlist",
@@ -268,16 +269,21 @@ export function clearReplayWorkspacePreferences(
   }
 }
 
+/** On a phone the rail's panel is a sheet over the chart, so a session opens on the chart. */
+function startOnPhone(preferences: ReplayWorkspacePreferences): ReplayWorkspacePreferences {
+  return isPhoneLayout() ? { ...preferences, panelCollapsed: true } : preferences;
+}
+
 export function useReplayWorkspacePreferences(sessionId: string): {
   readonly preferences: ReplayWorkspacePreferences;
   readonly actions: ReplayWorkspacePreferenceActions;
 } {
   const [storage] = useState<ReplayPreferenceStorage | null>(browserStorage);
   const [preferences, setPreferences] = useState<ReplayWorkspacePreferences>(() => (
-    loadReplayWorkspacePreferences(sessionId, storage)
+    startOnPhone(loadReplayWorkspacePreferences(sessionId, storage))
   ));
   useEffect(() => {
-    setPreferences(loadReplayWorkspacePreferences(sessionId, storage));
+    setPreferences(startOnPhone(loadReplayWorkspacePreferences(sessionId, storage)));
   }, [sessionId, storage]);
   const update = useCallback((patch: Partial<ReplayWorkspacePreferences>) => {
     setPreferences((current) => {

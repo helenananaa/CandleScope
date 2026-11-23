@@ -49,6 +49,7 @@ def execute(source, bars, values, *, timeout=10):
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+                    process.wait()
         if process.returncode != 0:
             raise AuthorError(f"Python worker exited with code {process.returncode}")
         if not result.is_file() or result.stat().st_size > MAX_RESULT_BYTES:

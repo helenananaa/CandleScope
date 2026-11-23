@@ -187,11 +187,17 @@ class PineEngineProvider:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
             ) from exc
-        schedule_contract = context.get("pineExecutionScheduleContract")
+        self.signal_chart = context.get("signalChart")
+        self.chart_events = context.get("signalChartEvents")
+        if self.signal_chart and not self.chart_events and (self.runtime_identity.get("ordered_chart_strategy") != "ordered-chart-strategy/1" or self.fill_callbacks or frozen.get("historyTicks") or frozen.get("realtimeTicks")):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Chart signals require a close-only ordered chart strategy runtime")
+        if self.chart_events and (self.chart_events!="candlescope.chart-signal-events/1" or self.runtime_identity.get("chart_signal_events")!=self.chart_events):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED","install the chart event runtime")
+        schedule_contract = SCHEDULE_CONTRACT if self.chart_events else context.get("pineExecutionScheduleContract")
         self.scheduled = schedule_contract is not None
-        self.streaming = context.get("pineStreamContract") is not None
-        self.realtime_streaming = context.get("pineRealtimeTicks") is True
-        if self.streaming and (context["pineStreamContract"]!=STREAM_CONTRACT or not self.scheduled
+        self.streaming = bool(self.chart_events) or context.get("pineStreamContract") is not None
+        self.realtime_streaming = bool(self.chart_events) or context.get("pineRealtimeTicks") is True
+        if self.streaming and not self.chart_events and (context["pineStreamContract"]!=STREAM_CONTRACT or not self.scheduled
                 or self.runtime_identity.get("external_stream_contract")!=STREAM_CONTRACT
                 or (frozen.get("realtimeTicks") is not True if self.realtime_streaming else
                     frozen.get("historyTicks") is not True or not isinstance(context.get("pineHistoricalBars"),list))):
@@ -227,13 +233,15 @@ class PineEngineProvider:
             "source": self.source,
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
+            **({"chart_event_contract":self.chart_events} if self.chart_events else {}),
+            **({"chart_signal_contract": "ordered-chart-strategy/1", "signal_chart": self.signal_chart} if self.signal_chart else {}),
             **({"execution_schedule_contract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
             **({"order_metadata_contract": self.runtime_identity["order_metadata_contract"]}
                if self.order_mode and self.runtime_identity.get("order_metadata_contract") else {}),
             **({"risk_contract": STOP_CONTRACT if self.stop_functions else RISK_CONTRACT} if self.entry_risk else {}),
         }
-        if self.streaming and frozen.get("eventRequestContract") is not None:
+        if self.streaming and not self.chart_events and frozen.get("eventRequestContract") is not None:
             self.wire["event_request_contract"]=frozen["eventRequestContract"]
         from app.backtest.errors import BacktestError
         from app.backtest.pine_requested_data import load_contexts
@@ -284,6 +292,7 @@ class PineEngineProvider:
             for name in ("open", "high", "low", "close", "volume")
         }
         bar["time"] = int(row.get("open_time_ms", frame.event_time_ms)) // 1000
+        if self.chart_events:bar["chart_time_ms"]=int(row["open_time_ms"])
         account = dict(frame.account_view)
         actual_metadata = account.pop("_contract_metadata", None)
         if actual_metadata is not None:
@@ -641,8 +650,10 @@ class PineEngineProvider:
         if self.scheduled:
             close_callbacks = sum(item["trigger"] == "closing_fill" for group in self.execution_contexts for item in group)
         skip=(self.stream.input_skip if self.stream is not None else (self._closed_stream_checkpoint or {}).get("input_skip",0)) if self.streaming else 0
+        event_source=("OBSERVED_TRADE_STREAM" if self.context.get("signalClock") else "OHLC_PATH_APPROXIMATION") if self.chart_events else None
         return {"pineExecution": {
-            "profile": "OBSERVED_AGG_TRADE_TICK_STREAM" if self.realtime_streaming else "HISTORICAL_OHLC_TICK_STREAM" if self.streaming else "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            **({"chartEventContract":self.chart_events,"chartPriceSource":event_source} if self.chart_events else {}),
+            "profile": "CHART_"+event_source if self.chart_events else "OBSERVED_AGG_TRADE_TICK_STREAM" if self.realtime_streaming else "HISTORICAL_OHLC_TICK_STREAM" if self.streaming else "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
             **({"executionScheduleContract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             **({"externalStreamContract":STREAM_CONTRACT,
                 **({"realtimeTickCount":sum(item["trigger"]=="realtime_tick" for group in self.execution_contexts for item in group),

@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api.v1.trading_accounts import router as trading_router
 from app.trading_accounts.journal import locked_plan, phase_at, plan_direction
 from app.trading_accounts.models import TradingAccountError
-from app.trading_accounts.practice import (
+from app.simulation.practice_account import (
     Cursor,
     PathChunk,
     PracticeMatcher,
@@ -472,7 +472,7 @@ def test_practice_flow_market_entry_bracket_and_candle_replay(service):
     market, clock = service.test_market, service.test_clock
     minute = T0 // 1000
     market.bar = bar(minute, "100", "100.5", "99.8", "100")
-    account = service.create_account({"kind": "practice", "name": "Practice", "settings": {"slippageBps": "0"}})
+    account = service.create_account({"kind": "practice", "name": "Practice", "settings": {"positionMode": "ONE_WAY", "slippageBps": "0"}})
     placed = service.place_order(account["id"], {
         **INSTRUMENT, "side": "buy", "type": "market", "qty": "1",
         "bracketStop": "98", "bracketTarget": "103",
@@ -516,7 +516,7 @@ def test_practice_flow_market_entry_bracket_and_candle_replay(service):
 def test_trade_protection_orders_preserve_explicit_ownership_and_cancellation_on_restart(service, tmp_path):
     clock = service.test_clock
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    account_id = service.create_account({"kind": "practice", "name": "Protection"})["id"]
+    account_id = service.create_account({"kind": "practice", "name": "Protection", "settings": {"positionMode": "ONE_WAY"}})["id"]
     service.place_order(account_id, {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
     trade_id = service.list_trades(account_id)["trades"][0]["id"]
     admission = clock.now
@@ -547,7 +547,7 @@ def test_trade_protection_orders_preserve_explicit_ownership_and_cancellation_on
 
 def test_practice_rejects_spot_short_and_wrong_side_stop(service):
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    account = service.create_account({"kind": "practice", "name": "Spot"})
+    account = service.create_account({"kind": "practice", "name": "Spot", "settings": {"positionMode": "ONE_WAY"}})
     with pytest.raises(TradingAccountError) as short:
         service.place_order(account["id"], {**INSTRUMENT, "marketType": "spot", "side": "sell", "type": "market", "qty": "1"})
     assert short.value.code == "TRADING_INSUFFICIENT_POSITION"
@@ -689,7 +689,7 @@ def test_cursor_stays_in_memory_until_candle_extremes_change(service):
     market, clock = service.test_market, service.test_clock
     minute = T0 // 1000
     market.bar = bar(minute, "100", "101", "99", "100")
-    account = service.create_account({"kind": "practice", "name": "P", "settings": {"slippageBps": "0"}})
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"positionMode": "ONE_WAY", "slippageBps": "0"}})
     service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
     seeded = service.store.cursor(*FUTURES)
     loads: list[str] = []
@@ -731,7 +731,7 @@ def test_cursor_stays_in_memory_until_candle_extremes_change(service):
 
 def test_status_change_is_written_but_repeats_are_not(service):
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    account = service.create_account({"kind": "practice", "name": "P"})
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"positionMode": "ONE_WAY"}})
     service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
     service.test_clock.now += 5_000
     service.set_feed_status(FUTURES, "catching_up", "gap")
@@ -744,7 +744,7 @@ def test_status_change_is_written_but_repeats_are_not(service):
 
 def test_account_summary_exposes_feed_lag(service):
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    account = service.create_account({"kind": "practice", "name": "P"})
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"positionMode": "ONE_WAY"}})
     service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
     service.record_feed_timing(FUTURES, {"lagMs": 120, "queueMs": 3, "queryMs": 5, "applyMs": 2})
     feed = service.account_summary(account["id"])["feeds"][0]
@@ -795,7 +795,7 @@ def test_sweep_steps_only_instruments_without_live_updates(tmp_path):
     minute = int(time.time()) // 60 * 60
     market.bar = bar(minute, "100", "100", "100", "100")
     market.history = [market.bar]
-    account = service.create_account({"kind": "practice", "name": "P"})
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"positionMode": "ONE_WAY"}})
     for symbol in ("BTCUSDT", "ETHUSDT"):
         service.place_order(account["id"], {
             **INSTRUMENT, "symbol": symbol, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "50",
@@ -831,7 +831,7 @@ def test_live_update_fills_limit_within_a_second_and_reports_lag(tmp_path):
     minute = int(time.time()) // 60 * 60
     market.bar = bar(minute, "100", "100", "100", "100")
     market.history = [market.bar]
-    account = service.create_account({"kind": "practice", "name": "P", "settings": {"slippageBps": "0"}})
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"positionMode": "ONE_WAY", "slippageBps": "0"}})
     order = service.place_order(account["id"], {
         **INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "99",
     })["order"]
@@ -877,7 +877,7 @@ def test_position_only_runtime_keeps_valuation_and_releases_after_last_close(tmp
     minute = int(time.time()) // 60 * 60
     market.bar = bar(minute, "100", "100", "100", "100")
     market.history = [market.bar]
-    account = service.create_account({"kind": "practice", "name": "Positions", "settings": {"slippageBps": "0"}})
+    account = service.create_account({"kind": "practice", "name": "Positions", "settings": {"positionMode": "ONE_WAY", "slippageBps": "0"}})
     for symbol in ("BTCUSDT", "ETHUSDT"):
         service.place_order(account["id"], {**INSTRUMENT, "symbol": symbol, "side": "buy", "type": "market", "qty": "1"})
     assert service.store.orders(account["id"], status="working") == []
@@ -910,8 +910,8 @@ def test_position_only_runtime_keeps_valuation_and_releases_after_last_close(tmp
 
 def test_position_demands_do_not_net_across_accounts_or_start_manual_account_feeds(service):
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    long = service.create_account({"kind": "practice", "name": "Long"})
-    short = service.create_account({"kind": "practice", "name": "Short"})
+    long = service.create_account({"kind": "practice", "name": "Long", "settings": {"positionMode": "ONE_WAY"}})
+    short = service.create_account({"kind": "practice", "name": "Short", "settings": {"positionMode": "ONE_WAY"}})
     manual = service.create_account({"kind": "manual", "name": "Notes"})
     for account, side in ((long, "buy"), (short, "sell")):
         service.place_order(account["id"], {**INSTRUMENT, "side": side, "type": "market", "qty": "0.3"})
@@ -931,7 +931,7 @@ def test_position_demands_restore_from_persisted_fills_without_orders(tmp_path):
     minute = int(time.time()) // 60 * 60
     market.bar = bar(minute, "100", "100", "100", "100")
     market.history = [market.bar]
-    account = service.create_account({"kind": "practice", "name": "Restart"})
+    account = service.create_account({"kind": "practice", "name": "Restart", "settings": {"positionMode": "ONE_WAY"}})
     for qty in ("0.1", "0.2"):
         service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": qty})
     service.flush_feeds()
@@ -957,7 +957,7 @@ def test_position_demands_restore_from_persisted_fills_without_orders(tmp_path):
 def test_position_demand_does_not_rebuild_ledgers_on_price_or_cursor_updates(service, monkeypatch):
     minute = T0 // 1000
     service.test_market.bar = bar(minute, "100", "100", "100", "100")
-    account = service.create_account({"kind": "practice", "name": "Cached demand"})
+    account = service.create_account({"kind": "practice", "name": "Cached demand", "settings": {"positionMode": "ONE_WAY"}})
     service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
     reads = []
     trades = service._trades
@@ -983,7 +983,7 @@ def test_position_demand_does_not_rebuild_ledgers_on_price_or_cursor_updates(ser
 
 def test_position_demand_does_not_adopt_rolled_back_sequence(service):
     service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
-    account = service.create_account({"kind": "practice", "name": "Rollback"})
+    account = service.create_account({"kind": "practice", "name": "Rollback", "settings": {"positionMode": "ONE_WAY"}})
     service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
     original = service.store.fills(account["id"])[0]
     original.pop("seq")

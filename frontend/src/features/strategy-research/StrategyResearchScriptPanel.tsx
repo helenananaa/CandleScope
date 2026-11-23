@@ -1,3 +1,4 @@
+import { BrowserDesktopLink, desktopReleaseUrl } from "../../app/BrowserDesktopLink.js";
 import {
   lazy,
   Suspense,
@@ -39,6 +40,7 @@ import {
 } from "../backtest/chart-tester/StrategyDraftStore.js";
 import type { ResearchSourceKind } from "../research-data/researchDataTypes.js";
 import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
+import { browserHost } from "../../app/browserHost.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../backtest/chart-tester/StrategyScriptWorkspace.js"));
 
@@ -76,6 +78,9 @@ export function StrategyResearchScriptPanel({
   configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
   onConfigure,
   batchControls,
+  robustnessControls,
+  languageFixed = false,
+  requestedPane,
   batchSession,
   marketBatchAvailable,
 }: {
@@ -91,10 +96,21 @@ export function StrategyResearchScriptPanel({
   onDraftRevision(revision: number): void;
   onRun(request: ChartStrategyRunRequest): void;
   onConfirmNeedsData(): void;
-  onOpenAdvanced(): void;
+  /** Leaves for the research tool; the research workspace has none (its tools are its fields, ADR-BACKTEST-015 P5c4). */
+  onOpenAdvanced?(): void;
+  /** A pane the page asks for (`?mode=precise` names run settings); a new nonce asks again. */
+  requestedPane?: { pane: "parameters" | "code" | "conditions"; nonce: number } | undefined;
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
   batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  /** The robustness check of this strategy, given the same request as the batch controls. */
+  robustnessControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  /**
+   * ADR-BACKTEST-015 P5c4: the page's strategies are named by language (as on the chart, P4c2). This panel is
+   * the Python strategy: no language switch, and its recent drafts and templates are Python. A Pine draft
+   * already open here still opens and runs.
+   */
+  languageFixed?: boolean;
   batchSession?: ChartSession | null;
   marketBatchAvailable?: boolean;
 }) {
@@ -107,13 +123,22 @@ export function StrategyResearchScriptPanel({
   const pythonTrustedConfirmed = pythonApproval === approvalKey;
   const [cursor, setCursor] = useState<StrategyDraftCursor | null>(null);
   const [openEditor, setOpenEditor] = useState(false);
-  const [pane, setPane] = useState<"parameters" | "code" | "conditions">("parameters");
+  const [pane, setPane] = useState<"parameters" | "code" | "conditions">(() => requestedPane?.pane ?? "parameters");
+  const requestedPaneNonce = requestedPane?.nonce;
+  useEffect(() => {
+    if (requestedPane) setPane(requestedPane.pane);
+    // Only a new request moves the pane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPaneNonce]);
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void draftStore.recent(20).then((records) => { if (!cancelled) setRecentDrafts(records); });
+    void draftStore.recent(20).then((records) => {
+      if (!cancelled) setRecentDrafts(languageFixed ? records.filter((record) => record.language === "python" || record.id === draftId) : records);
+    });
     return () => { cancelled = true; };
-  }, [draftId, draftStore]);
+  }, [draftId, draftStore, languageFixed]);
+  const templates = languageFixed ? RESEARCH_STRATEGY_TEMPLATES.filter((template) => template.language === "python") : RESEARCH_STRATEGY_TEMPLATES;
   const restoreGenerationRef = useRef(0);
   const restorePromiseRef = useRef<Promise<void> | null>(null);
   const pendingSavePromiseRef = useRef<Promise<StrategyDraftRecord> | null>(null);
@@ -259,7 +284,7 @@ export function StrategyResearchScriptPanel({
     } catch {
       return;
     }
-    onOpenAdvanced();
+    onOpenAdvanced?.();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
   const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
@@ -290,14 +315,18 @@ export function StrategyResearchScriptPanel({
   }, [cellScope, configuration, draft, editorSession, marketBatchAvailable, preciseBlocked, source, pythonTrustedConfirmed]);
 
   const run = useCallback(() => {
+    if (browserHost()) {
+      window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (!runRequest || !session || preciseBlocked) { setPane("conditions"); return; }
     onRun(runRequest);
   }, [onRun, preciseBlocked, runRequest, session]);
 
   const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
-    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: RESEARCH_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
-      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!RESEARCH_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates, pane, openEditor }), commands: [
+      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!templates.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
@@ -305,7 +334,7 @@ export function StrategyResearchScriptPanel({
       command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
       command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && session !== null && !preciseBlocked && runRequest !== null }),
       command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && session !== null && !preciseBlocked && needsData && runRequest !== null }),
-      command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
+      command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced(), { available: () => !!onOpenAdvanced }),
     ] }));
   if (!editorSession) {
     return <><p className="strategy-research-note" data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
@@ -330,7 +359,7 @@ export function StrategyResearchScriptPanel({
       ) : null}
       {draft === null ? (
         <div className="strategy-research-template-list" data-testid="strategy-research-templates">
-          {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
+          {templates.map((template) => (
             <Button
               key={template.id}
               fullWidth
@@ -340,18 +369,18 @@ export function StrategyResearchScriptPanel({
               {strategyLanguageLabel(template.language)} · {t(template.nameKey)}
             </Button>
           ))}
-          <Button
+          {onOpenAdvanced && <Button
             variant="ghost"
             size="sm"
             data-testid="strategy-research-open-advanced"
             onClick={() => void openAdvanced()}
           >
             {t("strategy.advanced")}
-          </Button>
+          </Button>}
         </div>
       ) : (
         <>
-          <StrategyLanguageControls language={draft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+          <StrategyLanguageControls language={draft.language} languageFixed={languageFixed} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
             setPythonApproval(null);
             void saveDraft({ ...draft, language, source, cursor });
           }} />
@@ -368,7 +397,8 @@ export function StrategyResearchScriptPanel({
           />
           <TabPanel tabsId={paneTabsId} value={pane} className="strategy-research-pane">
             {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-            {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
+            {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART" || sourceKind === "EXCHANGE_SERIES"}
+              rangeFixed={sourceKind === "EXCHANGE_SERIES"} onChange={onConfigure} />}
             {openEditor && pane === "code" ? (
               <Suspense fallback={<p className="strategy-research-note">{t("strategy.scriptSlot")}</p>}>
                 <StrategyScriptWorkspace
@@ -386,7 +416,7 @@ export function StrategyResearchScriptPanel({
             ) : null}
           </TabPanel>
           <div className="strategy-research-run-actions">
-            <Button
+            {browserHost() ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary" /> : <Button
               variant="primary"
               fullWidth
               data-testid="strategy-research-run"
@@ -394,19 +424,21 @@ export function StrategyResearchScriptPanel({
               onClick={needsData ? onConfirmNeedsData : run}
             >
               {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
-            </Button>
-            <Button
+            </Button>}
+            {onOpenAdvanced && <Button
               variant="ghost"
               size="sm"
               data-testid="strategy-research-open-advanced"
               onClick={() => void openAdvanced()}
             >
               {t("strategy.advanced")}
-            </Button>
+            </Button>}
           </div>
         </>
       )}
       {batchControls?.(runRequest && !runRequest.attachment.pythonBarExecution
+        && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
+      {robustnessControls?.(runRequest && !runRequest.attachment.pythonBarExecution
         && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
     </section>
   );

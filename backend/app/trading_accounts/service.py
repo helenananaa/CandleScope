@@ -35,13 +35,16 @@ from .models import (
     to_decimal,
     valid_id,
 )
-from .practice import (
+from app.simulation.practice_account import (
     BAR_MS,
     Cursor,
+    PracticeBuyingPower,
     PracticeMatcher,
     PracticeSettings,
     WorkingOrder,
     advance_cursor,
+    initial_margin,
+    market_leverage,
     reachable,
 )
 from .stats import TradeFacts, compute_stats, journal_tags
@@ -81,6 +84,14 @@ def _instrument_of(row: dict[str, Any]) -> Instrument:
     return (row["exchange"], row["market_type"], row["symbol"])
 
 
+def _hedge_fields(row: dict[str, Any]) -> dict[str, str]:
+    leg = row.get("position_side")
+    if not leg:
+        return {}
+    opening = (leg == "LONG") == (row["side"] == "buy")
+    return {"positionSide": leg, "positionEffect": "open" if opening else "close"}
+
+
 def _fill_view(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -88,6 +99,7 @@ def _fill_view(row: dict[str, Any]) -> dict[str, Any]:
         "marketType": row["market_type"],
         "symbol": row["symbol"],
         "side": row["side"],
+        **_hedge_fields(row),
         "qty": dec_str(row["qty"]),
         "price": dec_str(row["price"]),
         "fee": dec_str(row["fee"]),
@@ -108,6 +120,7 @@ def _order_view(row: dict[str, Any]) -> dict[str, Any]:
         "marketType": row["market_type"],
         "symbol": row["symbol"],
         "side": row["side"],
+        **_hedge_fields(row),
         "type": row["type"],
         "qty": dec_str(row["qty"]),
         "limitPrice": dec_str(row["limit_price"]),
@@ -143,6 +156,8 @@ def _working_order(row: dict[str, Any]) -> WorkingOrder:
         bracket_stop=row["bracket_stop"],
         bracket_target=row["bracket_target"],
         parent_id=row["parent_id"],
+        position_side=row["position_side"],
+        protection_trade_id=row["protection_trade_id"],
     )
 
 
@@ -230,13 +245,22 @@ class TradingAccountService(JournalService):
 
     @staticmethod
     def _practice_settings(raw: Any, *, base: dict[str, str] | None = None) -> dict[str, str]:
-        source = dict(base or DEFAULT_PRACTICE_SETTINGS)
+        source = DEFAULT_PRACTICE_SETTINGS.copy()
+        if base is not None:
+            source.update(base)
+            # Accounts created before position modes always used net positions.
+            source["positionMode"] = base.get("positionMode", "ONE_WAY")
         if raw is not None:
             if not isinstance(raw, dict):
                 raise invalid("settings must be an object")
             for key in DEFAULT_PRACTICE_SETTINGS:
                 if key in raw and raw[key] is not None:
                     source[key] = raw[key]
+        mode = source["positionMode"]
+        if mode not in ("ONE_WAY", "HEDGE"):
+            raise invalid("Unsupported contract position mode")
+        if base is not None and mode != base.get("positionMode", "ONE_WAY"):
+            raise conflict("Position mode is fixed when an account is created")
         initial = to_decimal(source["initialBalance"], "initialBalance", positive=True)
         taker = to_decimal(source["takerFeeRate"], "takerFeeRate")
         maker = to_decimal(source["makerFeeRate"], "makerFeeRate")
@@ -253,6 +277,7 @@ class TradingAccountService(JournalService):
             "takerFeeRate": dec_str(taker) or "0",
             "makerFeeRate": dec_str(maker) or "0",
             "slippageBps": dec_str(slippage) or "0",
+            "positionMode": mode,
             "leverage": dec_str(leverage) or "1",
         }
 
@@ -344,7 +369,7 @@ class TradingAccountService(JournalService):
             "kind": kind,
             "name": account["name"],
             "quoteCurrency": account["quote_currency"],
-            "settings": account["settings"],
+            "settings": {"positionMode": "ONE_WAY", **account["settings"]} if kind == "practice" else account["settings"],
             "createdAtMs": account["created_at_ms"],
             "archived": account["archived"],
             "capabilities": {
@@ -393,14 +418,16 @@ class TradingAccountService(JournalService):
         cursor = feed.cursor if feed is not None else None
         now = self.clock()
         if cursor is not None and now - cursor.observed_ms <= FRESH_PRICE_MS:
-            return cursor.last_close, cursor.observed_ms, "practice"
+            return cursor.last_close, cursor.observed_ms, "practice" if feed.status == "live" else "stale"
         if self.market is not None:
             try:
                 bar = self.market.latest_bar(*instrument)
             except Exception:
                 bar = None
             if bar is not None:
-                return _bar_decimal(bar, "close"), int(bar["time"]) * 1000, "market"
+                at = int(bar["time"]) * 1000
+                if cursor is None or at >= cursor.observed_ms or now - at <= 2 * BAR_MS:
+                    return _bar_decimal(bar, "close"), at, "market" if now - at <= 2 * BAR_MS else "stale"
         if cursor is not None:
             return cursor.last_close, cursor.observed_ms, "stale"
         return None, None, "none"
@@ -441,17 +468,21 @@ class TradingAccountService(JournalService):
         leverage = Decimal(account["settings"].get("leverage", "1")) if account["kind"] == "practice" else Decimal(1)
         unrealized = ZERO
         used_margin = ZERO
+        valuation_status = "current"
         positions = []
         for trade in trades:
             if trade.status != "open":
                 continue
             instrument = (trade.exchange, trade.market_type, trade.symbol)
             mark, mark_ms, mark_source = self._mark(instrument)
+            if mark is None:
+                valuation_status = "unknown"
+            elif valuation_status == "current" and mark_source == "stale":
+                valuation_status = "stale"
             value = trade.unrealized_pnl(mark)
             unrealized += value or ZERO
             price = mark if mark is not None else (trade.avg_entry_price or ZERO)
-            effective_leverage = leverage if trade.market_type == "futures" else Decimal(1)
-            used_margin += trade.open_qty * price / effective_leverage
+            used_margin += initial_margin(trade.open_qty, price, market_leverage(leverage, trade.market_type))
             view = trade.to_dict(mark=mark)
             view["markAtMs"] = mark_ms
             view["markSource"] = mark_source
@@ -484,6 +515,7 @@ class TradingAccountService(JournalService):
             "equity": dec_str(equity),
             "unrealizedPnl": dec_str(unrealized),
             "usedMargin": dec_str(used_margin),
+            "valuationStatus": valuation_status,
             "available": dec_str(equity - used_margin),
             "positions": positions,
             "workingOrders": working,
@@ -780,10 +812,10 @@ class TradingAccountService(JournalService):
     def place_order(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         # Serialize with the matcher so position and margin checks see the
         # same ledger the order is written against.
-        with self.store.locked():
-            return self._place_order(account_id, payload)
+        with self.store.transaction() as conn:
+            return self._place_order(conn, account_id, payload)
 
-    def _place_order(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _place_order(self, conn, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         account = self._account(account_id)
         if account["kind"] != "practice":
             raise conflict("This account cannot place orders", code="TRADING_ORDERS_UNSUPPORTED")
@@ -792,6 +824,20 @@ class TradingAccountService(JournalService):
         instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
         side = str(payload.get("side") or "").lower()
         order_type = str(payload.get("type") or "").lower()
+        leg = payload.get("positionSide")
+        effect = payload.get("positionEffect")
+        reduce_only = bool(payload.get("reduceOnly"))
+        if account["settings"].get("positionMode") == "HEDGE" and instrument[1] == "futures":
+            if leg not in ("LONG", "SHORT") or effect not in ("open", "close"):
+                raise invalid("Hedge orders require positionSide and positionEffect")
+            expected_side = "buy" if (leg == "LONG") == (effect == "open") else "sell"
+            closes_position = effect == "close"
+            if (("side" in payload and side != expected_side)
+                    or ("reduceOnly" in payload and payload["reduceOnly"] is not closes_position)):
+                raise invalid("Order side and reduceOnly must match the hedge intent")
+            side, reduce_only = expected_side, closes_position
+        elif leg is not None or effect is not None:
+            raise invalid("This market does not accept hedge order intent")
         if side not in SIDES:
             raise invalid("side must be buy or sell")
         if order_type not in ORDER_TYPES:
@@ -801,7 +847,6 @@ class TradingAccountService(JournalService):
         stop_price = optional_decimal(payload.get("stopPrice"), "stopPrice", positive=True)
         bracket_stop = optional_decimal(payload.get("bracketStop"), "bracketStop", positive=True)
         bracket_target = optional_decimal(payload.get("bracketTarget"), "bracketTarget", positive=True)
-        reduce_only = bool(payload.get("reduceOnly"))
         client_price = optional_decimal(payload.get("referencePrice"), "referencePrice", positive=True)
         if order_type == "limit" and limit_price is None:
             raise invalid("limitPrice is required for limit orders")
@@ -813,7 +858,11 @@ class TradingAccountService(JournalService):
         now = self.clock()
         reference, price_source = self._reference_price(instrument, client_price)
         trades = self._trades(account_id)
-        position = signed_position(trades, *instrument)
+        target = next((trade for trade in trades if trade.status == "open" and trade.position_side == leg
+                       and (trade.exchange, trade.market_type, trade.symbol) == instrument), None)
+        position = target.open_qty * target.sign if target else ZERO
+        if payload.get("tradeId") is not None and (not reduce_only or not target or payload["tradeId"] != target.id):
+            raise conflict("The selected position has already closed", code="TRADING_NOTHING_TO_REDUCE")
         settings = self._settings(account, instrument[1])
         direction = Decimal(1) if side == "buy" else Decimal(-1)
 
@@ -833,8 +882,9 @@ class TradingAccountService(JournalService):
         increases = not reduce_only and (position == 0 or (position > 0) == (direction > 0))
         if increases:
             summary = self.account_summary(account_id)
+            # Spot is fully paid; the account's leverage is read only for futures.
             leverage = Decimal(account["settings"]["leverage"]) if instrument[1] == "futures" else Decimal(1)
-            required = qty * entry_price / leverage
+            required = initial_margin(qty, entry_price, leverage)
             available = Decimal(summary["available"])
             if required > available:
                 raise conflict(
@@ -842,12 +892,7 @@ class TradingAccountService(JournalService):
                     code="TRADING_INSUFFICIENT_BALANCE",
                 )
 
-        protection_trade_id = None
-        if reduce_only and order_type in {"stop", "limit"}:
-            protection_trade_id = next(
-                trade.id for trade in trades if trade.status == "open"
-                and (trade.exchange, trade.market_type, trade.symbol) == instrument
-            )
+        protection_trade_id = target.id if reduce_only and target else None
         order_id = self.new_id("ord")
         row = {
             "id": order_id,
@@ -865,6 +910,7 @@ class TradingAccountService(JournalService):
             "tag": "exit" if reduce_only else "entry",
             "parent_id": None,
             "protection_trade_id": protection_trade_id,
+            "position_side": leg,
             "bracket_stop": bracket_stop,
             "bracket_target": bracket_target,
             "status": "working",
@@ -876,25 +922,29 @@ class TradingAccountService(JournalService):
             and ((side == "buy" and limit_price >= reference) or (side == "sell" and limit_price <= reference))
         )
         working_rows = self.store.working_orders_for(*instrument)
-        with self.store.transaction() as conn:
-            if not working_rows:
-                self._seed_cursor(conn, instrument, reference, now)
-            self.store.insert(conn, "orders", row)
-            if marketable:
-                # A marketable order fills now against the reference price.
-                # Other working orders join the session so a fill that closes
-                # the position also retires its reduce-only exits.
-                order = _working_order(row)
-                siblings = [
-                    _working_order(item) for item in working_rows if item["account_id"] == account_id
-                ]
-                matcher = PracticeMatcher(
-                    [*siblings, order], position, settings,
-                    new_order_id=lambda: self.new_id("ord"),
-                )
-                matcher.execute(order, reference, now, liquidity="taker")
-                self._persist_match(conn, account, instrument, matcher, now)
-        if not working_rows:
+        book = self._buying_power(account, instrument, trades) if marketable else None
+        seed_cursor = not working_rows and instrument not in self.working_instruments()
+        if seed_cursor:
+            self._seed_cursor(conn, instrument, reference, now)
+        self.store.insert(conn, "orders", row)
+        if marketable:
+            # A marketable order fills now against the reference price.
+            # Other working orders join the session so a fill that closes
+            # the position also retires its reduce-only exits.
+            order = _working_order(row)
+            siblings = [
+                _working_order(item) for item in working_rows if item["account_id"] == account_id
+            ]
+            matcher = PracticeMatcher(
+                [*siblings, order], position, settings, buying_power=book,
+                new_fill_id=lambda: self.new_id("fil"),
+                new_order_id=lambda: self.new_id("ord"),
+            )
+            if not matcher.execute(order, reference, now, liquidity="taker"):
+                reason, _ = matcher.result.cancelled[order.id]
+                raise conflict(reason, code="TRADING_" + reason.upper())
+            self._persist_match(conn, account, instrument, matcher, now)
+        if seed_cursor:
             # Reload the freshly seeded cursor on next use.
             self._feeds.pop(instrument, None)
         stored = self.store.order(order_id)
@@ -948,6 +998,8 @@ class TradingAccountService(JournalService):
                 "limit_price": child.limit_price,
                 "stop_price": child.stop_price,
                 "reduce_only": int(child.reduce_only),
+                "position_side": child.position_side,
+                "protection_trade_id": child.protection_trade_id,
                 "oco_group": child.oco_group,
                 "tag": child.tag,
                 "parent_id": child.parent_id,
@@ -959,7 +1011,8 @@ class TradingAccountService(JournalService):
             })
         for fill in result.fills:
             self.store.insert(conn, "fills", {
-                "id": self.new_id("fil"),
+                "id": fill.fill_id or self.new_id("fil"),
+                "position_side": fill.position_side,
                 "account_id": account["id"],
                 "exchange": instrument[0],
                 "market_type": instrument[1],
@@ -1089,35 +1142,59 @@ class TradingAccountService(JournalService):
             if bars:
                 cursor = replace(cursor, observed_ms=max(cursor.observed_ms, observed_ms))
 
-            sessions: list[tuple[dict[str, Any], PracticeMatcher]] = []
+            now = self.clock()
+            due = cursor != feed.flushed_cursor and now - feed.flushed_at_ms >= CURSOR_FLUSH_MS
+            candidates = False
             if chunks:
                 low = min(min(chunk.points) for chunk in chunks)
                 high = max(max(chunk.points) for chunk in chunks)
-                rows = self.store.working_orders_for(*instrument)
-                # Most updates move price nowhere near an order; skip loading
-                # the ledgers unless one could trigger.
-                if any(reachable(_working_order(row), low, high) for row in rows):
-                    sessions = self._match_sessions(instrument, rows)
-                for chunk in chunks:
-                    for _, matcher in sessions:
-                        matcher.run(chunk)
-
-            now = self.clock()
-            fills = sum(len(matcher.result.fills) for _, matcher in sessions)
-            changed = any(
-                matcher.result.fills or matcher.result.cancelled or matcher.result.created
-                for _, matcher in sessions
-            )
-            due = cursor != feed.flushed_cursor and now - feed.flushed_at_ms >= CURSOR_FLUSH_MS
-            if changed or due or _cursor_key(cursor, status, detail) != feed.flushed:
+                candidates = any(reachable(_working_order(row), low, high)
+                                 for row in self.store.working_orders_for(*instrument))
+            fills = 0
+            if candidates or due or _cursor_key(cursor, status, detail) != feed.flushed:
                 with self.store.transaction() as conn:
-                    for account, matcher in sessions:
-                        self._persist_match(conn, account, instrument, matcher, now)
+                    if candidates:
+                        rows = self.store.working_orders_for(*instrument)
+                        for account, matcher in self._match_sessions(instrument, rows):
+                            for chunk in chunks:
+                                matcher.run(chunk)
+                            self._persist_match(conn, account, instrument, matcher, now)
+                            fills += len(matcher.result.fills)
                     self._write_feed(conn, instrument, cursor, status, detail, now)
                 self._mark_flushed(feed, cursor, status, detail, now)
             else:
                 feed.cursor, feed.status, feed.detail = cursor, status, detail
             return fills
+
+    def _buying_power(self, account: dict[str, Any], instrument: Instrument, trades: list[Trade]) -> PracticeBuyingPower | None:
+        if account["settings"].get("positionMode") != "HEDGE":
+            return None
+        capital = self._balance(account["id"], trades)
+        leverage = Decimal(account["settings"]["leverage"])
+        marks_available = True
+        committed_ms = 0
+        quantities = {}
+        trade_ids = {}
+        for trade in trades:
+            key = (trade.exchange, trade.market_type, trade.symbol)
+            if key == instrument and trade.position_side:
+                committed_ms = max(committed_ms, trade.legs[-1].ts_ms)
+            if not trade.open_qty:
+                continue
+            if key == instrument:
+                quantities[trade.position_side] = trade.open_qty * trade.sign
+                trade_ids[trade.position_side] = trade.id
+                capital -= trade.open_qty * trade.sign * trade.avg_entry_price
+            else:
+                mark, _, _ = self._mark(key)
+                if mark is None:
+                    # No buying power from an account with incomplete collateral valuation.
+                    marks_available = False
+                    continue
+                capital += trade.unrealized_pnl(mark)
+                capital -= initial_margin(trade.open_qty, mark, market_leverage(leverage, trade.market_type))
+        return PracticeBuyingPower(capital if marks_available else None,
+                                   market_leverage(leverage, instrument[1]), quantities, trade_ids, committed_ms)
 
     def _match_sessions(
         self, instrument: Instrument, rows: list[dict[str, Any]],
@@ -1130,11 +1207,14 @@ class TradingAccountService(JournalService):
             account = self.store.account(account_id)
             if account is None or account["kind"] != "practice":
                 continue
-            position = signed_position(self._trades(account_id), *instrument)
+            trades = self._trades(account_id)
+            book = self._buying_power(account, instrument, trades)
+            position = ZERO if book else signed_position(trades, *instrument)
             sessions.append((account, PracticeMatcher(
                 [_working_order(row) for row in orders],
                 position,
                 self._settings(account, instrument[1]),
+                buying_power=book, new_fill_id=lambda: self.new_id("fil"),
                 new_order_id=lambda: self.new_id("ord"),
             )))
         return sessions

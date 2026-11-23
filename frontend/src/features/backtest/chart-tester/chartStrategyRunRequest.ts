@@ -8,7 +8,6 @@ import {
   type StrategyRevisionRecord,
 } from "../backtestApi.js";
 import { validExecutionOverrides, validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
-import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
@@ -300,7 +299,7 @@ export function buildChartStrategyRunBody(input: {
 
 function fixedStrategyRunBody(input: {
   session: ChartStrategyRunRequest["session"];
-  attachment: Pick<ChartStrategyRunRequest["attachment"], "rangeMode" | "quickPresetId" | "executionOverrides" | "pythonBarExecution">;
+  attachment: Pick<ChartStrategyRunRequest["attachment"], "rangeMode" | "quickPresetId" | "executionOverrides" | "pythonBarExecution" | "signalChart">;
   cellScope: string;
   revision: StrategyRevisionRecord;
   resolution: ChartContextResolution;
@@ -327,6 +326,7 @@ function fixedStrategyRunBody(input: {
   const overrides = input.attachment.executionOverrides;
   const profile = input.attachment.pythonBarExecution;
   return {
+    ...(input.attachment.signalChart ? { signal_chart: input.attachment.signalChart } : {}),
     strategy_revision_id: input.revision.revision_id,
     dataset_id: identity.datasetId,
     data_epoch: identity.dataEpoch,
@@ -354,9 +354,11 @@ function fixedStrategyRunBody(input: {
     leverage: overrides?.leverage ?? requireString(account, "leverage"),
     sizing_policy: requireString(account, "sizing_policy"),
     equity_percent: overrides?.equityPercent ?? requireString(account, "equity_percent"),
-    ...(profile?.executionModel === "LEGACY" ? {} : {
+    ...(profile?.executionModel === "LEGACY" || profile?.executionModel === "PRACTICE" ? {} : {
       execution_model_revision: requireString(account, "execution_model_revision"), participation_rate: "0.1",
     }),
+    // ADR-BACKTEST-015 P6e: the practice account model, shared with practice accounts.
+    ...(profile?.executionModel === "PRACTICE" ? { account_rules: "PRACTICE_V1" } : {}),
     latency_ms: 0,
     latency_events: 0,
     order_end_policy: "CANCEL_AT_END",
@@ -594,8 +596,55 @@ export async function buildImportedExternalRunBody(input: {
   });
 }
 
+/** The bar snapshot of imported research data (ADR-BACKTEST-015 P5c4b: a saved strategy's coverage and smoke). */
+export function previewImportedBars(api: Pick<ChartStrategyRunApi, "previewSnapshot">,
+  source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>, signal?: AbortSignal): Promise<BacktestSnapshot> {
+  return previewImportedSnapshot(api, source, false, signal);
+}
+
+/**
+ * A run of a saved strategy revision (a Python bundle, a builtin template; ADR-BACKTEST-015 P5c4b) over
+ * imported candles with the workspace's run settings, built as an external model's run is. Returns the
+ * body and the snapshot it runs on, which the revision's smoke must cover.
+ */
+export async function buildImportedSavedRunBody(input: {
+  api: Pick<ChartStrategyRunApi, "previewSnapshot">;
+  source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>;
+  settings: StrategyRunSettings;
+  revision: StrategyRevisionRecord;
+  outputMode: string;
+  parameters: Record<string, unknown>;
+  /** Bars before the range a strategy needs (a builtin RSI its length); at least the revision's own requirement. */
+  warmupBars?: number;
+  signal?: AbortSignal;
+}): Promise<{ body: Record<string, unknown>; snapshot: BacktestSnapshot }> {
+  const { api, source, settings, revision, outputMode, signal } = input;
+  if (!validStrategyRunSettings(settings) || settings.fidelityPreference === "PRECISE"
+    || settings.pythonBarExecution || source.marketTradeInput) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A saved strategy runs on imported candles with bar execution");
+  }
+  if (revision.provider_kind === "EXTERNAL_PROVIDER" || !revision.output_modes.includes(outputMode)) {
+    throw new ChartStrategyRunError("SCHEMA_UNKNOWN_FIELD", "Choose an output mode the saved strategy supports");
+  }
+  const snapshot = await previewImportedSnapshot(api, source, false, signal);
+  const resolution = resolutionFromImportedPreview({ source, rangeMode: settings.rangeMode, preview: snapshot, precise: false });
+  if (!resolution.coverage.complete) {
+    throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "Imported candles have gaps");
+  }
+  return { snapshot, body: fixedStrategyRunBody({
+    session: { exchange: "local", marketType: "spot", symbol: source.symbol, interval: source.interval },
+    attachment: { ...settings, quickPresetId: resolution.quick_preset_id },
+    cellScope: "strategy-research-saved",
+    revision,
+    resolution,
+    parameters: input.parameters,
+    outputMode,
+    warmupBars: Math.max(Number(revision.warmup_requirement?.bars ?? 0) || 0, input.warmupBars ?? 0),
+  }) };
+}
+
 async function previewImportedSnapshot(
-  api: ChartStrategyRunApi,
+  api: Pick<ChartStrategyRunApi, "previewSnapshot">,
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>,
   precise: boolean,
   signal?: AbortSignal,
@@ -641,20 +690,168 @@ async function previewImportedSnapshot(
   return preview;
 }
 
+/** A run over a frozen snapshot is accepted after a bounded smoke of the revision on that snapshot, then validation. */
+async function smokeAndValidate(api: Pick<ChartStrategyRunApi, "smokeStrategyRevision" | "validate">, frozen: ChartStrategyFrozenRunRequest,
+  revision: StrategyRevisionRecord, resolution: ChartContextResolution, body: Record<string, unknown>,
+  range: ReturnType<typeof readyRange>, signal?: AbortSignal): Promise<void> {
+  await api.smokeStrategyRevision(revision.revision_id, {
+    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
+    dataset_id: resolution.dataset_id,
+    snapshot_hash: resolution.snapshot_hash,
+    start_time_ms: range.startTimeMs,
+    end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
+    parameters: executionParameters(frozen),
+  }, signal);
+  await api.validate(body, signal);
+}
+
+/** What a strategy data preparation runs once the history is ready: the same run as a direct research run. */
+function strategyPreparationIntent(frozen: ChartStrategyFrozenRunRequest, revision: StrategyRevisionRecord,
+  pineContexts: Awaited<ReturnType<typeof freezePineChartContexts>>) {
+  const profile = frozen.attachment.pythonBarExecution;
+  return {
+    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
+    ...(frozen.attachment.signalChart ? { signal_chart: frozen.attachment.signalChart } : {}),
+    strategy_revision_id: revision.revision_id,
+    parameters: executionParameters(frozen),
+    ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
+    ...(profile ? { python_bar_execution: profile } : {}),
+    ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
+    ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
+    chart_cell_scope: frozen.cellScope,
+    strategy_draft_id: frozen.draftId,
+  };
+}
+
+/** One input of a research experiment: imported data (a frozen snapshot) or exchange history over a range. */
+export type ResearchExperimentInput =
+  | { input: Record<string, unknown>; source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }> }
+  | { input: Record<string, unknown>; source: { kind: "MARKET_HISTORY"; session: ChartStrategyRunRequest["session"]; startMs: number; endMs: number } };
+
+/**
+ * The members of an experiment that runs one research request over several inputs (ADR-BACKTEST-015 P5b):
+ * imported data becomes a run over its frozen snapshot, exchange history a strategy data preparation that
+ * starts its run when the history is ready. One strategy revision serves every member.
+ */
+/** One strategy revision for every run an experiment makes, frozen from the request. */
+function createResearchRevision(api: Pick<ChartStrategyRunApi, "createStrategyRevision">, base: ChartStrategyFrozenRunRequest,
+  signal?: AbortSignal): Promise<StrategyRevisionRecord> {
+  return api.createStrategyRevision({
+    name: base.displayName,
+    language: revisionLanguage(base.language),
+    base_revision_id: null,
+    source_text: base.source,
+    parameter_schema: [],
+    ...(base.language === "pine" ? { libraries: base.attachment.parameters.__pineLibraries ?? {} } : {}),
+  }, signal);
+}
+
+/**
+ * A robustness check's study (ADR-BACKTEST-015 P5c3): the request's Python strategy, frozen as one
+ * revision, with the rule ``fields`` over an imported dataset. Study V2 runs strategies that output
+ * signals on perpetual accounts, so the data must carry its historical contract data; the study runs
+ * the strategy in trusted local Python, which the request has confirmed.
+ */
+export async function buildRobustnessStudy(options: {
+  api: Pick<ChartStrategyRunApi, "createStrategyRevision" | "previewSnapshot">;
+  request: ChartStrategyRunRequest;
+  dataset: { dataset_id: string; data_epoch: string; interval: string };
+  fields: Record<string, unknown> & { start_ms: number; end_ms: number };
+  signal?: AbortSignal;
+}): Promise<{ revision: StrategyRevisionRecord; study: Record<string, unknown> }> {
+  const { request, dataset, fields } = options;
+  if (request.language !== "python" || request.attachment.pythonBarExecution) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A robustness check runs a Python strategy that outputs signals",
+      { next_step: "open a Python strategy" });
+  }
+  if (!request.pythonTrustedConfirmed) {
+    throw new ChartStrategyRunError("PYTHON_TRUST_REQUIRED", "Confirm running this Python strategy on this computer");
+  }
+  const base = await freezeChartStrategyRunRequest(request);
+  const revision = await createResearchRevision(options.api, base, options.signal);
+  if (!revision.output_modes.includes("SIGNAL")) {
+    throw new ChartStrategyRunError("PROVIDER_PROTOCOL_VIOLATION", "The strategy cannot output signals");
+  }
+  if (typeof options.api.previewSnapshot !== "function") {
+    throw new ChartStrategyRunError("SNAPSHOT_PREVIEW_UNAVAILABLE", "imported data requires a backend snapshot preview");
+  }
+  const preview = await options.api.previewSnapshot({
+    dataset_id: dataset.dataset_id, data_epoch: dataset.data_epoch, start_time_ms: fields.start_ms,
+    end_time_ms: fields.end_ms - 1, interval: dataset.interval, fidelity_mode: "BAR_APPROX",
+    contract_data_mode: "HISTORICAL_CONTRACT_V1", account_model: "LINEAR_PERP_ONE_WAY_V2",
+    funding_mode: typeof fields.funding_mode === "string" ? fields.funding_mode : "OFF",
+  }, options.signal);
+  if ((preview.quality.contract_data as Record<string, unknown> | undefined)?.status !== "complete") {
+    throw new ChartStrategyRunError("CONTRACT_DATA_REQUIRED", "The data has no complete historical contract data",
+      { next_step: "import the contract history for this dataset" });
+  }
+  return { revision, study: {
+    ...fields,
+    strategy_revision_id: revision.revision_id, dataset_id: dataset.dataset_id, data_epoch: preview.data_epoch,
+    dataset_snapshot_hash: preview.snapshot_hash, interval: dataset.interval, parameters: executionParameters(base),
+    python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: true,
+  } };
+}
+
+export async function buildResearchExperimentMembers(options: {
+  api: Pick<ChartStrategyRunApi, "createStrategyRevision" | "previewSnapshot" | "smokeStrategyRevision" | "validate">;
+  request: ChartStrategyRunRequest;
+  inputs: readonly ResearchExperimentInput[];
+  signal?: AbortSignal;
+}): Promise<{ revision: StrategyRevisionRecord; members: Array<Record<string, unknown>> }> {
+  if (options.request.attachment.pythonBarExecution) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A saved continuous profile runs on its own chart market only");
+  }
+  const base = await freezeChartStrategyRunRequest(options.request);
+  const revision = await createResearchRevision(options.api, base, options.signal);
+  const members: Array<Record<string, unknown>> = [];
+  for (const { input, source } of options.inputs) {
+    const session = source.kind === "IMPORTED_DATASET"
+      ? { exchange: "local", marketType: "spot", symbol: source.symbol, interval: source.interval }
+      : { ...source.session };
+    const attachment = source.kind === "IMPORTED_DATASET" ? options.request.attachment
+      : { ...options.request.attachment, rangeMode: "CUSTOM" as const, customRange: { startMs: source.startMs, endMs: source.endMs } };
+    const frozen = await freezeChartStrategyRunRequest({ ...options.request, session, attachment });
+    const pineContexts = frozen.language === "pine" ? await freezePineChartContexts(
+      restoreAdvancedInputs(frozen.attachment.parameters.__pineInputs, true).contexts,
+      { exchange: frozen.session.exchange, market_type: frozen.session.marketType }, undefined, options.signal) : [];
+    if (source.kind === "MARKET_HISTORY") {
+      const context = chartContextRequestForFrozen(frozen);
+      context.end_time_ms = source.endMs - 1;
+      members.push({ input, preparation: { context, strategy: strategyPreparationIntent(frozen, revision, pineContexts) } });
+      continue;
+    }
+    const precise = frozen.attachment.fidelityPreference === "PRECISE";
+    if (precise && !source.marketTradeInput) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Imported data only supports bar estimates", { next_step: "use bar estimate" });
+    }
+    const preview = await previewImportedSnapshot(options.api, source, precise, options.signal);
+    const resolution = resolutionFromImportedPreview({ source, rangeMode: frozen.attachment.rangeMode, preview, precise });
+    if (resolution.status !== "READY" || !resolution.coverage.complete) {
+      throw new ChartStrategyRunError("IMPORTED_DATASET_NOT_READY", "Imported data has gaps in the selected range",
+        { next_step: "choose complete data or a shorter range" });
+    }
+    const body = buildChartStrategyRunBody({ frozen, revision, resolution, pineContexts });
+    // As for a single run: the backend accepts a run over a snapshot only after the revision's smoke on it.
+    await smokeAndValidate(options.api, frozen, revision, resolution, body, readyRange(resolution), options.signal);
+    members.push({ input, run: body });
+  }
+  return { revision, members };
+}
+
 export async function runResearchBacktest(options: {
   api: ChartStrategyRunApi;
   request: ChartStrategyRunRequest;
   source: ResearchRunSource;
   signal?: AbortSignal;
-  pollIntervalMs?: number;
-  wait?: typeof waitForBacktestPoll;
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onPreparation?(job: PreparationJob): void | Promise<void>;
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
-  waitForTerminal?: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
+  /** Follows the created run to its terminal record; the strategy data manager streams it (no polling). */
+  waitForTerminal: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
   const request = options.source.kind === "IMPORTED_DATASET"
     ? {
@@ -734,17 +931,7 @@ export async function runResearchBacktest(options: {
     if (options.api.prepareChartContext && resolution.automatic_preparation_available !== false
       && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
       options.onStage?.("MATERIALIZING");
-      const strategyIntent = {
-        ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
-        strategy_revision_id: revision.revision_id,
-        parameters: executionParameters(frozen),
-        ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
-        ...(profile ? { python_bar_execution: profile } : {}),
-        ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
-        ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
-        chart_cell_scope: frozen.cellScope,
-        strategy_draft_id: frozen.draftId,
-      };
+      const strategyIntent = strategyPreparationIntent(frozen, revision, pineContexts);
       const preparationKey = await chartStrategySha256({ context: contextRequest, strategy: strategyIntent,
         resolved_context: resolution.chart_context_hash });
       resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey, options.onPreparation);
@@ -784,17 +971,7 @@ export async function runResearchBacktest(options: {
   const body = buildChartStrategyRunBody({ frozen, revision, resolution, pineContexts });
   const range = readyRange(resolution);
   options.onStage?.("VALIDATING");
-  if (!resolution.prepared_run) {
-    await options.api.smokeStrategyRevision(revision.revision_id, {
-    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
-    dataset_id: resolution.dataset_id,
-    snapshot_hash: resolution.snapshot_hash,
-    start_time_ms: range.startTimeMs,
-    end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
-    parameters: executionParameters(frozen),
-  }, options.signal);
-    await options.api.validate(body, options.signal);
-  }
+  if (!resolution.prepared_run) await smokeAndValidate(options.api, frozen, revision, resolution, body, range, options.signal);
 
   let refreshed = resolution;
   if (options.source.kind === "IMPORTED_DATASET") {
@@ -864,16 +1041,7 @@ export async function runResearchBacktest(options: {
     options.onStage?.(run.state === "QUEUED" ? "QUEUED" : "RUNNING");
     options.onRunUpdate?.(run);
   };
-  const terminal = options.waitForTerminal
-    ? await options.waitForTerminal(created.run_id, options.signal, onUpdate)
-    : await pollBacktestRunToTerminal({
-      api: options.api,
-      runId: created.run_id,
-      ...(options.signal ? { signal: options.signal } : {}),
-      ...(options.pollIntervalMs === undefined ? {} : { intervalMs: options.pollIntervalMs }),
-      ...(options.wait ? { wait: options.wait } : {}),
-      onUpdate,
-    });
+  const terminal = await options.waitForTerminal(created.run_id, options.signal, onUpdate);
   return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: terminal, identity, frozenContext };
 }
 
@@ -882,8 +1050,7 @@ export async function runChartStrategyBacktest(options: {
   request: ChartStrategyRunRequest;
   signal?: AbortSignal;
   materializeResolution?: ChartContextResolution | null;
-  pollIntervalMs?: number;
-  wait?: typeof waitForBacktestPoll;
+  waitForTerminal: Parameters<typeof runResearchBacktest>[0]["waitForTerminal"];
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onResolution?(resolution: ChartContextResolution): void;
@@ -900,8 +1067,7 @@ export async function runChartStrategyBacktest(options: {
         : {}),
     },
     ...(options.signal ? { signal: options.signal } : {}),
-    ...(options.pollIntervalMs === undefined ? {} : { pollIntervalMs: options.pollIntervalMs }),
-    ...(options.wait ? { wait: options.wait } : {}),
+    waitForTerminal: options.waitForTerminal,
     ...(options.onStage ? { onStage: options.onStage } : {}),
     ...(options.onRevision ? { onRevision: options.onRevision } : {}),
     ...(options.onResolution ? { onResolution: options.onResolution } : {}),

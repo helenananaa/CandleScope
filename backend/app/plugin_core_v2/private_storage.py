@@ -691,6 +691,15 @@ class PluginPrivateStorage:
             ],
         }
 
+    def export_for_migration(
+        self, namespace: StorageNamespace
+    ) -> dict[str, Any] | None:
+        with self._lock(namespace), self._readonly_connection(namespace) as connection:
+            if connection is None:
+                return None
+            connection.execute("BEGIN")
+            return self._export_payload(connection)
+
     def _snapshot_path(self, namespace: StorageNamespace, snapshot_id: str) -> Path:
         return self._directory(namespace) / "snapshots" / f"{snapshot_id}.json"
 

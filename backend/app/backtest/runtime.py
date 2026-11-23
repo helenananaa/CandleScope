@@ -42,6 +42,7 @@ from .chart_book import BOOK_MODES, DUAL_MODES
 from .chart_context import ChartBacktestContextResolver
 from .service import BacktestService
 from .strategy.isolated import IsolatedStrategyProvider
+from .strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, PineEngineProvider
 from .strategy.registry import build_default_strategy_registry
 from .external_provider.provider import ExternalHostInterrupted
 
@@ -123,6 +124,7 @@ class BacktestRuntime:
         local_data_dir: Path | None = None,
         local_data_service: LocalDatasetService | None = None,
         trade_archive_dir: Path | None = None,
+        start_worker: bool = True,
     ) -> BacktestRuntime:
         service = BacktestService.start(
             settings,
@@ -140,7 +142,8 @@ class BacktestRuntime:
             if settings.external_provider_enabled:
                 service.external.open()
                 service.external.store.reset_client_leases()
-            runtime.worker.start()
+            if start_worker:
+                runtime.worker.start()
         except BaseException:
             runtime.native.shutdown()
             runtime.worker.shutdown()
@@ -388,17 +391,39 @@ class BacktestRuntime:
             snapshot_hash=str(preview["snapshot_hash"]),
         )
 
-    def chart_data(self, run_id: str, *, max_bars: int = 50_000) -> dict[str, Any]:
-        record = self.service.get_run(run_id)
-        if record["state"] != "COMPLETED":
-            raise BacktestError("IDENTITY_MUTATION", "backtest chart is not ready")
-        config = json.loads(str(record["config_json"]))
-        interval = str(
+    def _chart_interval(self, record: Mapping[str, Any], config: Mapping[str, Any]) -> str:
+        """The bar interval a run's chart and results are anchored to."""
+        return str(
             config.get("signal_interval")
             if record["fidelity_mode"] in DUAL_MODES
             else config.get("interval")
             or self._manifest(str(record["dataset_id"]))["interval"]
         )
+
+    def run_result(self, run_id: str) -> dict[str, Any]:
+        """A completed run projected into ``candlescope.run-result/1`` (ADR-BACKTEST-015 P1)."""
+        from .run_result import BarAnchorRequired, from_host_result
+
+        record = self.service.get_run(run_id)
+        if record["state"] != "COMPLETED":
+            raise BacktestError("IDENTITY_MUTATION", "backtest result is not ready")
+        config = json.loads(str(record["config_json"]))
+        interval = self._chart_interval(record, config)
+        report = self.service.get_report(run_id)
+        fidelity = str(record["fidelity_mode"])
+        try:
+            return from_host_result(report, interval=interval, fidelity=fidelity)
+        except BarAnchorRequired:
+            # Calendar-aligned intervals (weeks, months, sessions) anchor to the run's own bars.
+            opens = [int(bar["time"]) * 1000 for bar in self.chart_data(run_id)["bars"]]
+            return from_host_result(report, interval=interval, fidelity=fidelity, bar_open_times_ms=opens)
+
+    def chart_data(self, run_id: str, *, max_bars: int = 50_000) -> dict[str, Any]:
+        record = self.service.get_run(run_id)
+        if record["state"] != "COMPLETED":
+            raise BacktestError("IDENTITY_MUTATION", "backtest chart is not ready")
+        config = json.loads(str(record["config_json"]))
+        interval = self._chart_interval(record, config)
         if record['fidelity_mode'] in BOOK_MODES:
             from .chart_book import freeze,require_identity
             preview,_,bars=freeze(self,config)
@@ -747,13 +772,14 @@ class BacktestWorker:
                 logger.warning(
                     "Backtest Study %s failed to materialize: %s", study_id, exc
                 )
-                service.repository.update_study_state(study_id, "FAILED")
+                service.repository.fail_study(study_id, code=exc.code, message=exc.message, now_ms=_now_ms())
             except Exception:
                 logger.exception(
                     "Backtest Study %s crashed during materialization",
                     study_id,
                 )
-                service.repository.update_study_state(study_id, "FAILED")
+                service.repository.fail_study(study_id, code="STUDY_CRASHED",
+                                              message="the study failed while planning its runs", now_ms=_now_ms())
 
     def _preview_snapshot(self, **values: object) -> dict[str, Any]:
         try:
@@ -840,13 +866,18 @@ class BacktestWorker:
                     trusted_confirmed=bool(config.get("python_trusted_confirmed")),
                 )
             else:
-                provider = IsolatedStrategyProvider(
-                    str(
-                        config.get("strategy_execution_revision")
-                        or record["strategy_revision_id"]
-                    ),
-                    step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                execution_revision = str(
+                    config.get("strategy_execution_revision") or record["strategy_revision_id"]
                 )
+                # The Pine adapter pins and supervises its evaluator through the
+                # active lifecycle owner in this process.
+                if execution_revision == PINE_ENGINE_REVISION:
+                    provider = PineEngineProvider()
+                else:
+                    provider = IsolatedStrategyProvider(
+                        execution_revision,
+                        step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                    )
             if config.get("pine_runtime_identity"):
                 observation_market = {"venue": str(config["exchange"]), "market_type": str(config["market_type"]),
                                       "symbol": str(manifest["symbol"])}

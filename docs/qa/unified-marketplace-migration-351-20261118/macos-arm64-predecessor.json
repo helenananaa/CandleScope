@@ -1,0 +1,65 @@
+{
+  "sourceCommit": "58b0fc731999d0ecda44cde46e67041e462be8b3",
+  "migratedBy": "9aad9388020760569fff608e9de9ec7c35fdae9c",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "signatureVerified": true,
+  "appAsar": "sha256:a4717a517f609d80d1102c9aaaa4a802823b39cde3ecdf86c7a13aae7ef7fcc5",
+  "fixtures": {
+    "failed": {
+      "color": "#f7d6e2",
+      "file": "qa.marketplace-theme-1.2.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:3e333e87dad9e236e861a85ce3dcd987f34b29328f7f834c2315516b9ec8f6f7",
+      "version": "1.2.0"
+    },
+    "initial": {
+      "color": "#ece5d2",
+      "file": "qa.marketplace-theme-1.0.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:1a45df7b560f75766fbc114fdc62f8466715e3ec23cd5410aa6dc6adba0bf6ee",
+      "version": "1.0.0"
+    },
+    "legacy": {
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:922131c7854a6a8a9165dbcbe46dd5f9eefb07f5eece1a3e55c71fe214f3eb2b",
+      "version": "0.1.0"
+    },
+    "marketplaceId": "candlescope.community",
+    "sources": {
+      "plugins/platform-grants-v2.json": "sha256:f8ccf426d1bf5dbbac1c96e52526f6375f8934e51a6920a5e0501a48435a482f",
+      "plugins/platform-registry-v2.json": "sha256:881af5873adb66e9e6b0ad12ffac40ceb91375c3f70a245edc790af0ca7fc6b0",
+      "plugins/plugin-settings-v1.json": "sha256:74213051fa783ab84d6f76b41735aa23740b1471f33948e513893056ed5227ed",
+      "plugins/private/63badebe8bd2cc51f44a04027103ef6a/candlescope.hello-command/storage-v1.sqlite": "sha256:3f2694d7ee0ffd9420c521b0844a4f8237385c384db3a019ef9266917bba95a9",
+      "plugins/sandbox-v2/private/aaa89c1be187e59ba9d6/state.bin": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+    },
+    "successor": {
+      "color": "#dfe7f8",
+      "file": "candlescope.hello-command-0.2.0.cspkg",
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:c2f8e8461e99aee30ff2979e16b457e9d4b4971c2dec42915679f530fcb1435e",
+      "version": "0.2.0"
+    },
+    "upgrade": {
+      "color": "#dcefe4",
+      "file": "qa.marketplace-theme-1.1.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:ab2460bca079062950fd9b4066f4a9bd0243c53a9185a0f4c9c8b29dacbb2395",
+      "version": "1.1.0"
+    }
+  },
+  "sessions": [
+    {
+      "name": "reuse retained data in the previous application",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "retainedAppearance": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "legacyFilesByteIdentical": true,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true
+}

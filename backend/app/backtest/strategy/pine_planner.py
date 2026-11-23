@@ -13,7 +13,7 @@ from .host_planner import HostPlan, HostOrderPlanner
 def host_identity():
     from app.backtest.external import host_identity as execution_identity
     digest = hashlib.sha256()
-    for name in ("pine_planner.py", "pine_engine.py", "pine_streaming.py", "host_planner.py", "host_policy.py", "host_adapter.py"):
+    for name in ("chart_signals.py", "pine_planner.py", "pine_engine.py", "pine_streaming.py", "host_planner.py", "host_policy.py", "host_adapter.py"):
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())
@@ -34,9 +34,10 @@ class PineHostPlanner(HostOrderPlanner):
 
     def bind_kernel(self, kernel):
         from app.simulation.kernel import SimulationKernel
+        from app.simulation.ohlc_path import PATH_CLOCKS
         self.kernel = getattr(kernel, "execution", kernel)
         self.orders = ExternalOrders(self.kernel, price_tick=self.price_tick,
-            fidelity="PINE_BAR_PATH" if hasattr(self.kernel, "path_level_provider")
+            fidelity="PINE_BAR_PATH" if getattr(self.kernel, "bar_clock", None) in PATH_CLOCKS
                 else "BAR_APPROX" if isinstance(self.kernel, SimulationKernel) else "TRADE_TAPE")
         self.kernel.order_policy = self._before_match
         from app.backtest.pine_risk_stops import PineRiskStops

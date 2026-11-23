@@ -554,6 +554,8 @@ class EventRouter:
                 ),
                 sequence=sequence,
                 extra={**({"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {}),
+                       **({'source_permission_floor':data['source_permission_floor']}
+                          if 'source_permission_floor' in data else {}),
                        "gate_close_source": data.get("gate_close_source") if exchange == "gate" else None,
                        "trade_coverage_verified": data.get("trade_coverage_verified") is True,
                        "bybit_close_confirmed": exchange == "bybit" and data.get("bybit_close_confirmed") is True},

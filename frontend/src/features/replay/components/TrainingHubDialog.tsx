@@ -1,3 +1,5 @@
+import { BrowserReplayMarket } from "../../research-data/BrowserReplayMarket.js";
+import { useReplayVenues } from "../../research-data/useReplayVenues.js";
 import { useState, type ReactNode } from "react";
 import {
   Badge, Button, Checkbox, ConfirmDialog, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select,
@@ -23,6 +25,7 @@ import { applyTrainingPreset } from "../trainingPresets.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { preparationRequest } from "../../data-preparation/api.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 export interface TrainingHubDialogProps {
   readonly runtime: TrainingHubRuntime;
@@ -114,6 +117,8 @@ type StartChoice = "RANGE" | "MARKET" | "MANUAL";
 
 function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: TrainingHubDialogProps) {
   useLocale();
+  const browser = browserHost();
+  const { venues, error: venueError } = useReplayVenues(browser && runtime.createOpen);
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetMode, setPresetMode] = useState<"practice" | "challenge" | "custom">("custom");
@@ -159,8 +164,10 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
       : runtime.capabilities?.sources.agg_trade.fidelity === "USER_MARKET_TRADE_COVERAGE"
         ? "local.localOnly" : "replay.hub.aggHint",
   );
-  const aggDisabled = busy || (!aggEnabled && !runtime.automaticTradePreparationAvailable);
-  const marketRandomDisabled = busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR";
+  const supportsTrades = !browser || draft.marketType === "local_bar"
+    || venues.find(v => v.id === draft.exchange)?.trades.includes(draft.marketType);
+  const aggDisabled = !supportsTrades || busy || (!aggEnabled && !runtime.automaticTradePreparationAvailable);
+  const marketRandomDisabled = browser || busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR";
   const startChoice: StartChoice = draft.startMode === "MANUAL" ? "MANUAL"
     : draft.randomScope === "MARKET" ? "MARKET" : "RANGE";
   const chooseStart = (choice: StartChoice) => {
@@ -180,6 +187,9 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         ? REPLAY_POLICY_MUTATIONS
         : ["deposit", "withdraw"],
   });
+  const preparationHint = browser
+    ? t("browser.replay.reuseHistory")
+    : t("preparation.background");
   const intro = t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.createIntro");
   return (
     <Dialog
@@ -195,7 +205,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           {runtime.preparationJob && <div role="status" aria-live="polite">
             <p>{t(preparationStatus)} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
             <PreparationWaiting job={runtime.preparationJob} />
-            {preparationActive && <p>{t("preparation.background")}</p>}
+            {preparationActive && <p>{preparationHint}</p>}
             {busy && preparationActive && <Button size="sm" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
               onClick={() => void preparationRequest(`/${runtime.preparationJob!.id}/cancel`, { method: "POST" }).catch(() => undefined)}>{t("preparation.cancel")}</Button>}
           </div>}
@@ -206,10 +216,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         </Button>
         <Button
           variant="primary"
-          disabled={!evaluation.canSubmit || busy || validatingCatalog}
+          disabled={!evaluation.canSubmit || busy || validatingCatalog || (browser && (!draft.symbol || (draft.sourceKind === "AGG_TRADE" && !supportsTrades)))}
           onClick={() => void runtime.actions.createRun(draft)}
         >
-          {busy || validatingCatalog ? busyLabel : t("replay.hub.submit")}
+          {busy || validatingCatalog ? busyLabel : browser && runtime.automaticPreparationAvailable
+            ? t("browser.replay.start") : t("replay.hub.submit")}
         </Button>
       </>}
     >
@@ -244,18 +255,25 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           <CreateSection id="training-hub-create-start" number={1} title={t("replay.hub.sectionStart")}
             hint={runtime.automaticPreparationAvailable ? undefined : t("replay.hub.startHint")}>
             {runtime.automaticPreparationAvailable && <div className="training-hub-field-grid training-hub-field-grid-three">
-              <Field label={t("backtest.exchange")}>
-                <Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} />
-              </Field>
-              <Field label={t("backtest.marketType")}>
-                <Select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
+              {browser ? <>
+                <BrowserReplayMarket venues={venues} market={draft} busy={busy}
+                  local={(runtime.catalog?.entries ?? []).filter(item => item.identity.market_type === "local_bar").map(({identity}) =>
+                    ({ exchange:identity.exchange,marketType:identity.market_type,symbol:identity.symbol }))}
+                  onChange={(market, quote) => patchDraft(runtime, { ...market,
+                    ...(quote ? { settlementAsset:quote } : {}),
+                    ...(market.marketType !== "local_bar" && !venues.find(v => v.id === market.exchange)?.trades.includes(market.marketType)
+                      ? { sourceKind:"BAR" } : {}) })} />
+                <Field label={t("replay.picker.settlement")}><Input disabled={busy} value={draft.settlementAsset}
+                  onChange={event => patchDraft(runtime, {settlementAsset:event.target.value.trim().toUpperCase()})} /></Field>
+                {venueError && <small>{venueError}</small>}
+              </> : <>
+                <Field label={t("backtest.exchange")}><Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} /></Field>
+                <Field label={t("backtest.marketType")}><Select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
                   <option value="spot">{t("market.spot")}</option><option value="futures">{t("market.futures")}</option>
-                </Select>
-              </Field>
-              <Field label={t("replay.hub.symbol")}>
-                <Input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} />
-              </Field>
-              {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{t("preparation.background")}</p>}
+                </Select></Field>
+                <Field label={t("replay.hub.symbol")}><Input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></Field>
+              </>}
+              {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{preparationHint}</p>}
             </div>}
             <Field label={t("replay.hub.archiveName")}>
               <Input value={draft.name} maxLength={80} onChange={(event) => patchDraft(runtime, { name: event.target.value })} />
@@ -269,7 +287,8 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               ]}
               onChange={(sourceKind) => patchDraft(runtime, { sourceKind })}
               hint={draft.sourceKind === "BAR" ? t("replay.hub.barHint") : aggHint}
-              note={draft.sourceKind === "BAR" && aggDisabled && !busy ? aggHint : null}
+              note={draft.sourceKind === "BAR" && aggDisabled && !busy ? (!supportsTrades
+                ? t("browser.replay.barsOnly") : aggHint) : null}
             />
             <CreateChoice<StartChoice>
               label={t("replay.hub.startMode")}
@@ -293,6 +312,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     onChange={(value) => patchDraft(runtime, { requestedStartMs: value })}
                   />
                 </Field>
+                {browser && runtime.automaticPreparationAvailable && <Field label={t("ux.endUtc")}>
+                  <UtcReplayStartInput data-training-field="end-utc" disabled={busy || draft.requestedStartMs === null}
+                    value={draft.requestedStartMs === null || draft.forwardCacheMs <= 0 ? null : draft.requestedStartMs + draft.forwardCacheMs}
+                    onChange={end => patchDraft(runtime, { forwardCacheMs: end === null || draft.requestedStartMs === null ? 0 : end - draft.requestedStartMs })} />
+                </Field>}
                 <InlineAlert tone="warning">{t("replay.hub.manualWarning")}</InlineAlert>
               </>
             ) : draft.randomScope === "MARKET" ? (
@@ -698,6 +722,7 @@ export default function TrainingHubDialog({
           </div>
         </header>
 
+
         <ReplayStorageGovernancePanel runtime={runtime} />
         {recent && <section className="training-hub-resume" aria-labelledby="training-hub-resume-title">
           <div>
@@ -784,7 +809,10 @@ export default function TrainingHubDialog({
           <EmptyState
             title={t("replay.hub.emptyTitle")}
             description={t("replay.hub.emptyHint")}
-            action={<Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>}
+            action={<>
+              {browserHost() && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
+              <Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>
+            </>}
           />
         ) : (
           <div className="training-hub-list" aria-label={t("replay.hub.list")}>

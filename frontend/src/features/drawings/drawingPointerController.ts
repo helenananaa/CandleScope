@@ -61,8 +61,30 @@ export function useDrawingPointerEvents({
     const supportsPointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
     const sharedDocumentEventCleanups: Array<() => void> = [];
 
+    // A touch whose pointerdown the drawing claims (it prevents the default) belongs to the drawing
+    // to its end. Its touch events stop here, before the chart's own touch handling pans or scales,
+    // and their default is prevented, so the browser does not take the touch over as a scroll and
+    // cancel the pointer partway through the stroke.
+    let claimedTouches = 0;
+    const handlePointerDown = (event: PointerEvent) => {
+      handleMouseDown(event);
+      if (event.pointerType === "touch" && event.defaultPrevented) claimedTouches += 1;
+    };
+    const holdClaimedTouch = (event: TouchEvent) => {
+      if (claimedTouches === 0) return;
+      if (event.cancelable) event.preventDefault();
+      event.stopPropagation();
+      if ((event.type === "touchend" || event.type === "touchcancel") && event.touches.length === 0) {
+        claimedTouches = 0;
+      }
+    };
+    const touchOptions = { capture: true, passive: false } as const;
+
     if (supportsPointerEvents) {
-      container.addEventListener("pointerdown", handleMouseDown, true);
+      container.addEventListener("pointerdown", handlePointerDown, true);
+      for (const type of ["touchstart", "touchmove", "touchend", "touchcancel"] as const) {
+        container.addEventListener(type, holdClaimedTouch, touchOptions);
+      }
       sharedDocumentEventCleanups.push(
         subscribeSharedDrawingDocumentEvent(
           document,
@@ -108,7 +130,10 @@ export function useDrawingPointerEvents({
 
     return () => {
       if (supportsPointerEvents) {
-        container.removeEventListener("pointerdown", handleMouseDown, true);
+        container.removeEventListener("pointerdown", handlePointerDown, true);
+        for (const type of ["touchstart", "touchmove", "touchend", "touchcancel"] as const) {
+          container.removeEventListener(type, holdClaimedTouch, touchOptions);
+        }
         container.removeEventListener("pointerleave", handleMouseLeave);
       } else {
         container.removeEventListener("mousedown", handleMouseDown, true);

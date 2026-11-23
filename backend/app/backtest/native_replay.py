@@ -287,6 +287,9 @@ class NativeReplay:
             if digest(wire) != current["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "replay input changed")
             plugin = origin.get("runtime_launch") or self.native.resolver(origin["config"]["language"])
+            from .native import pin_native_launch
+            plugin = pin_native_launch(plugin, restore=True)
+
             if self.native.runner(plugin, {"operation": "describe"}, cancelled=cancelled, timeout=15)["identity"] != wire["identity"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "reinstall the frozen runtime before continuing")
             worker = self._worker(key, plugin, wire, cancelled,external=external)

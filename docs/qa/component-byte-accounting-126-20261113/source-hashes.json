@@ -1,0 +1,17 @@
+{
+  "base": "e628fdf45aa5b3c6c034e869e804f73791b0b305",
+  "product_head": "04667fad927f20413add2475f12e42e94c3fc663",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "5d42aad2b7263d718f835351e1528491c9ce61a4aec458bdb229c62fd39bcd17",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "8ef642eb4496a59d3719712d47cfee8d7bc26336f209e825fda7bb2109eb53d3",
+    "backend/app/data_engine/bar_aggregator/component_memory.py": "1fd620937560007390c352e5b8398aa97a56be73863dc97fb317f40c7953ebda",
+    "backend/app/data_engine/bar_aggregator/models.py": "9f3402a1906465165b2a8dc175b8b075bccc1c3bc582430ae1cab2ca0e4e2da6",
+    "backend/app/data_engine/memory_budget.py": "5898e641306d1e95b1986acbef500a587f844c314dc18ae4310bd16385c91618",
+    "backend/app/data_engine/readonly.py": "76d5141bb53b700171b963301b22484f1bcb05ba95f0a1dfc4ac2f6f21c3d729",
+    "backend/scripts/ccxt_contracts/integration.py": "0e813acd1887a30f75cba8fcbc7b37b191961ac92796da514dc2b009fea6ad54",
+    "backend/tests/test_component_index_memory.py": "380270e2343490712e620db3466d6b711d18bdc15e85628ccf06df588e60b589",
+    "backend/tests/test_component_payload_accounting.py": "843b264ab9cc2ea9e29a53d0dc05b2385beb79885e90efc923a35979f4e5768d",
+    "backend/tests/test_readonly_payload_weight.py": "95ee75d11ddfda738b7d67c94e9b4e1b17fd1d64c4ac902da881b065b4fd44c5"
+  },
+  "measurement_head": "5d93d3037901980b64983b13f9276a876cd293aa"
+}

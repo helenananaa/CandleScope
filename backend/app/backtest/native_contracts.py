@@ -88,6 +88,7 @@ class PineHostEnvironment(BaseModel):
 
 
 class NativeRunRequest(FrozenNativeData):
+    signal_chart: dict[str, Any] | None = None
     language: Literal["pine"]
     source: str = Field(min_length=1, max_length=500_000)
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -128,10 +129,14 @@ class ExecutionEvent(BaseModel):
 
 
 class ExecutionData(BaseModel):
+    """Frozen trades and books for CandleScope matching. A research chart-book file also names its
+    exchange and market (ADR-BACKTEST-015 P5c4c); the run checks them against its own market."""
     model_config = ConfigDict(extra="forbid")
     symbol: str = Field(min_length=1, max_length=120)
     events: list[ExecutionEvent] = Field(min_length=1, max_length=500_000)
     provenance: dict[str, Any] = Field(default_factory=dict)
+    exchange: str | None = Field(default=None, min_length=1, max_length=40)
+    market_type: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class AccountEvent(BaseModel):
