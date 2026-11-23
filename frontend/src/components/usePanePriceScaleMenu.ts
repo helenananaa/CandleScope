@@ -8,6 +8,7 @@ import {
   type PriceScaleContextMenuState,
   type PriceScaleOptionsPatch,
 } from "./panePriceScaleMenuModel.js";
+import { isTouchContextMenu } from "../app/touchLongPress.js";
 
 interface PanePriceScaleMenuOptions {
   chartRef: RefObject<Parameters<typeof createMainSeries>[0] | null>;
@@ -37,7 +38,9 @@ export function usePanePriceScaleMenu({
       clientX: event.clientX,
       clientY: event.clientY,
       priceAtPaneY,
-      anywhere: true,
+      // A long press in the pane belongs to the crosshair, so on a touch screen the menu opens from
+      // the price axis only (app/touchLongPress.ts turns long presses into this event).
+      anywhere: !isTouchContextMenu(event.nativeEvent),
     });
     if (!next) return;
     event.preventDefault();

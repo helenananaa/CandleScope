@@ -1,5 +1,5 @@
 import { JournalDraftError, journalClientId } from "../trading-accounts/journalEditor.js";
-import { parseReplayNoteContext, sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "./replayNotes.js";
+import { parseReplayNoteContext, replayNoteContextVisibleAt, sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "./replayNotes.js";
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 interface Envelope {
@@ -19,11 +19,6 @@ function decode(raw: string): Envelope {
     throw new JournalDraftError("storage");
   return { ...value, context };
 }
-function owned(envelope: Envelope, context: ReplayNoteContext) {
-  return envelope.context.runId === context.runId && envelope.context.trackId === context.trackId
-    && envelope.context.dataEpoch === context.dataEpoch;
-}
-
 /** Each temporal draft wraps the existing journal draft, retaining its original
  * save context across restart. A past view never opens a later draft's text. */
 export function replayNoteDraftBinding(storage: Store, current: ReplayNoteContext, cutoff: number,
@@ -32,8 +27,7 @@ export function replayNoteDraftBinding(storage: Store, current: ReplayNoteContex
     current.timelineSequence, current.runRevision, current.reviewId ?? "", current.reviewRevision ?? 0].join(":");
   const raw = storage.getItem(key);
   const initial = raw === null ? null : decode(raw);
-  if (!key.startsWith(prefix(current)) || (initial && (!owned(initial, current) || initial.context.virtualTimeMs > cutoff
-    || initial.context.timelineSequence > current.timelineSequence)))
+  if (!key.startsWith(prefix(current)) || (initial && !replayNoteContextVisibleAt(initial.context, current, cutoff)))
     throw new JournalDraftError("changed");
   if (!initial && current.virtualTimeMs !== cutoff) throw new JournalDraftError("changed");
   const context = initial?.context ?? current;
@@ -43,7 +37,7 @@ export function replayNoteDraftBinding(storage: Store, current: ReplayNoteContex
     const value = storage.getItem(key);
     if (value === null) return null;
     const envelope = decode(value);
-    if (!owned(envelope, context) || !sameReplayNoteContext(envelope.context, context)) throw new JournalDraftError("changed");
+    if (!sameReplayNoteContext(envelope.context, context)) throw new JournalDraftError("changed");
     return envelope;
   };
   return { key, context, noteId, noteRevision, storage: {
@@ -67,8 +61,7 @@ export function visibleReplayNoteDrafts(storage: Store, context: ReplayNoteConte
     const raw = storage.getItem(key);
     if (raw === null) continue;
     const envelope = decode(raw);
-    if (owned(envelope, context) && envelope.context.virtualTimeMs <= cutoff
-      && envelope.context.timelineSequence <= context.timelineSequence)
+    if (replayNoteContextVisibleAt(envelope.context, context, cutoff))
       drafts.push({ key, context: envelope.context, noteId: envelope.noteId, noteRevision: envelope.noteRevision });
   }
   return drafts;
@@ -77,9 +70,7 @@ export function visibleReplayNoteDrafts(storage: Store, context: ReplayNoteConte
 /** Explicit copy only: retain the original pending submission and its retry ID. */
 export function replayNoteCopyBinding(storage: Store, current: ReplayNoteContext, cutoff: number,
   source: ReturnType<typeof replayNoteDraftBinding>) {
-  if (source.context.runId !== current.runId || source.context.trackId !== current.trackId
-    || source.context.dataEpoch !== current.dataEpoch || source.context.virtualTimeMs > cutoff
-    || source.context.timelineSequence > current.timelineSequence || current.virtualTimeMs !== cutoff)
+  if (!replayNoteContextVisibleAt(source.context, current, cutoff) || current.virtualTimeMs !== cutoff)
     throw new JournalDraftError("changed");
   return replayNoteDraftBinding(storage, current, cutoff, null, {
     key: prefix(current) + "copy:" + journalClientId(), context: current, noteId: null, noteRevision: 0,

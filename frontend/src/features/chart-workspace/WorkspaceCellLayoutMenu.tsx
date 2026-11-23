@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -13,6 +14,7 @@ import type {
   ChartWorkspaceSplitDirection,
 } from "./chartWorkspaceTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { useAnchoredPopup } from "../../components/ui/index.js";
 
 export interface WorkspaceCellLayoutMenuProps {
   cellId: ChartCellId;
@@ -21,6 +23,10 @@ export interface WorkspaceCellLayoutMenuProps {
   disabled?: boolean;
   portal?: boolean;
   children?: ReactNode;
+  /** The chart's appearance controls, shown first in the menu. */
+  appearance?: ReactNode;
+  /** The chart has its own appearance: a marker beside the menu button opens the menu. */
+  customized?: boolean;
   onSplit(
     cellId: ChartCellId,
     direction: ChartWorkspaceSplitDirection,
@@ -37,6 +43,8 @@ export default function WorkspaceCellLayoutMenu({
   disabled = false,
   portal = false,
   children,
+  appearance,
+  customized = false,
   onSplit,
   onClose,
   onSwap,
@@ -47,12 +55,18 @@ export default function WorkspaceCellLayoutMenu({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const [position, setPosition] = useState({ top: 0, right: 0, maxHeight: 0 });
   const cellNumber = (id: ChartCellId) => String(layoutCellIds.indexOf(id) + 1);
-  const canSplit = layoutCellIds.length < maxCellsPerWindow;
-  const canClose = layoutCellIds.length > 1;
-  const swapTargets = layoutCellIds.filter((candidate) => candidate !== cellId);
-  const menuOpen = open && !disabled;
+  // Layout editing can be off (a locked layout, a maximized chart) while the chart's appearance stays editable.
+  const layoutDisabled = disabled;
+  const menuDisabled = disabled && !appearance;
+  const canSplit = !layoutDisabled && layoutCellIds.length < maxCellsPerWindow;
+  const canClose = !layoutDisabled && layoutCellIds.length > 1;
+  const swapTargets = layoutDisabled ? [] : layoutCellIds.filter((candidate) => candidate !== cellId);
+  const menuOpen = open && !menuDisabled;
+  const closeMenu = useCallback(() => setOpen(false), []);
+  // On the overlay stack: Escape closes it, focus moves in and back to the trigger.
+  useAnchoredPopup({ open: menuOpen, onClose: closeMenu, popupRef: popoverRef, triggerRef });
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -61,19 +75,8 @@ export default function WorkspaceCellLayoutMenu({
       if (popoverRef.current?.contains(event.target as Node)) return;
       setOpen(false);
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [menuOpen]);
 
   const runAndClose = (action: () => void) => {
@@ -88,6 +91,21 @@ export default function WorkspaceCellLayoutMenu({
       className="workspace-cell-layout-menu"
       onDoubleClick={(event) => event.stopPropagation()}
     >
+      {customized && (
+        <button
+          type="button"
+          className="chart-appearance-marker"
+          aria-label={t("chartAppearance.marker")}
+          title={t("chartAppearance.marker")}
+          disabled={menuDisabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            triggerRef.current?.click();
+          }}
+        >
+          <Icon name="palette" size={13} />
+        </button>
+      )}
       <button
         ref={triggerRef}
         type="button"
@@ -96,13 +114,19 @@ export default function WorkspaceCellLayoutMenu({
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
         title={t("workspace.cellMenuTitle")}
-        disabled={disabled}
+        disabled={menuDisabled}
         onClick={(event) => {
           event.stopPropagation();
           if (portal) {
+            // Below the button, kept inside the window; a menu taller than the room left scrolls.
+            // It sits above drawers and under modals and toasts.
             const rect = event.currentTarget.getBoundingClientRect();
-            setPosition({ top: Math.max(8, Math.min(rect.bottom + 7, window.innerHeight - 300)),
-              right: Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - 244)) });
+            const top = Math.max(8, Math.min(rect.bottom + 7, window.innerHeight - 248));
+            setPosition({
+              top,
+              right: Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - 244)),
+              maxHeight: window.innerHeight - top - 8,
+            });
           }
           setOpen((value) => !value);
         }}
@@ -113,11 +137,12 @@ export default function WorkspaceCellLayoutMenu({
         <div
           ref={popoverRef}
           className="workspace-cell-layout-popover"
-          style={portal ? { position: "fixed", ...position, zIndex: 2000, maxHeight: "calc(100vh - 16px)", overflowY: "auto" } : undefined}
+          style={portal ? { position: "fixed", ...position, zIndex: "calc(var(--z-modal) - 1)", overflowY: "auto" } : undefined}
           role="dialog"
           aria-label={t("workspace.cellMenu", { n: cellNumber(cellId) })}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          {appearance}
           <strong>{t("workspace.cellLayout", { n: cellNumber(cellId) })}</strong>
           <fieldset disabled={!canSplit}>
             <legend>{t("workspace.newContent")}</legend>
@@ -181,7 +206,7 @@ export default function WorkspaceCellLayoutMenu({
             disabled={!canClose}
             onClick={() => runAndClose(() => onClose(cellId))}
           >
-            {canClose ? t("workspace.closeChart") : t("workspace.keepOneChart")}
+            {canClose || layoutDisabled ? t("workspace.closeChart") : t("workspace.keepOneChart")}
           </button>
         </div>
       )}

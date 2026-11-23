@@ -47,7 +47,7 @@ def observe(provider,runtime,symbol,timeframe,contexts,index,pass_index):
         if stream.cursor!=index-stream.input_skip:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION","chart and Pine stream cursors differ")
         stream.begin(provider.bars[index] if provider.realtime_streaming else provider.context["pineHistoricalBars"][index],
-                     bar_state="realtime" if provider.realtime_streaming else "historical")
+                     bar_state=provider.execution_contexts[index][-1]["bar_state"] if provider.chart_events else "realtime" if provider.realtime_streaming else "historical")
     observation=dict(evaluation=provider.execution_passes[index][-1],context=provider.execution_contexts[index][-1])
     return stream.observe(observation)
 

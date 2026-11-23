@@ -1,3 +1,6 @@
+import type { ChartSettings } from "../../settings/chartAppearanceSettings.js";
+import { chartStrategySignalInput, withChartSignalInput } from "./chartStrategySignalInput.js";
+import { researchModeForTask, strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
@@ -72,6 +75,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   workspaceId: string;
   cellId: string;
   session: ChartSession;
+  appearance?: Partial<ChartSettings> | undefined;
   attachment: ChartStrategyAttachmentRecord | null;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
@@ -96,7 +100,8 @@ export default function ChartStrategyTesterCellBridge({
   workspaceId,
   cellId,
   session,
-  attachment,
+  attachment: savedAttachment,
+  appearance,
   nativeStrategies,
   strategyTesterMode,
   onStrategyTesterModeChange,
@@ -115,6 +120,7 @@ export default function ChartStrategyTesterCellBridge({
   onOpenPanel,
   onClosePanel,
 }: ChartStrategyTesterCellBridgeProps) {
+  const attachment = useMemo(() => savedAttachment ? withChartSignalInput(savedAttachment, appearance ?? {}) : null, [savedAttachment, appearance]);
   const locale = useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
@@ -171,6 +177,7 @@ export default function ChartStrategyTesterCellBridge({
       customRange: attachment.customRange,
       fidelityPreference: attachment.fidelityPreference,
       quickPresetId: attachment.quickPresetId,
+      signalChart: attachment.signalChart,
       executionOverrides: attachment.executionOverrides,
     })
     : null;
@@ -704,7 +711,7 @@ export default function ChartStrategyTesterCellBridge({
   const openResearch = useCallback((entryTask: "PRECISE_EXECUTION" | "PARAMETER_ROBUSTNESS") => {
     if (advancedOpening) return;
     if (!attachment) {
-      window.location.assign("/backtest.html");
+      window.location.assign(strategyResearchModeHref(researchModeForTask(entryTask)));
       return;
     }
     setAdvancedOpening(true);
@@ -728,7 +735,7 @@ export default function ChartStrategyTesterCellBridge({
       return;
     }
     void defaultBacktestApi.createResearchLaunchContext(payload).then((context) => {
-      window.location.assign(backtestResearchContextHref(context.context_id));
+      window.location.assign(backtestResearchContextHref(context.context_id, entryTask));
     }).catch((reason: unknown) => {
       setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
       setAdvancedOpening(false);
@@ -756,6 +763,7 @@ export default function ChartStrategyTesterCellBridge({
       session={session}
       attachment={attachment}
       nativeStrategies={nativeStrategies}
+      signalChart={attachment?.signalChart ?? chartStrategySignalInput(appearance ?? {})}
       strategyTesterMode={strategyTesterMode}
       {...(onStrategyTesterModeChange ? { onStrategyTesterModeChange } : {})}
       {...(onNativeStrategiesChange ? { onNativeStrategiesChange } : {})}

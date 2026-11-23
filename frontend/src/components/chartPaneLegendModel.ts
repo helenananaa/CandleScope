@@ -2,6 +2,8 @@ import type { AxisTime, DisplayRow } from "../features/chart-representation/char
 import { sourceTimeFromChartTime } from "../chart-adapter/chartTime.js";
 import { t } from "../i18n/index.js";
 import type { IndicatorDataEntry, IndicatorLine } from "../chart-adapter/chartAdapterTypes.js";
+import { partialSeedRangeAt } from "../features/indicators/indicatorSeedState.js";
+import type { IndicatorPartialSeedRange } from "../features/indicators/indicatorTypes.js";
 
 export interface ChartPaneLegendValue {
   color: string | null;
@@ -13,6 +15,8 @@ export interface ChartPaneLegendValue {
   type: string | null;
   value: number | null;
   valueFormat: string | null;
+  /** Set when the displayed value was computed from a partial seed. */
+  partialSeed?: IndicatorPartialSeedRange;
 }
 
 export interface ResolveChartPaneLegendOptions {
@@ -97,13 +101,18 @@ function legendIndicatorId(line: IndicatorLine): string | null {
  */
 export function resolveChartPaneLegendValues(
   lines: readonly IndicatorLine[] | null | undefined,
-  crosshairTime: number | null,
+  crosshairTime: AxisTime | null,
   options: ResolveChartPaneLegendOptions = {},
 ): ChartPaneLegendValue[] {
   return (lines || []).map((line, index) => {
     const point = crosshairTime === null
       ? latestFinitePoint(line.data)
-      : exactFinitePoint(line.data, crosshairTime);
+      : exactFinitePoint(line.data, line.inputAxis === "display-ordinal"
+        ? (typeof crosshairTime === "object" ? crosshairTime.order + 1 : Number.NaN)
+        : sourceTimeFromChartTime(crosshairTime) ?? Number.NaN);
+    const partialSeed = point
+      ? partialSeedRangeAt(line.partialSeed, sourceTimeFromChartTime(crosshairTime ?? point.time))
+      : null;
     return {
       color: point?.color || line.color || null,
       id: legendLineId(line, index),
@@ -114,8 +123,20 @@ export function resolveChartPaneLegendValues(
       type: line.type || null,
       value: point?.value ?? null,
       valueFormat: line.valueFormat || null,
+      ...(partialSeed ? { partialSeed } : {}),
     };
   });
+}
+
+/** The first partial-seed span behind a legend row's displayed values, if any. */
+export function selectLegendPartialSeed(
+  entries: readonly ChartPaneLegendValue[],
+): IndicatorPartialSeedRange | null {
+  return entries.find((entry) => entry.partialSeed)?.partialSeed ?? null;
+}
+
+export function partialSeedLegendNotice(range: IndicatorPartialSeedRange): string {
+  return t("legend.partialSeed", { seed: range.seedBars, warmup: range.warmupBars });
 }
 
 /**

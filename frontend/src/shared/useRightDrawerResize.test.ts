@@ -35,10 +35,12 @@ test("uncapped drawers can reach the left edge at any viewport size", () => {
   }
 });
 
-test("market rail is capped so the chart keeps at least 55% of the window", () => {
-  assert.deepEqual(marketRailWidthBounds(1440), { min: 260, max: 716 });
-  assert.deepEqual(marketRailWidthBounds(1024), { min: 260, max: 377 });
-  assert.deepEqual(marketRailWidthBounds(640), { min: 204, max: 204 });
-  assert.deepEqual(marketRailWidthBounds(320), { min: 60, max: 60 });
+test("market rail is capped so the chart keeps at least 65% of the window", () => {
+  assert.deepEqual(marketRailWidthBounds(1440), { min: 260, max: 580 });
+  assert.deepEqual(marketRailWidthBounds(1366), { min: 260, max: 506 });
+  // At 1024px the default 320px rail no longer fits: the rail and its tab strip take 318px (31%).
+  assert.deepEqual(marketRailWidthBounds(1024), { min: 258, max: 258 });
+  assert.deepEqual(marketRailWidthBounds(640), { min: 124, max: 124 });
+  assert.deepEqual(marketRailWidthBounds(320), { min: 12, max: 12 });
   assert.deepEqual(marketRailWidthBounds(100), { min: 0, max: 0 });
 });

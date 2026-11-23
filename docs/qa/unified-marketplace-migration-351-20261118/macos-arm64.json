@@ -1,0 +1,127 @@
+{
+  "productSource": "58b0fc731999d0ecda44cde46e67041e462be8b3",
+  "macOS": "26.6.2 (25G83)",
+  "build": "standard desktop:package:dir, ad hoc signed",
+  "marketplaceDelivery": "guarded signed index and artifact import; desktop verified cache download",
+  "packagedBackendAndDesktopSourcesMatch": true,
+  "builtInPackageSha256": {
+    "candlescope-pine-unified-0.4.0-Darwin-arm64.cspkg": "sha256:d3d06694619380a56b4cc279b3d32b8ddee6d34829e98253883886404257106b",
+    "candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg": "sha256:827dcd5cbd210b8918d97c6c58c5e1c891efc08b9719daae95ef9e0e7a544d46"
+  },
+  "platform": "darwin",
+  "architecture": "arm64",
+  "signatureVerified": true,
+  "appAsar": "sha256:a4717a517f609d80d1102c9aaaa4a802823b39cde3ecdf86c7a13aae7ef7fcc5",
+  "fixtures": {
+    "failed": {
+      "color": "#f7d6e2",
+      "file": "qa.marketplace-theme-1.2.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:3e333e87dad9e236e861a85ce3dcd987f34b29328f7f834c2315516b9ec8f6f7",
+      "version": "1.2.0"
+    },
+    "initial": {
+      "color": "#ece5d2",
+      "file": "qa.marketplace-theme-1.0.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:1a45df7b560f75766fbc114fdc62f8466715e3ec23cd5410aa6dc6adba0bf6ee",
+      "version": "1.0.0"
+    },
+    "legacy": {
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:96e1c96649895c1aa7ca4c717701a0aeba6037df7df69b5436a16ec77df45dff",
+      "version": "0.1.0"
+    },
+    "marketplaceId": "candlescope.community",
+    "sources": {
+      "plugins/platform-grants-v2.json": "sha256:8ee56c78ce0d0b077309078f1df67c252560dab9e16cff7709b5b50d89120c85",
+      "plugins/platform-registry-v2.json": "sha256:fef280b64168e248687beb8a2dba761bc1255712aa1ce5be43cea964844fa87b",
+      "plugins/plugin-settings-v1.json": "sha256:ed0e921885be4c1a88cb46e319e388c5f78fef915bfc93718ae0d140f7d14cdf",
+      "plugins/private/595c409c748ab0b06b7f6ad3b74f6069/candlescope.hello-command/storage-v1.sqlite": "sha256:3f2694d7ee0ffd9420c521b0844a4f8237385c384db3a019ef9266917bba95a9",
+      "plugins/sandbox-v2/private/df0f7549e203c289b33e/state.bin": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+    },
+    "successor": {
+      "color": "#dfe7f8",
+      "file": "candlescope.hello-command-0.2.0.cspkg",
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:c2f8e8461e99aee30ff2979e16b457e9d4b4971c2dec42915679f530fcb1435e",
+      "version": "0.2.0"
+    },
+    "upgrade": {
+      "color": "#dcefe4",
+      "file": "qa.marketplace-theme-1.1.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:ab2460bca079062950fd9b4066f4a9bd0243c53a9185a0f4c9c8b29dacbb2395",
+      "version": "1.1.0"
+    }
+  },
+  "sessions": [
+    {
+      "name": "install, update and migrate",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "legacyReadyOnMac": false,
+      "cancelLeftInactive": true,
+      "installGeneration": 4,
+      "installedWindow": {
+        "theme": "light",
+        "background": "#ece5d2"
+      },
+      "upgradedWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "migrationGeneration": 11,
+      "migratedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "copiedData": {
+        "settingsRecords": 1,
+        "hostKeys": [
+          "bookmark"
+        ],
+        "sandboxFileSha256": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+      },
+      "legacyFilesByteIdentical": true,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart, manual and health rollback",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "restartedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "manualRollback": {
+        "restoredVersion": "0.1.0",
+        "runtimeReady": false
+      },
+      "migratedAppearanceRemoved": true,
+      "healthRollback": {
+        "restoredVersion": "1.1.0",
+        "runtimeReady": true,
+        "healthError": "invalid JSON document",
+        "restoredGeneration": 19
+      },
+      "rolledBackWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart after both rollbacks",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "finalWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "bothVersionsDataPreserved": true,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true
+}

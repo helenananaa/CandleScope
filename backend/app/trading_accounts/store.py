@@ -16,7 +16,7 @@ from typing import Any, Iterator
 
 from .models import dec_str
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -197,6 +197,10 @@ class TradingStore:
                 conn.execute("ALTER TABLE orders ADD COLUMN cancelled_at_ms INTEGER")
             if "protection_trade_id" not in order_columns:
                 conn.execute("ALTER TABLE orders ADD COLUMN protection_trade_id TEXT")
+            for table in ("orders", "fills"):
+                columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                if "position_side" not in columns:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN position_side TEXT")
             entry_columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_entries)")}
             if "trade_linked_at_ms" not in entry_columns:
                 conn.execute("ALTER TABLE journal_entries ADD COLUMN trade_linked_at_ms INTEGER")

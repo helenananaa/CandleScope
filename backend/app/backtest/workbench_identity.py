@@ -5,6 +5,7 @@ absence. Other fields, values and number types keep their original identity.
 """
 
 _DEFAULTS = (
+    ("signal_chart", None),
     ("cost_sensitivity_mode", "AUTO"),
     ("account_model", None),
     ("leverage", 1),
@@ -26,15 +27,17 @@ def _without_defaults(value):
 
 
 def request_identity(value):
-    if not isinstance(value, dict) or value.get("execution_mode") != "CANDLESCOPE":
+    if not isinstance(value, dict):
         return value
+    if value.get("execution_mode") != "CANDLESCOPE":
+        return {key: item for key, item in value.items() if key != "signal_chart" or item is not None}
     return _without_defaults(value)
 
 
 def preparation_identity(value, *, field):
     if not isinstance(value, dict) or not isinstance(value.get(field), dict):
         return value
-    result = dict(value)
+    result = {key: item for key, item in value.items() if key != "signal_chart" or item is not None}
     result[field] = (
         request_identity(value[field])
         if field == "run"

@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { resolveResearchDataLibraryEnabled } from "../../research-data/researchDataFlags.js";
-import { resolveStrategyResearchBootstrap } from "../strategyResearchLaunch.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
-test("default-on release keeps explicit dual-flag rollback", () => {
-  assert.equal(resolveResearchDataLibraryEnabled({}), true);
-  assert.equal(resolveResearchDataLibraryEnabled({ VITE_RESEARCH_DATA_LIBRARY_ENABLED: "0" }), false);
-  assert.equal(resolveResearchDataLibraryEnabled({ VITE_RESEARCH_DATA_LIBRARY_ENABLED: "invalid" }), false);
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "local" }), "local-legacy");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "backtest" }), "backtest-legacy");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "strategy" }), "unified");
+test("the library flag and its flag-off fallbacks are retired", () => {
+  assert.equal(existsSync(path.join(repoRoot, "frontend/src/features/research-data/researchDataFlags.ts")), false);
+  const launch = readFileSync(path.join(repoRoot, "frontend/src/features/strategy-research/strategyResearchLaunch.ts"), "utf8");
+  assert.doesNotMatch(launch, /resolveStrategyResearchBootstrap|local-legacy|backtest-legacy/);
+  const env = readFileSync(path.join(repoRoot, "frontend/.env.example"), "utf8");
+  assert.doesNotMatch(env, /VITE_RESEARCH_DATA_LIBRARY_ENABLED|VITE_BACKTEST_RESEARCH_ENABLED|VITE_BACKTEST_LEGACY_WORKBENCH_ENABLED/);
   const topBar = readFileSync(path.join(repoRoot, "frontend/src/app/WorkspaceNavigation.tsx"), "utf8");
   assert.match(topBar, /href="\/strategy\.html"/);
   assert.doesNotMatch(topBar, /href="\/backtest\.html"/);

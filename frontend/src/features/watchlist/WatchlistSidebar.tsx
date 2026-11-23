@@ -8,6 +8,7 @@ import { parseSymbolKey } from "../../utils/symbolKey";
 import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode,
   SetStateAction,
@@ -21,6 +22,7 @@ import {
   WATCHLIST_COLORS,
 } from "./watchlistStore";
 import { Icon } from "../../components/icons/Icon.js";
+import { isContextMenuKey, moveMenuFocus, useAnchoredPopup } from "../../components/ui/index.js";
 
 /** Remove trailing zeros after decimal point: "1.2000" → "1.2", "3.00" → "3" */
 /** Fixed decimals per magnitude, so a live value keeps its width as it ticks */
@@ -74,6 +76,17 @@ type WatchlistContextMenu =
   | { type: "list"; x: number; y: number; listId: string }
   | { type?: "symbol"; x: number; y: number; symbol: string; listId: string };
 type PriceFlashDirection = "up" | "down";
+
+/** Where a context menu opens: at the pointer, or under the element when the keyboard opened it
+ * (a menu key's contextmenu event has no pointer position). */
+function menuPoint(e: ReactMouseEvent<HTMLElement>): { x: number; y: number } {
+  if (e.clientX === 0 && e.clientY === 0) return menuPointBelow(e.currentTarget);
+  return { x: e.clientX, y: e.clientY };
+}
+function menuPointBelow(element: HTMLElement): { x: number; y: number } {
+  const rect = element.getBoundingClientRect();
+  return { x: Math.round(rect.left + 12), y: Math.round(rect.bottom) };
+}
 type WatchlistCssVars = CSSProperties & Record<`--${string}`, string | number>;
 
 function watchlistColorStyle(color: string): WatchlistCssVars {
@@ -252,6 +265,11 @@ export default function WatchlistSidebar({
   const [creatingNew, setCreatingNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [contextMenu, setContextMenu] = useState<WatchlistContextMenu | null>(null);
+  // The control focus goes back to when the menu closes (the row or list it was opened on).
+  const contextTriggerRef = useRef<HTMLElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  useAnchoredPopup({ open: contextMenu !== null, onClose: closeContextMenu, popupRef: contextMenuRef, triggerRef: contextTriggerRef });
 
   // ── DnD state ──
   const [dragType, setDragType] = useState<DragType | null>(null);
@@ -520,14 +538,30 @@ export default function WatchlistSidebar({
     e.preventDefault();
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, symbol: sym, listId });
+    contextTriggerRef.current = e.currentTarget.querySelector<HTMLElement>(".wl-sym-select");
+    setContextMenu({ ...menuPoint(e), symbol: sym, listId });
+  }, []);
+  // Shift+F10 or the menu key on a focused row opens the same menu under it.
+  const handleRowKeyDown = useCallback((e: ReactKeyboardEvent<HTMLButtonElement>, sym: string, listId: string) => {
+    if (!isContextMenuKey(e)) return;
+    e.preventDefault();
+    contextTriggerRef.current = e.currentTarget;
+    setContextMenu({ ...menuPointBelow(e.currentTarget), symbol: sym, listId });
   }, []);
 
   const handleListContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>, listId: string) => {
     e.preventDefault();
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, type: "list", listId });
+    contextTriggerRef.current = e.currentTarget.querySelector<HTMLElement>(".wl-list-toggle");
+    setContextMenu({ ...menuPoint(e), type: "list", listId });
+  }, []);
+  const handleListKeyDown = useCallback((e: ReactKeyboardEvent<HTMLButtonElement>, listId: string) => {
+    if (!isContextMenuKey(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    contextTriggerRef.current = e.currentTarget;
+    setContextMenu({ ...menuPointBelow(e.currentTarget), type: "list", listId });
   }, []);
 
   useEffect(() => {
@@ -593,19 +627,24 @@ export default function WatchlistSidebar({
             </svg>
           </span>
 
-          <WatchlistSymbolLiveColumns
-            compositeKey={compositeKey}
-            symbol={sym}
-            marketType={mt}
-            exchange={ex}
-            priceStore={priceStore}
-            tierKnown={tierKnown}
-            subscriptionTier={subscriptionTiers?.[compositeKey]}
-            fullTierTitle={subscriptionResourceSummaries?.[compositeKey]?.tooltip}
-          />
+          {/* The row's keyboard control: Enter opens the market (the click reaches the row),
+            * Shift+F10 or the menu key opens the row menu. */}
+          <button type="button" className="wl-sym-select" aria-current={isActive ? "true" : undefined}
+            onKeyDown={(e) => handleRowKeyDown(e, compositeKey, wl.id)}>
+            <WatchlistSymbolLiveColumns
+              compositeKey={compositeKey}
+              symbol={sym}
+              marketType={mt}
+              exchange={ex}
+              priceStore={priceStore}
+              tierKnown={tierKnown}
+              subscriptionTier={subscriptionTiers?.[compositeKey]}
+              fullTierTitle={subscriptionResourceSummaries?.[compositeKey]?.tooltip}
+            />
+          </button>
 
           {/* Delete button */}
-          <button className="wl-sym-del" onClick={(e) => { e.stopPropagation(); removeSymbol(wl.id, compositeKey); }} title={t("watchlist.remove")}>
+          <button type="button" className="wl-sym-del" onClick={(e) => { e.stopPropagation(); removeSymbol(wl.id, compositeKey); }} title={t("watchlist.remove")} aria-label={t("watchlist.remove")}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -658,19 +697,19 @@ export default function WatchlistSidebar({
         {/* ── Collapsed view ── */}
         {sidebarCollapsed && (
           <div className="wl-collapsed-icons">
-            <div className="wl-collapsed-icon" title={t("watchlist.expand")} onClick={toggleSidebarCollapse}>
+            <button type="button" className="wl-collapsed-icon" title={t("watchlist.expand")} aria-label={t("watchlist.expand")} onClick={toggleSidebarCollapse}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
-            </div>
+            </button>
             {watchlists.map((wl) => (
-              <div key={wl.id} className="wl-collapsed-tab"
+              <button type="button" key={wl.id} className="wl-collapsed-tab"
                 style={watchlistColorStyle(wl.color)}
                 onClick={() => setSidebarCollapsed(false)}
                 title={`${watchlistDisplayName(wl)} (${wl.symbols.length})`}>
                 <span className="wl-collapsed-dot"/>
                 <span className="wl-collapsed-count">{wl.symbols.length}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -721,7 +760,10 @@ export default function WatchlistSidebar({
 
                     {/* Collapse toggle */}
                     <button
+                      type="button"
                       className="wl-list-toggle"
+                      aria-expanded={!isCollapsed}
+                      onKeyDown={(e) => handleListKeyDown(e, wl.id)}
                       onClick={(e) => { e.stopPropagation(); toggleListCollapse(wl.id); }}
                       title={isCollapsed ? t("watchlist.expandList") : t("watchlist.collapseList")}
                     >
@@ -795,17 +837,19 @@ export default function WatchlistSidebar({
 
       {/* ── Context menu ── */}
       {contextMenu && (
-        <div className="wl-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}
+        <div ref={contextMenuRef} className="wl-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu"
+          aria-label={contextMenu.type === "list" ? (watchlists.find((w) => w.id === contextMenu.listId)?.name || t("watchlist.list")) : parseSymbolKey(contextMenu.symbol).symbol}
+          onKeyDown={(e) => { moveMenuFocus(e, contextMenuRef.current); }}
           onClick={(e) => e.stopPropagation()}>
           {contextMenu.type === "list" ? (
             <>
               <div className="wl-ctx-header">{watchlists.find((w) => w.id === contextMenu.listId)?.name || t("watchlist.list")}</div>
-              <button className="wl-ctx-item" onClick={() => { renameWatchlist(contextMenu.listId); setContextMenu(null); }}>
+              <button type="button" role="menuitem" className="wl-ctx-item" onClick={() => { renameWatchlist(contextMenu.listId); setContextMenu(null); }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 {t("watchlist.rename")}
               </button>
               {watchlists.length > 1 && (
-                <button className="wl-ctx-item wl-ctx-item-danger" onClick={() => { deleteWatchlist(contextMenu.listId); setContextMenu(null); }}>
+                <button type="button" role="menuitem" className="wl-ctx-item wl-ctx-item-danger" onClick={() => { deleteWatchlist(contextMenu.listId); setContextMenu(null); }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   {t("watchlist.deleteList")}
                 </button>
@@ -827,7 +871,7 @@ export default function WatchlistSidebar({
                     const desc = opt.value === "full" && fullSummary ? fullSummary.shortText : t(opt.descKey);
                     const title = opt.value === "full" && fullSummary ? fullSummary.tooltip : t(opt.titleKey);
                     return (
-                      <button key={opt.value} className={`wl-ctx-item ${currentTier === opt.value ? "wl-ctx-item-selected" : ""}`}
+                      <button type="button" role="menuitemradio" aria-checked={currentTier === opt.value} key={opt.value} className={`wl-ctx-item ${currentTier === opt.value ? "wl-ctx-item-selected" : ""}`}
                         title={title}
                         onClick={() => { onTierChange(ctxCompositeKey, opt.value); setContextMenu(null); }}>
                         <span className={`wl-tier-dot ${opt.value === "full" ? "wl-tier-full" : opt.value === "price" ? "wl-tier-price" : ""}`}/>
@@ -841,7 +885,7 @@ export default function WatchlistSidebar({
               )}
               {/* Move to other lists */}
               {watchlists.filter((w) => w.id !== contextMenu.listId).map((wl) => (
-                <button key={wl.id} className="wl-ctx-item" onClick={() => {
+                <button type="button" role="menuitem" key={wl.id} className="wl-ctx-item" onClick={() => {
                   setWatchlists((prev) => prev.map((w) => {
                     if (w.id === contextMenu.listId) return { ...w, symbols: w.symbols.filter((s) => s !== contextMenu.symbol) };
                     if (w.id === wl.id && !w.symbols.includes(contextMenu.symbol)) return { ...w, symbols: [...w.symbols, contextMenu.symbol] };
@@ -854,7 +898,7 @@ export default function WatchlistSidebar({
                 </button>
               ))}
               <div className="wl-ctx-divider"/>
-              <button className="wl-ctx-item wl-ctx-item-danger" onClick={() => { removeSymbol(contextMenu.listId, contextMenu.symbol); setContextMenu(null); }}>
+              <button type="button" role="menuitem" className="wl-ctx-item wl-ctx-item-danger" onClick={() => { removeSymbol(contextMenu.listId, contextMenu.symbol); setContextMenu(null); }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>

@@ -1,0 +1,36 @@
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/starlette/testclient.py:40
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/.venv/lib/python3.12/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_chart_pine_engine.py::test_chart_workspace_compiles_smokes_and_runs_through_host_ledger[//@version=6\nstrategy("SMA")\naverage = ta.sma(close, 2)\nif close > average\n    strategy.entry("L", strategy.long, qty=2)\nif close < average\n    strategy.close("L")\n-quantities0-False]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/backend/app/main.py:597: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_chart_pine_engine.py::test_chart_workspace_compiles_smokes_and_runs_through_host_ledger[//@version=6\nstrategy("SMA")\naverage = ta.sma(close, 2)\nif close > average\n    strategy.entry("L", strategy.long, qty=2)\nif close < average\n    strategy.close("L")\n-quantities0-False]
+tests/test_chart_pine_engine.py::test_chart_workspace_compiles_smokes_and_runs_through_host_ledger[//@version=6\nstrategy("SMA")\naverage = ta.sma(close, 2)\nif close > average\n    strategy.entry("L", strategy.long, qty=2)\nif close < average\n    strategy.close("L")\n-quantities0-False]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/.venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tests/test_chart_pine_engine.py::test_chart_workspace_compiles_smokes_and_runs_through_host_ledger[//@version=6\nstrategy("SMA")\naverage = ta.sma(close, 2)\nif close > average\n    strategy.entry("L", strategy.long, qty=2)\nif close < average\n    strategy.close("L")\n-quantities0-False]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/backend/app/main.py:937: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+37 passed, 5 warnings in 85.12s (0:01:25)

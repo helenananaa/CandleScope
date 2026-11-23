@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable
@@ -406,7 +407,9 @@ def bootstrap_default_adapters() -> ExchangeRegistry:
 
 
 def _bootstrap_default_adapters_unlocked() -> ExchangeRegistry:
-    if not _registry.has("twelvedata"):
+    # This provider requires a private API key and the native equity calendar
+    # package. Public browser builds expose the original CCXT providers.
+    if sys.platform != "emscripten" and not _registry.has("twelvedata"):
         from .plugins.twelvedata import create_plugin as create_twelve_data_plugin
 
         _registry.register(

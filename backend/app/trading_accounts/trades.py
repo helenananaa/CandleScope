@@ -2,7 +2,7 @@
 
 Trades are a pure, rebuildable projection: fills are never modified, and a
 change to the grouping rule only means recomputing. One trade covers one
-account + instrument from the first fill that leaves a flat position until the
+account + instrument (and leg in hedge mode) from the first fill that leaves a flat position until the
 fill that returns it to flat. A fill that crosses through zero is split: the
 closing part ends the old trade and the remainder opens a new trade whose id
 carries a ``~r`` suffix so ids stay unique and stable.
@@ -62,6 +62,8 @@ class Trade:
     exit_value: Decimal = ZERO
     realized_pnl: Decimal = ZERO
     fees: Decimal = ZERO
+    position_side: str | None = None
+    remaining_cost: Decimal = ZERO
     legs: list[FillLeg] = field(default_factory=list)
 
     @property
@@ -74,6 +76,8 @@ class Trade:
 
     @property
     def avg_entry_price(self) -> Decimal | None:
+        if self.position_side and self.open_qty:
+            return self.remaining_cost / self.open_qty
         return self.entry_cost / self.entry_qty if self.entry_qty > 0 else None
 
     @property
@@ -99,6 +103,7 @@ class Trade:
             "marketType": self.market_type,
             "symbol": self.symbol,
             "direction": self.direction,
+            **({"positionSide": self.position_side} if self.position_side else {}),
             "status": self.status,
             "openedAtMs": self.opened_at_ms,
             "closedAtMs": self.closed_at_ms,
@@ -127,13 +132,13 @@ def build_trades(account_id: str, fills: Iterable[dict[str, Any]]) -> list[Trade
     ``fills`` rows need: id, side, qty, price, fee (Decimal), ts_ms, exchange,
     market_type, symbol, liquidity, order_id.
     """
-    by_instrument: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    by_instrument: dict[tuple[str, str, str, str | None], list[dict[str, Any]]] = {}
     for fill in fills:
-        key = (fill["exchange"], fill["market_type"], fill["symbol"])
+        key = (fill["exchange"], fill["market_type"], fill["symbol"], fill.get("position_side"))
         by_instrument.setdefault(key, []).append(fill)
 
     trades: list[Trade] = []
-    for (exchange, market_type, symbol), rows in by_instrument.items():
+    for (exchange, market_type, symbol, position_side), rows in by_instrument.items():
         current: Trade | None = None
         for fill in sorted(rows, key=_fill_sort_key):
             qty: Decimal = fill["qty"]
@@ -151,6 +156,8 @@ def build_trades(account_id: str, fills: Iterable[dict[str, Any]]) -> list[Trade
                 current.exit_qty += closing
                 current.exit_value += price * closing
                 current.fees += fee_part
+                if position_side:
+                    current.remaining_cost -= avg * closing
                 current.open_qty -= closing
                 remaining -= closing
                 role = "close" if current.open_qty == 0 else "reduce"
@@ -176,6 +183,7 @@ def build_trades(account_id: str, fills: Iterable[dict[str, Any]]) -> list[Trade
                     exchange=exchange,
                     market_type=market_type,
                     symbol=symbol,
+                    position_side=position_side,
                     direction="long" if fill_sign > 0 else "short",
                     opened_at_ms=int(fill["ts_ms"]),
                 )
@@ -183,6 +191,8 @@ def build_trades(account_id: str, fills: Iterable[dict[str, Any]]) -> list[Trade
             else:
                 role = "add"
             current.open_qty += remaining
+            if position_side:
+                current.remaining_cost += price * remaining
             current.entry_qty += remaining
             current.entry_cost += price * remaining
             current.max_qty = max(current.max_qty, current.open_qty)

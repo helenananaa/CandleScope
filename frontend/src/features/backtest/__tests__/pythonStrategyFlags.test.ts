@@ -23,8 +23,9 @@ describe("python strategy studio flag", () => {
     );
   });
 
-  it("states Host owns orders fills and reports", () => {
-    assert.match(pythonHostOwnsCopy("zh-CN"), /Host/);
+  it("states CandleScope produces orders fills and reports", () => {
+    assert.match(pythonHostOwnsCopy("zh-CN"), /CandleScope/);
+    assert.doesNotMatch(pythonHostOwnsCopy("zh-CN"), /Host|Study/);
     assert.match(pythonHostOwnsCopy("zh-CN"), /成交/);
     assert.doesNotMatch(pythonHostOwnsCopy("en"), /成交/);
   });

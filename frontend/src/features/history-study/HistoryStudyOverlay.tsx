@@ -1,10 +1,14 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Badge, Button, InlineAlert, Input } from "../../components/ui/index.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { indicatorSignature, type ControlCellObservation } from "../app-control/controlModel.js";
 import { historyStudyCommands } from "./historyStudyCommands.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
+import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
@@ -28,7 +32,6 @@ import ChartTimeNavigationDialog from "../market-data/ChartTimeNavigationDialog.
 import { locateStudyViewportTime } from "./historyStudyNavigation.js";
 import { createStudyLinkSurface } from "./historyStudyLinkSurface.js";
 import type { ChartStudyClockIssue } from "../chart-workspace/chartStudyClockLinks.js";
-import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
 export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, drawingsHidden, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onAutomaticMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
@@ -113,6 +116,20 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   }, [active, changePlaying, editor, onMove, playback, playing]);
   const version = Number(store.version);
   const rows = store.snapshot();
+  usePluginChartSource(`${workspaceId}:${cellId}`, !busy && !error && rows.length ? {
+    observe: () => Number(store.version) === version ? {
+      mode: "history-study", runId: input.id, trackId: cellId, seriesId: store.seriesKey ?? `study:${input.id}`,
+      symbol: series.symbol, interval: series.interval,
+      dataRevision: `${input.id}:${revision}:${version}`, visibleThroughMs: cursorMs,
+    } : null,
+    bars: ({ visibleThroughMs }) => rows.slice(-MAX_PLUGIN_CHART_BARS).flatMap(bar => {
+      const open = Number(bar.time) * 1000;
+      const end = open + (store.intervalSeconds ?? 0) * 1000 - 1;
+      return end <= visibleThroughMs && bar.is_closed === true ? observePluginBar(open, end, true, bar) : [];
+    }),
+    subscribe: listener => store.subscribe(listener),
+  } : null);
+
   const renderedVersion = useRef(version);
   useLayoutEffect(() => { renderedVersion.current = version; }, [version]);
   const linkedSurface = useMemo(() => createStudyLinkSurface(playback, () => renderedVersion.current, surface.actions), [playback, surface.actions]);
@@ -129,7 +146,8 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     committedAt: null, optimistic: false, historyComplete: true, dataRevision: input.id }), [input.id, rows, store.seriesKey, version]);
   const persistence = useMemo(() => ({ controlled: true, load: () => definitions.map(item => ({ ...item })), save: () => undefined }), [definitions]);
   const unsupported = definitions.map(indicator => ({ indicator, support: providedBarsIndicatorSupport(indicator) })).filter(item => !item.support.supported);
-  const indicators = useProvidedBarsIndicatorRuntime({ bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
+  const indicators = useProvidedBarsIndicatorRuntime({
+    chart: chartIndicatorSelection(capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs), store, { chartType: normalizeMainChartType(style.chartType) }), bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
     exchange: series.exchange, marketType: series.marketType, symbol: series.symbol, interval: series.interval,
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });
@@ -154,15 +172,16 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   }
   return <div className="quick-replay history-study" role="region" aria-label={t("study.title")}
     data-study-id={input.id} data-study-cursor-ms={cursorMs}>
-    <header className="quick-replay-banner"><span className="trading-badge" data-tone="warning">{t("study.title")}</span>
+    <header className="quick-replay-banner"><Badge tone="warning">{t("study.title")}</Badge>
       <strong>{series.symbol}</strong><span>{series.interval}</span><time>{formatDateTime(cursorMs)}</time>
       <span className="quick-replay-spacer" /><span role="status">{t(busy ? "study.saving" : "study.saved")}</span>
-      <button type="button" className="trading-button" disabled={busy || editor !== null}
-        onClick={() => { setPlaying(false); void onMove(cursorMs, false); }}>{t("study.exit")}</button></header>
+      <Button size="sm" disabled={busy || editor !== null}
+        onClick={() => { setPlaying(false); void onMove(cursorMs, false); }}>{t("study.exit")}</Button></header>
     <div className="quick-replay-body"><div className="quick-replay-chart">
-      {(error || notesError) ? <p className="trading-error" role="alert">{t("study.error")}</p> : null}
-      {error ? <button className="trading-button" type="button" onClick={onRetry}>{t("study.retry")}</button> : null}
+      {(error || notesError) ? <InlineAlert tone="danger" className="quick-replay-notice"
+        {...(error ? { action: <Button size="sm" onClick={onRetry}>{t("study.retry")}</Button> } : {})}>{t("study.error")}</InlineAlert> : null}
       <ChartErrorBoundary><SingleChartPanes ref={surface.ref} seriesStore={store} symbol={series.symbol} interval={series.interval}
+        backendSyntheticSource={capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs)}
         drawingKeyBase={`history-study:${input.id}`} drawingReadOnly drawingsHidden={drawingsHidden ?? false}
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}
@@ -189,11 +208,11 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
         <time>{t("study.noteMarketTime", { time: formatDateTime(note.marketTimeMs) })}</time>
         <time>{t("study.noteWriteTime", { time: formatDateTime(note.updatedAtMs) })}</time>
         <p>{note.fields.entryBasis}</p><small>{t("study.noteVersions", { count: note.revisionCount })}</small>
-        <button className="trading-button" type="button" disabled={busy || editor !== null}
-          onClick={() => { setPlaying(false); setEditor({ marketMs: note.marketTimeMs, note }); }}>{t("study.noteEdit")}</button>
+        <Button size="sm" disabled={busy || editor !== null}
+          onClick={() => { setPlaying(false); setEditor({ marketMs: note.marketTimeMs, note }); }}>{t("study.noteEdit")}</Button>
       </li>)}</ul>
-      <button className="trading-button" type="button" disabled={busy || editor !== null}
-        onClick={() => { setPlaying(false); setEditor({ marketMs: cursorMs, note: null }); }}>{t("study.noteNew")}</button>
+      <Button size="sm" disabled={busy || editor !== null}
+        onClick={() => { setPlaying(false); setEditor({ marketMs: cursorMs, note: null }); }}>{t("study.noteNew")}</Button>
       {editor && <StudyNoteEditor key={`${input.id}:${editor.note?.id ?? editor.marketMs}`} manager={manager.historyStudy}
         studyId={input.id} marketMs={editor.marketMs} note={editor.note}
         onChanged={() => setRefreshNotes(n => n + 1)} onClose={() => setEditor(null)} />}
@@ -201,8 +220,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
         {!journal.enabled || !journal.accountId ? <p className="trading-help">{t("study.sourceNotesHint")}</p> : <>
           <p>{t("study.sourceAccount", { name: journal.accountName ?? journal.accountId })}</p>
           {journal.loading && <p role="status">{t("study.sourceNotesLoading")}</p>}
-          {journal.error && <><p role="alert" className="trading-error">{journal.error}</p>
-            <button className="trading-button" type="button" onClick={journal.retry}>{t("shell.retry")}</button></>}
+          {journal.error && <InlineAlert tone="danger" action={<Button size="sm" onClick={journal.retry}>{t("shell.retry")}</Button>}>{journal.error}</InlineAlert>}
           {journal.hasMore && <p>{t("study.sourceNotesLimit")}</p>}
           {!journal.loading && !journal.original.length && !journal.reviews.length && <p>{t("trading.replay.noNotes")}</p>}
           <ul className="trading-quick-notes">{[...journal.original, ...journal.reviews].sort((a, b) => a.marketTimeMs - b.marketTimeMs).map(note => <li key={note.id}>
@@ -216,19 +234,19 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
         </>}
       </section>
     </aside></div>
-    <footer className="history-study-controls"><button type="button" className="trading-button" disabled={busy || !!editor || cursorMs <= playback.minimumMs}
-      onClick={() => { setPlaying(false); void onMove(playback.stepTarget(-1)); }}>{t("study.previous")}</button>
-      <button type="button" className="trading-button" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
-        onClick={() => changePlaying(!playing)}>{t(playing ? "study.pause" : "study.play")}</button>
-      <button type="button" className="trading-button" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
-        onClick={() => { setPlaying(false); void onMove(playback.stepTarget(1)); }}>{t("study.next")}</button>
-      <button type="button" className="trading-button" onClick={() => navigation.setOpen(true)}>{t("study.viewDate")}</button>
-      <label>{t("study.cursor")}<input type="datetime-local" step="1" value={value} disabled={!!editor}
+    <footer className="history-study-controls"><Button size="sm" disabled={busy || !!editor || cursorMs <= playback.minimumMs}
+      onClick={() => { setPlaying(false); void onMove(playback.stepTarget(-1)); }}>{t("study.previous")}</Button>
+      <Button size="sm" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
+        onClick={() => changePlaying(!playing)}>{t(playing ? "study.pause" : "study.play")}</Button>
+      <Button size="sm" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
+        onClick={() => { setPlaying(false); void onMove(playback.stepTarget(1)); }}>{t("study.next")}</Button>
+      <Button size="sm" onClick={() => navigation.setOpen(true)}>{t("study.viewDate")}</Button>
+      <label>{t("study.cursor")}<Input size="sm" type="datetime-local" step="1" value={value} disabled={!!editor}
         onChange={e => setValue(e.target.value)} /></label>
-      <button type="button" className="trading-button" disabled={!!editor} onClick={() => { void jump(); }}>{t("study.seek")}</button>
+      <Button size="sm" disabled={!!editor} onClick={() => { void jump(); }}>{t("study.seek")}</Button>
       {invalid && <span role="alert">{t("study.invalidRange")}</span>}
       {cursorLinkIssue && <p role="alert">{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkFailed" : "study.cursorLinkFailed", { count: cursorLinkIssue.failed.length })}
-        <button type="button" className="trading-button" disabled={busy || !!editor} onClick={onRetryCursorLink}>{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkRetry" : "study.cursorLinkRetry")}</button>
+        <Button size="sm" disabled={busy || !!editor} onClick={onRetryCursorLink}>{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkRetry" : "study.cursorLinkRetry")}</Button>
       </p>}
     </footer>
     {navigation.open && <ChartTimeNavigationDialog cellId={cellId} onClose={() => navigation.setOpen(false)}

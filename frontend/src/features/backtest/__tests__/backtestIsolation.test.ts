@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  isBacktestEntryEnabled,
-  isBacktestLegacyWorkbenchEnabled,
-  isBacktestResearchEnabled,
-} from "../backtestFlags.js";
+import { isBacktestEntryEnabled } from "../backtestFlags.js";
+import * as backtestFlags from "../backtestFlags.js";
 import { createBacktestStore, reportHidesApproximate } from "../backtestStore.js";
 
 const featureRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -20,18 +17,14 @@ function walk(dir: string): string[] {
   });
 }
 
-test("backtest and research entries default on with explicit rollback flags", () => {
+test("the backtest entry defaults on; the research-disabled and legacy workbench fallbacks are retired", () => {
   assert.equal(isBacktestEntryEnabled({ VITE_BACKTEST_ENTRY_ENABLED: "0" }), false);
   assert.equal(isBacktestEntryEnabled({}), true);
   assert.equal(isBacktestEntryEnabled({ VITE_BACKTEST_ENTRY_ENABLED: "1" }), true);
-  assert.equal(isBacktestResearchEnabled({}), true);
-  assert.equal(isBacktestResearchEnabled({ VITE_BACKTEST_RESEARCH_ENABLED: "0" }), false);
-  assert.equal(isBacktestResearchEnabled({ VITE_BACKTEST_RESEARCH_ENABLED: "1" }), true);
-  assert.equal(isBacktestLegacyWorkbenchEnabled({}), true);
-  assert.equal(
-    isBacktestLegacyWorkbenchEnabled({ VITE_BACKTEST_LEGACY_WORKBENCH_ENABLED: "0" }),
-    false,
-  );
+  assert.equal("isBacktestResearchEnabled" in backtestFlags, false);
+  assert.equal("isBacktestLegacyWorkbenchEnabled" in backtestFlags, false);
+  assert.equal(existsSync(join(featureRoot, "BacktestApp.tsx")), false);
+  assert.equal(existsSync(join(featureRoot, "research", "BacktestResearchDisabled.tsx")), false);
 });
 
 test("live top bar exposes the enabled backtest entry without coupling to replay state", () => {

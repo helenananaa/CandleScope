@@ -1,3 +1,6 @@
+import { Icon } from "../../../components/icons/Icon.js";
+import { Badge, buttonClassName, IconButton, InlineAlert, SegmentedControl } from "../../../components/ui/index.js";
+import { ResearchModeLayout } from "./ResearchModeLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
@@ -8,9 +11,10 @@ import { useChartSurfaceRuntime } from "../../../chart-adapter/useChartSurfaceRu
 import IntervalSelector from "../../../components/IntervalSelector.js";
 import MarketPageFrame from "../../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../../app/MarketStatusBar.js";
-import MarketTopBarFrame from "../../../app/MarketTopBarFrame.js";
+import AppHeader from "../../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../../app/MarketWorkspaceFrame.js";
 import { getLocale, t } from "../../../i18n/index.js";
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useChartSession } from "../../chart-session/useChartSession.js";
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { useMarketDataRuntime } from "../../market-data/useMarketDataRuntime.js";
@@ -147,6 +151,8 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
         datasetId: frozenIdentity.dataset_id,
         dataEpoch: frozenIdentity.data_epoch,
         snapshotHash: frozenIdentity.snapshot_hash,
+        runId: run.run_id,
+        chartHash: chart.chart_hash,
         bars: chart.bars.map((bar) => ({ ...bar })),
       });
     }
@@ -194,8 +200,8 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
   );
   const rightPanels = (
     <aside className="research-right-rail" aria-label={t("research.aria.controls")}>
-      {runtime.view.operationError && <p className="research-operation-message error" role="alert">{runtime.view.operationError}</p>}
-      {runtime.view.notice && <p className="research-operation-message" role="status">{runtime.view.notice}</p>}
+      {runtime.view.operationError && <InlineAlert tone="danger" className="research-operation-message">{runtime.view.operationError}</InlineAlert>}
+      {runtime.view.notice && <InlineAlert tone="info" className="research-operation-message">{runtime.view.notice}</InlineAlert>}
       {backtestResearchHasPanel(task, "EXECUTION") && <ResearchExecutionPanel runtime={runtime} />}
       {backtestResearchHasPanel(task, "RUN") && <ResearchRunPanel runtime={runtime} />}
       {backtestResearchHasPanel(task, "STUDY") && <ResearchStudyPanel runtime={runtime} />}
@@ -228,39 +234,41 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
   return (
     <MarketPageFrame
       topBar={(
-        <MarketTopBarFrame
+        <AppHeader
           source="research"
           className="research-top-bar"
-          navigation={(
-            <button type="button" className="research-task-home-button" onClick={() => runtime.actions.selectTask(null)}>
-              {t("research.task.home")}
-            </button>
-          )}
-          identity={(
+          context={(
             <div className="research-market-identity">
               <strong>{chartSession.view.symbol}</strong>
               <span>{chartSession.view.exchange} · {chartSession.view.marketType} · {chartSession.view.interval}</span>
             </div>
           )}
-          controls={(
-            <div className="research-source-switch" role="group" aria-label={t("research.aria.chartSource")}>
-              <button type="button" disabled={runtime.view.runtimeMode === "LOCAL_OFFLINE"} title={runtime.view.runtimeMode === "LOCAL_OFFLINE" ? t("research.source.liveOffline") : ""} data-active={effectiveSourceMode === "LIVE_REFERENCE"} onClick={() => runtime.actions.selectSourceMode("LIVE_REFERENCE")}>{t("research.source.live")}</button>
-              <button type="button" disabled={frozenDisabled} title={frozenDisabled ? t("research.source.frozenUnavailable") : ""} data-active={effectiveSourceMode === "FROZEN_SNAPSHOT"} onClick={() => runtime.actions.selectSourceMode("FROZEN_SNAPSHOT")}>{t("research.source.frozen")}</button>
-              <button type="button" disabled={runModeDisabled} title={runModeDisabled ? t("research.source.runUnavailable") : ""} data-active={effectiveSourceMode === "RUN_RESULT"} onClick={() => runtime.actions.selectSourceMode("RUN_RESULT")}>{t("research.source.run")}</button>
-            </div>
+          tools={(
+            <SegmentedControl
+              size="sm"
+              className="research-source-switch"
+              label={t("research.aria.chartSource")}
+              value={effectiveSourceMode}
+              options={[
+                { value: "LIVE_REFERENCE", label: t("research.source.live"), disabled: runtime.view.runtimeMode === "LOCAL_OFFLINE", ...(runtime.view.runtimeMode === "LOCAL_OFFLINE" ? { title: t("research.source.liveOffline") } : {}) },
+                { value: "FROZEN_SNAPSHOT", label: t("research.source.frozen"), disabled: frozenDisabled, ...(frozenDisabled ? { title: t("research.source.frozenUnavailable") } : {}) },
+                { value: "RUN_RESULT", label: t("research.source.run"), disabled: runModeDisabled, ...(runModeDisabled ? { title: t("research.source.runUnavailable") } : {}) },
+              ]}
+              onChange={runtime.actions.selectSourceMode}
+            />
           )}
-          trailing={(
+          extras={(
             <div className="research-top-actions">
-              <span className="research-advanced-state" data-enabled={runtime.view.advancedEnabled}>
-                {runtime.view.advancedEnabled ? t("research.advanced.on") : t("research.advanced.off")}
-              </span>
-              <button type="button" onClick={runtime.actions.refresh}>{t("research.refresh")}</button>
-              <a href={runtime.view.returnHref}>{t("research.return")}</a>
+              {!runtime.view.advancedEnabled && <Badge tone="warning">{t("research.advanced.off")}</Badge>}
+              <IconButton size="sm" label={t("research.refresh")} icon={<Icon name="refresh" size={14} />} onClick={runtime.actions.refresh} />
+              <a className={buttonClassName({ size: "sm", variant: "ghost" })} href={runtime.view.returnHref}>{t("research.return")}</a>
             </div>
           )}
         />
       )}
-      intervalSelector={(
+      intervalSelector={null}
+      workspace={(
+        <ResearchModeLayout top={(
         <IntervalSelector
           interval={chartSession.view.interval}
           capabilityReady={chartSession.status.exchangeCatalogStatus !== "loading" && chartSession.status.historyIntervalAvailable}
@@ -278,8 +286,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
           intervalNotice={chartSession.view.intervalNotice}
           readOnlyReason={activeSource.mode === "LIVE_REFERENCE" ? null : sourceLabel(activeSource.mode)}
         />
-      )}
-      workspace={(
+      )}>
         <MarketWorkspaceFrame
           toolbar={leftPanels}
           exportOverlay={null}
@@ -291,7 +298,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
               data-research-task={task}
             >
               <div className="research-chart-context">
-                <span data-source-mode={activeSource.mode}>{sourceLabel(activeSource.mode)}</span>
+                <span data-source-mode={activeSource.mode}><Badge tone="accent">{sourceLabel(activeSource.mode)}</Badge></span>
                 <small>{rangeText}</small>
               </div>
               <MarketChartSurface
@@ -316,7 +323,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
                 errorFallback={(
                   <div className={liveUnavailable ? "research-chart-offline" : "research-chart-error"}>
                     <strong>{liveUnavailable ? t("research.source.liveOfflineTitle") : t("research.source.unavailable")}</strong>
-                    <span>{liveUnavailable ? t("research.source.liveOffline") : String(activeSource.marketData.view.error ?? "Chart unavailable")}</span>
+                    <span>{liveUnavailable ? t("research.source.liveOffline") : describeError(activeSource.marketData.view.error, t("research.source.unavailable"))}</span>
                   </div>
                 )}
               />
@@ -328,6 +335,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
             : null}
           rightRail={rightPanels}
         />
+        </ResearchModeLayout>
       )}
       featureSurfaces={null}
       statusBar={(

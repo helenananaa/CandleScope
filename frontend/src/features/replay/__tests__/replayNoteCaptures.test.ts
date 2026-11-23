@@ -32,6 +32,21 @@ test("PNG request survives restart exactly, preserves original on explicit copy,
   assert.throws(() => readReplayNoteCaptureDraft(storage, original.id, { ...context(), trackId: "other" }, context()));
   assert.deepEqual(storage.values, old);
   const fields = { entryBasis: "retained text", replayPendingCaptureId: original.id };
+  const review = { ...context(), reviewId: "review", reviewRevision: 1, reviewNote: true };
+  assert.throws(() => readReplayNoteCaptureDraft(storage, original.id, context(), review));
+  assert.throws(() => copyReplayNoteCaptureDraft(storage, fields, context(), review));
+  assert.throws(() => createReplayNoteCaptureDraft(review, { image, capturedContext: context(), chart }));
+  // Keep a pending copy written by older versions available once its original capture is visible.
+  const legacy = { ...original, id: "legacy-copy", context: review };
+  saveReplayNoteCaptureDraft(storage, legacy);
+  assert.throws(() => readReplayNoteCaptureDraft(storage, legacy.id, review, review));
+  assert.deepEqual(readReplayNoteCaptureDraft(storage, legacy.id, review, context(200, 2)), legacy);
+  releaseReplayNoteCaptureDraft(storage, legacy);
+  const retrospective = createReplayNoteCaptureDraft(review, { image, capturedContext: review, chart });
+  saveReplayNoteCaptureDraft(storage, retrospective);
+  assert.deepEqual(readReplayNoteCaptureDraft(storage, retrospective.id, review, review), retrospective);
+  releaseReplayNoteCaptureDraft(storage, retrospective);
+  assert.deepEqual(storage.values, old);
   const current = context(200, 2), copied = copyReplayNoteCaptureDraft(storage, fields, context(), current);
   assert.notEqual(copied.replayPendingCaptureId, original.id);
   const copy = readReplayNoteCaptureDraft(storage, copied.replayPendingCaptureId!, current, current)!;

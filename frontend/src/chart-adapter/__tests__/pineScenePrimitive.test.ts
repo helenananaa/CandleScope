@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PineScenePrimitive, pineSceneRange } from "../pineScenePrimitive.js";
+import { PineScenePrimitive, pineSceneRange, pineSceneOrdinalCoordinate } from "../pineScenePrimitive.js";
 import { structuralMock, mustBeDefined } from "../../test/testHelpers.js";
 import { normalizeIndicatorPayload, clearIndicatorLineData, pineRuntimeNotice } from "../../features/indicators/indicatorPayloadRuntime.js";
 
@@ -41,4 +41,14 @@ test("native scene projects actual time/price coordinates, repaints tables and d
   primitive.detached();
   paint();
   assert.equal(calls.length, count);
+});
+
+
+test("native scene ordered coordinates preserve same-time bricks and explicit bar_time clocks", () => {
+  const axes = [0,1,2].map(order => ({ order,sourceTime:1700000040,sourceOrdinal:order }));
+  const coordinate = (time: import("../chartAdapterTypes.js").ChartTime) => typeof time === "object" && "order" in time ? 20 + time.order * 12 : null;
+  assert.equal(pineSceneOrdinalCoordinate(axes,2,coordinate,12),32);
+  assert.equal(pineSceneOrdinalCoordinate(axes,3,coordinate,12),44);
+  assert.equal(pineSceneOrdinalCoordinate(axes,4,coordinate,12),56);
+  assert.equal(pineSceneOrdinalCoordinate(axes,1700000040,coordinate,12,true),20);
 });

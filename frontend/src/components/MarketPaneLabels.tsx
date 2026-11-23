@@ -1,3 +1,4 @@
+import { sourceTimeFromChartTime } from "../chart-adapter/chartTime.js";
 import { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import type {
   IndicatorPanePointMetadata,
@@ -27,11 +28,12 @@ const MarketPaneLabel = memo(function MarketPaneLabel({
   collapsed,
   crosshairStore,
 }: MarketPaneLabelProps) {
-  const crosshairTime = useSyncExternalStore(
+  const crosshairAxisTime = useSyncExternalStore(
     crosshairStore.subscribe,
     crosshairStore.getSnapshot,
     crosshairStore.getSnapshot,
   );
+  const crosshairTime = sourceTimeFromChartTime(crosshairAxisTime);
   const metadataByTime = useMemo<ReadonlyMap<number, IndicatorPanePointMetadata>>(
     () => new Map((pane.pointMetadata || []).map((point) => [point.time, point])),
     [pane.pointMetadata],

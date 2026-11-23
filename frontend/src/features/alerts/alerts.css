@@ -1,0 +1,372 @@
+/* Alerts drawer: one column of kit controls. The form is numbered sections, not cards inside
+ * cards; lists are rows with their actions. Alert toasts use the shared stack (notify). */
+
+.alert-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-panel) - 8);
+  background: color-mix(in srgb, var(--surface-0) 48%, transparent);
+  animation: fade-in 0.15s ease-out;
+}
+.alert-panel {
+  position: fixed;
+  top: 48px;
+  right: 0;
+  bottom: 24px;
+  z-index: calc(var(--z-panel) + 2);
+  display: flex;
+  flex-direction: column;
+  width: 430px;
+  min-width: 0;
+  max-width: 100vw;
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  container-type: inline-size;
+  animation: slide-in-right 0.2s ease-out;
+}
+
+.alert-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 6px;
+}
+.alert-panel-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.alert-panel-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+.alert-runtime-status {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-runtime-status.status-running {
+  color: var(--text-success);
+}
+.alert-runtime-status.status-error {
+  color: var(--text-danger);
+}
+.alert-tabs {
+  flex-shrink: 0;
+  padding: 0 16px;
+}
+.alert-panel-notice {
+  flex-shrink: 0;
+  margin: 12px 16px 0;
+}
+.alert-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+.alert-panel-content:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.alert-panel-footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+/* 添加警报 */
+.alert-form {
+  display: grid;
+  gap: 20px;
+}
+.alert-step {
+  display: grid;
+  gap: 12px;
+}
+.alert-step + .alert-step {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.alert-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.alert-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+.alert-step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.alert-step-note {
+  margin: -4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 12px;
+}
+.alert-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.alert-field-wide {
+  grid-column: 1 / -1;
+}
+.alert-channels {
+  display: grid;
+  gap: 10px;
+}
+
+/* 触发条件 */
+.alert-logic-builder,
+.alert-logic-group {
+  display: grid;
+  gap: 10px;
+}
+.alert-logic-group.nested {
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.alert-condition {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.alert-condition-head,
+.alert-logic-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.alert-condition-index,
+.alert-logic-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.alert-logic-desc {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.alert-inline-actions .ui-check {
+  margin-inline-end: 4px;
+}
+.alert-inline-actions .ui-select {
+  width: auto;
+}
+.alert-logic-connector {
+  display: flex;
+  justify-content: center;
+}
+.alert-logic-connector span {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+.alert-logic-footer {
+  display: flex;
+  gap: 8px;
+}
+
+/* 测试规则 */
+.alert-test-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.alert-test-grid {
+  display: grid;
+  gap: 12px;
+}
+.alert-test-column {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.alert-test-column legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-test-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.alert-test-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.alert-trace-node,
+.alert-trace-children {
+  display: grid;
+  gap: 6px;
+}
+.alert-trace-main {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+.alert-trace-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.alert-trace-node[data-result='true'] > .alert-trace-main .alert-trace-dot {
+  background: var(--text-success);
+}
+.alert-trace-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+.alert-trace-details {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-trace-children {
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+/* 全部警报, 触发历史 */
+.alert-list-view {
+  display: grid;
+  gap: 12px;
+}
+.alert-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.alert-toolbar > .ui-input:not(.ui-select) {
+  flex: 1 1 160px;
+}
+.alert-toolbar > .ui-select {
+  flex: 0 1 auto;
+  width: auto;
+}
+.alert-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.alert-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+.alert-row + .alert-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.alert-row-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.alert-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.alert-row-title strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alert-row[data-enabled='false'] .alert-row-title strong {
+  color: var(--text-secondary);
+}
+.alert-row-summary {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.alert-row-meta {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.alert-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-inline-start: -8px;
+}
+.alert-unread-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+}
+
+/* A narrow drawer stacks its two-column parts. */
+@container (max-width: 480px) {
+  .alert-field-row,
+  .alert-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .alert-test-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

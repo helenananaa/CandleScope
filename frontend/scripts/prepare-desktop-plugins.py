@@ -181,6 +181,9 @@ def main():
                 shutil.copytree(Path(temporary) / f"{name}-{engine['commit']}" / "tests/fixtures",
                                 suite / "tests/fixtures", dirs_exist_ok=True)
 
+    sys.path[:0] = [str(REPO / "backend"), str(REPO / "packages" / "candlescope-plugin-sdk" / "src")]
+    from app.plugin_lifecycle.script_bundle import PYTHON_ID, build_pine_package, build_script_package
+
     # Current SDK/bridge source is always built, so source edits cannot be
     # hidden by a same-version cached wheel from an earlier package.
     with tempfile.TemporaryDirectory(prefix="bridges-", dir=args.cache) as temporary:
@@ -228,7 +231,17 @@ def main():
             lock_path = args.output / f"{engine['bridge']}.lock.json"
             lock_path.write_text(json.dumps(lock, indent=2) + "\n")
             bundle = args.output / f"{engine['bridge']}-{lock['plugin']['version']}-{target}.cspkg"
-            result = builder.build_locked_bundle([records[p].path for p in lock["wheels"]], bundle, lock_path=lock_path)
+            locked_paths = [records[p].path for p in lock["wheels"]]
+            locked = builder.collect_locked_wheels(locked_paths, lock)
+            unified_bundle = args.output / f"candlescope-pine-unified-{lock['plugin']['version']}-{target}.cspkg"
+            unified = build_pine_package([wheel.path for wheel in locked], lock["plugin"]["version"], unified_bundle)
+            (args.output / "unified-pine.json").write_text(json.dumps({
+                "schema": "candlescope.bundled-unified-pine/1", "filename": unified_bundle.name,
+                "sha256": unified.sha256, "size": unified.size,
+            }, indent=2) + "\n", encoding="utf-8")
+            if not args.qualification:
+                continue
+            result = builder.build_locked_bundle(locked_paths, bundle, lock_path=lock_path)
             entries.append({
                 "runtimeId": lock["plugin"]["id"], "package": lock["plugin"]["package"],
                 "version": lock["plugin"]["version"], "filename": bundle.name,
@@ -241,14 +254,21 @@ def main():
         python_wheels = [next(built.glob("candlescope_plugin_python_indicator-*.whl")),
                          next(built.glob("candlescope_plugin_sdk-*.whl"))]
         python_bundle = args.output / f"candlescope-plugin-python-indicator-0.1.0-{target}.cspkg"
-        python_result = python_builder.build(python_wheels, python_bundle)
-        entries.append({
-            "runtimeId": "candlescope.python-indicator", "package": "candlescope-plugin-python-indicator",
-            "version": "0.1.0", "filename": python_bundle.name,
-            "sha256": python_result.sha256, "size": python_result.size,
-            "platform": {"system": platform.system(), "machine": platform.machine(),
-                         "implementation": platform.python_implementation(), "pythonVersion": python_version},
-        })
+        if args.qualification:
+            python_result = python_builder.build(python_wheels, python_bundle)
+            entries.append({
+                "runtimeId": PYTHON_ID, "package": "candlescope-plugin-python-indicator",
+                "version": "0.1.0", "filename": python_bundle.name,
+                "sha256": python_result.sha256, "size": python_result.size,
+                "platform": {"system": platform.system(), "machine": platform.machine(),
+                             "implementation": platform.python_implementation(), "pythonVersion": python_version},
+            })
+        else:
+            python_result = build_script_package(PYTHON_ID, python_wheels, "0.1.0", python_bundle)
+            (args.output / "unified-python.json").write_text(json.dumps({
+                "schema": "candlescope.bundled-unified-python/1", "filename": python_bundle.name,
+                "sha256": python_result.sha256, "size": python_result.size,
+            }, indent=2) + "\n")
         (args.output / "python-indicator.lock.json").write_text(json.dumps({
             "releaseStatus": "desktop-source-build-unpublished",
             "sourceSha256": source_digest(python_package),
@@ -262,18 +282,19 @@ def main():
                 {"language": "python", "mode": "sidecar", "runtimeId": "candlescope.python-indicator"},
             ],
         }, indent=2) + "\n")
-        manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
-        (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        if args.qualification:
+            manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
+            (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         shutil.copy2(RECIPE, sources_out / RECIPE.name)
-    # Check both installers/protocol probes before publishing the runtime stage.
-    # The isolated root is temporary; no acceptance/user activation is changed.
-    sys.path[:0] = [str(REPO / "backend"), str(REPO / "packages" / "candlescope-plugin-sdk" / "src")]
-    from app.plugin_runtime.installer import PluginInstaller
-    with tempfile.TemporaryDirectory(prefix="probe-", dir=args.cache) as temporary:
-        installer = PluginInstaller(root=Path(temporary), python_executable=Path(sys.executable),
-                                    host_name="CandleScope", host_version="0.3.0")
-        installer.install_many(tuple((args.output / e["filename"], e["sha256"]) for e in entries),
-                               enabled=True, auto_start=True, required=True)
+    if args.qualification:
+        # The release qualification command retains isolated historical probes.
+        from app.plugin_runtime.installer import PluginInstaller
+
+        with tempfile.TemporaryDirectory(prefix="probe-", dir=args.cache) as temporary:
+            installer = PluginInstaller(root=Path(temporary), python_executable=Path(sys.executable),
+                                        host_name="CandleScope", host_version="0.3.0")
+            installer.install_many(tuple((args.output / e["filename"], e["sha256"]) for e in entries),
+                                   enabled=True, auto_start=True, required=True)
     print(f"Built and verified bundled runtimes for {target}: {args.output}")
 
 

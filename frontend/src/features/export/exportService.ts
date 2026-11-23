@@ -18,6 +18,7 @@ import type {
   ExportScope,
   ExportSnapshot,
 } from "./exportTypes.js";
+import { CHART_FONT_FAMILY } from "../../chart-adapter/chartPalette.js";
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   scope: "chart",
@@ -139,7 +140,7 @@ function drawWatermark(
   const margin = Math.round(18 * scale);
 
   ctx.save();
-  ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+  ctx.font = `600 ${fontSize}px ${CHART_FONT_FAMILY}`;
   const maxTextWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
   const boxWidth = maxTextWidth + padX * 2;
   const boxHeight = lineHeight * lines.length + padY * 2;
@@ -168,7 +169,7 @@ function finalizeCanvas(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error(t("export.canvasFailed"));
 
-  const font = `${12 * options.scale}px Inter, system-ui, -apple-system, sans-serif`;
+  const font = `${12 * options.scale}px ${CHART_FONT_FAMILY}`;
   const padding = 12 * options.scale;
   const lineHeight = 18 * options.scale;
   ctx.font = font;

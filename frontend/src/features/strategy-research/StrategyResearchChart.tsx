@@ -1,4 +1,5 @@
 import { formatIntervalLabel } from "../../utils/intervals.js";
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import SingleChartPanes from "../../components/SingleChartPanes.js";
@@ -23,6 +24,7 @@ import {
 } from "../chart-session/visibleRangeStorage.js";
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
+import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backendSyntheticFeature.js";
 import {
   formatResearchRows,
 } from "../research-data/researchDataFormat.js";
@@ -39,6 +41,7 @@ import {
   buildLocalChartDataMeta,
   useLocalChartRuntime,
 } from "../local-data/useLocalChartRuntime.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
 import { useLocalIndicatorRuntime } from "../local-data/useLocalIndicatorRuntime.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 import type { ActiveIndicatorPersistence } from "../indicators/activeIndicatorStore.js";
@@ -58,16 +61,6 @@ import {
   importedDrawingKeyBase,
 } from "./importedDatasetSource.js";
 
-
-export function EmptyImportedChart() {
-  return (
-    <div className="local-chart-empty" data-testid="strategy-research-empty-chart">
-      <div className="local-empty-icon">CSV</div>
-      <h1>{t("local.emptyTitle")}</h1>
-      <p>{t("local.emptyHint")}</p>
-    </div>
-  );
-}
 
 export function ImportedDatasetIntervalStrip({
   manifest,
@@ -90,9 +83,9 @@ export function ImportedDatasetIntervalStrip({
       />
       <div className="local-dataset-truthbar">
         <span>
-          {`${formatIntervalLabel(interval)}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: formatIntervalLabel(manifest.interval) })} · ${manifest.timezone} · ${formatResearchRows(manifest.rows)} source bars · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
+          {`${formatIntervalLabel(interval)}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: formatIntervalLabel(manifest.interval) })} · ${manifest.timezone} · ${t("local.sourceBars", { count: formatResearchRows(manifest.rows) })} · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
         </span>
-        <span>{`dataEpoch ${manifest.data_epoch.slice(7, 19)}`}</span>
+        <span title={manifest.data_epoch}>{t("local.dataVersion", { id: manifest.data_epoch.slice(7, 19) })}</span>
       </div>
     </div>
   );
@@ -169,15 +162,20 @@ function StrategyResearchChartPanes({
       data-interval={interval}
     >
       {runtime.error !== null && (
-        <div className="local-chart-error" role="alert">
-          <span>{runtime.error}</span>
-          <button type="button" onClick={runtime.retry}>{t("replay.retry")}</button>
-        </div>
+        <InlineAlert tone="danger" className="local-chart-error"
+          action={<Button size="sm" onClick={runtime.retry}>{t("replay.retry")}</Button>}>
+          {runtime.error}
+        </InlineAlert>
       )}
       <ChartErrorBoundary>
         <SingleChartPanes
           ref={chartSurfaceRef}
           seriesStore={runtime.seriesStore}
+          backendSyntheticSource={BACKEND_SYNTHETIC_SERIES_ENABLED ? {
+            symbol: manifest.symbol, interval, exchange: "local", marketType: "local_dataset",
+            syntheticSeriesKey: String(runtime.seriesStore.seriesKey ?? "unavailable"),
+            syntheticOrigin: { kind: "LOCAL_DATASET", dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch },
+          } : null}
           symbol={manifest.symbol}
           drawingKeyBase={importedDrawingKeyBase(manifest)}
           interval={interval}
@@ -320,6 +318,11 @@ export function StrategyResearchImportedWorkspace({
     seriesVersion,
   ]);
   const indicators = useLocalIndicatorRuntime({
+    chart: chartIndicatorSelection(BACKEND_SYNTHETIC_SERIES_ENABLED ? {
+      symbol: manifest.symbol, interval, exchange: "local", marketType: "local_dataset",
+      syntheticSeriesKey: String(chartRuntime.seriesStore.seriesKey ?? "unavailable"),
+      syntheticOrigin: { kind: "LOCAL_DATASET", dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch },
+    } : null, chartRuntime.seriesStore, settings),
     manifest,
     interval,
     bars,
@@ -507,6 +510,7 @@ export function ImportedAnalysisPanel({
   crosshair,
   onFocus,
   onError,
+  defaultOpen,
 }: {
   manifest: LocalDatasetManifest;
   snapshot: LocalAnalysisSnapshot;
@@ -514,10 +518,12 @@ export function ImportedAnalysisPanel({
   crosshair: MainSeriesCrosshairValue | null;
   onFocus(event: LocalAnalysisEvent): void;
   onError(message: string | null): void;
+  defaultOpen?: boolean;
 }) {
   return (
     <LocalAnalysisPanel
       key={manifest.data_epoch}
+      {...(defaultOpen === undefined ? {} : { defaultOpen })}
       manifest={manifest}
       snapshot={snapshot}
       eventStore={eventStore}

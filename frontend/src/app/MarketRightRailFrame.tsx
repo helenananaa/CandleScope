@@ -1,3 +1,4 @@
+import { IconButton } from "../components/ui/index.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -16,6 +17,8 @@ import {
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
+import { scrollBehavior } from "../utils/reducedMotion.js";
+import { usePhoneLayout } from "./phoneLayout.js";
 
 type RailCssVars = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -137,6 +140,33 @@ export default function MarketRightRailFrame({
   const activeView = singleView
     ? sortedViews.find((view) => view.id === openViewIds[0]) ?? null
     : null;
+  // On a phone the panel is a sheet over the chart (marketRail.css) that shows one view at a time.
+  // Single-view owners already choose that view; for an accordion the sheet shows the view last
+  // chosen from the bar, or else the one opened last, while the owner keeps its set of open views.
+  const phone = usePhoneLayout();
+  const phoneSheet = phone && !singleView;
+  const [phoneChoice, setPhoneChoice] = useState<string | null>(null);
+  const sheetViewId = !phoneSheet ? null
+    : phoneChoice !== null && openViewIds.includes(phoneChoice) ? phoneChoice
+      : [...openViewIds].reverse().find((id) => sortedViews.some((view) => view.id === id)) ?? null;
+  const sheetView = sortedViews.find((view) => view.id === sheetViewId) ?? null;
+  const previousOpenRef = useRef(openViewIds);
+  useEffect(() => {
+    const previous = previousOpenRef.current;
+    previousOpenRef.current = openViewIds;
+    if (!phoneSheet) return;
+    const added = openViewIds.filter((id) => !previous.includes(id));
+    if (added.length > 0) {
+      setPhoneChoice(added[added.length - 1] ?? null);
+      return;
+    }
+    // The shown view closed itself (its own close button): the sheet goes with it.
+    if (phoneChoice !== null && previous.includes(phoneChoice) && !openViewIds.includes(phoneChoice)) {
+      setPhoneChoice(null);
+      if (!panelCollapsed) onTogglePanelCollapsed?.();
+    }
+  }, [onTogglePanelCollapsed, openViewIds, panelCollapsed, phoneChoice, phoneSheet]);
+  const [sheetHeight, setSheetHeight] = useState(0);
   // Views stay mounted after their first visit so switching away and back
   // keeps drafts (ticket inputs, selected tabs) intact.
   const [visitedViewIds, setVisitedViewIds] = useState<readonly string[]>(
@@ -147,9 +177,11 @@ export default function MarketRightRailFrame({
   }
   const panelOpen = sortedViews.length > 0
     && !panelCollapsed
-    && (!singleView || activeView !== null);
+    && (!singleView || activeView !== null)
+    && (!phoneSheet || sheetView !== null);
   const widthBounds = marketRailWidthBounds(viewportWidth);
-  const width = clamp(transientWidth ?? layout.width, widthBounds.min, widthBounds.max);
+  // The sheet is as wide as the window, not a resizable column.
+  const width = phone ? undefined : clamp(transientWidth ?? layout.width, widthBounds.min, widthBounds.max);
   const effectiveHeights = transientHeights ?? viewHeights;
 
   // The last expanded view absorbs free space below the stack, so a short stack
@@ -162,7 +194,7 @@ export default function MarketRightRailFrame({
   const [fillExtra, setFillExtra] = useState(0);
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    if (!panel || !panelOpen || fillViewId === null || heightResizingViewId !== null) return undefined;
+    if (!panel || phoneSheet || !panelOpen || fillViewId === null || heightResizingViewId !== null) return undefined;
     const measure = () => {
       let used = 0;
       for (const child of Array.from(panel.children)) used += (child as HTMLElement).offsetHeight;
@@ -176,7 +208,19 @@ export default function MarketRightRailFrame({
     const observer = new ResizeObserver(measure);
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [effectiveHeights, fillViewId, heightResizingViewId, openViewIds, panelOpen]);
+  }, [effectiveHeights, fillViewId, heightResizingViewId, openViewIds, panelOpen, phoneSheet]);
+
+  // A view in the sheet takes the sheet's height, which docks such as the order book need in pixels.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !phoneSheet || !panelOpen) return undefined;
+    const measure = () => setSheetHeight(panel.clientHeight);
+    measure();
+    if (typeof ResizeObserver !== "function") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [panelOpen, phoneSheet]);
 
   const colorVars = useMemo<RailCssVars>(() => ({
     "--wl-up-color": upColor,
@@ -201,7 +245,7 @@ export default function MarketRightRailFrame({
       const top = Math.max(0, section.offsetTop - 6);
       const bottom = section.offsetTop + section.offsetHeight;
       if (top < panel.scrollTop || bottom > panel.scrollTop + panel.clientHeight) {
-        panel.scrollTo({ top, behavior: "smooth" });
+        panel.scrollTo({ top, behavior: scrollBehavior() });
       }
       pendingRevealRef.current = null;
     });
@@ -292,6 +336,7 @@ export default function MarketRightRailFrame({
   }, [heightResizingViewId, onViewHeightChange, sortedViews, viewHeights]);
 
   const startWidthResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (width === undefined) return;
     event.preventDefault();
     const direction = event.currentTarget.closest('[data-extension-rail-side="left"]') ? 1 : -1;
     widthStartRef.current = { x: event.clientX, width, direction };
@@ -326,11 +371,22 @@ export default function MarketRightRailFrame({
   }, [onViewHeightChange]);
 
   const toggleView = useCallback((viewId: string) => {
+    if (phoneSheet) {
+      // The shown view's tab closes the sheet; another tab shows its view, opening it if needed.
+      if (panelOpen && sheetViewId === viewId) {
+        if (onTogglePanelCollapsed) onTogglePanelCollapsed();
+        else onToggleView(viewId);
+        return;
+      }
+      setPhoneChoice(viewId);
+      if (panelCollapsed || !openViewIds.includes(viewId)) onToggleView(viewId);
+      return;
+    }
     if (!openViewIds.includes(viewId) || panelCollapsed) {
       pendingRevealRef.current = viewId;
     }
     onToggleView(viewId);
-  }, [onToggleView, openViewIds, panelCollapsed]);
+  }, [onTogglePanelCollapsed, onToggleView, openViewIds, panelCollapsed, panelOpen, phoneSheet, sheetViewId]);
 
   const collapseLabel = panelCollapsed ? t("rail.showPanel") : t("rail.hidePanel");
   const resolvedAriaLabel = ariaLabel ?? t("rail.ariaLabel");
@@ -348,7 +404,7 @@ export default function MarketRightRailFrame({
     >
       {sortedViews.length > 0 && (
         <>
-          {panelOpen && (
+          {panelOpen && !phone && (
             <div
               className={`wl-resize-handle ${widthResizing ? "active" : ""}`}
               onPointerDown={startWidthResize}
@@ -357,7 +413,28 @@ export default function MarketRightRailFrame({
               aria-orientation="vertical"
             />
           )}
-          {singleView ? (
+          {phoneSheet ? (
+            <div
+              ref={panelRef}
+              className="market-rail-panel market-rail-sheet"
+              style={{ display: panelOpen ? undefined : "none" }}
+              data-market-shell-owner="right-rail-panel"
+              aria-hidden={panelOpen ? undefined : true}
+            >
+              {sheetView !== null && (
+                <section
+                  key={sheetView.id}
+                  id={`market-rail-view-${source}-${sheetView.id}`}
+                  className="market-rail-view-host"
+                  style={{ height: sheetHeight }}
+                  data-rail-view={sheetView.id}
+                  data-expanded="true"
+                >
+                  {renderView(sheetView.id, sheetHeight)}
+                </section>
+              )}
+            </div>
+          ) : singleView ? (
             <div
               className="market-rail-panel market-rail-single"
               style={{ width, display: panelOpen ? undefined : "none" }}
@@ -371,15 +448,8 @@ export default function MarketRightRailFrame({
                     <span>{activeView.collapsedSummary}</span>
                   )}
                   {onTogglePanelCollapsed && (
-                    <button
-                      type="button"
-                      className="market-rail-single-hide"
-                      title={t("rail.hidePanel")}
-                      aria-label={t("rail.hidePanel")}
-                      onClick={onTogglePanelCollapsed}
-                    >
-                      <PanelCollapseIcon collapsed />
-                    </button>
+                    <IconButton size="sm" className="market-rail-single-hide" label={t("rail.hidePanel")}
+                      onClick={onTogglePanelCollapsed} icon={<PanelCollapseIcon collapsed />} />
                   )}
                 </header>
               )}
@@ -486,7 +556,7 @@ export default function MarketRightRailFrame({
         data-market-shell-owner="activity-bar"
       >
         {sortedViews.map((view) => {
-          const active = openViewIds.includes(view.id);
+          const active = phoneSheet ? panelOpen && view.id === sheetViewId : openViewIds.includes(view.id);
           return (
             <button
               key={view.id}
@@ -507,7 +577,7 @@ export default function MarketRightRailFrame({
             </button>
           );
         })}
-        {onTogglePanelCollapsed && !singleView && (
+        {onTogglePanelCollapsed && !singleView && !phoneSheet && (
           <button
             type="button"
             className={`market-activity-item market-activity-collapse ${panelCollapsed ? "active" : ""}`}

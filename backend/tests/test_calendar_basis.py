@@ -230,3 +230,19 @@ def test_custom_native_phase_is_validated_without_relabeling(monkeypatch):
     assert event.data["open_time"] == 60000 and event.data["close_time"] == 359999
     contract.validate(event.data["open_time"], event.data["close_time"])
     assert normalizer.parse(message(0)) is None
+
+
+def test_replay_minute_rest_fixtures_qualify_only_the_observed_markets():
+    from app.data_engine.bar_basis import native_bar_spec
+
+    captured = json.loads((Path(__file__).parent / "fixtures/bar_basis/replay-minute-rest.json").read_text())
+    for identity, fixture in captured.items():
+        venue, market_type = identity.split("-", 1)
+        body = fixture["body"]
+        rows = body["result"]["list"] if venue == "bybit" else body["data"]
+        opens = sorted(int(row[0]) for row in rows)
+        assert opens == [opens[0], opens[0] + 60_000, opens[0] + 120_000]
+        assert opens[0] % 60_000 == 0
+        assert native_bar_spec(venue, market_type, "1m", "history").basis_interval == "1m"
+        assert native_bar_spec(venue, "swap.inverse", "1m", "history").basis_interval is None
+        assert native_bar_spec(venue, market_type, "1m", "realtime").basis_interval is None

@@ -80,6 +80,13 @@ async def test_version_images_preserve_pixels_and_same_time_event_boundary_acros
         await service.training.start_review(run, event_id=event["event_id"])
         history = await service.training.notes(run, track)
         assert history["notes"] == [original]
+        # Both contexts point at the same event and market time. The live PNG was captured after it.
+        assert history["context"]["timelineSequence"] == later["timelineSequence"]
+        with pytest.raises(TrainingRunError) as unpublished_copy:
+            await service.training.save_note_capture(run, track, **{
+                **payload(history["context"], "copied-future-pixels"), "captured_context": later,
+            })
+        assert unpublished_copy.value.code == "REPLAY_NOTE_CAPTURE_INVALID"
         assert (await service.training.note_captures(run, track))["captures"] == [first["capture"]]
         with pytest.raises(TrainingRunError) as future_version:
             await service.training.note_capture_image(run, track, "plan", 2, "capture-b")

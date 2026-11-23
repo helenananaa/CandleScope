@@ -1,4 +1,6 @@
 import type { IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, SeriesType } from "lightweight-charts";
+import { isOrdinalAxisTime } from "../features/chart-representation/axisTime.js";
+import type { OrdinalAxisTime } from "../features/chart-representation/chartRepresentationTypes.js";
 import type { ChartTime } from "./chartAdapterTypes.js";
 import { prepareDrawingCoordinateContext, resolveDrawingDataPointsToCoordinates } from "./coordinateBridge.js";
 import { drawingColor as color, drawingNumber as num, drawingRows as rows, drawingText as text, drawingCellSpan } from "../features/backtest/native/nativeDrawingModel.js";
@@ -10,6 +12,21 @@ const array = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 const record = (value: unknown): Row => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 const fontSize = (v: unknown) => Math.max(8, Math.min(36, num(v) ?? ({ tiny: 9, small: 11, normal: 14, large: 18, huge: 24 }[text(v).split(".").at(-1)!] ?? 12)));
 const dash = (v: unknown) => text(v).includes("dotted") ? [2, 4] : text(v).includes("dashed") ? [8, 5] : [];
+
+/** Ordinal execution keys and explicit script clocks are distinct coordinates. */
+export function pineSceneOrdinalCoordinate(axes: readonly OrdinalAxisTime[], value: number,
+  coordinate: (time: ChartTime) => number | null, spacing: number, clock = false): number | null {
+  if (!axes.length || !Number.isFinite(value)) return null;
+  const stamp = (index: number) => clock ? axes[index]!.sourceTime : axes[index]!.order + 1;
+  let lo = 0, hi = axes.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (stamp(mid) < value) lo = mid + 1; else hi = mid; }
+  if (lo < axes.length && stamp(lo) === value) return coordinate(axes[lo]!);
+  const left = Math.max(0, Math.min(axes.length - 1, lo - 1));
+  const x = coordinate(axes[left]!); if (x === null) return null;
+  const next = axes[left + 1], right = next ? coordinate(next) : null;
+  const span = next ? stamp(left + 1) - stamp(left) : clock ? 60 : 1;
+  return x + (value - stamp(left)) / (span || (clock ? 60 : 1)) * (right === null ? spacing : right - x);
+}
 
 export function pineSceneRange(scene: Row) {
   const values: number[] = [];
@@ -58,11 +75,15 @@ export class PineScenePrimitive {
       const left = Math.max(0, Math.min(times.length - 2, Math.floor(index)));
       return times[left]! + (index - left) * ((times[left + 1] ?? times[left]! + 60) - times[left]!);
     };
-    const x = (time: number) => resolveDrawingDataPointsToCoordinates(attached.chart, attached.series, [{ time: time as ChartTime }], context)[0] ?? null;
+    const axes = array(scene.axisTimes).filter(isOrdinalAxisTime);
+    const coordinate = (time: ChartTime) => resolveDrawingDataPointsToCoordinates(attached.chart, attached.series, [{ time }], context)[0] ?? null;
+    const x = (time: number, clock = false) => scene.inputAxis === "display-ordinal"
+      ? pineSceneOrdinalCoordinate(axes, time, coordinate, attached.chart.timeScale().options().barSpacing, clock)
+      : coordinate(time);
     const y = (value: unknown) => num(value) === undefined ? null : attached.series.priceToCoordinate(Number(value));
     const point = (row: Row, xv: unknown, yv: unknown): Point | null => {
       if (num(xv) === undefined) return null;
-      const px = x(text(row.xloc).endsWith("bar_time") ? Number(xv) / 1000 : timeAt(Number(xv))), py = y(yv);
+      const px = x(text(row.xloc).endsWith("bar_time") ? Number(xv) / 1000 : timeAt(Number(xv)), text(row.xloc).endsWith("bar_time")), py = y(yv);
       return px === null || py === null ? null : { x: px, y: py };
     };
     target.useBitmapCoordinateSpace((scope) => {
@@ -116,7 +137,7 @@ export class PineScenePrimitive {
           c.font = `${fontSize(row.textsize)}px sans-serif`; c.textAlign = "center"; c.fillStyle = color(row.textcolor); c.fillText(text(row.text), (left + right) / 2, (top + bottom) / 2);
         } else if (kind === "labels") {
           let price = row.y;
-          const index = text(row.xloc).endsWith("bar_time") ? times.indexOf(Number(row.x) / 1000) : Number(row.x);
+          const index = text(row.xloc).endsWith("bar_time") ? (axes.length ? axes.map(axis => axis.sourceTime) : times).indexOf(Number(row.x) / 1000) : Number(row.x);
           if (text(row.yloc).endsWith("abovebar")) price = array(scene.highs)[index];
           if (text(row.yloc).endsWith("belowbar")) price = array(scene.lows)[index];
           const p = point(row, row.x, price); if (!p) continue;

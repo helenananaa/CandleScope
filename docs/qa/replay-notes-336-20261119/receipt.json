@@ -1,0 +1,726 @@
+{
+  "schema": "candlescope.imported-bar-replay-native/1",
+  "sourceCommit": "75298147454021c328e3d5535e89049dfa4fa9dc",
+  "transport": "packaged bundled backend, real imported BAR data and formal replay managers; isolated QA profile, no response substitution",
+  "steps": [
+    {
+      "name": "launch",
+      "at": "2026-11-19T06:02:57.569Z",
+      "evidence": {
+        "packaged": true,
+        "pid": 30903
+      }
+    },
+    {
+      "name": "two-runs-two-markets",
+      "at": "2026-11-19T06:02:59.338Z",
+      "evidence": [
+        {
+          "label": "A",
+          "run": "85d563e1d1c149c4ac1f60fdafaee592",
+          "notes": "/api/v1/replay/runs/85d563e1d1c149c4ac1f60fdafaee592/tracks/track-1/notes",
+          "track": {
+            "run_id": "85d563e1d1c149c4ac1f60fdafaee592",
+            "track_id": "track-1",
+            "stable_ordinal": 1,
+            "adapter_session_id": "f96c83c6912543ecb152cc54e2e03896",
+            "exchange": "local-0d3f1adeea704b4f956ab4ae214b117e",
+            "market_type": "local_bar",
+            "symbol": "BTCUSDT",
+            "settlement_asset": "USDT",
+            "state": "READY",
+            "source_kind": "BAR",
+            "subscription_tier": "FULL",
+            "cursor": {
+              "virtual_time_ms": 1700006040000,
+              "source_sequence": 0,
+              "revision": 1
+            },
+            "forced_full_reasons": [
+              "VIEWED"
+            ],
+            "capabilities": {
+              "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+              "BASIS": "UNSUPPORTED_NO_HISTORY",
+              "FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+              "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "INDICATORS": "AVAILABLE_EXACT",
+              "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+              "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "OHLCV": "AVAILABLE_EXACT",
+              "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+              "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+            },
+            "public_price": "100",
+            "position": {
+              "entry_price": null,
+              "mark_price": "100",
+              "notional": "0",
+              "quantity": "0",
+              "realized_pnl": "0",
+              "unrealized_pnl": "0"
+            },
+            "open_order_count": 0,
+            "degraded_reason": null,
+            "account": {
+              "available_equity": "10000",
+              "cash_balance": "10000",
+              "equity": "10000",
+              "fees_paid": "0",
+              "margin_used": "0",
+              "quote_asset": "USDT",
+              "realized_pnl": "0",
+              "reserved_margin": "0",
+              "unrealized_pnl": "0"
+            },
+            "historical_book": {
+              "mode": "OFF",
+              "capability_state": "UNSUPPORTED_NO_HISTORY",
+              "status": "OFF",
+              "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+              "queue_exact": false,
+              "as_of_virtual_time_ms": null,
+              "last_update_id": null,
+              "bids": [],
+              "asks": [],
+              "book_hash": null,
+              "message": "历史盘口模式未启用"
+            }
+          },
+          "original": {
+            "id": "plan-track-1",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178881,
+            "updatedAtMs": 1795068178881,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "A BTCUSDT before fill"
+            },
+            "body": "",
+            "timelineSequence": 2,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "latest": {
+            "id": "plan-track-1",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178881,
+            "updatedAtMs": 1795068178967,
+            "effectiveTimeMs": 1700006099999,
+            "revisionCount": 2,
+            "fields": {
+              "entryBasis": "A BTCUSDT updated",
+              "replayFillIds": "[\"fill-0000000002\"]",
+              "replayTradeIds": "[\"trade-0000000001\"]"
+            },
+            "body": "",
+            "timelineSequence": 15,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [
+              {
+                "eventTimeMs": 1700006099999,
+                "fillId": "fill-0000000002",
+                "id": "fill-0000000002",
+                "kind": "FILL",
+                "price": "100.9899",
+                "quantity": "0.1",
+                "side": "SELL",
+                "sourceSequence": 1
+              },
+              {
+                "eventTimeMs": 1700006099999,
+                "fillId": "fill-0000000002",
+                "id": "trade-0000000001",
+                "kind": "TRADE",
+                "price": "100.9899",
+                "quantity": "0.1",
+                "side": "BUY",
+                "sourceSequence": 1
+              }
+            ],
+            "screenshots": []
+          },
+          "supplement": {
+            "id": "review-track-1",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178983,
+            "updatedAtMs": 1795068178983,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "A BTCUSDT retrospective"
+            },
+            "body": "",
+            "timelineSequence": 3,
+            "reviewNote": true,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          }
+        },
+        {
+          "label": "A",
+          "run": "85d563e1d1c149c4ac1f60fdafaee592",
+          "notes": "/api/v1/replay/runs/85d563e1d1c149c4ac1f60fdafaee592/tracks/track-2/notes",
+          "track": {
+            "run_id": "85d563e1d1c149c4ac1f60fdafaee592",
+            "track_id": "track-2",
+            "stable_ordinal": 2,
+            "adapter_session_id": "0cabd229aa324b4bbd4165a603a9e5be",
+            "exchange": "local-03f44c9565eb4095a8d08c033149a7f2",
+            "market_type": "local_bar",
+            "symbol": "ETHUSDT",
+            "settlement_asset": "USDT",
+            "state": "READY",
+            "source_kind": "BAR",
+            "subscription_tier": "FULL",
+            "cursor": {
+              "virtual_time_ms": 1700006040000,
+              "source_sequence": 0,
+              "revision": 2
+            },
+            "forced_full_reasons": [],
+            "capabilities": {
+              "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+              "BASIS": "UNSUPPORTED_NO_HISTORY",
+              "FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+              "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "INDICATORS": "AVAILABLE_EXACT",
+              "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+              "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "OHLCV": "AVAILABLE_EXACT",
+              "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+              "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+            },
+            "public_price": "200",
+            "position": {
+              "entry_price": null,
+              "mark_price": "200",
+              "notional": "0",
+              "quantity": "0",
+              "realized_pnl": "0",
+              "unrealized_pnl": "0"
+            },
+            "open_order_count": 0,
+            "degraded_reason": null,
+            "account": {
+              "available_equity": "10000",
+              "cash_balance": "10000",
+              "equity": "10000",
+              "fees_paid": "0",
+              "margin_used": "0",
+              "quote_asset": "USDT",
+              "realized_pnl": "0",
+              "reserved_margin": "0",
+              "unrealized_pnl": "0"
+            },
+            "historical_book": {
+              "mode": "OFF",
+              "capability_state": "UNSUPPORTED_NO_HISTORY",
+              "status": "OFF",
+              "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+              "queue_exact": false,
+              "as_of_virtual_time_ms": null,
+              "last_update_id": null,
+              "bids": [],
+              "asks": [],
+              "book_hash": null,
+              "message": "历史盘口模式未启用"
+            }
+          },
+          "original": {
+            "id": "plan-track-2",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178889,
+            "updatedAtMs": 1795068178889,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "A ETHUSDT before fill"
+            },
+            "body": "",
+            "timelineSequence": 2,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "latest": {
+            "id": "plan-track-2",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178889,
+            "updatedAtMs": 1795068178970,
+            "effectiveTimeMs": 1700006099999,
+            "revisionCount": 2,
+            "fields": {
+              "entryBasis": "A ETHUSDT updated"
+            },
+            "body": "",
+            "timelineSequence": 15,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "supplement": {
+            "id": "review-track-2",
+            "runId": "85d563e1d1c149c4ac1f60fdafaee592",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068178990,
+            "updatedAtMs": 1795068178990,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "A ETHUSDT retrospective"
+            },
+            "body": "",
+            "timelineSequence": 3,
+            "reviewNote": true,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          }
+        },
+        {
+          "label": "B",
+          "run": "aea442e2db494eb88d585f68dd09fbdd",
+          "notes": "/api/v1/replay/runs/aea442e2db494eb88d585f68dd09fbdd/tracks/track-1/notes",
+          "track": {
+            "run_id": "aea442e2db494eb88d585f68dd09fbdd",
+            "track_id": "track-1",
+            "stable_ordinal": 1,
+            "adapter_session_id": "18b7e2a1fa5d42ed881c62b7ac75e6bb",
+            "exchange": "local-0d3f1adeea704b4f956ab4ae214b117e",
+            "market_type": "local_bar",
+            "symbol": "BTCUSDT",
+            "settlement_asset": "USDT",
+            "state": "READY",
+            "source_kind": "BAR",
+            "subscription_tier": "FULL",
+            "cursor": {
+              "virtual_time_ms": 1700006040000,
+              "source_sequence": 0,
+              "revision": 1
+            },
+            "forced_full_reasons": [
+              "VIEWED"
+            ],
+            "capabilities": {
+              "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+              "BASIS": "UNSUPPORTED_NO_HISTORY",
+              "FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+              "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "INDICATORS": "AVAILABLE_EXACT",
+              "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+              "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "OHLCV": "AVAILABLE_EXACT",
+              "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+              "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+            },
+            "public_price": "100",
+            "position": {
+              "entry_price": null,
+              "mark_price": "100",
+              "notional": "0",
+              "quantity": "0",
+              "realized_pnl": "0",
+              "unrealized_pnl": "0"
+            },
+            "open_order_count": 0,
+            "degraded_reason": null,
+            "account": {
+              "available_equity": "10000",
+              "cash_balance": "10000",
+              "equity": "10000",
+              "fees_paid": "0",
+              "margin_used": "0",
+              "quote_asset": "USDT",
+              "realized_pnl": "0",
+              "reserved_margin": "0",
+              "unrealized_pnl": "0"
+            },
+            "historical_book": {
+              "mode": "OFF",
+              "capability_state": "UNSUPPORTED_NO_HISTORY",
+              "status": "OFF",
+              "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+              "queue_exact": false,
+              "as_of_virtual_time_ms": null,
+              "last_update_id": null,
+              "bids": [],
+              "asks": [],
+              "book_hash": null,
+              "message": "历史盘口模式未启用"
+            }
+          },
+          "original": {
+            "id": "plan-track-1",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179176,
+            "updatedAtMs": 1795068179176,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "B BTCUSDT before fill"
+            },
+            "body": "",
+            "timelineSequence": 2,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "latest": {
+            "id": "plan-track-1",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179176,
+            "updatedAtMs": 1795068179271,
+            "effectiveTimeMs": 1700006099999,
+            "revisionCount": 2,
+            "fields": {
+              "entryBasis": "B BTCUSDT updated",
+              "replayFillIds": "[\"fill-0000000002\"]",
+              "replayTradeIds": "[\"trade-0000000001\"]"
+            },
+            "body": "",
+            "timelineSequence": 15,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [
+              {
+                "eventTimeMs": 1700006099999,
+                "fillId": "fill-0000000002",
+                "id": "fill-0000000002",
+                "kind": "FILL",
+                "price": "100.9899",
+                "quantity": "0.1",
+                "side": "SELL",
+                "sourceSequence": 1
+              },
+              {
+                "eventTimeMs": 1700006099999,
+                "fillId": "fill-0000000002",
+                "id": "trade-0000000001",
+                "kind": "TRADE",
+                "price": "100.9899",
+                "quantity": "0.1",
+                "side": "BUY",
+                "sourceSequence": 1
+              }
+            ],
+            "screenshots": []
+          },
+          "supplement": {
+            "id": "review-track-1",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-1",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179293,
+            "updatedAtMs": 1795068179293,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "B BTCUSDT retrospective"
+            },
+            "body": "",
+            "timelineSequence": 3,
+            "reviewNote": true,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          }
+        },
+        {
+          "label": "B",
+          "run": "aea442e2db494eb88d585f68dd09fbdd",
+          "notes": "/api/v1/replay/runs/aea442e2db494eb88d585f68dd09fbdd/tracks/track-2/notes",
+          "track": {
+            "run_id": "aea442e2db494eb88d585f68dd09fbdd",
+            "track_id": "track-2",
+            "stable_ordinal": 2,
+            "adapter_session_id": "12de984f3d1e4daaa9c28910e885db05",
+            "exchange": "local-03f44c9565eb4095a8d08c033149a7f2",
+            "market_type": "local_bar",
+            "symbol": "ETHUSDT",
+            "settlement_asset": "USDT",
+            "state": "READY",
+            "source_kind": "BAR",
+            "subscription_tier": "FULL",
+            "cursor": {
+              "virtual_time_ms": 1700006040000,
+              "source_sequence": 0,
+              "revision": 2
+            },
+            "forced_full_reasons": [],
+            "capabilities": {
+              "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+              "BASIS": "UNSUPPORTED_NO_HISTORY",
+              "FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+              "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+              "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "INDICATORS": "AVAILABLE_EXACT",
+              "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+              "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+              "OHLCV": "AVAILABLE_EXACT",
+              "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+              "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+              "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+              "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+            },
+            "public_price": "200",
+            "position": {
+              "entry_price": null,
+              "mark_price": "200",
+              "notional": "0",
+              "quantity": "0",
+              "realized_pnl": "0",
+              "unrealized_pnl": "0"
+            },
+            "open_order_count": 0,
+            "degraded_reason": null,
+            "account": {
+              "available_equity": "10000",
+              "cash_balance": "10000",
+              "equity": "10000",
+              "fees_paid": "0",
+              "margin_used": "0",
+              "quote_asset": "USDT",
+              "realized_pnl": "0",
+              "reserved_margin": "0",
+              "unrealized_pnl": "0"
+            },
+            "historical_book": {
+              "mode": "OFF",
+              "capability_state": "UNSUPPORTED_NO_HISTORY",
+              "status": "OFF",
+              "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+              "queue_exact": false,
+              "as_of_virtual_time_ms": null,
+              "last_update_id": null,
+              "bids": [],
+              "asks": [],
+              "book_hash": null,
+              "message": "历史盘口模式未启用"
+            }
+          },
+          "original": {
+            "id": "plan-track-2",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179185,
+            "updatedAtMs": 1795068179185,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "B ETHUSDT before fill"
+            },
+            "body": "",
+            "timelineSequence": 2,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "latest": {
+            "id": "plan-track-2",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179185,
+            "updatedAtMs": 1795068179276,
+            "effectiveTimeMs": 1700006099999,
+            "revisionCount": 2,
+            "fields": {
+              "entryBasis": "B ETHUSDT updated"
+            },
+            "body": "",
+            "timelineSequence": 15,
+            "reviewNote": false,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          },
+          "supplement": {
+            "id": "review-track-2",
+            "runId": "aea442e2db494eb88d585f68dd09fbdd",
+            "trackId": "track-2",
+            "marketTimeMs": 1700006040000,
+            "createdAtMs": 1795068179303,
+            "updatedAtMs": 1795068179303,
+            "effectiveTimeMs": 1700006040000,
+            "revisionCount": 1,
+            "fields": {
+              "entryBasis": "B ETHUSDT retrospective"
+            },
+            "body": "",
+            "timelineSequence": 3,
+            "reviewNote": true,
+            "revisions": [],
+            "links": [],
+            "screenshots": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "failed-save-409",
+      "at": "2026-11-19T06:03:00.840Z",
+      "evidence": {
+        "note": "plan-track-1",
+        "text": "draft from the original event after failed save"
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T06:03:00.916Z",
+      "evidence": {
+        "ownedPids": [
+          30903,
+          30907,
+          30908,
+          30911,
+          30915,
+          30916,
+          30919
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T06:03:01.720Z",
+      "evidence": {
+        "elapsedMs": 804
+      }
+    },
+    {
+      "name": "launch",
+      "at": "2026-11-19T06:03:05.601Z",
+      "evidence": {
+        "packaged": true,
+        "pid": 30957
+      }
+    },
+    {
+      "name": "restart",
+      "at": "2026-11-19T06:03:07.888Z",
+      "evidence": {
+        "draft": "draft from the original event after failed save",
+        "history": [
+          4,
+          3,
+          2,
+          1
+        ],
+        "isolatedScopes": 4,
+        "accountAndCursorUnchanged": true,
+        "retainedPngBytes": 28263,
+        "retainedTradeAndFill": [
+          "FILL",
+          "TRADE"
+        ]
+      }
+    },
+    {
+      "name": "same-event-review-hides-live-draft",
+      "at": "2026-11-19T06:03:08.696Z",
+      "evidence": {
+        "sequence": 15,
+        "event": "review-event-00000015",
+        "selectedRun": "85d563e1d1c149c4ac1f60fdafaee592"
+      }
+    },
+    {
+      "name": "package",
+      "at": "2026-11-19T06:03:08.761Z",
+      "evidence": {
+        "asarSha256": "f3aa690d8354297e79d2469d01506fa26f268b2a3600566ec83075d430c680c6",
+        "offlineBlockedAttempts": 0
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T06:03:08.833Z",
+      "evidence": {
+        "ownedPids": [
+          30957,
+          30958,
+          30959,
+          30960,
+          30962,
+          30963,
+          30965
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T06:03:09.577Z",
+      "evidence": {
+        "elapsedMs": 744
+      }
+    }
+  ],
+  "errors": [],
+  "scope": "macOS arm64 packaged Replay notes, two runs and two imported BAR markets per run",
+  "passed": true,
+  "packageVerification": {
+    "sourceAndDesktopFiles": 1160,
+    "builtFrontendFiles": 170,
+    "mismatches": 0,
+    "strictSignatureBeforeAndAfter": true,
+    "runtime": "Reused macOS arm64 Python and plugins from unified-plugin-349-20261118. Rebuilt control bundle, frontend and Electron application."
+  }
+}

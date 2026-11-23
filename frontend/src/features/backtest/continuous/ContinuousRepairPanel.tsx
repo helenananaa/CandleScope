@@ -152,7 +152,7 @@ export default function ContinuousRepairPanel({ manager, view, repair, active, a
       }} />{t("repair.resumeAfter")}</label>
       <button type="button" disabled={busy || !enabled || storageFailed} onClick={inspectRange}>{t("repair.preview")}</button>
     </>}
-    {preview && !repairing && <div className="continuous-repair-preview">
+    {preview && !repairing && <div>
       <dl><div><dt>{t("repair.from")}</dt><dd>{utc(preview.plan.from_ms)}</dd></div>
         <div><dt>{t("repair.through")}</dt><dd>{utc(preview.plan.through_ms)}</dd></div></dl>
       <p>{t("repair.reused", { count: preview.plan.anchor_sequence })} · {t("repair.bars", { count: preview.plan.recompute_bars })}</p>

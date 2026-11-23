@@ -1,0 +1,110 @@
+{
+  "platform": "macOS 26.6.2 arm64",
+  "arch": "arm64",
+  "asarSha256": "sha256:2ee62a90e7d0a167100ffc3c89b06fc14698b363715eedd5c2836c36f3188771",
+  "sourceSha256": "sha256:b185edf6cda5ddbae0837e641cb0b23cd6e47b4a151f89b2b7e40038862f06af",
+  "fixtureSha256": "sha256:f2257eb03d58a923ceec7768f8817c6d71ab984c3fd9a33683f0ba6d0cd94d11",
+  "legacyPackageSha256": "sha256:6f0a40aea1b131ed002121c23ec379d5c359751a345ddba46d17f62d6ee1de64",
+  "packages": {
+    "candlescope.pine-compat": {
+      "schema": "candlescope.bundled-unified-pine/1",
+      "filename": "candlescope-pine-unified-0.4.0-Darwin-arm64.cspkg",
+      "sha256": "sha256:d3d06694619380a56b4cc279b3d32b8ddee6d34829e98253883886404257106b",
+      "size": 11863787
+    },
+    "candlescope.python-indicator": {
+      "schema": "candlescope.bundled-unified-python/1",
+      "filename": "candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg",
+      "sha256": "sha256:827dcd5cbd210b8918d97c6c58c5e1c891efc08b9719daae95ef9e0e7a544d46",
+      "size": 556783
+    }
+  },
+  "phases": [
+    {
+      "name": "activate-and-compute",
+      "electron": "43.3.0",
+      "pythonInstance": "2490be48af164f308a8deeb3a02c6591",
+      "activeLanguages": [
+        "pine",
+        "python"
+      ],
+      "invalidPython": true,
+      "retiredBundleRejected": [
+        "PLUGIN_SCRIPT_RUNTIME_UPDATE_REQUIRED",
+        "invalid unified package: unsupported plugin schema; update the plugin package explicitly"
+      ],
+      "oldRegistryPreserved": true,
+      "ownedProcesses": 10,
+      "remainingOwnedProcesses": [],
+      "pythonOutput": {
+        "points": [
+          {
+            "time": 1700000100,
+            "value": 22
+          },
+          {
+            "time": 1700000160,
+            "value": 24
+          }
+        ],
+        "type": "histogram",
+        "window": {
+          "requestedBars": 4,
+          "confirmedBars": 3,
+          "computedBars": 2,
+          "offset": 1,
+          "formingBarsExcluded": 1
+        }
+      },
+      "pineOutput": {
+        "points": [
+          {
+            "time": 1700000040,
+            "value": 20
+          },
+          {
+            "time": 1700000100,
+            "value": 22
+          },
+          {
+            "time": 1700000160,
+            "value": 24
+          },
+          {
+            "time": 1700000220,
+            "value": 26
+          }
+        ],
+        "type": "line"
+      }
+    },
+    {
+      "name": "restart-disable-and-reenable",
+      "electron": "43.3.0",
+      "pythonInstance": "45f75a531a4d4990bb3ef8d12ac136d5",
+      "disabledRevokesCompute": true,
+      "reactivated": true,
+      "oldRegistryPreserved": true,
+      "ownedProcesses": 11,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restore-pr481-pine-replay",
+      "electron": "43.3.0",
+      "pineDigest": "sha256:d3d06694619380a56b4cc279b3d32b8ddee6d34829e98253883886404257106b",
+      "replayId": "nr_60f581c3c756400bafd8612642b7b862",
+      "restoredBars": 60,
+      "completedBars": 600,
+      "ledgerMatchesOriginal": true,
+      "oldRegistryPreserved": true,
+      "ownedProcesses": 8,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "signatureVerified": true,
+  "ok": true,
+  "python": "3.12.15",
+  "productSource": "aa232e17c59891c9081dd45118a92e0d00d896db",
+  "profile": "Fresh LIVE profile for two launches and an isolated copy of the #481 LOCAL_OFFLINE profile",
+  "packagedBackendAndPythonSourceMatch": true
+}
