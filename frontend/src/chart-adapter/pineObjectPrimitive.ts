@@ -34,12 +34,13 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
   private scenes: readonly IndicatorDrawing[] = [];
   private bars: readonly Bar[] = [];
   private coordinate: ((time: number) => number | null) | undefined;
+  private sourceCoordinate: ((time: number) => number | null) | undefined;
   private readonly renderer: IPrimitivePaneRenderer = { draw: (target) => target.useMediaCoordinateSpace((scope) => this.draw(scope.context, scope.mediaSize.width, scope.mediaSize.height)) };
   private readonly view = { zOrder: () => "top" as const, renderer: () => this.renderer };
   attached({ chart, series, requestUpdate }: SeriesAttachedParameter<ChartTime>): void { this.chart = chart; this.series = series; this.requestUpdate = requestUpdate; requestUpdate(); }
   detached(): void { this.chart = null; this.series = null; this.requestUpdate = null; }
   paneViews() { return [this.view]; }
-  update(scenes: readonly IndicatorDrawing[], bars: readonly Bar[], coordinate?: (time: number) => number | null) { this.scenes = scenes; this.bars = bars; this.coordinate = coordinate; this.requestUpdate?.(); }
+  update(scenes: readonly IndicatorDrawing[], bars: readonly Bar[], coordinate?: (time: number) => number | null, sourceCoordinate?: (time: number) => number | null) { this.scenes = scenes; this.bars = bars; this.coordinate = coordinate; this.sourceCoordinate = sourceCoordinate ?? coordinate; this.requestUpdate?.(); }
   private timeCoordinate(time: number): number | null {
     if (this.coordinate) return this.coordinate(time);
     const index = pineTimeLogical(time, this.bars);
@@ -95,7 +96,7 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
         if (suffix(r.xloc) !== "bar_time") return this.indexCoordinate(scene, v);
         const time = v / 1000;
         if (time === null) return null;
-        if (this.coordinate) return this.coordinate(time);
+        if (this.sourceCoordinate) return this.sourceCoordinate(time);
         const logical = pineTimeLogical(time, this.bars);
         return logical === null ? null : scale.logicalToCoordinate(logical as Logical);
       }).filter((v): v is number => v !== null);
@@ -120,7 +121,7 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
         const v = num(value); if (v === undefined) return null;
         if (suffix(xloc) !== "bar_time") return this.indexCoordinate(scene, v);
         const time = v / 1000;
-        if (time !== null && this.coordinate) return this.coordinate(time);
+        if (time !== null && this.sourceCoordinate) return this.sourceCoordinate(time);
         const logical = time === null ? null : pineTimeLogical(time, this.bars);
         return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
       };

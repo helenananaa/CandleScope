@@ -28,29 +28,28 @@ export function runStrategyResearchSmoke(root = repoRoot) {
   if (topBar.includes('href="/backtest.html"')) {
     throw new Error("TopBar must not keep a sibling /backtest.html entry");
   }
-  const backtestApp = readFileSync(path.join(root, "frontend/src/features/backtest/BacktestApp.tsx"), "utf8");
-  if (!backtestApp.includes("BacktestResearchApp")) {
-    throw new Error("BacktestApp must be a thin research bootstrap");
-  }
-  if (/setInterval\(/.test(backtestApp)) {
-    throw new Error("BacktestApp must not poll Runs");
-  }
-  const flags = readFileSync(
-    path.join(root, "frontend/src/features/research-data/researchDataFlags.ts"),
-    "utf8",
-  );
-  if (
-    !flags.includes("if (raw === undefined)") ||
-    !flags.includes('raw === true || raw === 1 || raw === "1"')
-  ) {
-    throw new Error("library flag must default on and retain explicit rollback");
+  // The flag-off fallbacks (standalone LocalApp, the BacktestApp wrapper, the research-disabled
+  // screen and the library flag) are retired: every page opens the one strategy research app.
+  const retired = [
+    "frontend/src/features/backtest/BacktestApp.tsx",
+    "frontend/src/features/backtest/research/BacktestResearchDisabled.tsx",
+    "frontend/src/features/local-data/LocalApp.tsx",
+    "frontend/src/features/research-data/researchDataFlags.ts",
+  ];
+  for (const file of retired) {
+    if (existsSync(path.join(root, file))) {
+      throw new Error(`retired fallback is back: ${file}`);
+    }
   }
   const bootstrap = readFileSync(
     path.join(root, "frontend/src/features/strategy-research/strategyResearchBootstrap.tsx"),
     "utf8",
   );
-  if (!bootstrap.includes('mode === "local-legacy"') || !bootstrap.includes("<LocalApp")) {
-    throw new Error("flag-off must restore LocalApp compatibility shell");
+  if (!bootstrap.includes("<StrategyResearchApp intent={intent} />")) {
+    throw new Error("every page must open the strategy research app");
+  }
+  if (/LocalApp|BacktestApp\b|BacktestResearchDisabled|local-legacy|backtest-legacy|libraryEnabled/.test(bootstrap)) {
+    throw new Error("the bootstrap must not route to a retired fallback");
   }
   const launch = readFileSync(
     path.join(root, "frontend/src/features/strategy-research/strategyResearchLaunch.ts"),
@@ -67,7 +66,7 @@ export function runStrategyResearchSmoke(root = repoRoot) {
     ok: true,
     canonical: "/strategy.html",
     compatibility: ["/local.html", "/backtest.html"],
-    libraryFlagDefault: 1,
+    retiredFallbacks: retired.length,
   };
 }
 

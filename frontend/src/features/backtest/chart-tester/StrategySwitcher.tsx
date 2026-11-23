@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { Icon } from "../../../components/icons/Icon.js";
+import { Input, moveMenuFocus, useAnchoredPopup } from "../../../components/ui/index.js";
 
 export interface StrategySwitcherItem {
   id: string;
@@ -28,8 +29,15 @@ export function StrategySwitcher({ items, activeId, actions, onSelect, renaming 
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const chosen = useRef<HTMLButtonElement>(null);
   const renameSettled = useRef(false);
   const current = items.find((item) => item.id === activeId) ?? items[0];
+  const menuOpen = open && !renaming;
+  const closeMenu = useCallback(() => setOpen(false), []);
+  // Escape and Tab close it; focus starts on the strategy shown and goes back to the trigger.
+  useAnchoredPopup({ open: menuOpen, onClose: closeMenu, popupRef: menu, triggerRef: trigger, initialFocusRef: chosen });
   useEffect(() => {
     if (!open) return undefined;
     const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -40,7 +48,7 @@ export function StrategySwitcher({ items, activeId, actions, onSelect, renaming 
   if (renaming && current && onRename) {
     const settle = (name: string | null) => { if (!renameSettled.current) { renameSettled.current = true; onRename(name); } };
     return <div className="strategy-switcher">
-      <input className="strategy-switcher-rename" autoFocus maxLength={80} defaultValue={current.name}
+      <Input size="sm" className="strategy-switcher-rename" autoFocus maxLength={80} defaultValue={current.name}
         aria-label={t("strategyCollection.name")} placeholder={t("strategyCollection.default")}
         onFocus={() => { renameSettled.current = false; }}
         onBlur={(event) => settle(event.currentTarget.value)}
@@ -50,18 +58,21 @@ export function StrategySwitcher({ items, activeId, actions, onSelect, renaming 
         }} />
     </div>;
   }
-  return <div className="strategy-switcher" ref={root}
-    onKeyDown={(event) => { if (event.key === "Escape" && open) { event.stopPropagation(); setOpen(false); } }}>
-    <button type="button" className="strategy-switcher-trigger" aria-haspopup="menu" aria-expanded={open}
+  return <div className="strategy-switcher" ref={root}>
+    <button ref={trigger} type="button" className="strategy-switcher-trigger" aria-haspopup="menu" aria-expanded={open}
       aria-label={t("strategyCollection.select")} title={current?.name} onClick={() => setOpen(!open)}>
       <i className="strategy-status-dot" data-running={current?.running === true} aria-hidden="true" />
       <strong>{current?.name ?? t("strategyCollection.default")}</strong>
       {current?.meta && <small>{current.meta}</small>}
       <Icon name="chevron-down" size={12} />
     </button>
-    {open && <div className="strategy-switcher-menu" role="menu" aria-label={t("strategyCollection.list")}>
+    {open && <div ref={menu} className="strategy-switcher-menu" role="menu" aria-label={t("strategyCollection.list")}
+      onKeyDown={(event) => {
+        if (event.key === "Tab") { event.preventDefault(); setOpen(false); return; }
+        moveMenuFocus(event, menu.current);
+      }}>
       <p className="strategy-switcher-heading">{t("strategyCollection.list")}</p>
-      {items.map((item) => <button key={item.id} type="button" role="menuitemradio" aria-checked={item.id === activeId}
+      {items.map((item) => <button key={item.id} ref={item.id === activeId ? chosen : undefined} type="button" role="menuitemradio" aria-checked={item.id === activeId}
         onClick={() => choose(() => onSelect(item.id))}>
         <i className="strategy-status-dot" data-running={item.running === true} aria-hidden="true" />
         <span><strong>{item.name}</strong>{item.meta && <small>{item.meta}</small>}</span>

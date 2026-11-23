@@ -1,0 +1,10 @@
+/* Data preparation jobs, and the summary row of the training hub's preparation section.
+ * The summary rule belongs to the hub; it loads here, after the hub files, because rules in
+ * between depend on the order (cascade order). It moves into features/replay/trainingHub.css
+ * when the hub is rebuilt (design refactor Phase 5). */
+
+.training-hub-preparation > summary { padding: 12px 16px; cursor: pointer; font-size: var(--font-size-md); }
+.preparation-job-list { max-height: 320px; overflow: auto; overscroll-behavior: contain; }
+.preparation-job-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; border-top: 1px solid var(--hub-border); font-size: var(--font-size-md); overflow-wrap: anywhere; }
+.preparation-job-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.preparation-job-actions > :is(button, a) { width: auto; padding: 6px 10px; }

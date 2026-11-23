@@ -59,6 +59,6 @@ test("local support is capability driven and leaves unavailable shared items vis
     script: "plot(close)",
   }, manifest), {
     supported: false,
-    reason: "离线 profile 未启动自定义脚本运行时",
+    reason: "离线模式下不能运行自定义脚本",
   });
 });

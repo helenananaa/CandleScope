@@ -194,6 +194,7 @@ def build_core_plugin_platform_from_environment(
             env, RUNTIME_REGISTRY_NETWORK_UPDATES_ENV, default=False
         ),
         trust_ux_enabled=_environment_bool(env, TRUST_UX_ENABLED_ENV, default=False),
+        allow_legacy_execution=False,
     )
 
 

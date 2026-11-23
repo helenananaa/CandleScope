@@ -187,6 +187,7 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
     from app.indicator.history_worker import history_executor_snapshot, shutdown_builtin_history
     service = NumericIndicatorService(IndicatorInputPort(dm), IndicatorRangeResultService())
     async def run():
+        submitted_before = history_executor_snapshot().get('submitted', 0)
         try:
             result = await service.query(query)
             assert result.status == 'ready', result
@@ -194,7 +195,7 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
             assert state['worker']['pid'] != os.getpid()
             assert state['input_bars'] == 0
             assert len(result.values) == 3
-            assert state['submitted'] == 1
+            assert state['submitted'] - submitted_before == 1
             rows = read_rows(dm)[-100:]
             for output, value in result.values:
                 oracle = compute(output.name, {'symbol': KEY.symbol, 'interval': KEY.interval,
@@ -313,9 +314,10 @@ def test_numeric_input_fingerprint_preserves_sub_wire_precision(dm, query):
 
 def test_numeric_process_rejects_unbounded_input_before_submission():
     from app.indicator.history_worker import run_builtin_history_numeric
+    from app.indicator.query_contracts import MAX_NUMERIC_SOURCE_SLOTS
     async def run():
         with pytest.raises(ValueError, match='bounded input'):
-            await run_builtin_history_numeric(OUTPUTS, {}, [None] * 251)
+            await run_builtin_history_numeric(OUTPUTS, {}, [None] * (MAX_NUMERIC_SOURCE_SLOTS + 1))
         with pytest.raises(ValueError, match='bounded input'):
             await run_builtin_history_numeric(OUTPUTS * 2, {}, [None])
     asyncio.run(run())

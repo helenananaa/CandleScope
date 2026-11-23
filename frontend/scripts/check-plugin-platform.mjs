@@ -54,9 +54,12 @@ for (const entry of fs.readdirSync(extensionRoot, { withFileTypes: true })) {
   assert.doesNotMatch(fs.readFileSync(path.join(extensionRoot, entry.name), "utf8"), /\bimport\s*\(/,
     "Only the trusted extension runtime may load executable extension modules");
 }
-const extensionRuntime = fs.readFileSync(path.join(extensionRoot, "runtime.ts"), "utf8");
-assert.match(extensionRuntime, /extensionManagementRequest\(`\/plan\?afterRevision=/);
-assert.match(extensionRuntime, /extensionSafeMode/);
-assert.match(extensionRuntime, /owned\.dispose/);
+const rendererOwner = fs.readFileSync(path.join(extensionRoot, "unifiedRuntime.ts"), "utf8");
+const realmLifecycle = fs.readFileSync(path.join(root, "desktop", "unified-entry-lifecycle.mjs"), "utf8");
+assert.match(rendererOwner, /unifiedBackgroundRequest\("\/realm",/);
+assert.match(rendererOwner, /unifiedBackgroundRequest\("\/report",/);
+assert.match(rendererOwner, /extensionSafeMode\(\) \|\| plan\.safeMode/);
+assert.doesNotMatch(rendererOwner, /extensionManagementRequest/);
+assert.match(realmLifecycle, /owned\.dispose\(/);
 
 console.log(`Plugin Platform architecture check passed (${files.length} host files, one opaque-origin sandbox gateway).`);

@@ -19,6 +19,7 @@ import type {
   IndicatorRangeBatchResponse,
   IndicatorRegistrySpec,
   IndicatorRevision,
+  IndicatorSeedState,
   IndicatorSignal,
   IndicatorUnifiedAnnotation,
   IndicatorUnifiedSeries,
@@ -803,6 +804,22 @@ export function parseIndicatorRange(
   return { start: Math.floor(start), end: Math.floor(end) };
 }
 
+/**
+ * Builtin range payloads report whether their first value had its full
+ * convergence warmup (ADR-INDICATOR-001 §4). The field is advisory: a missing
+ * or malformed seed leaves the values usable, so it is dropped rather than
+ * rejecting the payload.
+ */
+export function parseIndicatorSeedState(value: unknown): IndicatorSeedState | undefined {
+  if (!isIndicatorRecord(value)) return undefined;
+  const { state, warmupBars, seedBars } = value;
+  if (state !== "converged" && state !== "partial") return undefined;
+  const count = (item: unknown): item is number =>
+    typeof item === "number" && Number.isSafeInteger(item) && item >= 0;
+  if (!count(warmupBars) || !count(seedBars)) return undefined;
+  return { state, warmupBars, seedBars };
+}
+
 export function parseIndicatorRevision(
   value: unknown,
   path = "indicator.dataRevision",
@@ -1012,6 +1029,8 @@ export function parseIndicatorPayloadEnvelope(
   if (range !== undefined && range !== null) {
     envelope.range = parseIndicatorRange(range, `${path}.range`);
   }
+  const seed = parseIndicatorSeedState(record.seed);
+  if (seed !== undefined) envelope.seed = seed;
   if (revision !== undefined && revision !== null) {
     envelope.dataRevision = parseIndicatorRevision(
       revision,

@@ -7,7 +7,7 @@ import pytest
 from app.data_preparation.models import PreparationError
 from app.data_preparation.replay_context import ReplayHistoryContext, project_context
 from app.data_preparation.replay_origin import ReplayContextScope
-from app.indicator.warmup import indicator_warmup_bars
+from app.indicator.warmup import replay_display_warmup_bars
 from app.replay.bars.builder import ReplayDisplayBar
 from app.replay.catalog import ReplaySeriesIdentity
 from app.replay.display_time import SourceBucketTimeMapper
@@ -74,7 +74,7 @@ async def test_bounded_math_uses_local_context_while_origin_is_unavailable(
         mapper = SourceBucketTimeMapper.create(interval=interval,
             actual_replay_start_ms=fixture.REPLAY_START, public_replay_start_ms=snapshot.replay_start_ms)
         width = int(interval[:-1]) * fixture.MINUTE
-        start = max(0, rows[0]["open_time_ms"] - indicator_warmup_bars(name, params) * width)
+        start = max(0, rows[0]["open_time_ms"] - replay_display_warmup_bars(name, params) * width)
         end = rows[-1]["close_time_ms"] + 1
         actual_start, actual_end = mapper.actual_from_public(start), mapper.actual_from_public(end)
         source = [fixture.market_row(at) for at in range(actual_start, actual_end, fixture.MINUTE)]

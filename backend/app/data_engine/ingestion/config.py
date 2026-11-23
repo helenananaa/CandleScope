@@ -278,6 +278,13 @@ class IngestionConfig:
     ccxt_fork_kline_enabled: bool = field(
         default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", True),
     )
+    # Raw public REST/WS envelopes kept in market_source_observations (see
+    # storage/market_sources.py). A host whose storage lives in memory, such
+    # as the browser, turns the capture off. Kline source observations, which
+    # kline revisions rely on, are recorded either way.
+    market_source_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("INGESTION_MARKET_SOURCE_CAPTURE_ENABLED", True),
+    )
     # Zero disables automatic lossless source-log compaction; heads stay hot.
     source_log_retention_days: int = field(
         default_factory=lambda: _env_int("INGESTION_SOURCE_LOG_RETENTION_DAYS", 30),

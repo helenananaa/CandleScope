@@ -1907,8 +1907,25 @@ class LocalDatasetService:
         limit: int,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Read a bounded chart tail from a pinned imported candle revision."""
+        return self._load_pinned_closed_bars(dataset_id, data_epoch=data_epoch, interval=interval,
+            through_ms=through_ms, limit=limit, display_sources=False)
+
+    def load_pinned_display_bars(
+        self, dataset_id: str, *, data_epoch: str, interval: str,
+        through_ms: int | None, limit: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Display-only candles from imported, captured or trade-derived revisions."""
+        return self._load_pinned_closed_bars(dataset_id, data_epoch=data_epoch, interval=interval,
+            through_ms=through_ms, limit=limit, display_sources=True)
+
+    def _load_pinned_closed_bars(
+        self, dataset_id: str, *, data_epoch: str, interval: str,
+        through_ms: int | None, limit: int, display_sources: bool,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        from .user_market_trades import USER_TRADE_SOURCE
         manifest, revision_dir = self._validated_pinned_revision_dir(dataset_id, data_epoch)
-        if manifest.get("source") != "local_dataset":
+        allowed = {"local_dataset", "host_chart_snapshot", USER_TRADE_SOURCE} if display_sources else {"local_dataset"}
+        if manifest.get("source") not in allowed:
             raise LocalDatasetError("Comparison requires imported candles", code="FIDELITY_UNSUPPORTED")
         plan = self.resolve_interval(manifest, interval)
         if through_ms is None:

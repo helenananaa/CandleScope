@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import sys
 from dataclasses import replace
 from typing import Any
 
@@ -21,6 +22,15 @@ _connection_ids = itertools.count(1)
 
 def connection_rules(exchange: str, egress: str | None) -> list[RateLimitRule]:
     capacity, window = (3, 1.0) if exchange == "okx" else (300, 300.0)
+    if sys.platform == "emscripten" and exchange == "binance":
+        # A browser tab starts cold with every page load and has one socket
+        # per client (see ccxt_ext.generic). Spacing attempts a second apart
+        # kept the chart's stream behind the watchlist's; the browser already
+        # opens the sockets to one host in turn. The window is Binance's
+        # documented limit.
+        rules = [RateLimitRule(f"{exchange}_ws_connect_window", f"{exchange}:ws_connect:ip",
+                               capacity, window, algorithm="sliding_window", max_concurrency=8)]
+        return [scope_rate_limit_rule(rule, egress) for rule in rules]
     rules = [
         RateLimitRule(f"{exchange}_ws_connect_window", f"{exchange}:ws_connect:ip",
                       capacity, window, algorithm="sliding_window", max_concurrency=2),

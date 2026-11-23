@@ -1,0 +1,12 @@
+✔ the preparation entry point promotes installed dependencies and built plugins together (67.42925ms)
+✔ the preparation entry point preserves the active runtime when dependencies fail (53.893167ms)
+✔ the preparation entry point preserves the active runtime when ccxt fail (53.162417ms)
+✔ the preparation entry point preserves the active runtime when plugins fail (57.195542ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 283.661667

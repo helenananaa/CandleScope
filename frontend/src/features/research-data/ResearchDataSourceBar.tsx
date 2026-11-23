@@ -1,18 +1,16 @@
+import { Button } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel } from "./researchDataSourceModel.js";
 import type { ResearchSourceRefV1 } from "./researchDataTypes.js";
-import { RESEARCH_DATA_LIBRARY_ENABLED } from "./researchDataFlags.js";
 
 export function ResearchDataSourceBar({
   source,
-  libraryEnabled = RESEARCH_DATA_LIBRARY_ENABLED,
   currentChartEnabled = true,
   onOpenLibrary,
   onSelectCurrentChart,
   sourceLabel,
 }: {
   source: ResearchSourceRefV1 | null;
-  libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
   onOpenLibrary(): void;
   onSelectCurrentChart?(): void;
@@ -28,13 +26,11 @@ export function ResearchDataSourceBar({
         {sourceLabel ?? label}
       </span>
       {source?.kind !== "CURRENT_CHART" && currentChartEnabled && onSelectCurrentChart ? (
-        <button type="button" className="ui-control" data-testid="research-source-use-current-chart" onClick={onSelectCurrentChart}>
+        <Button size="sm" data-testid="research-source-use-current-chart" onClick={onSelectCurrentChart}>
           {t("strategy.useCurrentChart")}
-        </button>
+        </Button>
       ) : null}
-      {libraryEnabled ? (
-        <button type="button" className="ui-control" onClick={onOpenLibrary}>{t("research.source.openLibrary")}</button>
-      ) : null}
+      <Button size="sm" onClick={onOpenLibrary}>{t("research.source.openLibrary")}</Button>
     </div>
   );
 }

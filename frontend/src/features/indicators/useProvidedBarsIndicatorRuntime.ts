@@ -38,6 +38,9 @@ import { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.
 import { providedBarsViewport } from "./providedBarsViewport.js";
 export { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.js";
 
+import { useChartIndicatorInput } from "./useChartIndicatorInput.js";
+import type { ChartIndicatorSelection } from "./chartIndicatorInput.js";
+
 const EMPTY_RANGE_REQUEST = () => false;
 
 export interface ProvidedBarsIndicatorSupport {
@@ -46,13 +49,16 @@ export interface ProvidedBarsIndicatorSupport {
 }
 
 export interface UseProvidedBarsIndicatorRuntimeOptions {
+  chart?: ChartIndicatorSelection;
+  executeBatch?: IndicatorComputeBatchExecutor;
+  chartDerived?: boolean;
   bars: KlineBar[];
   outputBarTimes?: readonly number[];
   candleDownColor?: string;
   candleUpColor?: string;
   chartDataMeta?: ChartDataCommitMeta | null;
   datasetKey: string;
-  computeBatch?: IndicatorComputeBatchExecutor;
+  computeBatch?: IndicatorComputeBatchExecutor | undefined;
   exchange: string;
   interval: string;
   marketType: string;
@@ -155,7 +161,7 @@ export function clearProvidedBarsIndicatorRuntimeFields(
  * projection, while deliberately excluding hosted range, WebSocket and shared
  * result-cache lifecycles.
  */
-export function useProvidedBarsIndicatorRuntime({
+function useProvidedBarsIndicatorCore({
   bars,
   outputBarTimes,
   candleDownColor = "#ef4444",
@@ -163,6 +169,8 @@ export function useProvidedBarsIndicatorRuntime({
   chartDataMeta = null,
   datasetKey,
   computeBatch,
+  executeBatch,
+  chartDerived = false,
   exchange,
   interval,
   marketType,
@@ -189,7 +197,7 @@ export function useProvidedBarsIndicatorRuntime({
     updateIndicatorScript,
   } = useActiveIndicatorStore({
     autoAddVolume: false,
-    normalizeIndicator: prepareProvidedBarsIndicator,
+    normalizeIndicator: chartDerived ? prepareChartIndicator : prepareProvidedBarsIndicator,
     onRequireCompute: requireIndicatorCompute,
     persistence,
   });
@@ -269,6 +277,7 @@ export function useProvidedBarsIndicatorRuntime({
     chartDataRef: barsRef,
     datasetKey,
     ...(computeBatch === undefined ? {} : { computeBatch }),
+    ...(executeBatch === undefined ? {} : { executeBatch }),
     exchange,
     forceHostedSubscriptions: () => undefined,
     historyLimit: MAX_SERIES_BARS,
@@ -357,4 +366,56 @@ export function useProvidedBarsIndicatorRuntime({
       realtimeMode: "historical-only",
     },
   };
+}
+
+/** Keep definitions, including unavailable plugin languages, visible and editable. */
+function prepareChartIndicator(indicator: IndicatorDefinition): IndicatorDefinition {
+  return { ...stripIndicatorRuntimeFields(indicator), executionTarget: "local" };
+}
+
+const markAxis = <T extends object>(item: T): T => ({ ...item, inputAxis: "display-ordinal" });
+
+export function useProvidedBarsIndicatorRuntime(options: UseProvidedBarsIndicatorRuntimeOptions): IndicatorRuntime {
+  const chart = useChartIndicatorInput(options.chart);
+  const persistence = useMemo<ActiveIndicatorPersistence | null>(() => {
+    const original = options.persistence;
+    if (!chart.enabled || !original) return original ?? null;
+    return { ...original, load: () => original.load(), save: list => {
+      const targets = new Map(original.load().map(item => [item.id, item.executionTarget]));
+      original.save(list.map(item => {
+        const saved = { ...item };
+        const target = targets.get(item.id);
+        if (target === undefined) delete saved.executionTarget;
+        else saved.executionTarget = target;
+        return saved;
+      }));
+    }};
+  }, [chart.enabled, options.persistence]);
+  const runtime = useProvidedBarsIndicatorCore(chart.enabled ? {
+    ...options, persistence, bars: chart.bars, chartDerived: true,
+    exchange: options.chart!.source!.exchange, marketType: options.chart!.source!.marketType,
+    symbol: options.chart!.source!.symbol, interval: options.chart!.source!.interval,
+    executeBatch: chart.executeBatch, computeBatch: undefined,
+    chartDataMeta: null, outputBarTimes: chart.bars.map(row => Number(row.time)),
+    datasetKey: `${chart.key}:${chart.revision}`, sourceScopeKey: chart.key,
+    sourceOrdinal: chart.revision, seriesReady: chart.ready ? chart.revision + 1 : 0,
+    visibleThroughSeconds: chart.bars.length ? Number(chart.bars.at(-1)!.time) : null, visibleRangePriority: false,
+  } : options);
+  const view = useMemo(() => {
+    if (!chart.enabled || !chart.ready) {
+      if (!chart.enabled) return runtime.view;
+      return { ...runtime.view, mainOverlayLines: [], subPanes: [], markers: [], fills: [], hlines: [],
+        bgcolors: [], drawings: [], barcolors: [], signals: [],
+        activeIndicators: runtime.view.activeIndicators.map(item => ({ ...item, lines: [], error: chart.error })) };
+    }
+    if (!chart.ordinal) return runtime.view;
+    const map = <T extends object>(items: T[]) => items.map(markAxis);
+    return { ...runtime.view, mainOverlayLines: map(runtime.view.mainOverlayLines),
+      subPanes: runtime.view.subPanes.map(pane => ({ ...pane, lines: map(pane.lines) })),
+      markers: map(runtime.view.markers), fills: map(runtime.view.fills), hlines: map(runtime.view.hlines),
+      bgcolors: map(runtime.view.bgcolors), drawings: map(runtime.view.drawings ?? []),
+      barcolors: map(runtime.view.barcolors), signals: map(runtime.view.signals) };
+  }, [chart.enabled, chart.ordinal, chart.ready, chart.error, runtime.view]);
+  return { ...runtime, view, status: { ...runtime.status,
+    computing: runtime.status.computing || (chart.enabled && !chart.ready && !chart.error) } };
 }

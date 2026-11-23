@@ -1,0 +1,34 @@
+📦 Including license file `LICENSE`
+🔗 Found pyo3 bindings with abi3 support
+🐍 Found CPython 3.12 at /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/.venv/bin/python
+💻 Using `MACOSX_DEPLOYMENT_TARGET=11.0` for aarch64-apple-darwin by default
+   Compiling pine-runtime v0.3.3 (/Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/frontend/.desktop-runtime/plugin-build/pine-compat-runtime-_w8brw56/pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc/crates/pine-runtime)
+warning: methods `chart_close` and `supports_security_timeframe` are never used
+   --> crates/pine-runtime/src/request/timeframe.rs:118:19
+    |
+ 35 | impl RequestTimeframe {
+    | --------------------- methods in this implementation
+...
+118 |     pub(crate) fn chart_close(&self, open: i64) -> Option<i64> {
+    |                   ^^^^^^^^^^^
+...
+126 |     pub(crate) fn supports_security_timeframe(&self, requested: &Self) -> bool {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling pine-host-support v0.3.3 (/Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/frontend/.desktop-runtime/plugin-build/pine-compat-runtime-_w8brw56/pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc/crates/pine-host-support)
+warning: `pine-runtime` (lib) generated 1 warning
+   Compiling pine-python v0.3.3+cs.1 (/Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/frontend/.desktop-runtime/plugin-build/pine-compat-runtime-_w8brw56/pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc/crates/pine-python)
+    Finished `release` profile [optimized] target(s) in 1m 33s
+📦 Built wheel for abi3 Python ≥ 3.10 to /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/frontend/.desktop-runtime/plugin-build/pine-compat-runtime-_w8brw56/built/pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl
+Building wheel...
+Successfully built frontend/.desktop-runtime/plugin-build/bridges-jjqlojok/candlescope_plugin_sdk-0.2.1-py3-none-any.whl
+Building wheel...
+Successfully built frontend/.desktop-runtime/plugin-build/bridges-jjqlojok/candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl
+Building wheel...
+Successfully built frontend/.desktop-runtime/plugin-build/bridges-jjqlojok/candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl
+13b1f6efe42c655112b39ac1defee75da247b3c8e4f402b131a24f3b7a63e7dc  candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl
+6b1f1543fa557dd9d840a95f91c511c0d2aa8823474b19cd5fe99822ae372c56  candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl
+1d86850cf9a25d9a1dfadfcc8d13bdd93896bb8c043ae7bca6e2a03fe6e6aeab  candlescope_plugin_sdk-0.2.1-py3-none-any.whl
+Built and verified bundled runtimes for Darwin-arm64: /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-plugin-build

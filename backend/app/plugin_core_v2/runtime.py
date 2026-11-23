@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,7 @@ class CorePluginPlatform:
         runtime_registry_network_updates_enabled: bool | None = None,
         managed_runtime_registry: ManagedRuntimeRegistryService | None = None,
         trust_ux_enabled: bool = False,
+        allow_legacy_execution: bool = True,
     ) -> None:
         if trust_level not in TRUST_LEVELS:
             raise ValueError("plugin platform trust level is invalid")
@@ -254,6 +256,7 @@ class CorePluginPlatform:
         self.live_testnet_execution_enabled = live_testnet_execution_enabled
         self.marketplace_enabled = marketplace_enabled
         self.trust_ux_enabled = trust_ux_enabled
+        self.allow_legacy_execution = allow_legacy_execution
         self._pinned_python_runtime: PinnedPythonRuntime | None = None
         if managed_runtime_registry is None:
             managed_runtime_registry = build_official_runtime_registry(
@@ -336,6 +339,7 @@ class CorePluginPlatform:
             installer=self.installer,
             roots=tuple(marketplace_roots),
             enabled=marketplace_enabled,
+            allow_legacy_execution=allow_legacy_execution,
             fetcher=marketplace_fetcher,
             managed_runtime_registry=managed_runtime_registry,
             now_provider=marketplace_now_provider,
@@ -514,11 +518,19 @@ class CorePluginPlatform:
 
     @staticmethod
     def _sandbox_key(bundle: VerifiedPlatformBundle, publisher_identity: str) -> str:
+        return CorePluginPlatform._sandbox_key_for_identity(
+            bundle.manifest.plugin.id,
+            bundle.manifest.plugin.version,
+            publisher_identity,
+        )
+
+    @staticmethod
+    def _sandbox_key_for_identity(
+        plugin_id: str, version: str, publisher_identity: str
+    ) -> str:
+        major = version.split(".", 1)[0]
         return hashlib.sha256(
-            (
-                f"{publisher_identity}\0{bundle.manifest.plugin.id}\0"
-                f"{bundle.manifest.plugin.version.split('.', 1)[0]}"
-            ).encode("utf-8")
+            f"{publisher_identity}\0{plugin_id}\0{major}".encode("utf-8")
         ).hexdigest()[:20]
 
     @staticmethod
@@ -713,6 +725,7 @@ class CorePluginPlatform:
         async with self._reconcile_lock:
             if self._started:
                 return
+            await asyncio.to_thread(self.marketplace.recover_legacy_migrations)
             await asyncio.to_thread(self.marketplace.enforce_trust_policy)
             await self.live_broker.start()
             try:
@@ -729,6 +742,7 @@ class CorePluginPlatform:
                 for record in self._registry.plugins:
                     if (
                         record.state == "active"
+                        and record.plugin_id in self._bundles
                         and record.plugin_id in self.approved_startup_plugins
                     ):
                         manifest = self._bundles[record.plugin_id].manifest
@@ -797,6 +811,16 @@ class CorePluginPlatform:
         registry = await asyncio.to_thread(
             load_activation_registry, self.installer.registry_path
         )
+        fenced = await asyncio.to_thread(self.marketplace.legacy_fences)
+        if fenced:
+            registry = replace(
+                registry,
+                plugins=tuple(
+                    record
+                    for record in registry.plugins
+                    if record.plugin_id not in fenced
+                ),
+            )
         records = registry.by_id()
         bundles: dict[str, VerifiedPlatformBundle] = {}
         installations: dict[str, Path] = {}
@@ -809,6 +833,12 @@ class CorePluginPlatform:
         raw_summaries = await asyncio.to_thread(self.grant_store.summary)
         summaries_by_id = {item["pluginId"]: item for item in raw_summaries}
         for plugin_id, record in records.items():
+            summary = summaries_by_id.get(plugin_id)
+            permission_summaries[plugin_id] = self._safe_permission_summary(
+                record, summary
+            )
+            if not self.allow_legacy_execution:
+                continue
             try:
                 bundle, installation = await asyncio.to_thread(
                     self.installer.verify_activation_static, record
@@ -844,10 +874,6 @@ class CorePluginPlatform:
                 )
             except Exception as exc:
                 failures[plugin_id] = self._failure_wire(exc)
-            summary = summaries_by_id.get(plugin_id)
-            permission_summaries[plugin_id] = self._safe_permission_summary(
-                record, summary
-            )
 
         self._registry = registry
         self._records = records
@@ -898,7 +924,12 @@ class CorePluginPlatform:
     async def _add_live_plugin(self, plugin_id: str) -> None:
         record = self._records.get(plugin_id)
         bundle = self._bundles.get(plugin_id)
-        if record is None or bundle is None or record.state != "active":
+        if (
+            record is None
+            or bundle is None
+            or record.state != "active"
+            or self.marketplace.legacy_fenced(plugin_id)
+        ):
             return
         if not await asyncio.to_thread(
             self.grant_store.activation_ready,
@@ -1149,6 +1180,7 @@ class CorePluginPlatform:
             raise core_error(
                 "PLUGIN_CORE_NOT_STARTED", "plugin platform is not started"
             )
+        self.assert_legacy_mutable(plugin_id)
         record = self._records.get(plugin_id)
         if record is None or record.state != "active":
             raise core_error(
@@ -1159,6 +1191,7 @@ class CorePluginPlatform:
         owner = (plugin_id, entrypoint_id)
         lock = self._activation_locks.setdefault(owner, asyncio.Lock())
         async with lock:
+            self.assert_legacy_mutable(plugin_id)
             supervisor = self.manager.supervisor(plugin_id, entrypoint_id)
             if supervisor.state == "active":
                 return supervisor
@@ -1419,6 +1452,14 @@ class CorePluginPlatform:
             )
         return contribution
 
+    def assert_legacy_mutable(self, plugin_id: str) -> None:
+        if self.marketplace.legacy_fenced(plugin_id):
+            raise core_error(
+                "PLUGIN_CORE_MIGRATED",
+                "plugin is owned by the unified lifecycle",
+                plugin_id=plugin_id,
+            )
+
     def _resolve_full(self, full_id: str, *, kind: str) -> CoreContribution:
         contribution = self._contributions.get(full_id)
         if contribution is None or contribution.kind != kind:
@@ -1426,6 +1467,7 @@ class CorePluginPlatform:
                 "PLUGIN_CORE_CONTRIBUTION_NOT_FOUND",
                 "core contribution is not available",
             )
+        self.assert_legacy_mutable(contribution.plugin_id)
         return contribution
 
     async def read_settings(self, full_id: str) -> dict[str, Any]:
@@ -1798,13 +1840,18 @@ class CorePluginPlatform:
             }
             await self._refresh_static_state()
             record = self._records.get(plugin_id)
-            if self._started and record is not None and record.state == "active":
+            active = (
+                record is not None
+                and record.state == "active"
+                and plugin_id in self._bundles
+            )
+            if self._started and active:
                 await self._add_live_plugin(plugin_id)
                 await self._register_work(plugin_id)
             if self._started:
                 event_id = (
                     "candlescope.plugin.enabled/1"
-                    if record is not None and record.state == "active"
+                    if active
                     else "candlescope.plugin.disabled/1"
                 )
                 self.events.publish(event_id, {"pluginId": plugin_id})
@@ -1973,7 +2020,9 @@ class CorePluginPlatform:
                 and plugin_id in live_plugin_ids
             )
             unavailable_reason = None
-            if failure is not None:
+            if not self.allow_legacy_execution:
+                unavailable_reason = "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+            elif failure is not None:
                 unavailable_reason = failure["code"]
             elif not self._started:
                 unavailable_reason = "PLUGIN_PLATFORM_NOT_STARTED"
@@ -2286,16 +2335,6 @@ class CorePluginPlatform:
             permission_diff=permission_diff.to_wire(),
             previous_bundle=self._bundles.get(bundle.manifest.plugin.id),
         )
-        from .runtime_install import RuntimeReviewBundle
-        if isinstance(bundle, RuntimeReviewBundle):
-            preview["executionModel"] = "script-runtime"
-            preview["warning"] = (
-                "Unsigned script runtime: publisher identity is not verified. "
-                "Installation probes and runtime code execute as your current user, "
-                "without an OS sandbox or capability restrictions. Empty declared "
-                "permissions do not restrict file, network or subprocess access. "
-                "Restart CandleScope after installation."
-            )
         return self.trust_policy.prepare_local_install(
             upload_path=upload_path,
             bundle=bundle,
@@ -2340,16 +2379,15 @@ class CorePluginPlatform:
         authorized = False
         bundle: VerifiedPlatformBundle | None = None
         try:
-            from .runtime_install import (
-                is_runtime_bundle, install_runtime_bundle, review_runtime_bundle,
-            )
-            runtime_bundle = await asyncio.to_thread(is_runtime_bundle, claim.path)
+            from .local_bundle import verify_local_platform_bundle
+
             bundle = await asyncio.to_thread(
-                review_runtime_bundle if runtime_bundle else verify_platform_bundle,
+                verify_local_platform_bundle,
                 claim.path,
                 expected_sha256=claim.bundle_sha256,
                 host_version=self.installer.host_version,
             )
+            self.assert_legacy_mutable(bundle.manifest.plugin.id)
             preview_plugin = claim.preview.get("plugin")
             if (
                 not isinstance(preview_plugin, dict)
@@ -2362,14 +2400,8 @@ class CorePluginPlatform:
                     "the claimed local bundle no longer matches its reviewed identity",
                     plugin_id=bundle.manifest.plugin.id,
                 )
-            if runtime_bundle:
-                evidence = TrustEvidence(
-                    "local-developer", manifest_publisher_identity(bundle.manifest),
-                    "local-file", None,
-                )
-            else:
-                await asyncio.to_thread(self.marketplace.record_local_bundle, bundle)
-                evidence = self._trust_evidence(bundle)
+            await asyncio.to_thread(self.marketplace.record_local_bundle, bundle)
+            evidence = self._trust_evidence(bundle)
             previous_decision = await asyncio.to_thread(
                 self.trust_policy.authorize_claimed_local_install,
                 bundle=bundle,
@@ -2377,28 +2409,19 @@ class CorePluginPlatform:
                 evidence=evidence,
             )
             authorized = True
-            if runtime_bundle:
-                result = await asyncio.to_thread(
-                    install_runtime_bundle, claim.path, claim.bundle_sha256,
-                    self.installer.host_version,
-                )
-            else:
-                result = await asyncio.to_thread(
-                    self.installer.install,
-                    claim.path,
-                    expected_sha256=claim.bundle_sha256,
-                    enabled=True,
-                )
-                await self.reconcile_plugin(result.plugin_id)
+            result = await asyncio.to_thread(
+                self.installer.install,
+                claim.path,
+                expected_sha256=claim.bundle_sha256,
+                enabled=True,
+            )
+            await self.reconcile_plugin(result.plugin_id)
             await asyncio.to_thread(
                 self.trust_policy.finalize_local_install,
                 claim=claim,
                 plugin_id=bundle.manifest.plugin.id,
             )
-            return {
-                "installation": result.to_wire(),
-                **({"kind": "script-runtime"} if runtime_bundle else {}),
-            }
+            return {"installation": result.to_wire()}
         except BaseException as exc:
             if bundle is not None and authorized:
                 await asyncio.to_thread(
@@ -2462,6 +2485,7 @@ class CorePluginPlatform:
         confirmation_token: str,
         user_action_id: str,
     ) -> dict[str, Any]:
+        self.assert_legacy_mutable(plugin_id)
         bundle = self._bundles.get(plugin_id)
         if bundle is None:
             raise core_error(
@@ -2639,7 +2663,11 @@ class CorePluginPlatform:
         return results
 
     def health_summary(self) -> dict[str, Any]:
-        active_records = sum(item.state == "active" for item in self._records.values())
+        active_records = (
+            sum(item.state == "active" for item in self._records.values())
+            if self.allow_legacy_execution
+            else 0
+        )
         manager = self.manager.health_summary()
         return {
             "status": "degraded"

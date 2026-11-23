@@ -90,6 +90,7 @@ function AppShell({
 
   return (
     <MarketPageFrame
+      skipToChart
       rootRef={pageExportRef}
       topBar={<TopBar {...model.topBar} extensionControls={<PluginUiErrorBoundary><PluginPlatformToolbar runtime={plugins} /></PluginUiErrorBoundary>} />}
       intervalSelector={<IntervalSelector {...model.intervalSelector} />}

@@ -1,0 +1,6 @@
+{
+  "name": "candlescope-browser-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": { "pyodide": "314.0.8" }
+}

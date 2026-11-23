@@ -471,6 +471,7 @@ class V1ScriptRuntimeCompatibilityBridge:
         root: Path | str,
         indicator_source: IndicatorCatalogSource,
         runtime_host: RuntimeHostSource,
+        excluded_runtime_ids: frozenset[str] = frozenset(),
         clock: Callable[[], str] = _utc_now,
     ) -> None:
         self.root = Path(root).expanduser().resolve(strict=False)
@@ -478,6 +479,7 @@ class V1ScriptRuntimeCompatibilityBridge:
         self.lock_path = self.root / "v1-compatibility-import-v1.lock"
         self.indicator_source = indicator_source
         self.runtime_host = runtime_host
+        self.excluded_runtime_ids = excluded_runtime_ids
         self._clock = clock
         self._thread_lock = threading.RLock()
 
@@ -503,6 +505,8 @@ class V1ScriptRuntimeCompatibilityBridge:
     def _source_identity(self, v1_catalog: Mapping[str, Any]) -> dict[str, Any]:
         registry_entries: list[dict[str, Any]] = []
         for spec in self.runtime_host.registry.plugins:
+            if spec.runtime_id in self.excluded_runtime_ids:
+                continue
             registry_entries.append(
                 {
                     "runtimeId": spec.runtime_id,
@@ -626,8 +630,19 @@ class V1ScriptRuntimeCompatibilityBridge:
                 "PLUGIN_V1_COMPATIBILITY_SOURCE_INVALID",
                 "the v1 Indicator catalog cannot be projected safely",
             )
-        contributions = self._contributions(catalog)
-        identity = self._source_identity(catalog)
+        legacy_catalog = {
+            **catalog,
+            "languages": [
+                item for item in catalog["languages"]
+                if not isinstance(item, Mapping) or item.get("runtimeId") not in self.excluded_runtime_ids
+            ],
+            "runtimes": [
+                item for item in catalog["runtimes"]
+                if not isinstance(item, Mapping) or item.get("id") not in self.excluded_runtime_ids
+            ],
+        }
+        contributions = self._contributions(legacy_catalog)
+        identity = self._source_identity(legacy_catalog)
         return {
             "sourceSha256": _digest(identity),
             "v1IndicatorCatalog": catalog,

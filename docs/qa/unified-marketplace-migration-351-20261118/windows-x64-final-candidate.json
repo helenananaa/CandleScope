@@ -1,0 +1,122 @@
+{
+  "platform": "win32",
+  "architecture": "x64",
+  "signatureVerified": null,
+  "appAsar": "sha256:680172edc7f621ae3f2c9d088d987fcd5e49ba878ff53a70016c1f65a7be7889",
+  "fixtures": {
+    "failed": {
+      "color": "#f7d6e2",
+      "file": "qa.marketplace-theme-1.2.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:3e333e87dad9e236e861a85ce3dcd987f34b29328f7f834c2315516b9ec8f6f7",
+      "version": "1.2.0"
+    },
+    "initial": {
+      "color": "#ece5d2",
+      "file": "qa.marketplace-theme-1.0.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:1a45df7b560f75766fbc114fdc62f8466715e3ec23cd5410aa6dc6adba0bf6ee",
+      "version": "1.0.0"
+    },
+    "legacy": {
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:7b39133fb85a233a8e097fd146d3a67f474f99f2cbab95f239e6b44d2f0361c7",
+      "version": "0.1.0"
+    },
+    "marketplaceId": "candlescope.community",
+    "sources": {
+      "plugins\\platform-grants-v2.json": "sha256:ed26dbf06b34ec9727e5e6c3e5240a596cd59673ba01e3ae44c795d5553d0240",
+      "plugins\\platform-registry-v2.json": "sha256:de35a0c34c599c801d65918b6241d5432aff73b1c08f21a740545af2b4db34e0",
+      "plugins\\plugin-settings-v1.json": "sha256:bbd4aa720ce13b4582fd8894d13453d4e28a221b1d4eb0d24685b11ceca20e2e",
+      "plugins\\private\\b9354ea0d5fb1655ced29296deab3d40\\candlescope.hello-command\\storage-v1.sqlite": "sha256:d9fa45750790d8099faa5631b296c3d003d4ff35893b39dba2c4d032f6f7511c",
+      "plugins\\sandbox-v2\\private\\5f5f1bac781e1f6c0968\\state.bin": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+    },
+    "successor": {
+      "color": "#dfe7f8",
+      "file": "candlescope.hello-command-0.2.0.cspkg",
+      "id": "candlescope.hello-command",
+      "sha256": "sha256:c2f8e8461e99aee30ff2979e16b457e9d4b4971c2dec42915679f530fcb1435e",
+      "version": "0.2.0"
+    },
+    "upgrade": {
+      "color": "#dcefe4",
+      "file": "qa.marketplace-theme-1.1.0.cspkg",
+      "id": "qa.marketplace-theme",
+      "sha256": "sha256:ab2460bca079062950fd9b4066f4a9bd0243c53a9185a0f4c9c8b29dacbb2395",
+      "version": "1.1.0"
+    }
+  },
+  "sessions": [
+    {
+      "name": "install, update and migrate",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "legacyAvailable": false,
+      "legacyExecutionBlocked": true,
+      "cancelLeftInactive": true,
+      "installGeneration": 4,
+      "installedWindow": {
+        "theme": "light",
+        "background": "#ece5d2"
+      },
+      "upgradedWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "migrationGeneration": 11,
+      "migratedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "copiedData": {
+        "settingsRecords": 1,
+        "hostKeys": [
+          "bookmark"
+        ],
+        "sandboxFileSha256": "sha256:80213d5f9a8b60fb5a1f95d1a99dbe918eec0da08a58b91fa081c9c5b3594de8"
+      },
+      "legacyFilesByteIdentical": true,
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart, manual and health rollback",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "restartedWindow": {
+        "theme": "light",
+        "background": "#dfe7f8"
+      },
+      "manualRollback": {
+        "restoredVersion": "0.1.0",
+        "runtimeReady": false
+      },
+      "migratedAppearanceRemoved": true,
+      "healthRollback": {
+        "restoredVersion": "1.1.0",
+        "runtimeReady": true,
+        "healthError": "invalid JSON document",
+        "restoredGeneration": 19
+      },
+      "rolledBackWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "remainingOwnedProcesses": []
+    },
+    {
+      "name": "restart after both rollbacks",
+      "electron": "43.3.0",
+      "pluginPlatformStarted": true,
+      "finalWindow": {
+        "theme": "light",
+        "background": "#dcefe4"
+      },
+      "legacyExecutionBlockedAfterRestart": true,
+      "bothVersionsDataPreserved": true,
+      "remainingOwnedProcesses": []
+    }
+  ],
+  "ok": true,
+  "sourceCommit": "90a844f6330ac7167e71990b80ad8d6c79c43254",
+  "workflowRun": 44300135547
+}

@@ -27,7 +27,6 @@ if (-not (Test-Path -LiteralPath $viteEntrypoint -PathType Leaf)) {
 $env:CANDLESCOPE_RUNTIME_MODE = "LOCAL_OFFLINE"
 $env:CANDLESCOPE_LOCAL_DATA_DIR = $resolvedDataDir
 $env:CANDLESCOPE_RESEARCH_DATA_LIBRARY_ENABLED = "1"
-$env:VITE_RESEARCH_DATA_LIBRARY_ENABLED = "1"
 $env:VITE_API_PROXY_TARGET = "http://127.0.0.1:$BackendPort"
 $env:VITE_DEV_PORT = [string]$FrontendPort
 

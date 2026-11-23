@@ -1,0 +1,42 @@
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "asarSha256": "cc7222f152ca875b9e2a7af4f36f075911170f089ab198edecd61c9840076a8f",
+  "good": "sha256:d3637d4b8f7a2965b0fd0bc1af2087d88c051d6bbc29ffd7c4a33f6a7527eceb",
+  "before": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "phases": [
+    {
+      "name": "01-normal-takeover",
+      "shell": "example.startup-takeover",
+      "page": "/",
+      "runtime": "example.startup-takeover",
+      "exited": true
+    },
+    {
+      "name": "02-fault",
+      "startupError": true,
+      "backendHealthy": false,
+      "sidecarExitCode": 3,
+      "exited": true
+    },
+    {
+      "name": "03-native-disable",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    },
+    {
+      "name": "04-normal-restart",
+      "shell": null,
+      "page": "/",
+      "runtime": null,
+      "exited": true
+    }
+  ],
+  "bad": "sha256:00caf5155b073d9bcd02cbb40bc027883361adc08f2b5925d5c666e9c0197eab",
+  "after": "195aa594ec3f55d208e277bcbd2a447a013b5852800a08a344c029c300c2fa26",
+  "ok": true,
+  "sourceHead": "9aad9388020760569fff608e9de9ec7c35fdae9c",
+  "runtimeMode": "LIVE"
+}

@@ -6,6 +6,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
+import { replaySyntheticSource } from "./replaySyntheticSource.js";
+import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
 import { useReplayCanonicalIndicatorCompute } from "./useReplayCanonicalIndicatorCompute.js";
 import { replayIndicatorPresentation } from "./replayIndicatorPresentation.js";
 import { replayIndicatorCalculationKey } from "./replayCanonicalIndicators.js";
@@ -313,6 +316,7 @@ export function useReplaySharedIndicatorRuntime(
   viewer: ReplayViewerRuntime,
   runScope: string,
   cellPersistence?: ActiveIndicatorPersistence,
+  appearance: Partial<ChartSettings> = {},
 ): ReplaySharedIndicatorRuntime {
   const locale = useLocale();
   const seriesStore = viewer.seriesStore;
@@ -494,6 +498,12 @@ export function useReplaySharedIndicatorRuntime(
   const canonicalScopeKey = `${sourceScopeKey}|${canonical.sourceKey}`;
   const outputBarTimes = useMemo(() => indicatorBars.map(bar => bar.time), [indicatorBars]);
   const providedBars = useProvidedBarsIndicatorRuntime({
+    chart: chartIndicatorSelection(replaySyntheticSource({
+      market: { exchange, marketType, symbol, interval }, seriesKey: seriesStore.seriesKey,
+      sessionId: runtime.store.sessionId, trackId: selectedTrackId, dataEpoch: runtime.store.dataEpoch,
+      revealedBoundaryMs: cursorMs, sourceSequence,
+      ...(historyEpoch === undefined ? {} : { historyEpoch }),
+    }), seriesStore, appearance),
     visibleRangePriority: true,
     computeBatch,
     bars: indicatorBars,

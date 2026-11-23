@@ -38,6 +38,7 @@ import type {
   TrainingRunListResponse,
   TrainingRunMutationResponse,
 } from "./replayV2Types.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export type TrainingHubPhase = "IDLE" | "LOADING" | "READY" | "ERROR" | "STOPPED";
 export type TrainingHubOperation =
@@ -308,6 +309,13 @@ export class TrainingHubLifecycle {
       if (!this.accept(token)) return;
       this.catalog = catalog;
       this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
+      if (!preservedDraft && browserHost() && this.canPrepare(this.draft)) {
+        const source = this.launchContext;
+        this.draft = { ...this.draft, exchange: source?.exchange ?? "binance", marketType: source?.market_type ?? "spot",
+          symbol: source?.symbol ?? "BTCUSDT", indicatorWarmupBars: 5,
+          forwardCacheMs: 15 * 60_000, requestedStartMs: Math.floor(Date.now()/60_000 - 30)*60_000,
+          visibleHistoryMode: "DURATION", visibleHistoryLookbackMs: 5 * 60_000 };
+      }
       if (preservedDraft === null && !this.canPrepare(this.draft)) {
         this.draft = this.sourceAwareDraft(this.draft, catalog);
       }

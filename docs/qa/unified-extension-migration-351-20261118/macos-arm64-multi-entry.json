@@ -1,0 +1,26 @@
+{
+  "revision": "9aad9388020760569fff608e9de9ec7c35fdae9c",
+  "platform": "darwin",
+  "arch": "arm64",
+  "steps": [
+    "Plugin Center import, explicit approval, four entries and live Python calls",
+    "two native windows have separate frontend instances with a common activation",
+    "upgrade revokes previous generation before restart",
+    "complete restart starts updated package and retains private data",
+    "rollback restarts original archive at a new generation",
+    "disable, uninstall and process exit, private data still present"
+  ],
+  "result": "passed",
+  "archives": [
+    {
+      "digest": "sha256:e604688def48a49b99b97f7c51aabe0ba6cb5095f2bc88b02a02417b0848359a",
+      "version": "1.0.0"
+    },
+    {
+      "digest": "sha256:8db871d98f432d3762c7aed3e45844467837fa2544149eaeed1f14a8ee19d357",
+      "version": "2.0.0"
+    }
+  ],
+  "privateDataSha256": "177d8cfc171546adb3056b4ead048fcc112e2aac458929a9950f4095fda957fc",
+  "asarSha256": "sha256:cc7222f152ca875b9e2a7af4f36f075911170f089ab198edecd61c9840076a8f"
+}

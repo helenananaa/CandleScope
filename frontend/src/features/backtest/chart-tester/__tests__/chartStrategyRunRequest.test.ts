@@ -923,3 +923,20 @@ test("external models use the fixed BAR snapshot and pass smoke with the same pa
   assert.deepEqual(calls, ["preview", "external-smoke", "validate", "create"]);
   manager.dispose();
 });
+
+
+test("current chart signal configuration is frozen into creation and automatic preparation", async () => {
+  const signalChart = { transform: "renko" as const, mode: "traditional" as const, box_size: 2 };
+  const selected = { ...request, attachment: { ...request.attachment, signalChart } };
+  const frozen = await freezeChartStrategyRunRequest(selected);
+  signalChart.box_size = 9;
+  assert.equal((buildChartStrategyRunBody({ frozen, revision, resolution: resolution() }).signal_chart as { box_size: number }).box_size, 2);
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (_body, _signal, intent) => {
+    assert.deepEqual(intent?.signal_chart, selected.attachment.signalChart);
+    return { ...resolution(), prepared_run: completed() };
+  };
+  const outcome = await runChartStrategyBacktest({ api, request: selected });
+  assert.equal(outcome.kind, "TERMINAL");
+});

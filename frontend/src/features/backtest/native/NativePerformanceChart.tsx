@@ -1,3 +1,4 @@
+import { Checkbox, SegmentedControl } from "../../../components/ui/index.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -38,9 +39,9 @@ export function NativePerformanceChart({ result }: { result: NativeResult }) {
   const current = selected == null ? points.at(-1) : points[Math.min(selected, points.length - 1)];
   const comparison = current && reference.length ? [...reference].reverse().find(p => p.time <= current.time) : null;
   return <div className="native-performance" ref={host}>
-    <div className="native-performance-heading"><div className="native-performance-tabs">
-      {(["return", "equity", "drawdown"] as const).map(item => <button key={item} aria-pressed={metric === item} onClick={() => setMetric(item)}>{t(`report.${item}`)}</button>)}
-    </div>{metric === "return" && <label><input type="checkbox" checked={benchmark} onChange={event => setBenchmark(event.target.checked)} />{t("report.benchmark")}</label>}</div>
+    <div className="native-performance-heading"><SegmentedControl size="sm" label={t("report.change")} value={metric} onChange={setMetric}
+      options={(["return", "equity", "drawdown"] as const).map((item) => ({ value: item, label: t(`report.${item}`) }))} />
+      {metric === "return" && <Checkbox checked={benchmark} onChange={event => setBenchmark(event.target.checked)} label={t("report.benchmark")} />}</div>
     <div className="native-performance-readout" aria-live="off"><span>{current ? new Date(current.time * 1000).toLocaleString(locale) : "—"}</span><strong>{format(current?.value)}</strong>{comparison && <span className="native-benchmark-value">{t("report.benchmark")} {format(comparison.value)}</span>}</div>
     {!values.length ? <p>{t("report.unavailable")}</p> : <svg viewBox={`0 0 ${width} 180`} role="img" tabIndex={0} aria-label={t("report.chartHelp")}
       onMouseLeave={() => setSelected(null)} onKeyDown={event => {

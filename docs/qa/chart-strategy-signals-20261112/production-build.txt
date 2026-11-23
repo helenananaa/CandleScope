@@ -1,0 +1,178 @@
+
+> frontend@0.3.0 build
+> vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2020 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/desktop-runtime-config.json                                0.06 kB │ gzip:   0.08 kB
+dist/strategy.html                                              1.43 kB │ gzip:   0.57 kB
+dist/local.html                                                 1.44 kB │ gzip:   0.61 kB
+dist/backtest.html                                              1.59 kB │ gzip:   0.62 kB
+dist/index.html                                                 2.50 kB │ gzip:   0.86 kB
+dist/replay.html                                                3.17 kB │ gzip:   0.96 kB
+dist/assets/inter-cyrillic-400-normal-obahsSVq.woff2            7.71 kB
+dist/assets/inter-cyrillic-300-normal-BnqRxXuy.woff2            7.81 kB
+dist/assets/inter-cyrillic-500-normal-BasfLYem.woff2            7.90 kB
+dist/assets/inter-cyrillic-700-normal-CjBOestx.woff2            7.90 kB
+dist/assets/inter-cyrillic-600-normal-CWCymEST.woff2            7.97 kB
+dist/assets/inter-cyrillic-400-normal-HOLc17fK.woff             9.78 kB
+dist/assets/inter-cyrillic-300-normal-LR1W_oT8.woff             9.82 kB
+dist/assets/inter-cyrillic-700-normal-DrXBdSj3.woff             9.91 kB
+dist/assets/inter-cyrillic-600-normal-4D_pXhcN.woff             9.94 kB
+dist/assets/inter-cyrillic-500-normal-CxZf_p3X.woff             9.94 kB
+dist/assets/drawing.worker-C4dKDygz.js                         21.02 kB
+dist/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2     21.17 kB
+dist/assets/jetbrains-mono-latin-500-normal-BWZEU5yA.woff2     21.83 kB
+dist/assets/inter-latin-400-normal-C38fXH4l.woff2              23.66 kB
+dist/assets/inter-latin-300-normal-BVlfKGgI.woff2              23.92 kB
+dist/assets/inter-latin-500-normal-Cerq10X2.woff2              24.27 kB
+dist/assets/inter-latin-700-normal-Yt3aPRUw.woff2              24.36 kB
+dist/assets/inter-latin-600-normal-LgqL8muc.woff2              24.45 kB
+dist/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff      27.50 kB
+dist/assets/jetbrains-mono-latin-500-normal-CJOVTJB7.woff      28.21 kB
+dist/assets/inter-latin-400-normal-CyCys3Eg.woff               30.70 kB
+dist/assets/inter-latin-300-normal-i8F0SvXL.woff               31.01 kB
+dist/assets/inter-latin-600-normal-CiBQ2DWP.woff               31.26 kB
+dist/assets/inter-latin-500-normal-BL9OpVg8.woff               31.28 kB
+dist/assets/inter-latin-700-normal-BLAVimhd.woff               31.32 kB
+dist/assets/codicon-Brq4_Ui5.ttf                              140.96 kB
+dist/assets/editor.worker-CRaYpIdo.js                         272.78 kB
+dist/assets/ResearchReturnDialog-CxjiKBM6.css                   0.53 kB │ gzip:   0.29 kB
+dist/assets/chartTimeNavigation-BlNfv9Zs.css                    0.76 kB │ gzip:   0.33 kB
+dist/assets/continuousStrategy-BnWRb0LD.css                     1.48 kB │ gzip:   0.49 kB
+dist/assets/vendor-DVNuo9oB.css                                 2.69 kB │ gzip:   0.48 kB
+dist/assets/ReadOnlyAccountDock-C0-_jMGo.css                    2.70 kB │ gzip:   0.81 kB
+dist/assets/live-D2_xmNSD.css                                   6.05 kB │ gzip:   1.54 kB
+dist/assets/nativeStrategy-D92U4sHi.css                        16.18 kB │ gzip:   3.25 kB
+dist/assets/backtest-DJuAZOe9.css                              16.45 kB │ gzip:   3.27 kB
+dist/assets/tradingAccounts-CKdJ5nDK.css                       17.77 kB │ gzip:   3.05 kB
+dist/assets/strategyResearchBootstrap-BLXm_U5h.css             32.12 kB │ gzip:   5.84 kB
+dist/assets/chartStrategyTester-gsNOkLBQ.css                   52.81 kB │ gzip:   8.37 kB
+dist/assets/vendor-editor-pVkXmWnx.css                        134.46 kB │ gzip:  20.51 kB
+dist/assets/index-BFwB4Z80.css                                396.55 kB │ gzip:  57.59 kB
+dist/assets/watchlistDisplayName-DkUYINA4.js                    0.14 kB │ gzip:   0.14 kB
+dist/assets/syntheticMessages-GrxK6LxO.js                       0.17 kB │ gzip:   0.14 kB
+dist/assets/LocalMonacoEditor-BR_MV1It.js                       0.27 kB │ gzip:   0.19 kB
+dist/assets/local-BYoBMn-H.js                                   0.30 kB │ gzip:   0.20 kB
+dist/assets/strategy-z7t6cC-k.js                                0.31 kB │ gzip:   0.20 kB
+dist/assets/backtest-CxoN1heC.js                                0.40 kB │ gzip:   0.25 kB
+dist/assets/PreparationWaiting-CzFAUHJP.js                      0.44 kB │ gzip:   0.31 kB
+dist/assets/BacktestResearchDisabled-CEf2k_q7.js                0.47 kB │ gzip:   0.28 kB
+dist/assets/formatDecimal-BVPX2Gp_.js                           0.52 kB │ gzip:   0.36 kB
+dist/assets/MarketStatusBar-C6hLxNjs.js                         0.52 kB │ gzip:   0.33 kB
+dist/assets/strategyTradeReview-YTeW9opq.js                     0.63 kB │ gzip:   0.32 kB
+dist/assets/cacheAccessRuntime-DBLwfa5t.js                      0.66 kB │ gzip:   0.39 kB
+dist/assets/utcDateTimeInput-Cqf3kb0_.js                        0.72 kB │ gzip:   0.39 kB
+dist/assets/MarketChartSurface-C0FRJSxs.js                      0.72 kB │ gzip:   0.43 kB
+dist/assets/BacktestApp-BY9zmeOD.js                             0.99 kB │ gzip:   0.50 kB
+dist/assets/backtestFlags-CSN6kSiD.js                           1.07 kB │ gzip:   0.36 kB
+dist/assets/portfolioCurve-DI6Zb3Xb.js                          1.14 kB │ gzip:   0.58 kB
+dist/assets/PineCurrencyInputs-C1MlkjcJ.js                      1.41 kB │ gzip:   0.62 kB
+dist/assets/PreparedNativeRun-CTIu6u9W.js                       1.65 kB │ gzip:   0.86 kB
+dist/assets/ChartTimeNavigationDialog-CRZKc7F5.js               2.01 kB │ gzip:   1.01 kB
+dist/assets/useRightDrawerResize-BR9Cj72b.js                    2.18 kB │ gzip:   0.94 kB
+dist/assets/nativeExecutionSettings-BVV0-Mp4.js                 2.30 kB │ gzip:   1.07 kB
+dist/assets/nativeStrategyCollection-guqhZcj6.js                2.30 kB │ gzip:   0.95 kB
+dist/assets/providedChartCommands-6MXIalYG.js                   2.49 kB │ gzip:   1.07 kB
+dist/assets/ContinuousAccountView-ispu6bnd.js                   2.49 kB │ gzip:   1.09 kB
+dist/assets/StrategyScriptWorkspace-B2sWMP8c.js                 2.81 kB │ gzip:   1.34 kB
+dist/assets/StrategyResearchLiveChart-DscJWJnH.js               2.96 kB │ gzip:   1.23 kB
+dist/assets/chartStrategyResultMarkerSource-Cu-NdOeE.js         3.43 kB │ gzip:   1.74 kB
+dist/assets/SavedContinuousAccounts-Bgmo5TeU.js                 3.71 kB │ gzip:   1.55 kB
+dist/assets/ResearchReturnDialog-B0gQfx6t.js                    3.83 kB │ gzip:   1.64 kB
+dist/assets/HistoryStudySetupDialog-BpLGt47H.js                 3.90 kB │ gzip:   1.75 kB
+dist/assets/ReplayLauncherDialog-D9tkzpHA.js                    4.03 kB │ gzip:   1.76 kB
+dist/assets/chartStrategyResultModel-Cj0u-qZk.js                4.42 kB │ gzip:   1.84 kB
+dist/assets/researchReturnError-BT3dqqPb.js                     4.73 kB │ gzip:   2.23 kB
+dist/assets/journalEditor-CUM_V6mb.js                           4.98 kB │ gzip:   1.58 kB
+dist/assets/LocalApp-CNU0JtOq.js                                6.07 kB │ gzip:   2.55 kB
+dist/assets/scriptTheme-CCJGsUvo.js                             6.11 kB │ gzip:   2.58 kB
+dist/assets/StrategyRunHistory-C4Cc0f9a.js                      6.81 kB │ gzip:   2.42 kB
+dist/assets/strategyResearchBootstrap-B6vB_4TF.js               7.23 kB │ gzip:   2.85 kB
+dist/assets/backtestResearchAdvancedModel-BHe12paq.js           7.53 kB │ gzip:   2.91 kB
+dist/assets/chartTimeNavigation-IALUwcFq.js                     7.56 kB │ gzip:   3.07 kB
+dist/assets/chartStrategyTesterDrafts-BkZRqtaB.js               8.36 kB │ gzip:   3.26 kB
+dist/assets/PreparationJobsPanel-CvfaXLZS.js                    8.60 kB │ gzip:   3.13 kB
+dist/assets/MarketRightRailFrame-Cg2zRhe1.js                    9.27 kB │ gzip:   3.09 kB
+dist/assets/PythonStudioPanel-Dje7KmYT.js                      10.06 kB │ gzip:   3.70 kB
+dist/assets/StrategySwitcher-CIjibddU.js                       10.40 kB │ gzip:   3.42 kB
+dist/assets/ExportPanel-BowRw6a8.js                            10.58 kB │ gzip:   2.88 kB
+dist/assets/FibonacciDrawingPrimitive-DogPIY5k.js              11.51 kB │ gzip:   3.97 kB
+dist/assets/vendor-export-BQZo1r6a.js                          12.91 kB │ gzip:   5.16 kB
+dist/assets/TradeJournalDrawer-CVwsm5Uh.js                     15.36 kB │ gzip:   5.07 kB
+dist/assets/QuickReplayOverlay-Bgio5YGW.js                     15.50 kB │ gzip:   5.43 kB
+dist/assets/vendor-BJbQDcJy.js                                 16.63 kB │ gzip:   5.18 kB
+dist/assets/IntervalSelector-D4MFmxy8.js                       17.22 kB │ gzip:   5.83 kB
+dist/assets/StrategyResultReplay-Aq9ewisU.js                   20.82 kB │ gzip:   6.76 kB
+dist/assets/HistoryStudyOverlay-CbOTz1SG.js                    22.26 kB │ gzip:   7.78 kB
+dist/assets/WorkspacePanel-DR1z39iH.js                         24.05 kB │ gzip:   5.74 kB
+dist/assets/ReadOnlyAccountDock-BVgpMX02.js                    24.09 kB │ gzip:   6.69 kB
+dist/assets/ContinuousStrategyPanel-DFtM126w.js                24.38 kB │ gzip:   8.19 kB
+dist/assets/nativeEnglish-BgZH-_-J.js                          24.53 kB │ gzip:   7.52 kB
+dist/assets/SymbolSearchModal-BqDTewtG.js                      25.44 kB │ gzip:   8.09 kB
+dist/assets/TradingAccountsPanel-vYM8EGTt.js                   28.23 kB │ gzip:   7.12 kB
+dist/assets/strategyResearchHandoff-CELNWYts.js                34.15 kB │ gzip:  10.29 kB
+dist/assets/NativeStrategyReport-hI3qobO7.js                   41.89 kB │ gzip:  13.98 kB
+dist/assets/IndicatorPanel-ZHS7E_9p.js                         43.94 kB │ gzip:  13.42 kB
+dist/assets/DrawingToolbar-BAA3lk_e.js                         44.26 kB │ gzip:  10.04 kB
+dist/assets/AlertsPanel-ClHwkkNl.js                            51.41 kB │ gzip:  14.16 kB
+dist/assets/NativeStrategyPanel-6fBkW6g7.js                    52.41 kB │ gzip:  15.84 kB
+dist/assets/ChartStrategyTesterCellBridge-C7hzk7E8.js          52.57 kB │ gzip:  16.07 kB
+dist/assets/appVersion-hsueMPln.js                             54.53 kB │ gzip:  16.55 kB
+dist/assets/RightMarketRail-C4b5Tve7.js                        54.95 kB │ gzip:  16.27 kB
+dist/assets/DataWorkbenchModal-P4lojwfl.js                     58.57 kB │ gzip:  13.77 kB
+dist/assets/SettingsModalStyles-BKfjtXa8.js                    66.61 kB │ gzip:  10.16 kB
+dist/assets/BacktestResearchApp-D_otscKz.js                    74.23 kB │ gzip:  20.09 kB
+dist/assets/marketRailIcons-BLb6dEJg.js                        82.27 kB │ gzip:  27.84 kB
+dist/assets/libraryCommands-LLOEEQ_e.js                        83.30 kB │ gzip:  24.71 kB
+dist/assets/useTrainingHub--loQUEEi.js                         84.71 kB │ gzip:  20.26 kB
+dist/assets/StrategyResearchApp-DrlE6lRk.js                    90.28 kB │ gzip:  27.25 kB
+dist/assets/marketChartSurfaceModel-jMu5S75_.js               104.64 kB │ gzip:  32.59 kB
+dist/assets/WorkspaceCellLinkSelect-DU-OLf5x.js               131.27 kB │ gzip:  39.84 kB
+dist/assets/SettingsModal-SUHoA2x7.js                         137.24 kB │ gzip:  33.57 kB
+dist/assets/vendor-charts-CNlYVWnQ.js                         169.62 kB │ gzip:  54.90 kB
+dist/assets/MarketDataWorkspaceProvider-rDj7volH.js           187.96 kB │ gzip:  53.44 kB
+dist/assets/vendor-react-PjoAGfyD.js                          189.06 kB │ gzip:  59.05 kB
+dist/assets/zh-MO-CuvgxpSR.js                                 247.12 kB │ gzip:  81.00 kB
+dist/assets/zh-HK-CRIpMUMy.js                                 247.20 kB │ gzip:  81.00 kB
+dist/assets/zh-Hant-Cxy3SIl9.js                               247.79 kB │ gzip:  81.14 kB
+dist/assets/zh-TW-DMzQ-5YP.js                                 250.32 kB │ gzip:  82.04 kB
+dist/assets/id-BohHUz_5.js                                    264.45 kB │ gzip:  77.02 kB
+dist/assets/ms-D6WIY1c0.js                                    266.12 kB │ gzip:  76.71 kB
+dist/assets/sv-BFFuH-SC.js                                    269.45 kB │ gzip:  80.36 kB
+dist/assets/nl-BQ243YiA.js                                    273.69 kB │ gzip:  81.23 kB
+dist/assets/tr-CceFF67I.js                                    276.00 kB │ gzip:  81.42 kB
+dist/assets/cs-Cr9gXdKE.js                                    276.01 kB │ gzip:  84.10 kB
+dist/assets/de-os8pLR04.js                                    278.82 kB │ gzip:  83.32 kB
+dist/assets/it-CxCjQ3FM.js                                    279.64 kB │ gzip:  81.26 kB
+dist/assets/pl-Bm6_Oagg.js                                    280.69 kB │ gzip:  85.04 kB
+dist/assets/ro-DtSEPUa5.js                                    282.79 kB │ gzip:  82.89 kB
+dist/assets/pt-PT-CYkpfVfk.js                                 286.05 kB │ gzip:  82.12 kB
+dist/assets/es-CdJX-0ZF.js                                    289.51 kB │ gzip:  82.84 kB
+dist/assets/hu-COvj0T2v.js                                    290.01 kB │ gzip:  84.82 kB
+dist/assets/vi-776DQKdV.js                                    294.71 kB │ gzip:  79.93 kB
+dist/assets/fr-DwC09yBa.js                                    295.80 kB │ gzip:  84.04 kB
+dist/assets/he-B-GjA-U2.js                                    309.76 kB │ gzip:  83.47 kB
+dist/assets/ko-B34f-kEK.js                                    318.64 kB │ gzip:  93.41 kB
+dist/assets/ar-C9buM3ho.js                                    324.07 kB │ gzip:  86.31 kB
+dist/assets/pt-BR-MLDgyJAL.js                                 329.74 kB │ gzip:  94.88 kB
+dist/assets/ja-DnHHUpm7.js                                    338.40 kB │ gzip:  95.41 kB
+dist/assets/uk-BaIpSN_8.js                                    379.26 kB │ gzip:  95.52 kB
+dist/assets/ru-C5fuO9DN.js                                    389.21 kB │ gzip:  97.37 kB
+dist/assets/replay-Cecn8S2r.js                                421.56 kB │ gzip: 116.57 kB
+dist/assets/hi-BKtz3c1z.js                                    428.50 kB │ gzip:  92.23 kB
+dist/assets/th-B4GgYUaV.js                                    433.26 kB │ gzip:  90.51 kB
+dist/assets/live-BUSt8rL3.js                                  439.57 kB │ gzip: 132.84 kB
+dist/assets/MarketWorkspaceFrame-CIbnA2Vp.js                  481.92 kB │ gzip: 141.24 kB
+dist/assets/DrawingEngineHost-CVbQ143K.js                     496.50 kB │ gzip: 140.82 kB
+dist/assets/index-BKzLU6s8.js                               1,540.89 kB │ gzip: 446.56 kB
+dist/assets/vendor-editor-D0EGOljU.js                       3,246.69 kB │ gzip: 838.29 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 8.64s

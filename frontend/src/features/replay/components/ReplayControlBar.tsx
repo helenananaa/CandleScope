@@ -1,5 +1,6 @@
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useRef, useState } from "react";
+import { Badge, Button, Dialog, Disclosure, Field, InlineAlert, Input, Select } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import {
@@ -90,8 +91,7 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
   const [advanceAmount, setAdvanceAmount] = useState(1);
   const [controlError, setControlError] = useState<string | null>(null);
   const [requestedPlaybackRate, setRequestedPlaybackRate] = useState<number | null>(null);
-  const endDialogRef = useRef<HTMLElement | null>(null);
-  const endTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const endCancelRef = useRef<HTMLButtonElement | null>(null);
   const store = runtime.store;
   const config = store.sessionConfig;
   const tradeTape = config?.source_kind === "agg_trade";
@@ -185,163 +185,122 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
     rate: playbackRate,
   });
 
-  useEffect(() => {
-    if (!showEnd) return undefined;
-    const dialog = endDialogRef.current;
-    if (dialog === null) return undefined;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const trigger = endTriggerRef.current;
-    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), select:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
-    )].filter((item) => !item.hasAttribute("hidden") && item.getAttribute("aria-hidden") !== "true");
-    const initial = dialog.querySelector<HTMLElement>('[data-replay-action="cancel-end"]') ?? focusable()[0] ?? dialog;
-    initial.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setShowEnd(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (items.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      const restore = trigger ?? previous;
-      requestAnimationFrame(() => restore?.focus());
-    };
-  }, [showEnd]);
+  const displayInterval = viewer.viewerState?.display_interval ?? null;
+  // With the display interval equal to the base interval, "next display bar" and "next base bar" are the same step.
+  const showBaseAdvance = supportedBases.includes("BASE_BAR")
+    && !(supportedBases.includes("DISPLAY_BAR") && displayInterval !== null && displayInterval === config?.base_interval);
+  const confirmEnd = () => {
+    setShowEnd(false);
+    void (async () => {
+      const payload = {
+        open_order_disposition: openOrderDisposition,
+        position_disposition: positionDisposition,
+      };
+      if (effectiveState === "PLAYING") await viewer.actions.submitControl("pause", {});
+      await viewer.actions.submitControl("end", payload);
+    })().catch(() => undefined);
+  };
 
   return (
     <section className="replay-control-stack" aria-label={t("replay.control.aria")}>
       {store.connectionState !== "connected" && (
-        <div className="replay-recovery-banner" role="status">
-          {t("replay.control.connection", { state: store.connectionState })}
-          <button type="button" onClick={() => runtime.actions.requestResync("manual recovery")}>{t("replay.control.resync")}</button>
+        <div className="replay-recovery-banner">
+          <InlineAlert tone="warning" action={<Button size="sm" onClick={() => runtime.actions.requestResync("manual recovery")}>{t("replay.control.resync")}</Button>}>
+            {t("replay.control.connection", { state: store.connectionState })}
+          </InlineAlert>
         </div>
       )}
       {!ownsController && (
-        <div className="replay-controller-banner" role="status">
-          {store.controllerClientId
-            ? t("replay.control.otherPage")
-            : effectiveState === "ENDED"
-              ? t("replay.control.ended")
-              : controllerActionPending
-                ? t("replay.control.recovering")
-                : t("replay.control.readonly")}
-          <button
-            type="button"
-            data-replay-action="takeover-controller"
-            disabled={pending !== null || phase3Pending !== null || store.connectionState !== "connected"}
-            onClick={() => {
-              if (store.controllerClientId === null) {
-                phase3Command("acquire_controller", { takeover: false });
-              } else {
-                phase3Command("takeover_controller");
-              }
-            }}
+        <div className="replay-controller-banner">
+          <InlineAlert
+            tone="info"
+            action={<Button
+              size="sm"
+              variant="primary"
+              data-replay-action="takeover-controller"
+              disabled={pending !== null || phase3Pending !== null || store.connectionState !== "connected"}
+              onClick={() => {
+                if (store.controllerClientId === null) {
+                  phase3Command("acquire_controller", { takeover: false });
+                } else {
+                  phase3Command("takeover_controller");
+                }
+              }}
+            >
+              {controllerActionPending
+                ? store.controllerClientId ? t("replay.control.taking") : t("replay.control.restoring")
+                : store.controllerClientId
+                ? t("replay.control.take")
+                : effectiveState === "ENDED" ? t("replay.control.takeReview") : t("replay.control.takeControl")}
+            </Button>}
           >
-            {controllerActionPending
-              ? store.controllerClientId ? t("replay.control.taking") : t("replay.control.restoring")
-              : store.controllerClientId
-              ? t("replay.control.take")
-              : effectiveState === "ENDED" ? t("replay.control.takeReview") : t("replay.control.takeControl")}
-          </button>
+            {store.controllerClientId
+              ? t("replay.control.otherPage")
+              : effectiveState === "ENDED"
+                ? t("replay.control.ended")
+                : controllerActionPending
+                  ? t("replay.control.recovering")
+                  : t("replay.control.readonly")}
+          </InlineAlert>
         </div>
       )}
       {controlError && (
-        <div className="replay-command-error" role="alert" data-replay-control-error>
-          {controlError}
+        <div className="replay-command-error" data-replay-control-error>
+          <InlineAlert tone="danger">{controlError}</InlineAlert>
         </div>
       )}
       {(runtime.commandError || store.error) && (
-        <div className="replay-command-error" role="alert" data-replay-command-error={runtime.commandError?.code ?? store.error?.code}>
-          <strong>{runtime.commandError?.code ?? store.error?.code}</strong>
-          <span>{runtime.commandError?.message ?? store.error?.message}</span>
-          {(runtime.commandError?.details?.needs_resync === true) && <span>{t("replay.control.unknownResult")}</span>}
-          {(runtime.commandError?.code === "REVISION_CONFLICT") && <span>{t("replay.control.resyncWait")}</span>}
-          {runtime.commandRecoveryPending && (
-            <button
-              type="button"
-              data-replay-action="reconcile-command"
-              disabled={!runtime.commandRecoveryReady || runtime.commandRecoveryInFlight}
-              onClick={() => void runtime.actions.retryPendingCommandRecovery().catch(() => undefined)}
-            >{runtime.commandRecoveryInFlight ? t("replay.control.reconciling") : t("replay.control.reconcile")}</button>
-          )}
+        <div className="replay-command-error" data-replay-command-error={runtime.commandError?.code ?? store.error?.code}>
+          <InlineAlert
+            tone="danger"
+            title={runtime.commandError?.message ?? store.error?.message}
+            action={runtime.commandRecoveryPending ? (
+              <Button
+                size="sm"
+                data-replay-action="reconcile-command"
+                disabled={!runtime.commandRecoveryReady || runtime.commandRecoveryInFlight}
+                onClick={() => void runtime.actions.retryPendingCommandRecovery().catch(() => undefined)}
+              >{runtime.commandRecoveryInFlight ? t("replay.control.reconciling") : t("replay.control.reconcile")}</Button>
+            ) : undefined}
+          >
+            <code>{runtime.commandError?.code ?? store.error?.code}</code>
+            {(runtime.commandError?.details?.needs_resync === true) && <> · {t("replay.control.unknownResult")}</>}
+            {(runtime.commandError?.code === "REVISION_CONFLICT") && <> · {t("replay.control.resyncWait")}</>}
+          </InlineAlert>
         </div>
       )}
       <div className="replay-control-bar">
-        <button
-          ref={endTriggerRef}
-          type="button"
+        <Button
+          size="sm"
+          variant="ghost"
+          className="replay-control-end"
           data-replay-action="end"
           aria-haspopup="dialog"
           aria-expanded={showEnd}
           disabled={disabled || effectiveState === "ENDED"}
           onClick={() => setShowEnd(true)}
-        >{t("replay.control.end")}</button>
-        <>
+        >{t("replay.control.end")}</Button>
+        <span className="replay-control-divider" aria-hidden="true" />
+        <div className="replay-control-group">
           {supportedBases.includes("DISPLAY_BAR") && (
-            <button type="button" title={t("replay.control.advanceDisplayTitle")} data-replay-action="advance-display" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("DISPLAY_BAR", 1)}>
-              {canonicalAdvancePending ? t("replay.control.advancing") : t("replay.control.nextDisplay", { interval: viewer.viewerState?.display_interval ?? "--" })}
-            </button>
+            <Button size="sm" title={t("replay.control.advanceDisplayTitle")} data-replay-action="advance-display" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("DISPLAY_BAR", 1)}>
+              {canonicalAdvancePending ? t("replay.control.advancing") : t("replay.control.nextDisplay", { interval: displayInterval ?? "--" })}
+            </Button>
           )}
-          {supportedBases.includes("BASE_BAR") && (
-            <button type="button" title={t("replay.control.advanceBaseTitle")} data-replay-action="advance-base" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("BASE_BAR", 1)}>
+          {showBaseAdvance && (
+            <Button size="sm" title={t("replay.control.advanceBaseTitle")} data-replay-action="advance-base" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("BASE_BAR", 1)}>
               {canonicalAdvancePending ? t("replay.control.advancing") : t("replay.control.nextBase", { interval: config?.base_interval ?? "--" })}
-            </button>
+            </Button>
           )}
           {supportedBases.includes("SOURCE_EVENT") && (
-            <button type="button" data-replay-action="advance-source-event" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("SOURCE_EVENT", 1)}>
+            <Button size="sm" data-replay-action="advance-source-event" disabled={disabled || effectiveState !== "PAUSED"} onClick={() => submitCanonicalAdvance("SOURCE_EVENT", 1)}>
               {canonicalAdvancePending ? t("replay.control.advancing") : tradeTape ? t("replay.control.nextAgg") : t("replay.control.nextSource")}
-            </button>
+            </Button>
           )}
-        </>
-        <label className="replay-speed-control">
-          {t("replay.control.basis")}
-          <select
-            data-replay-action="advance-basis"
-            value={advanceBasis}
-            disabled={disabled || effectiveState === "PLAYING" || effectiveState === "ENDED"}
-            onChange={(event) => setRequestedAdvanceBasis(event.target.value as ReplayV2AdvanceBasis)}
-          >
-            {supportedBases.map((basis) => (
-              <option key={basis} value={basis}>
-                {basis === "SOURCE_EVENT"
-                  ? (tradeTape ? t("replay.control.aggSource") : t("replay.control.barSource"))
-                  : basisLabel(basis)}
-                {!playbackBases.includes(basis) ? t("replay.control.manualOnly") : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        {independentCharts && <label className="replay-speed-control">
-          {t("replay.control.displayBar")}
-          <select value={viewer.viewerState?.display_interval ?? "1m"}
-            disabled={disabled || effectiveState !== "PAUSED"}
-            onChange={(event) => { void viewer.actions.setDisplayInterval(event.target.value)
-              .catch((cause: unknown) => setControlError(String(cause))); }}>
-            {replayDisplayIntervalOptions(config?.base_interval ?? "1m", viewer.viewerState?.display_interval ?? "1m")
-              .map((interval) => <option key={interval} value={interval}>{interval}</option>)}
-          </select>
-        </label>}
-        <button
-          type="button"
+        </div>
+        <Button
+          size="sm"
+          variant="primary"
           data-replay-action={effectiveState === "PLAYING" ? "pause" : "play"}
           disabled={
             disabled
@@ -355,10 +314,42 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
           }}
         >
           {pending === "pause" || phase3Pending === "pause" ? t("replay.control.pausing") : pending === "play" || phase3Pending === "play" ? t("replay.control.playing") : effectiveState === "PLAYING" ? t("replay.control.pause") : t("replay.control.play")}
-        </button>
+        </Button>
+        <span className="replay-control-divider" aria-hidden="true" />
         <label className="replay-speed-control">
-          {t("replay.control.amount")}
-          <input
+          <span>{t("replay.control.basis")}</span>
+          <Select
+            size="sm"
+            data-replay-action="advance-basis"
+            value={advanceBasis}
+            disabled={disabled || effectiveState === "PLAYING" || effectiveState === "ENDED"}
+            onChange={(event) => setRequestedAdvanceBasis(event.target.value as ReplayV2AdvanceBasis)}
+          >
+            {supportedBases.map((basis) => (
+              <option key={basis} value={basis}>
+                {basis === "SOURCE_EVENT"
+                  ? (tradeTape ? t("replay.control.aggSource") : t("replay.control.barSource"))
+                  : basisLabel(basis)}
+                {!playbackBases.includes(basis) ? t("replay.control.manualOnly") : ""}
+              </option>
+            ))}
+          </Select>
+        </label>
+        {independentCharts && <label className="replay-speed-control">
+          <span>{t("replay.control.displayBar")}</span>
+          <Select size="sm" value={displayInterval ?? "1m"}
+            disabled={disabled || effectiveState !== "PAUSED"}
+            onChange={(event) => { void viewer.actions.setDisplayInterval(event.target.value)
+              .catch((cause: unknown) => setControlError(String(cause))); }}>
+            {replayDisplayIntervalOptions(config?.base_interval ?? "1m", displayInterval ?? "1m")
+              .map((interval) => <option key={interval} value={interval}>{interval}</option>)}
+          </Select>
+        </label>}
+        <label className="replay-speed-control">
+          <span>{t("replay.control.amount")}</span>
+          <Input
+            size="sm"
+            className="replay-control-amount"
             data-replay-action="advance-amount"
             type="number"
             min={1}
@@ -372,26 +363,27 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
             ))}
           />
         </label>
-        <button
-          type="button"
+        <Button
+          size="sm"
           data-replay-action="advance"
           title={t("replay.control.advance", { count: `${boundedAdvanceAmount} ${basisLabel(advanceBasis)}` })}
           disabled={disabled || effectiveState !== "PAUSED"}
           onClick={() => submitCanonicalAdvance(advanceBasis, boundedAdvanceAmount)}
         >
           {canonicalAdvancePending ? t("replay.control.advancing") : t("replay.control.advance", { count: boundedAdvanceAmount })}
-        </button>
+        </Button>
         {cancelableAdvancePending && (
-          <button
-            type="button"
+          <Button
+            size="sm"
             data-replay-action="cancel-advance"
             disabled={store.connectionState !== "connected" || !ownsController}
             onClick={() => void viewer.actions.cancelAdvance().catch(() => undefined)}
-          >{t("replay.control.cancelAdvance")}</button>
+          >{t("replay.control.cancelAdvance")}</Button>
         )}
         <label className="replay-speed-control">
-          {t("replay.control.speed")}
-          <select
+          <span>{t("replay.control.speed")}</span>
+          <Select
+            size="sm"
             data-replay-action="playback-rate"
             value={String(playbackRate)}
             disabled={disabled || effectiveState === "ENDED" || !basisCanPlay}
@@ -411,7 +403,7 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
                   })}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div
           className="replay-progress"
@@ -435,124 +427,104 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
         </div>
       </div>
 
-      <details className="replay-control-diagnostics">
-          <summary>{t("replay.control.diagnostics")}</summary>
-          <div className="replay-control-diagnostics-body">
-            <div className="replay-fidelity-chips">
-              <span>{tradeTape ? "AGG_TRADE" : `BAR_${config?.base_interval.toUpperCase() ?? "--"}`}</span>
-              <span>{contractPortfolio?.execution_model ?? "--"}</span>
-              <span>{tradeTape ? "VERIFIED_TAPE · APPROX_BARS" : "EXACT_BAR"}</span>
-              <span>{contractPortfolio === null
-                ? (tradeTape ? "AGG_TRADE_TAPE" : "BAR_CONSERVATIVE")
-                : "NO_BOOK_QUEUE"}</span>
-            </div>
-            {visiblePlan !== null && (
-              <div
-                className="replay-fast-forward-plan"
-                data-replay-fast-forward-plan={visiblePlan.mode}
-                data-replay-equivalence={visiblePlan.equivalence}
-              >
-                <strong>{visiblePlan.mode}</strong>
-                <span>{visiblePlan.explanation}</span>
-                {visiblePlan.reasons.length > 0 && <code>{visiblePlan.reasons.join(" · ")}</code>}
-                <em>{t("replay.control.equivalence", { value: visiblePlan.equivalence })}</em>
-                {visiblePlan.summaryStatus !== null && (
-                  <em>{t("replay.control.summaryStatus", { value: visiblePlan.summaryStatus })}</em>
-                )}
-              </div>
-            )}
-            <div
-              className="replay-period-summary-status"
-              data-replay-period-summary={
-                viewer.periodSummary?.enabled === false
-                  ? "DISABLED"
-                  : summaryBuild?.status ?? (viewer.summaryError === null ? "EMPTY" : "ERROR")
-              }
-            >
-              <strong>{t("replay.control.summary")}</strong>
-              {viewer.periodSummary?.enabled === false ? (
-                <span>{t("replay.control.summaryDisabled")}</span>
-              ) : summaryBuild === null ? (
-                <span>{t("replay.control.summaryEmpty")}</span>
-              ) : (
-                <span>
-                  {t("replay.control.summaryStats", {
-                    status: summaryBuild.status,
-                    count: summaryBuild.candidate_count,
-                    bytes: summaryBuild.compressed_bytes,
-                    ms: summaryBuild.build_wall_ms,
-                  })}
-                </span>
-              )}
-              {viewer.summaryError !== null && (
-                <span role="alert">{viewer.summaryError}</span>
-              )}
-              <button
-                type="button"
-                data-replay-action="prepare-period-summaries"
-                disabled={
-                  viewer.periodSummary?.enabled === false
-                  || viewer.summaryPreparing
-                  || viewer.controlPending !== null
-                  || viewer.viewerPending
-                  || effectiveState !== "PAUSED"
-                  || store.connectionState !== "connected"
-                }
-                onClick={() => void viewer.actions.preparePeriodSummaries().catch(() => undefined)}
-              >
-                {viewer.summaryPreparing
-                  ? t("replay.control.scanning")
-                  : summaryBuild?.status === "READY" ? t("replay.control.rebuildSummary") : t("replay.control.prepareSummary")}
-              </button>
-            </div>
+      <Disclosure className="replay-control-diagnostics" summary={t("replay.control.diagnostics")}>
+        <div className="replay-control-diagnostics-body">
+          <div className="replay-fidelity-chips">
+            <Badge>{tradeTape ? "AGG_TRADE" : `BAR_${config?.base_interval.toUpperCase() ?? "--"}`}</Badge>
+            <Badge>{contractPortfolio?.execution_model ?? "--"}</Badge>
+            <Badge>{tradeTape ? "VERIFIED_TAPE · APPROX_BARS" : "EXACT_BAR"}</Badge>
+            <Badge>{contractPortfolio === null
+              ? (tradeTape ? "AGG_TRADE_TAPE" : "BAR_CONSERVATIVE")
+              : "NO_BOOK_QUEUE"}</Badge>
           </div>
-        </details>
-
-      {showEnd && (
-        <div className="replay-modal-backdrop" role="presentation">
-          <section
-            ref={endDialogRef}
-            className="replay-end-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="replay-end-title"
-            aria-describedby="replay-end-description"
-            data-replay-focus-trap="active"
-            tabIndex={-1}
-          >
-            <h2 id="replay-end-title">{t("replay.control.endTitle")}</h2>
-            <p id="replay-end-description">{t("replay.control.endHint")}</p>
-            <label>{t("replay.control.openOrders")}
-              <select value={openOrderDisposition} onChange={(event) => setOpenOrderDisposition(event.target.value as typeof openOrderDisposition)}>
-                <option value="expire">{t("replay.control.expire")}</option><option value="cancel">{t("replay.control.cancel")}</option><option value="preserve">{t("replay.control.preserve")}</option>
-              </select>
-            </label>
-            <label>{t("replay.control.positions")}
-              <select value={positionDisposition} onChange={(event) => setPositionDisposition(event.target.value as typeof positionDisposition)}>
-                <option value="keep">{t("replay.control.keepUnrealized")}</option><option value="mark_close">{t("replay.control.markClose")}</option>
-              </select>
-            </label>
-            <div className="replay-dialog-actions">
-              <button type="button" data-replay-action="cancel-end" onClick={() => setShowEnd(false)}>{t("replay.control.cancel")}</button>
-              <button
-                type="button"
-                data-replay-action="confirm-end"
-                onClick={() => {
-                  setShowEnd(false);
-                  void (async () => {
-                    const payload = {
-                      open_order_disposition: openOrderDisposition,
-                      position_disposition: positionDisposition,
-                    };
-                    if (effectiveState === "PLAYING") await viewer.actions.submitControl("pause", {});
-                    await viewer.actions.submitControl("end", payload);
-                  })().catch(() => undefined);
-                }}
-              >{t("replay.control.confirmEnd")}</button>
+          {visiblePlan !== null && (
+            <div
+              className="replay-fast-forward-plan"
+              data-replay-fast-forward-plan={visiblePlan.mode}
+              data-replay-equivalence={visiblePlan.equivalence}
+            >
+              <strong>{visiblePlan.mode}</strong>
+              <span>{visiblePlan.explanation}</span>
+              {visiblePlan.reasons.length > 0 && <code>{visiblePlan.reasons.join(" · ")}</code>}
+              <span>{t("replay.control.equivalence", { value: visiblePlan.equivalence })}</span>
+              {visiblePlan.summaryStatus !== null && (
+                <span>{t("replay.control.summaryStatus", { value: visiblePlan.summaryStatus })}</span>
+              )}
             </div>
-          </section>
+          )}
+          <div
+            className="replay-period-summary-status"
+            data-replay-period-summary={
+              viewer.periodSummary?.enabled === false
+                ? "DISABLED"
+                : summaryBuild?.status ?? (viewer.summaryError === null ? "EMPTY" : "ERROR")
+            }
+          >
+            <strong>{t("replay.control.summary")}</strong>
+            {viewer.periodSummary?.enabled === false ? (
+              <span>{t("replay.control.summaryDisabled")}</span>
+            ) : summaryBuild === null ? (
+              <span>{t("replay.control.summaryEmpty")}</span>
+            ) : (
+              <span>
+                {t("replay.control.summaryStats", {
+                  status: summaryBuild.status,
+                  count: summaryBuild.candidate_count,
+                  bytes: summaryBuild.compressed_bytes,
+                  ms: summaryBuild.build_wall_ms,
+                })}
+              </span>
+            )}
+            {viewer.summaryError !== null && (
+              <span role="alert" className="replay-period-summary-error">{viewer.summaryError}</span>
+            )}
+            <Button
+              size="sm"
+              data-replay-action="prepare-period-summaries"
+              disabled={
+                viewer.periodSummary?.enabled === false
+                || viewer.summaryPreparing
+                || viewer.controlPending !== null
+                || viewer.viewerPending
+                || effectiveState !== "PAUSED"
+                || store.connectionState !== "connected"
+              }
+              onClick={() => void viewer.actions.preparePeriodSummaries().catch(() => undefined)}
+            >
+              {viewer.summaryPreparing
+                ? t("replay.control.scanning")
+                : summaryBuild?.status === "READY" ? t("replay.control.rebuildSummary") : t("replay.control.prepareSummary")}
+            </Button>
+          </div>
         </div>
-      )}
+      </Disclosure>
+
+      <Dialog
+        open={showEnd}
+        size="sm"
+        className="replay-end-dialog"
+        title={t("replay.control.endTitle")}
+        description={t("replay.control.endHint")}
+        initialFocusRef={endCancelRef}
+        onClose={() => setShowEnd(false)}
+        footer={<>
+          <Button ref={endCancelRef} data-replay-action="cancel-end" onClick={() => setShowEnd(false)}>{t("replay.control.cancel")}</Button>
+          <Button variant="danger" data-replay-action="confirm-end" onClick={confirmEnd}>{t("replay.control.confirmEnd")}</Button>
+        </>}
+      >
+        <div className="replay-end-fields">
+          <Field label={t("replay.control.openOrders")}>
+            <Select value={openOrderDisposition} onChange={(event) => setOpenOrderDisposition(event.target.value as typeof openOrderDisposition)}>
+              <option value="expire">{t("replay.control.expire")}</option><option value="cancel">{t("replay.control.cancel")}</option><option value="preserve">{t("replay.control.preserve")}</option>
+            </Select>
+          </Field>
+          <Field label={t("replay.control.positions")}>
+            <Select value={positionDisposition} onChange={(event) => setPositionDisposition(event.target.value as typeof positionDisposition)}>
+              <option value="keep">{t("replay.control.keepUnrealized")}</option><option value="mark_close">{t("replay.control.markClose")}</option>
+            </Select>
+          </Field>
+        </div>
+      </Dialog>
     </section>
   );
 }

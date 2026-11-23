@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import type { FibonacciLevel } from "../../features/drawings/drawingTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { useAnchoredPopup } from "../ui/index.js";
 
 export interface FibLevelsPanelProps {
   levels?: FibonacciLevel[] | null;
@@ -41,6 +42,8 @@ export default function FibLevelsPanel({
 }: FibLevelsPanelProps) {
   useLocale();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Escape closes it and focus goes back to the tool's button.
+  useAnchoredPopup({ open: true, onClose, popupRef: panelRef });
   const [newLevelInput, setNewLevelInput] = useState("");
   const panelLevels = Array.isArray(levels) ? levels : DEFAULT_FIB_LEVELS;
 
@@ -100,10 +103,10 @@ export default function FibLevelsPanel({
   );
 
   return (
-    <div className="fib-levels-panel" ref={panelRef}>
+    <div className="fib-levels-panel" ref={panelRef} role="dialog" aria-label={t("drawing.settings.fibonacciLevels")}>
       <div className="fib-levels-header">
         <span>{t("drawing.settings.fibonacciLevels")}</span>
-        <button className="fib-levels-close" onClick={onClose}>x</button>
+        <button type="button" className="fib-levels-close" data-overlay-close onClick={onClose} aria-label={t("common.close")}>x</button>
       </div>
 
       <div className="fib-invert-row">
