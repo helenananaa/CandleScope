@@ -52,16 +52,8 @@
     color-mix(in srgb, var(--color-danger) 16%, var(--surface-1)) 10px 20px
   );
 }
-.live-control-toolbar {
-  border-color: color-mix(in srgb, var(--color-warning) 72%, transparent) !important;
-  color: #fbbf24 !important;
-}
-.live-control-toolbar.live-control-armed,
-.live-control-toolbar.live-control-killed,
-.live-control-toolbar.live-control-unavailable {
-  border-color: color-mix(in srgb, var(--color-danger) 80%, transparent) !important;
-  color: #f87171 !important;
-}
+/* The toolbar button's warning or danger tone is in styles/overrides.css: it wins over the
+ * button styles of whichever toolbar or header holds it. */
 .live-host-modal-overlay { z-index: calc(var(--z-toast) + 800); }
 .live-host-modal { width: min(880px, 94vw); }
 .live-control-summary,
@@ -168,10 +160,8 @@
 }
 
 @media (max-width: 900px) {
-  .plugin-command-layout,
-  .plugin-manager-layout { grid-template-columns: 1fr; }
-  .plugin-command-layout nav,
-  .plugin-manager-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 0 0 10px; }
+  .plugin-command-layout { grid-template-columns: 1fr; }
+  .plugin-command-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 0 0 10px; }
   .plugin-toolbar { max-width: 32vw; }
   .live-revoke-grid { grid-template-columns: 1fr; }
   .live-intent-facts { grid-template-columns: 1fr; }

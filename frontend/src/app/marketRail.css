@@ -332,7 +332,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 .market-rail-view-resizer {
   flex-basis: 7px;
-  height: 7px !important;
+  height: 7px;
   border-top-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
   border-bottom-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
 }
@@ -398,38 +398,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-}
-
-.market-dock-tabs {
-  display: inline-flex;
-  min-width: 0;
-  padding: 2px;
-  gap: 1px;
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-}
-.market-dock-tabs button {
-  height: 24px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.market-dock-tabs button:hover,
-.market-dock-tabs button:focus-visible {
-  color: var(--text-primary);
-  outline: none;
-}
-.market-dock-tabs button.active {
-  background: var(--surface-1);
-  color: var(--text-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Replay desktop trading workstation ───────────────────── */

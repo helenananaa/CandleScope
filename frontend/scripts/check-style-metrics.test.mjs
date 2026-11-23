@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classNamesInCss, classNamesInTsx, collectMetrics } from "./check-style-metrics.mjs";
+import { RATCHETS, classNamesInCss, classNamesInTsx, collectMetrics, importantOutsideReducedMotion, malformedSelectorLines, strictFailures } from "./check-style-metrics.mjs";
 
 test("TSX class extraction reads plain and conditional className values", () => {
   const names = classNamesInTsx(`
@@ -49,4 +49,31 @@ test("metrics count legacy colour token names in stylesheets and components, not
     "/src/ok.css": ".panel { background: var(--surface-0); border: 1px solid var(--border-subtle); }",
   };
   assert.equal(collectMetrics(Object.keys(files), (file) => files[file]).legacyColorTokens, 3);
+});
+
+test("!important counts skip comments and prefers-reduced-motion blocks", () => {
+  const css = `/* no !important here */
+.panel { color: red !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation-duration: 0.01ms !important; transition: none !important; } }
+@media (max-width: 900px) { .panel { width: 1px !important; } }`;
+  assert.equal(importantOutsideReducedMotion(css), 2);
+});
+
+test("strict mode fails on a metric off its zero target or above its ratchet, not below it", () => {
+  const clean = { unstyledClasses: 0, important: 0, nativeDialogs: 0, legacyColorTokens: 0, malformedSelectors: 0, ...RATCHETS };
+  assert.deepEqual(strictFailures(clean), []);
+  assert.deepEqual(strictFailures({ ...clean, rawButtons: RATCHETS.rawButtons - 5 }), []);
+  assert.deepEqual(strictFailures({ ...clean, important: 1, inlineStyles: RATCHETS.inlineStyles + 1 }), [
+    "important is 1, target 0",
+    `inlineStyles is ${RATCHETS.inlineStyles + 1}, above its ratchet of ${RATCHETS.inlineStyles}`,
+  ]);
+});
+
+test("selectors with unbalanced brackets are reported by line; strings and keyframes are skipped", () => {
+  const css = `.a :is(b, c):where(:not(.x, .y)) { color: red; }
+.hub :is(button, a):where(:not(.ui-btn, .ui-icon-btn)), .ui-icon-btn)) { color: red; }
+.ui-icon-btn)) { color: blue; }
+[data-label="("] { color: green; }
+@keyframes spin { from { opacity: 0; } to { opacity: 1; } }`;
+  assert.deepEqual(malformedSelectorLines(css), [2, 3]);
 });

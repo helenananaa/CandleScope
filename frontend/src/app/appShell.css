@@ -6,7 +6,6 @@
 .workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
 
-
 /* ── 布局容器 ────────────────────────────────────────────── */
 .app-layout {
   display: flex;
@@ -77,15 +76,6 @@
   color: var(--text-down);
 }
 
-.change-positive {
-  color: var(--text-up);
-  background: var(--candle-up-light);
-}
-.change-negative {
-  color: var(--text-down);
-  background: var(--candle-down-light);
-}
-
 .status-left,
 .status-right {
   display: flex;
@@ -119,19 +109,6 @@
 @media (max-width: 1280px) {
   .top-bar[data-runtime-source="live"] .price-info {
     display: none;
-  }
-
-  .workspace-switcher-trigger {
-    width: 116px;
-  }
-}
-@media (max-width: 1050px) {
-  .workspace-switcher-trigger {
-    width: 104px;
-  }
-
-  .workspace-link-setting {
-    padding-inline: 4px;
   }
 }
 

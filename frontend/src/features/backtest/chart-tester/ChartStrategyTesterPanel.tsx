@@ -1152,7 +1152,7 @@ export function CandleScopeStrategyTesterPanel({
         )}
 
         <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult && sharedRunId === result.run.run_id
-            ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+            ? <div className="chart-strategy-result-overview" data-testid="run-result-views">
               <RunResultSummary result={sharedResult.result} locale={locale} />
               <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}
                 active={active && activeTab === "trades"} onLocateTrade={onLocateTrade}

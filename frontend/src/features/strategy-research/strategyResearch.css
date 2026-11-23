@@ -18,17 +18,13 @@
 }
 .strategy-research-chart-slot--live { display: flex; flex-direction: column; padding: 0; }
 .strategy-research-shell .strategy-research-chart-slot:has(.strategy-research-imported-chart) { display: flex; padding: 0; }
-.strategy-research-imported-chart,
-.strategy-research-advanced {
+.strategy-research-imported-chart {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.strategy-research-advanced { padding: 0; height: 100vh; overflow: hidden; }
-.strategy-research-advanced > .app-layout { flex: 1; width: 100%; height: auto; min-height: 0; }
-.strategy-research-imported-chart .tv-lightweight-charts,
-.strategy-research-imported-chart .chart-error-boundary { flex: 1; min-height: 0; }
+.strategy-research-imported-chart .tv-lightweight-charts { flex: 1; min-height: 0; }
 .strategy-research-current-chart {
   display: flex;
   flex-direction: column;
@@ -700,13 +696,6 @@
   .strategy-research-shell .chart-with-toolbar { flex: 1 0 420px; }
   .strategy-research-right-rail { flex: 0 0 auto; min-height: 420px; overflow: visible; border-left: 0; }
   .research-data-source-bar > span { display: none; }
-}
-
-/* The research chart reuses the app top-bar frame. Inside the strategy shell the
-   outer header already shows the brand and workspace navigation, so the nested
-   bar keeps only its research controls. Standalone it keeps everything. */
-.strategy-research-shell .research-top-bar :is(.logo, .workspace-navigation) {
-  display: none;
 }
 
 /* Phone layout (app/phoneLayout.ts): one column that scrolls as a whole. The first-open chooser

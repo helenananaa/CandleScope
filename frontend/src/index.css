@@ -49,3 +49,4 @@
 @import "./features/trading-accounts/tradingAccounts.css" layer(features);
 @import "./features/trading-accounts/chartAccountOverlay.css" layer(features);
 @import "./features/readonly-accounts/readonlyAccount.css" layer(features);
+@import "./styles/overrides.css" layer(overrides);

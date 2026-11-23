@@ -49,15 +49,6 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.drawing-toolbar-label {
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  user-select: none;
-  margin-bottom: 2px;
-}
 .drawing-toolbar-divider {
   width: 24px;
   height: 1px;
@@ -248,150 +239,6 @@
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
   color: var(--text-primary);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
-}
-.text-format-bar .tfb-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.text-format-bar .tfb-divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 4px 4px;
-  background: color-mix(in srgb, var(--text-secondary) 25%, transparent);
-}
-.text-format-bar .tfb-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: inherit;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-.text-format-bar .tfb-btn:hover {
-  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
-}
-.text-format-bar .tfb-btn.active,
-.text-format-bar .tfb-btn-toggle.active {
-  background: color-mix(in srgb, var(--accent-blue) 28%, transparent);
-  border-color: color-mix(in srgb, var(--accent-blue) 55%, transparent);
-  color: var(--text-accent);
-}
-.text-format-bar .tfb-btn-icon {
-  font-weight: 600;
-}
-.text-format-bar .tfb-btn-danger:hover {
-  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
-  color: var(--text-danger);
-}
-.text-format-bar .tfb-select {
-  height: 26px;
-  padding: 0 4px;
-  background: color-mix(in srgb, var(--surface-0) 60%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent);
-  border-radius: var(--radius-sm);
-  color: inherit;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-[data-theme='light'] .text-format-bar .tfb-select {
-  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-}
-.text-format-bar .tfb-fontsize-input {
-  width: 42px;
-  height: 26px;
-  padding: 0 4px;
-  background: color-mix(in srgb, var(--surface-0) 60%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent);
-  border-radius: var(--radius-sm);
-  color: inherit;
-  font-size: var(--font-size-sm);
-  text-align: center;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.text-format-bar .tfb-fontsize-input::-webkit-outer-spin-button,
-.text-format-bar .tfb-fontsize-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-[data-theme='light'] .text-format-bar .tfb-fontsize-input {
-  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-}
-.text-format-bar .tfb-label {
-  display: inline-flex;
-  width: 18px;
-  justify-content: center;
-  font-size: var(--font-size-sm);
-  opacity: 0.7;
-}
-.text-format-bar .tfb-color-wrap {
-  position: relative;
-  display: inline-flex;
-}
-.text-format-bar .tfb-color-btn {
-  padding: 2px;
-  width: 26px;
-  height: 26px;
-}
-.text-format-bar .tfb-color-chip {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xs);
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 40%, transparent);
-}
-.text-format-bar .tfb-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 10;
-  padding: 8px;
-  background: color-mix(in srgb, var(--surface-0) 98%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 30%, transparent);
-  border-radius: var(--radius-control);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-}
-[data-theme='light'] .text-format-bar .tfb-popover {
-  background: #ffffff;
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
-}
-.text-format-bar .tfb-color-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 18px);
-  gap: 4px;
-  margin-bottom: 6px;
-}
-.text-format-bar .tfb-color-cell {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xs);
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  padding: 0;
-}
-.text-format-bar .tfb-color-cell:hover {
-  outline: 2px solid color-mix(in srgb, var(--accent-blue) 60%, transparent);
-}
-.text-format-bar .tfb-color-cell-none {
-  background: repeating-linear-gradient(45deg, #e11d48 0 2px, transparent 2px 5px);
-}
-.text-format-bar .tfb-color-input {
-  width: 100%;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
 }
 /* ── 工具按钮容器（含弹出菜单） ──────────────────────────── */
 .drawing-tool-wrapper {
@@ -770,21 +617,9 @@
   border-color: var(--accent-blue);
   color: var(--text-accent);
 }
+/* Its type and colour are in styles/overrides.css: they win over every toolbar's button styles. */
 .position-settings-trigger {
-  font-family: var(--font-mono, monospace) !important;
-  font-weight: 600 !important;
-  color: var(--text-secondary) !important;
   white-space: nowrap;
-}
-
-/* ── 绘图画布覆盖层 ─────────────────────────────────────── */
-.drawing-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
 }
 
 /* Phase 5 drawing feedback surfaces. Geometry is clipped to the adapter-owned
@@ -816,7 +651,7 @@
 
 .drawing-coordinate-inputs label:last-child { margin-bottom: 0; }
 .selected-drawing-style-bar .drawing-coordinate-inputs input:not([type='range']):not([type='checkbox']):not([type='color']) { width: 100%; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.drawing-coordinate-inputs input[aria-invalid='true'] { border-color: var(--text-danger) !important; }
+/* The invalid border of a coordinate is in styles/overrides.css. */
 .drawing-style-templates { border: 1px solid var(--drawing-border); border-radius: var(--radius-md); }
 
 .drawing-template-content { display: grid; gap: 10px; padding: 0 12px 12px; }

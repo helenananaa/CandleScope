@@ -714,6 +714,14 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `check:styles` counts the old names and fails on any (the first guardrail that fails today rather than with `--strict`).
 - Next: 8b.
 
+**Phase 8b is done (branch `design/phase-8b-cleanup`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8B.md).
+
+- Dead CSS is gone: 211 rules and 34 selectors that need a class no component applies (103 class names, from surfaces since rebuilt or removed), and two replay hub rules a Phase 5f2 edit had left with unbalanced brackets, which browsers had been dropping. Stylesheets: 16,948 → 15,777 lines.
+- Unstyled class names 5 → 0: three second names for elements already found by `data-testid` are dropped, and the practice account's rules get the strategy tester's note style.
+- `!important` 31 → 6, all in the reduced-motion block. Rules that must hold in every container (CJK letter-spacing, the focus ring, `.sr-only`, the live control button's tone, the drawing position readout, an invalid drawing coordinate) live in `styles/overrides.css`, the first file in the `overrides` layer; the rest win by specificity. Two inline styles that the old `!important` beat are removed. A computed-style comparison of 23 states in both themes, with hover and focus forced and fixtures for the elements that need the local service, finds no difference apart from the practice rules note; in CJK languages the script editor keeps its own letter spacing.
+- `npm run check` runs `check:styles --strict`: the zero targets (unstyled class names, `!important` outside reduced motion, native dialogs, legacy colour names, and selectors with unbalanced brackets) fail it, and raw buttons (266), static inline styles (94) and `*-btn` families (25) have ratchets that fail it if they rise.
+- Next: 8c after launch (the ratchets' targets: raw `<button>` ≤ 20, no static inline styles, `*-btn` families onto the kit).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

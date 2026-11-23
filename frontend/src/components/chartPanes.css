@@ -174,14 +174,6 @@
 [data-theme='light'] .synthetic-chart-notice {
   background: color-mix(in srgb, var(--surface-0) 86%, transparent);
 }
-/* Wrapper for each pane — height set dynamically via inline style */
-.chart-pane-wrapper {
-  position: relative;
-  width: 100%;
-  min-height: 0;
-  flex-shrink: 0;
-  overflow: hidden;
-}
 /* The ChartPane component root */
 .chart-pane {
   width: 100%;
@@ -189,12 +181,6 @@
   position: relative;
   display: flex;
   flex-direction: column;
-}
-/* The actual chart container inside each pane */
-.chart-pane-container {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
 }
 /* Pane label overlay (for sub-panes like RSI, MACD, Vol) */
 .chart-pane-label {
@@ -451,47 +437,6 @@
   pointer-events: none;
   will-change: transform;
 }
-
-/* ── Pane Resizer (draggable divider) ─────────────────────── */
-.pane-resizer {
-  width: 100%;
-  height: 6px;
-  cursor: row-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 20;
-  background: var(--surface-1);
-  border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
-  transition: background 0.15s ease;
-}
-.pane-resizer:hover {
-  background: var(--surface-hover);
-}
-.pane-resizer:hover .pane-resizer-handle {
-  background: var(--accent-blue);
-  opacity: 1;
-}
-.pane-resizer-handle {
-  width: 40px;
-  height: 2px;
-  border-radius: var(--radius-xs);
-  background: var(--text-muted);
-  opacity: 0.4;
-  transition: all 0.15s ease;
-}
-/* When actively dragging (body cursor is set by JS) */
-.pane-resizer:active {
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-}
-.pane-resizer:active .pane-resizer-handle {
-  background: var(--accent-blue);
-  opacity: 1;
-  width: 60px;
-}
 /* ── Context Menu Divider ────────────────────────────────── */
 .price-scale-menu-divider {
   height: 1px;
@@ -542,13 +487,6 @@
   color: var(--text-accent);
   font-family: var(--font-mono);
 }
-
-.price-scale-menu-label-en {
-  margin-left: auto;
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  font-weight: 400;
-}
 [data-theme='light'] .price-scale-context-menu {
   background: color-mix(in srgb, var(--surface-0) 97%, transparent);
   border-color: rgba(0, 0, 0, 0.1);
@@ -559,9 +497,6 @@
 }
 [data-theme='light'] .price-scale-menu-item:hover {
   background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
-}
-[data-theme='light'] .price-scale-menu-label-en {
-  color: var(--text-muted);
 }
 
 /* Adapt to each chart cell, not the browser viewport. Full values remain in

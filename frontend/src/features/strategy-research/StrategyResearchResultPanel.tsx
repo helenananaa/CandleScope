@@ -158,7 +158,7 @@ export function StrategyResearchResultPanel({
         {...(manager ? { advancedLabel: t("researchResult.openDetails") } : {})}
         {...(onOpenCompare ? { onOpenCompare } : {})}
       /> : CHART_RUN_RESULT_VIEWS_ENABLED && sharedResult?.run.runId === result.run.run_id
-        ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+        ? <div className="chart-strategy-result-overview" data-testid="run-result-views">
           <RunResultSummary result={sharedResult.result} locale={locale} />
           <RunResultTradeList result={sharedResult.result} locale={locale}
             onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }} onSelectExplanation={setExplanation} />

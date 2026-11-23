@@ -208,8 +208,7 @@
 
 html[lang="ru"] .st-group-title,
 html[lang="ru"] .st-group-desc,
-html[lang="ru"] .st-theme-label,
-html[lang="ru"] .st-select {
+html[lang="ru"] .st-theme-label {
   overflow-wrap: break-word;
 }
 
@@ -316,23 +315,6 @@ html[lang="ru"] .st-select {
   cursor: pointer;
   background: none;
   border-radius: var(--radius-control);
-}
-
-/* ── Select ─────────────────────────────────────────────── */
-.st-select {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-2);
-  color: var(--text-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  outline: none;
-  font-size: 13px;
-  transition: border-color 0.15s;
-}
-.st-select:focus {
-  border-color: var(--accent-blue);
 }
 
 /* ── Input ──────────────────────────────────────────────── */
@@ -528,18 +510,6 @@ html[lang="ru"] .st-select {
     grid-template-columns: repeat(2, 1fr);
   }
 
-}
-
-.st-result-ok {
-  background: color-mix(in srgb, var(--color-success) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
-  color: var(--text-success);
-}
-
-.st-result-warn {
-  background: color-mix(in srgb, var(--color-warning) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 20%, transparent);
-  color: var(--text-warning);
 }
 
 .st-result-stats {

@@ -8,9 +8,6 @@
   --tf-sell-text: var(--wl-down-text);
   container: trade-flow rail-dock / size;
 }
-.tf-header .market-dock-tabs {
-  flex-shrink: 0;
-}
 .tf-status {
   display: inline-flex;
   align-items: center;
@@ -165,7 +162,7 @@
 }
 .tf-tape-row:hover { background: var(--surface-hover); }
 .tf-tape-row time { color: var(--text-muted); font-size: var(--font-size-xs); }
-.tf-tape-side { font-weight: 700; text-align: center !important; }
+.tf-tape-side { font-weight: 700; text-align: center; }
 .tf-tape-row.tf-buy .tf-tape-side,
 .tf-tape-row.tf-buy > span:nth-child(2) { color: var(--tf-buy-text); }
 .tf-tape-row.tf-sell .tf-tape-side,
@@ -237,14 +234,3 @@
 .tf-profile-sell-bar { bottom: 0; background: var(--tf-sell); }
 .tf-profile-buy { color: var(--tf-buy-text); }
 .tf-profile-sell { color: var(--tf-sell-text); }
-.sr-only {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
-}

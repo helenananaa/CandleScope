@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 // Style metrics for the design refactor (FRONTEND_DESIGN_REFACTOR_PLAN.md §5 and §7).
-// Reports what the refactor is meant to drive down. Warn-only for now: it exits 0 unless
-// --strict is passed. Phase 8 of the plan turns the zero-targets into failures.
+// Reports what the refactor drives down. With --strict (`npm run check:styles`, part of
+// `npm run check`) it fails when a metric that has reached its target leaves it, or when a
+// metric still on its way down rises above its ratchet.
 //
 //   node scripts/check-style-metrics.mjs            # summary + worst offenders
+//   node scripts/check-style-metrics.mjs --strict   # the same, failing on a target or ratchet
 //   node scripts/check-style-metrics.mjs --json     # machine-readable metrics
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+
+const require = createRequire(import.meta.url);
+const postcss = require("postcss");
 
 const SRC = path.resolve(import.meta.dirname, "../src");
 
@@ -36,6 +42,13 @@ export const HOOK_CLASSES = new Set([
   "replay-market-picker", // replay tests and the soak script find the initial market picker page
   "replay-end-dialog", // the soak script reads the end-session dialog
 ]);
+
+// Metrics that have reached zero: any occurrence fails --strict.
+export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "legacyColorTokens", "malformedSelectors"];
+
+// Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
+// its ratchet. Lower a ratchet when its count falls; never raise it.
+export const RATCHETS = { rawButtons: 266, inlineStyles: 94, buttonClassFamilies: 25 };
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -93,16 +106,47 @@ export function classNamesInCss(source) {
 // in candlescope.theme/1; features/extensions/state.ts writes them as the design tokens.
 const LEGACY_COLOR_TOKEN = /--(?:bg-(?:primary|secondary|tertiary|hover)|border-color)\b/g;
 
+/** !important declarations outside comments and outside prefers-reduced-motion blocks. */
+export function importantOutsideReducedMotion(css) {
+  let text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (let at = text.search(/@media[^{]*prefers-reduced-motion/); at !== -1; at = text.search(/@media[^{]*prefers-reduced-motion/)) {
+    text = text.slice(0, at) + text.slice(closingBrace(text, text.indexOf("{", at)));
+  }
+  return (text.match(/!important/g) ?? []).length;
+}
+
+/**
+ * Line numbers of rules whose selector has unbalanced () or []. A browser drops such a rule
+ * whole (Vite only warns), so the rule silently stops applying.
+ */
+export function malformedSelectorLines(css) {
+  const lines = [];
+  postcss.parse(css).walkRules((rule) => {
+    if (rule.parent?.type === "atrule" && /keyframes$/.test(rule.parent.name)) return;
+    const text = rule.selector.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "");
+    let round = 0, square = 0;
+    for (const ch of text) {
+      if (ch === "(") round++; else if (ch === ")") round--;
+      else if (ch === "[") square++; else if (ch === "]") square--;
+      if (round < 0 || square < 0) break;
+    }
+    if (round !== 0 || square !== 0) lines.push(rule.source?.start?.line ?? 0);
+  });
+  return lines;
+}
+
 export function collectMetrics(files, read = (file) => fs.readFileSync(file, "utf8")) {
   const styleFiles = files.filter((file) => file.endsWith(".css") || file.endsWith("Styles.tsx"));
   const componentFiles = files.filter((file) => file.endsWith(".tsx") && !file.endsWith("Styles.tsx") && !/\.test\.tsx$/.test(file));
   const defined = new Set();
   let important = 0;
   let legacyColorTokens = 0;
+  const malformed = [];
   for (const file of styleFiles) {
     const css = read(file);
     for (const name of classNamesInCss(css)) defined.add(name);
-    important += (css.match(/!important/g) ?? []).length;
+    important += importantOutsideReducedMotion(css);
+    if (file.endsWith(".css")) for (const line of malformedSelectorLines(css)) malformed.push(`${file}:${line}`);
   }
   for (const file of files.filter((f) => /\.(css|tsx?)$/.test(f) && !/\.test\.tsx?$/.test(f))) {
     legacyColorTokens += (read(file).match(LEGACY_COLOR_TOKEN) ?? []).length;
@@ -135,22 +179,37 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     important,
     nativeDialogs,
     legacyColorTokens,
+    malformedSelectors: malformed.length,
+    malformed,
   };
+}
+
+/** What --strict rejects: metrics off their zero target or above their ratchet. */
+export function strictFailures(metrics) {
+  const failures = ZERO_TARGETS.filter((name) => metrics[name] > 0).map((name) => `${name} is ${metrics[name]}, target 0`);
+  for (const [name, ceiling] of Object.entries(RATCHETS)) {
+    if (metrics[name] > ceiling) failures.push(`${name} is ${metrics[name]}, above its ratchet of ${ceiling}`);
+  }
+  return failures;
 }
 
 function report(metrics) {
   const rows = [
-    ["Class names with no CSS rule", metrics.unstyledClasses, 0],
-    ["Raw <button> outside components/ui", metrics.rawButtons, "≤ 20"],
+    ["Class names with no CSS rule", metrics.unstyledClasses, "0"],
+    ["Raw <button> outside components/ui", metrics.rawButtons, `≤ 20 (ratchet ${RATCHETS.rawButtons})`],
     ["<Button> primitive uses", metrics.buttonPrimitive, "grows"],
-    ["*-btn / *-button class families", metrics.buttonClassFamilies, "primitives"],
-    ["Inline style={{}}", metrics.inlineStyles, "dynamic only"],
-    ["!important in stylesheets", metrics.important, 0],
-    ["window.confirm / window.alert", metrics.nativeDialogs, 0],
-    ["Legacy colour token names (--bg-*)", metrics.legacyColorTokens, 0],
+    ["*-btn / *-button class families", metrics.buttonClassFamilies, `primitives (ratchet ${RATCHETS.buttonClassFamilies})`],
+    ["Inline style={{}}", metrics.inlineStyles, `dynamic only (ratchet ${RATCHETS.inlineStyles})`],
+    ["!important outside reduced motion", metrics.important, "0"],
+    ["window.confirm / window.alert", metrics.nativeDialogs, "0"],
+    ["Legacy colour token names (--bg-*)", metrics.legacyColorTokens, "0"],
+    ["Selectors with unbalanced ( ) or [ ]", metrics.malformedSelectors, "0"],
   ];
-  console.log("Style metrics (warn-only; see FRONTEND_DESIGN_REFACTOR_PLAN.md §7)\n");
+  console.log("Style metrics (see FRONTEND_DESIGN_REFACTOR_PLAN.md §7)\n");
   for (const [label, value, target] of rows) console.log(`  ${label.padEnd(38)} ${String(value).padStart(5)}   target ${target}`);
+  const lower = Object.entries(RATCHETS).filter(([name, ceiling]) => metrics[name] < ceiling);
+  if (lower.length) console.log(`\nBelow the ratchet; lower RATCHETS in scripts/check-style-metrics.mjs: ${lower.map(([name]) => `${name} → ${metrics[name]}`).join(", ")}`);
+  for (const location of metrics.malformed) console.log(`  malformed selector: ${path.relative(SRC, location)}`);
   if (metrics.unstyled.length) {
     console.log("\nFiles with the most unstyled class names:");
     for (const entry of metrics.unstyled.slice(0, 12)) {
@@ -162,14 +221,16 @@ function report(metrics) {
 export function main(argv = process.argv.slice(2)) {
   const metrics = collectMetrics(walk(SRC));
   if (argv.includes("--json")) {
-    console.log(JSON.stringify({ ...metrics, unstyled: metrics.unstyled.map((e) => ({ ...e, file: path.relative(SRC, e.file) })) }, null, 2));
+    console.log(JSON.stringify({ ...metrics, malformed: metrics.malformed.map((location) => path.relative(SRC, location)), unstyled: metrics.unstyled.map((e) => ({ ...e, file: path.relative(SRC, e.file) })) }, null, 2));
   } else {
     report(metrics);
   }
-  if (argv.includes("--strict") && (metrics.unstyledClasses || metrics.important || metrics.nativeDialogs)) process.exitCode = 1;
-  // Already at zero: a legacy colour name coming back fails the check now, not only with --strict.
-  if (metrics.legacyColorTokens) {
-    console.error(`\n${metrics.legacyColorTokens} legacy colour token name(s) (--bg-*, --border-color); use --surface-* / --border-subtle.`);
+  if (!argv.includes("--strict")) return;
+  const failures = strictFailures(metrics);
+  if (failures.length) {
+    console.error(`\nStyle metrics failed:\n${failures.map((line) => `  - ${line}`).join("\n")}`);
+    if (metrics.legacyColorTokens) console.error("  Legacy colour names (--bg-*, --border-color): use --surface-* / --border-subtle.");
+    if (metrics.important) console.error("  !important outside prefers-reduced-motion: raise the selector's specificity, or put a cross-cutting rule in styles/overrides.css.");
     process.exitCode = 1;
   }
 }

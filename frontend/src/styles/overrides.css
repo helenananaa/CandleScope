@@ -1,0 +1,60 @@
+/* Rules that win over every feature rule. They sit in the overrides layer (styles/layers.css),
+ * which outranks features whatever the selectors' specificity, so they need no important flag.
+ * Inline styles still win over them. Keep this file short: a rule belongs here only when it must
+ * hold in every container a component can appear in; otherwise give the feature rule the
+ * specificity it needs. */
+
+/* Letter-spacing is for uppercase Latin labels; on CJK text it reads as broken
+ * spacing ("开 始 一 个"). Reset it for CJK interface languages. */
+html:is(:lang(zh), :lang(ja), :lang(ko)) * {
+  letter-spacing: normal;
+}
+
+/* Keyboard focus is always visible. Many older rules set outline: none for mouse
+ * clicks; :focus-visible only matches keyboard focus, so this does not affect them.
+ * Text fields and selects match :focus-visible on any focus; the kit's own fields (.ui-*)
+ * draw their own ring, the symbol search field marks its header, and the code editor its caret. */
+:is(button, a[href], summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"]),
+  input:not([type="hidden"], .ui-input, .ui-check-input, .ui-switch, .sym-modal-search-input, .monaco-editor *),
+  select:not(.ui-input), textarea:not(.ui-input, .monaco-editor *)):focus-visible {
+  outline: 2px solid var(--focus-ring);
+}
+
+/* Text for screen readers only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Feature states that hold in any container ──────────────────────────────────────────── */
+
+/* Live control button (features/plugins/PluginPlatformToolbar.tsx): its warning or danger tone
+ * holds when hovered, in the market top bar and in chart headers. */
+.live-control-toolbar {
+  border-color: color-mix(in srgb, var(--color-warning) 72%, transparent);
+  color: #fbbf24;
+}
+.live-control-toolbar:is(.live-control-armed, .live-control-killed, .live-control-unavailable) {
+  border-color: color-mix(in srgb, var(--color-danger) 80%, transparent);
+  color: #f87171;
+}
+
+/* Position size readout in the drawing toolbar (components/drawing/DrawingStyleControls.tsx):
+ * mono type and a quiet colour when hovered or active, on every page that shows the toolbar. */
+.position-settings-trigger {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* A drawing coordinate that does not parse (features/drawings/DrawingCoordinateInputs.tsx). */
+.drawing-coordinate-inputs input[aria-invalid='true'] {
+  border-color: var(--text-danger);
+}

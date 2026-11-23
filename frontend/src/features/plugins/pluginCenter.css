@@ -51,19 +51,12 @@
 .pc-engines { margin-top: 24px; }
 .pc-engines > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .pc-engines header p { font-size: 13px; margin-top: 4px; }
-.pc-engine-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.pc-engine-grid article { padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); }
-.pc-engine-grid article > div { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
-.pc-engine-grid p { margin-block: 6px 10px; font-size: 12px; }
 .pc-confirm { padding: 16px; border: 1px solid var(--color-danger); border-radius: var(--radius-md); display: grid; gap: 10px; margin-bottom: 16px; }
-.pc-install-flow { max-width: 760px; margin: 24px auto; display: grid; gap: 20px; }
-.pc-install-flow > header p { margin-top: 8px; }
-.pc-install-flow > button { justify-self: start; }
 .plugin-center .plugin-settings-card { margin-top: 16px; background: var(--surface-0); border: 1px solid var(--border-subtle); padding: 20px; border-radius: var(--radius-md); gap: 14px; }
 .plugin-center .plugin-settings-card p, .plugin-center .plugin-empty-state p { color: var(--pc-secondary); }
 .plugin-center .plugin-empty-state { background: transparent; padding: 18px 0; }
-.plugin-center :is(.plugin-runtime-list article,.plugin-marketplace-list article,.plugin-trust-installed-summary,.plugin-trust-risk-grid > div,.plugin-trust-runtime,.plugin-trust-diffs > div,.plugin-permissions article,.plugin-marketplace-roots article) { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-subtle); }
-.plugin-center :is(.plugin-trust-reason textarea,.plugin-trust-acknowledgements,.plugin-trust-candidate) { background: var(--surface-1); color: var(--text-primary); }
+.plugin-center :is(.plugin-marketplace-list article,.plugin-trust-installed-summary,.plugin-trust-risk-grid > div,.plugin-trust-runtime,.plugin-trust-diffs > div,.plugin-permissions article,.plugin-marketplace-roots article) { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-subtle); }
+.plugin-center :is(.plugin-trust-reason textarea,.plugin-trust-acknowledgements) { background: var(--surface-1); color: var(--text-primary); }
 .plugin-center :is(pre,code,dd) { overflow-wrap: anywhere; white-space: pre-wrap; max-width: 100%; }
 .plugin-center pre { background: var(--surface-0); color: var(--pc-secondary); padding: 12px; font-size: 12px; }
 .plugin-center .plugin-technical-details { color: var(--pc-secondary); font-size: 12px; }
@@ -77,7 +70,6 @@
   .pc-show-detail .pc-detail { display: block; }
   .pc-show-detail .pc-list { display: none; }
   .plugin-center .pc-back { display: block; margin-bottom: 16px; }
-  .pc-engine-grid { grid-template-columns: minmax(0, 1fr); }
   .pc-detail { padding: 16px; }
   .plugin-center .plugin-trust-risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -87,12 +79,6 @@
   .plugin-center h2 { font-size: 19px; }
 }
 
-.pc-install-steps { display: flex; flex-wrap: wrap; gap: 24px; padding-inline-start: 24px; color: var(--pc-secondary); }
-.pc-install-steps [aria-current=step] { color: var(--text-primary); font-weight: 700; }
-.plugin-center .plugin-trust-review { min-width: 0; border: 0; padding: 0; }
-
-.plugin-center :is(.plugin-trust-review,.plugin-trust-mode-control) { background: var(--surface-1); }
+.plugin-center .plugin-trust-mode-control { background: var(--surface-1); }
 .plugin-center .plugin-trust-warning { color: var(--text-primary); }
-.plugin-center .plugin-trust-source code { color: var(--pc-secondary); }
-.plugin-center .plugin-trust-confirmations .is-danger { color: var(--text-primary); }
 .pc-advanced article { overflow-wrap: anywhere; }

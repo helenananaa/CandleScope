@@ -12,7 +12,6 @@ import {
   MARKET_DOCK_MAX_HEIGHT,
   MARKET_DOCK_MIN_HEIGHT,
   marketRailWidthBounds,
-  MARKET_RAIL_SPLITTER_HEIGHT,
 } from "../shared/marketRailLayout.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
@@ -504,7 +503,6 @@ export default function MarketRightRailFrame({
                       </div>
                       <div
                         className={`market-rail-splitter market-rail-view-resizer ${heightResizingViewId === view.id ? "active" : ""}`}
-                        style={{ height: MARKET_RAIL_SPLITTER_HEIGHT }}
                         onPointerDown={(event) => startHeightResize(event, view, height)}
                         onDoubleClick={() => onViewHeightChange?.(
                           view.id,

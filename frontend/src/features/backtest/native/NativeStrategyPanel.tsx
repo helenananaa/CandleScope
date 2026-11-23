@@ -768,7 +768,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <p>{t("strategyDock.empty")}</p>
         <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
-      {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+      {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview" data-testid="run-result-views">
         <RunResultSummary result={sharedResult.result} locale={locale} />
         <RunResultTradeList key={sharedResult.run.runId} result={sharedResult.result} locale={locale}
           active={props.active !== false} onLocateTrade={props.onLocateTrade ?? (() => undefined)}
