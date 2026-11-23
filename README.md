@@ -80,8 +80,9 @@
 - **Order flow.** Order book, trade tape, CVD, volume delta and volume profile
   wherever the exchange publishes the data — deepest on Binance, with full-depth
   books, trade history and live liquidations on futures.
-- **Unlimited indicators.** Run the Pine indicators you already have, write new
-  ones in JavaScript, or start from the built-ins.
+- **Unlimited indicators.** Run the Pine indicators you already have on the open
+  [pine-compat-runtime](https://github.com/helenananaa/pine-compat-runtime), write new ones in JavaScript, or start from the
+  built-ins.
 - **Unlimited alerts.** Nest AND, OR and NOT groups over price and any indicator.
   Fire in real time, on bar updates or on bar close, and see which condition
   matched. Deliver in the app, as a browser notification, as a sound or to a
@@ -171,6 +172,14 @@ file access.
 
 Plugins can also add indicators, strategies and runtimes. See the
 [plugin author guide (Chinese)](docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md).
+
+## Ecosystem
+
+| Project | What it is | License |
+|---|---|---|
+| **CandleScope** (this repository) | The workstation: charts, replay, paper trading, backtesting and the journal | GPL-3.0 |
+| [pine-compat-runtime](https://github.com/helenananaa/pine-compat-runtime) | The Pine engine behind CandleScope's Pine plugin: a clean-room runtime for a tested Pine-compatible subset that any app can embed from Rust, Python, WASM or the CLI | MIT |
+| [Plugin SDKs](packages/) | Python, TypeScript, Rust/WASM and Java SDKs for data providers, indicators and strategies | GPL-3.0 |
 
 ## Quick start
 
@@ -262,8 +271,9 @@ npm run dev
   on what the selected exchange or provider publishes.
 - The standard workspace shows up to four charts. Sixteen-chart and
   multi-window layouts (up to 64 charts) are opt-in.
-- Pine support covers a subset of the language. The first-party Pine plugin
-  bundles currently target Windows with CPython 3.12.
+- Pine support covers a tested subset of the language. The first-party Pine
+  plugin runs in the desktop app and local installs on Windows, Linux and macOS
+  (Apple Silicon and Intel), not in the browser version.
 - The desktop app supports Windows and native macOS (Apple Silicon and Intel).
   Linux runs the browser version or a local install from source.
 
