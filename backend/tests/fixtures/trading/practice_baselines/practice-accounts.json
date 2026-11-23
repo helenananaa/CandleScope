@@ -1,0 +1,115 @@
+{
+  "forming_offsets_ms": [
+    20000,
+    40000
+  ],
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.practice-baseline/1",
+  "settings": {
+    "initialBalance": "1000",
+    "leverage": "10",
+    "makerFeeRate": "0.0002",
+    "slippageBps": "1",
+    "takerFeeRate": "0.0005"
+  },
+  "variants": {
+    "futures-hedge": {
+      "digests": {
+        "fills": "sha256:a2cd693f34d529a907db65d2a8f4ffd8076a62842bd28eb0363bb558be6de221",
+        "orders": "sha256:a3f5c909c76c0f0d373a5c81450688cf8f2021ab247d3600fe03015899fee7ae",
+        "summary": "sha256:b6829d489d61c3b5897a2e5e4fd012e193358b9a600b14012a51a9cf868f7444",
+        "trades": "sha256:964c46cc75ddc432aa59b639722cfa46822ecea5e153ddc3911a0b1126410255"
+      },
+      "summary": {
+        "available": "1004.6679499",
+        "equity": "1014.7679499",
+        "fill_rows": [
+          "1760001899000 SHORT buy 1 @ 101.0101 fee 0.05050505 taker",
+          "1760001560000 LONG sell 1 @ 100.25 fee 0.02005 maker",
+          "1760001320000 SHORT sell 2 @ 104.9895 fee 0.1049895 taker",
+          "1760000879999 LONG buy 1 @ 106 fee 0.0212 maker",
+          "1760000480000 SHORT buy 1 @ 98 fee 0.0196 maker",
+          "1760000399000 SHORT sell 1 @ 102.9897 fee 0.05149485 taker",
+          "1760000240000 LONG sell 2 @ 111 fee 0.0444 maker",
+          "1760000159000 LONG buy 2 @ 107.0107 fee 0.1070107 taker"
+        ],
+        "fills": 8,
+        "order_states": [
+          "cancelled",
+          "filled"
+        ],
+        "orders": 10,
+        "rejected": []
+      }
+    },
+    "futures-one-way": {
+      "digests": {
+        "fills": "sha256:e93f8c27f3aa2984411458aa4b31f2e8b723fc2cc1018df2fe9f95205a395958",
+        "orders": "sha256:46af5c573022ebf9bf425efa6acd2e5f2be8d26da55ccd20b8271d9ff30f77fe",
+        "summary": "sha256:902f73965f8faa5a48625981ce9b300134f3d6756ce895af8e677373cf3e592a",
+        "trades": "sha256:8bc977fe250abdbe1eaab61056f4b7c02eadd4e308e9b0a96154a2a0dba42251"
+      },
+      "summary": {
+        "available": "1021.482411025",
+        "equity": "1021.482411025",
+        "fill_rows": [
+          "1760001860000 buy 1 @ 104 fee 0.0208 maker",
+          "1760001320000 buy 3 @ 105.5 fee 0.0633 maker",
+          "1760001239000 sell 3 @ 110.48895 fee 0.165733425 taker",
+          "1760000900000 sell 1 @ 102.9897 fee 0.05149485 taker",
+          "1760000240000 sell 2 @ 111 fee 0.0444 maker",
+          "1760000159000 buy 2 @ 107.0107 fee 0.1070107 taker"
+        ],
+        "fills": 6,
+        "order_states": [
+          "cancelled",
+          "filled",
+          "working"
+        ],
+        "orders": 10,
+        "rejected": [
+          {
+            "bar": 33,
+            "code": "TRADING_INSUFFICIENT_BALANCE"
+          }
+        ]
+      }
+    },
+    "spot": {
+      "digests": {
+        "fills": "sha256:341e2ad1ef2c9c807e3af85b1300ef132c87748359cc2b0e40ad532feed1a274",
+        "orders": "sha256:4cc9d47e2f38584c61b767e51a838c5908f3925d35206063d6ad1062b6219bfa",
+        "summary": "sha256:e346dd2ed0a1574ff5b82310807e0563223bb9e112201b2ddb564ec0f5013fd5",
+        "trades": "sha256:98f7b05acf1bf8a5d2753cebfd47208a84210c5de773e8257ec77680a153b7e7"
+      },
+      "summary": {
+        "available": "892.55819955",
+        "equity": "993.55819955",
+        "fill_rows": [
+          "1760001100000 sell 1 @ 106 fee 0.0212 maker",
+          "1760000939999 buy 2 @ 102 fee 0.0408 maker",
+          "1760000399999 sell 3 @ 103.9896 fee 0.1559844 taker",
+          "1760000159000 buy 3 @ 107.0107 fee 0.16051605 taker"
+        ],
+        "fills": 4,
+        "order_states": [
+          "filled",
+          "working"
+        ],
+        "orders": 5,
+        "rejected": [
+          {
+            "bar": 8,
+            "code": "TRADING_INSUFFICIENT_POSITION"
+          }
+        ]
+      }
+    }
+  }
+}

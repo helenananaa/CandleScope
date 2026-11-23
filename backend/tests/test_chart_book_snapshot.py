@@ -1,4 +1,10 @@
-"""Frozen physical book admission reaches the queued chart worker unchanged."""
+"""Frozen physical book admission reaches the queued chart worker unchanged.
+
+ADR-BACKTEST-015 P6d: Pine with order-book data runs only through CandleScope matching
+(``/backtests/external/runs``). New Host Pine engine book runs are refused; runs stored
+before that still execute, resume and read, which the Pine tests below keep proving by
+creating their runs as they were stored before the refusal.
+"""
 from copy import deepcopy
 from decimal import Decimal
 import json
@@ -13,6 +19,8 @@ from app.api.v1.backtests import router
 from app.backtest.chart_book import freeze
 from app.backtest.errors import BacktestError
 from app.backtest.runtime import BacktestRuntime
+from app.backtest.service import BacktestService
+from app.backtest.strategy.pine_engine import REVISION as PINE_ENGINE_REVISION
 from app.core.config import load_backtest_settings
 from app.local_data.service import LocalDatasetService, LocalImportOptions
 
@@ -116,10 +124,33 @@ def test_spread_snapshot_rejects_invalid_quotes_before_publishing_an_execution_i
     with pytest.raises(BacktestError): freeze(runtime,value)
 
 
+def stored_before_p6d(monkeypatch):
+    """Create runs as the Host stored them before Pine book runs moved to CandleScope matching."""
+    monkeypatch.setattr(BacktestService,'_refuse_host_pine_book',lambda *_args:None)
+
+
+@pytest.mark.parametrize('mode',MODES)
+def test_new_host_pine_book_runs_point_to_candlescope_matching(host,mode,monkeypatch):
+    runtime,base=host
+    service=runtime.service
+    lookup=service.repository.get_strategy_revision
+    monkeypatch.setattr(service.repository,'get_strategy_revision',lambda revision_id:(
+        {'revision_id':revision_id,'base_revision_id':PINE_ENGINE_REVISION} if revision_id=='pine-book' else lookup(revision_id)))
+    value={**base,'fidelity_mode':mode,'execution_data':data(mode),'strategy_revision_id':'pine-book'}
+    for attempt in (lambda:service.validate_run(value),lambda:service.create_run(value,idempotency_key=f'pine-book-{mode}')):
+        with pytest.raises(BacktestError,match='CandleScope matching') as refused:
+            attempt()
+        assert refused.value.code=='FIDELITY_UNSUPPORTED'
+    # The refusal is Pine's alone: other strategies keep the Host book path, and Pine keeps BAR.
+    service._refuse_host_pine_book({**value,'strategy_revision_id':'builtin-sma'},mode)
+    service._refuse_host_pine_book(value,'BAR_APPROX')
+
+
 @pytest.mark.skipif(not os.environ.get('NATIVE_TEST_PINE_PYTHON'),reason='requires installed Pine')
 @pytest.mark.parametrize('mode',MODES)
-def test_http_freezes_then_dispatches_actual_pine_book_ticks_and_returns_the_last_bar(host,mode):
+def test_http_freezes_then_dispatches_actual_pine_book_ticks_and_returns_the_last_bar(host,mode,monkeypatch):
     runtime,base=host
+    stored_before_p6d(monkeypatch)
     request={**base,'fidelity_mode':mode,'execution_data':data(mode)}
     app=FastAPI()
     app.state.backtest_runtime=runtime
@@ -191,8 +222,9 @@ def v2_config(runtime,base,mode,tmp_path):
 
 @pytest.mark.skipif(not os.environ.get('NATIVE_TEST_PINE_PYTHON'),reason='requires installed Pine')
 @pytest.mark.parametrize('mode',MODES)
-def test_queued_v2_chart_book_keeps_account_authority_and_independent_cost_scenarios(host,mode,tmp_path):
+def test_queued_v2_chart_book_keeps_account_authority_and_independent_cost_scenarios(host,mode,tmp_path,monkeypatch):
     runtime,base=host
+    stored_before_p6d(monkeypatch)
     value=v2_config(runtime,base,mode,tmp_path)
     run=runtime.service.create_run(value,idempotency_key='v2-book')
     deadline=time.monotonic()+45
@@ -221,6 +253,7 @@ def test_v2_book_checkpoint_reconstructs_pine_before_restoring_the_physical_acco
     from app.backtest.strategy.pine_engine import PineEngineProvider
     from app.simulation.dual_clock_book import execution_type
     runtime,base=host
+    stored_before_p6d(monkeypatch)
     runtime.worker.shutdown()
     service=runtime.service
     service._colocated_worker=True

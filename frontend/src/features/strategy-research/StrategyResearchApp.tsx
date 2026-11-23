@@ -2,7 +2,6 @@ import { chartStrategySignalInput, withChartSignalInput } from "../backtest/char
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { Button, Disclosure, Drawer, InlineAlert, SegmentedControl } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
-import { describeError } from "../../i18n/serverErrors.js";
 import {
   Component,
   lazy,
@@ -26,7 +25,16 @@ import { ResearchIndicatorScopeStore } from "./researchIndicatorScope.js";
 import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.js";
 import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
-import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
+import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
+import { ResearchRobustness } from "./ResearchRobustnessPanel.js";
+import { ResearchSavedStrategy } from "./ResearchSavedStrategy.js";
+import { describeError } from "../../i18n/serverErrors.js";
+import { launchContextState, researchRunSource, type DatasetChoice } from "./researchLinks.js";
+import { CHART_STRATEGY_FOLLOW_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
+import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
+import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
+import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
+import { RESEARCH_SOURCE_SCHEMA, type ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -59,35 +67,30 @@ import {
 import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
-import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { createChartStrategyDraftId, openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS } from "../../shared/strategyRunSettings.js";
 import { ResearchExternalModel } from "./ResearchExternalModel.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
-import { readResearchHandoff } from "./strategyResearchHandoff.js";
+import { readResearchHandoff, type ResearchHandoff } from "./strategyResearchHandoff.js";
 import ResearchReturnButton from "./ResearchReturnButton.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
 import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
 import { useStrategyResearchRun } from "./useStrategyResearchRun.js";
 import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js";
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
-import { createStrategyResearchContextSearch } from "./strategyResearchAdvanced.js";
-import StrategyResearchModeRail from "./StrategyResearchModeRail.js";
 import {
   initialStrategyResearchMode,
-  isResearchToolMode,
-  researchModeForTask,
-  researchTaskForMode,
+  researchWorkspaceFocus,
   strategyResearchModeHref,
   STRATEGY_RESEARCH_MODES,
+  type ResearchWorkspaceFocus,
   type StrategyResearchMode,
 } from "./strategyResearchMode.js";
-import { ResearchModeRailContext } from "../backtest/research/researchModeRailContext.js";
 import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js";
 import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 import { datasetIdentityChanged } from "../backtest/native/nativeExecutionSettings.js";
 
-const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
 const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
 const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
@@ -95,7 +98,6 @@ const StrategyResultReplay = lazy(() => import("./StrategyResultReplay.js"));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 const SavedContinuousAccounts = lazy(() => import("../backtest/continuous/SavedContinuousAccounts.js"));
 import {
-  strategyResearchDeepLinkSearch,
   strategyResearchLaunchActions,
   strategyResearchVisualState,
   type StrategyResearchLaunchIntent,
@@ -147,6 +149,7 @@ function dispatchImportedSource(
 }
 
 import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
+import { overlayRunForNative, useStrategyRunOverlay, type StrategyOverlayRun } from "../backtest/runResult/useStrategyRunOverlay.js";
 import { settingsCommands } from "../app-control/settingsCommands.js";
 import { libraryCommands } from "../app-control/libraryCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -156,10 +159,13 @@ import { browserHost } from "../../app/browserHost.js";
 export default function StrategyResearchApp({
   intent,
   initialMode,
+  handoff: preloadedHandoff,
 }: {
   intent: StrategyResearchLaunchIntent;
   /** Mode to open in; by default `?mode=` or what the launch intent implies. */
   initialMode?: StrategyResearchMode | null;
+  /** The chart's hand-off, read from the backend before mounting (ADR-BACKTEST-015 P3c); otherwise read from browser storage. */
+  handoff?: ResearchHandoff | null;
 }) {
   const locale = useLocale();
   const availability = useNativeAvailability();
@@ -173,7 +179,8 @@ export default function StrategyResearchApp({
   usePageControlBridge();
   useControlCommands(() => settingsCommands({ settings, setSettings, resolvedTheme }, "strategy-settings"));
   useControlCommands(() => libraryCommands(library));
-  const handoff = useMemo(() => intent.kind === "handoff" ? readResearchHandoff(intent.id) : null, [intent]);
+  const handoff = useMemo(() => intent.kind !== "handoff" ? null
+    : preloadedHandoff !== undefined ? preloadedHandoff : readResearchHandoff(intent.id), [intent, preloadedHandoff]);
   const [runtime] = useState(() => {
     const created = new StrategyResearchRuntime({
       restoreWorkspace: intent.kind === "restore",
@@ -253,11 +260,16 @@ export default function StrategyResearchApp({
     return;
   }, []);
 
+  // The drawer shows the library or the exchange history form (ADR-BACKTEST-015 P5a).
+  const [drawerKind, setDrawerKind] = useState<ResearchSourceKind>(() => (
+    runtime.state.source.source?.kind === "EXCHANGE_SERIES" ? "EXCHANGE_SERIES" : "IMPORTED_DATASET"));
   const onSelectKind = useCallback((kind: ResearchSourceKind) => {
     if (kind === "CURRENT_CHART") {
       return;
     }
+    setDrawerKind(kind);
     dispatch({ type: "source/libraryOpen", open: true });
+    if (kind === "EXCHANGE_SERIES") return;
     if (kind === "IMPORTED_DATASET" && library.selected !== null) {
       dispatchImportedSource(dispatch, runtime.state.source.source, library.selected);
     }
@@ -418,6 +430,16 @@ export default function StrategyResearchApp({
     restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
+  // ADR-BACKTEST-015 P1c: research runs draw on the research charts through the shared run overlay.
+  const researchChartInterval = (source?.kind === "CURRENT_CHART" ? source.interval : selectedInterval) ?? "";
+  const hostResearchRunId = researchRun.sourceResult?.run.state === "COMPLETED" ? researchRun.sourceResult.run.run_id : null;
+  const nativeResearchRun = overlayRunForNative(nativeRun);
+  // The overlay hook loads by family and run id, so a fresh object each render does not refetch.
+  const researchOverlayRun: StrategyOverlayRun | null = nativeMode
+    ? nativeResearchRun
+    : hostResearchRunId ? { family: "host", runId: hostResearchRunId } : null;
+  const researchOverlay = useStrategyRunOverlay({ run: researchOverlayRun, interval: researchChartInterval,
+    manager: researchRun.historyManager });
   const saveResultReplay = useCallback((replay: BacktestResultReplayCursor) => {
     dispatch({ type: "result/replay", replay });
   }, [dispatch]);
@@ -444,54 +466,91 @@ export default function StrategyResearchApp({
   const [marketInputs, setMarketInputs] = useState<readonly ResearchMarketInput[]>([]);
   const marketBatchAvailable = hostReady && runtime.runtimeMode === "LIVE";
   const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
+  const experimentsState = useSyncExternalStore(researchRun.experiments.subscribe, researchRun.experiments.snapshot, researchRun.experiments.snapshot);
+  const batchCount = experimentsState.experiments.length + batchState.jobs.length;
   const [batchError, setBatchError] = useState(false);
-  const [advancedError, setAdvancedError] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // ADR-BACKTEST-015 P5d: every research link opens here. A run with a baseline opens their comparison and a
+  // study its robustness experiment, both in the run history.
+  const link = intent.kind === "deep-link" ? intent : null;
+  const [historyCompare] = useState<readonly [string, string] | null>(() =>
+    link?.entry.kind === "run" && link.compareRunId ? [link.compareRunId, link.entry.runId] : null);
+  const [historyOpen, setHistoryOpen] = useState(() => historyCompare !== null || link?.entry.kind === "study");
   const [accountsOpen, setAccountsOpen] = useState(false);
   useEffect(() => { if (researchRun.inputStale && !state.result.stale) dispatch({ type: "result/invalidate" }); }, [dispatch, researchRun.inputStale, state.result.stale]);
-  // One page, several modes: 快速测试 and the research tools. `researchSearch` is the
-  // research tools' launch context or deep link, kept while switching modes.
-  const [mode, setMode] = useState<StrategyResearchMode | null>(() => initialMode !== undefined
+  // ADR-BACKTEST-015 P5c4: one workspace. The research tools' features are its fields, and `?mode=` opens
+  // the field it names. A link to a run, study or launch context still opens the research tool until P5d.
+  const [openingMode] = useState<StrategyResearchMode | null>(() => initialMode !== undefined
     ? initialMode
     : initialStrategyResearchMode(intent, typeof window === "undefined" ? "" : window.location.search));
-  const [researchSearch, setResearchSearch] = useState<string | null>(() => strategyResearchDeepLinkSearch(intent));
-  const [modeSwitching, setModeSwitching] = useState(false);
-  const showMode = useCallback((next: StrategyResearchMode, search: string | null) => {
-    setMode(next);
-    if (typeof window === "undefined") return;
-    const params = next === "quick" ? {} : Object.fromEntries(new URLSearchParams(search ?? ""));
-    window.history.replaceState(window.history.state, "", strategyResearchModeHref(next, params));
+  const [initialFocus] = useState(() => researchWorkspaceFocus(openingMode));
+  const [focus, setFocus] = useState<ResearchWorkspaceFocus & { nonce: number }>(() => ({ ...initialFocus, nonce: 0 }));
+  const [batchOpen, setBatchOpen] = useState(initialFocus.batch === true);
+  const [robustnessOpen, setRobustnessOpen] = useState(initialFocus.robustness === true);
+  const [savedOpen, setSavedOpen] = useState(initialFocus.saved === true);
+  const showFocus = useCallback((next: StrategyResearchMode) => {
+    const opened = researchWorkspaceFocus(next);
+    setFocus((current) => ({ ...opened, nonce: current.nonce + 1 }));
+    if (opened.batch) setBatchOpen(true);
+    if (opened.robustness) setRobustnessOpen(true);
+    if (opened.saved) setSavedOpen(true);
+    // Run settings, batches, robustness and saved strategies are in the CandleScope (Python) panel.
+    if (opened.pane || opened.batch || opened.robustness || opened.saved) setNativeMode(false);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", next === "quick" ? "/strategy.html" : strategyResearchModeHref(next));
+    }
   }, []);
-  const switchMode = useCallback((next: StrategyResearchMode) => {
-    if (next === mode || modeSwitching) return;
-    setAdvancedError(null);
-    // Leaving 快速测试 carries its source, strategy draft and latest result to the tools.
-    if (mode === "quick" && next !== "quick" && researchRun.session !== null && source !== null && state.script.draftId !== null) {
-      setModeSwitching(true);
-      void createStrategyResearchContextSearch({
-        source,
-        session: researchRun.session,
-        draftId: state.script.draftId,
-        result: researchRun.sourceResult,
-        configuration: signalConfiguration,
-      }).then((search) => {
-        setResearchSearch(search);
-        showMode(next, search);
-      }).catch((reason: unknown) => {
-        setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      }).finally(() => setModeSwitching(false));
+
+  // The data a linked run or launch context used, selected once the library knows its datasets.
+  const [pendingSource, setPendingSource] = useState<ResearchSourceRefV1 | DatasetChoice | null>(null);
+  useEffect(() => {
+    if (pendingSource === null) return;
+    if ("kind" in pendingSource) {
+      dispatch({ type: "source/select", source: pendingSource });
+      setPendingSource(null);
       return;
     }
-    showMode(next, researchSearch);
-  }, [mode, modeSwitching, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, signalConfiguration]);
-  const openAdvanced = useCallback(() => switchMode("precise"), [switchMode]);
-  const modeRail = <StrategyResearchModeRail mode={mode} pending={modeSwitching} onSelect={switchMode} />;
-
-  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError, mode }), commands: [
+    if (libraryLoading) return;
+    const dataset = libraryDatasets.find((item) => item.dataset_id === pendingSource.datasetId && item.data_epoch === pendingSource.dataEpoch);
+    if (dataset) {
+      setLibrarySelectedId(dataset.dataset_id);
+      onSelectDataset(dataset.dataset_id);
+    }
+    setPendingSource(null);
+  }, [dispatch, libraryDatasets, libraryLoading, onSelectDataset, pendingSource, setLibrarySelectedId]);
+  const linkedRunSource = useRef(link?.entry.kind === "run" ? link.entry.runId : null);
+  useEffect(() => {
+    const shown = researchRun.result;
+    if (!shown || linkedRunSource.current !== shown.run.run_id) return;
+    linkedRunSource.current = null;
+    if (source !== null) return;
+    setPendingSource(researchRunSource(shown.config, shown.run));
+  }, [researchRun.result, source]);
+  const linkApplied = useRef(false);
+  useEffect(() => {
+    if (!link || linkApplied.current) return;
+    linkApplied.current = true;
+    const failed = (reason: unknown) => library.setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
+    if (link.entry.kind === "study") void researchRun.experiments.openStudy(link.entry.studyId).catch(failed);
+    if (link.entry.kind === "context") {
+      void researchRun.historyManager.loadResearchLaunchContext(link.entry.contextId).then((context) => {
+        const opened = launchContextState(context);
+        if (opened.source) setPendingSource(opened.source);
+        if (opened.draftId) dispatch({ type: "script/setDraft", draftId: opened.draftId });
+        if (opened.runId) dispatch({ type: "result/viewHistory", runId: opened.runId });
+        if (openingMode === null && opened.mode) showFocus(opened.mode);
+      }).catch(failed);
+    }
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", openingMode && openingMode !== "quick" ? strategyResearchModeHref(openingMode) : "/strategy.html");
+    }
+    // Applied once, when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, focus }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
     command("indicators", "Open/close the indicator catalog for the selected chart scope.", object({ open: bool }), ({ open }) => setIndicatorPanel({ scope: chartUiScope, open })),
     command("history", "Open/close strategy run history.", object({ open: bool }), ({ open }) => setHistoryOpen(open)),
-    command("mode", "Switch the page between 快速测试 and the research tools.", object({ mode: choice(STRATEGY_RESEARCH_MODES) }), ({ mode: next }) => switchMode(next)),
+    command("mode", "Open the workspace field a research mode names: precise run settings, robustness, Python packages, batches or run details (ADR-BACKTEST-015 P5c4).", object({ mode: choice(STRATEGY_RESEARCH_MODES) }), ({ mode: next }) => showFocus(next)),
   ] }));
   const drawer = (
     <StrategyResearchDrawerBoundary
@@ -499,7 +558,18 @@ export default function StrategyResearchApp({
     >
       <ResearchDataDrawer
         open={state.source.libraryOpen}
-        availableKinds={["IMPORTED_DATASET"]}
+        availableKinds={["IMPORTED_DATASET", "EXCHANGE_SERIES"]}
+        selectedKind={drawerKind}
+        exchangeSeries={<ResearchMarketInputForm key={source?.kind === "EXCHANGE_SERIES" ? `${source.symbol}:${source.startMs}:${source.endMs}` : "new"}
+          legend={t("researchSource.exchangeSeries")} submitLabel={t("researchSource.use")}
+          initial={source?.kind === "EXCHANGE_SERIES" ? { session: { exchange: source.exchange, marketType: source.marketType,
+            symbol: source.symbol, interval: source.interval }, startMs: source.startMs, endMs: source.endMs } : null}
+          onSave={(input) => {
+            dispatch({ type: "source/select", source: { schemaVersion: RESEARCH_SOURCE_SCHEMA, kind: "EXCHANGE_SERIES",
+              exchange: input.session.exchange, marketType: input.session.marketType, symbol: input.session.symbol,
+              interval: input.session.interval, startMs: input.startMs, endMs: input.endMs } });
+            dispatch({ type: "source/libraryOpen", open: false });
+          }} />}
         runtimeMode={runtime.runtimeMode}
         capabilities={capabilities}
         library={library}
@@ -529,16 +599,22 @@ export default function StrategyResearchApp({
 
   const [externalVisited, setExternalVisited] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  // ADR-BACKTEST-015 P5c4: as on the chart (P4c2), strategies are named by their language and the engine
+  // follows from it: Pine runs as the script declares or with CandleScope matching (a fills setting), Python on CandleScope.
+  const strategyList = CHART_STRATEGY_FOLLOW_ENABLED;
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
       <SegmentedControl
         className="strategy-research-engine-switch"
         size="sm"
         fullWidth
-        label={t("native.mode")}
+        label={t(strategyList ? "research.strategy.language" : "native.mode")}
         value={nativeMode ? "native" : "host"}
         onChange={(value) => setNativeMode(value === "native")}
-        options={[
+        options={strategyList ? [
+          { value: "native", label: strategyLanguageLabel("pine") },
+          { value: "host", label: strategyLanguageLabel("python") },
+        ] : [
           { value: "native", label: t("native.fullStrategies") },
           { value: "host", label: t("native.hostMode") },
         ]}
@@ -546,15 +622,17 @@ export default function StrategyResearchApp({
       {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</p>}
       {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
-        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
-          onSelectPython={() => {
+        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} manager={researchRun.historyManager} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+          strategyList={strategyList}
+          {...(strategyList ? {} : { onSelectPython: () => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
               dispatch({ type: "script/setDraft", draftId: draft.id });
               setNativeMode(false);
             });
-          }}
+          } })}
           key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun} onStatusChange={setNativeStatus}
           dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
+          fixedRange={source?.kind === "EXCHANGE_SERIES" ? { startMs: source.startMs, endMs: source.endMs } : undefined}
           onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
             requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
           } }))} />
@@ -573,27 +651,52 @@ export default function StrategyResearchApp({
         onRun={researchRun.onRun}
         marketBatchAvailable={marketBatchAvailable}
         batchSession={marketBatchAvailable ? marketInputs[0]?.session ?? null : null}
-        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
+        batchControls={(request) => <ResearchBatchSources open={batchOpen} onToggle={setBatchOpen} datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
           marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
           <div className="strategy-research-batch-actions">
-            <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
+            <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2)}
               onClick={() => {
                 if (!request) return;
                 setBatchError(false);
-                void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
+                // The backend keeps the batch as an experiment (ADR-BACKTEST-015 P5b): leaving or switching does not stop it.
+                void researchRun.experiments.submit(request, selected, exchange).catch(() => setBatchError(true));
               }}>{t("researchBatch.run")}</Button>
-            {batchState.jobs.length > 0 && <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
-              {t("researchBatch.jobs")} · {batchState.jobs.length}
+            {batchCount > 0 && <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+              {t("researchBatch.jobs")} · {batchCount}
             </Button>}
           </div>
-          {batchState.storageFailed ? <InlineAlert tone="danger">{t("researchBatch.storage")}</InlineAlert>
-            : batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
+          {batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
         </>}</ResearchBatchSources>}
+        robustnessControls={(request) => <ResearchRobustness request={request} open={robustnessOpen} onToggle={setRobustnessOpen}
+          dataset={importedManifest && !importedManifest.market_trade_input ? importedManifest : null}
+          onSubmit={async (fields) => {
+            if (!request || !importedManifest) return;
+            // The backend keeps the check as a Study V2 experiment (ADR-BACKTEST-015 P5c3); its runs show in the history.
+            await researchRun.experiments.submitRobustness(request, importedManifest, fields);
+            setHistoryOpen(true);
+          }} />}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
-        onOpenAdvanced={openAdvanced}
+        {...(focus.pane ? { requestedPane: { pane: focus.pane, nonce: focus.nonce } } : {})}
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
+        languageFixed={strategyList}
       />}
+      {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
+        <Disclosure className="strategy-research-external" summary={t("researchSaved.title")} open={savedOpen} onToggle={(open) => {
+          setSavedOpen(open);
+          if (open) setNativeMode(false);
+        }}>
+          {savedOpen && <ResearchSavedStrategy
+            key={chartUiScope}
+            manager={researchRun.historyManager}
+            dataset={importedManifest}
+            interval={selectedInterval}
+            settings={state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS}
+            runBusy={["RESOLVING", "QUEUED", "RUNNING"].includes(researchRun.runStatus)}
+            onRunCreated={handleRunId}
+          />}
+        </Disclosure>
+      )}
       {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
         <Disclosure className="strategy-research-external" summary={t("research.external.title")} open={externalOpen} onToggle={(open) => {
           setExternalOpen(open);
@@ -628,12 +731,26 @@ export default function StrategyResearchApp({
     </div>
   </Suspense> : null : (
     <>
-    {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
-      runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
+    {researchRun.preparation && <div data-testid="research-preparation"><InlineAlert
+      title={`${t("preparation.title")} · ${researchRun.preparation.completed}/${researchRun.preparation.total}`}>
+      <PreparationWaiting job={researchRun.preparation} />
+    </InlineAlert></div>}
+    {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={`return:${researchRun.result.run.run_id}`}
+      manager={researchRun.historyManager} runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
         : researchRun.sourceResult && source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
+      sharedResult={researchOverlay.shown?.run.family === "host" ? researchOverlay.shown : null}
+      manager={researchRun.historyManager}
+      onRunCreated={(runId) => dispatch({ type: "result/setRun", runId })}
+      onOpenVersion={(version, name) => {
+        void getChartStrategyDraftStore().save({ id: createChartStrategyDraftId(), displayName: name, language: version.language,
+          source: version.source, cursor: { line: 1, column: 1 } }).then((draft) => {
+          dispatch({ type: "script/setDraft", draftId: draft.id });
+          setNativeMode(false);
+        }).catch(() => library.setError(t("chartTester.autosave.error")));
+      }}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
       barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}
@@ -641,7 +758,8 @@ export default function StrategyResearchApp({
       runStatus={researchRun.runStatus}
       network={networkDiagnostics}
       dataResolution={researchRun.dataResolution}
-      onOpenAdvanced={openAdvanced}
+      {...(focus.resultTab ? { requestedTab: { tab: focus.resultTab, nonce: focus.nonce } } : {})}
+      onOpenCompare={() => setHistoryOpen(true)}
       {...(canReplay ? { onOpenReplay: openResultReplay } : {})}
       onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({
         scope: chartUiScope,
@@ -679,8 +797,30 @@ export default function StrategyResearchApp({
         <Suspense fallback={<p className="strategy-research-note">{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
       </Drawer>
       <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t("ux.history")} className="strategy-research-drawer">
-        <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
-        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
+        <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} initialCompare={historyCompare} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
+        <ResearchExperimentResults experiments={experimentsState.experiments}
+          onCancel={(experimentId) => { void researchRun.experiments.cancel(experimentId).catch(() => setBatchError(true)); }}
+          onRetry={(experimentId, ordinal) => { void researchRun.experiments.retry(experimentId, ordinal).catch(() => setBatchError(true)); }}
+          onReveal={(experimentId) => { void researchRun.experiments.revealHoldout(experimentId).catch(() => setBatchError(true)); }}
+          onOpen={(experiment, member) => {
+            const input = member.input;
+            const studyData = experiment.study?.dataset;
+            if (studyData && libraryDatasets.some(dataset => dataset.dataset_id === studyData.datasetId && dataset.data_epoch === studyData.dataEpoch)) {
+              setLibrarySelectedId(studyData.datasetId);
+              onSelectDataset(studyData.datasetId);
+            } else if (input.kind === "IMPORTED_DATASET" && libraryDatasets.some(dataset => dataset.dataset_id === input.datasetId && dataset.data_epoch === input.dataEpoch)) {
+              setLibrarySelectedId(String(input.datasetId));
+              onSelectDataset(String(input.datasetId));
+            } else if (input.kind === "EXCHANGE_SERIES" && typeof input.startMs === "number" && typeof input.endMs === "number") {
+              dispatch({ type: "source/select", source: { schemaVersion: RESEARCH_SOURCE_SCHEMA, kind: "EXCHANGE_SERIES",
+                exchange: String(input.exchange), marketType: String(input.marketType), symbol: String(input.symbol),
+                interval: String(input.interval), startMs: input.startMs, endMs: input.endMs } });
+            }
+            if (member.runId) dispatch({ type: "result/viewHistory", runId: member.runId });
+            setNativeMode(false);
+            setHistoryOpen(false);
+          }} />
+        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed} title={t("researchExperiment.earlier")}
           onResume={(id, retry) => researchRun.batch.resume(id, retry)}
           onOpen={job => {
             if (libraryDatasets.some(dataset => dataset.dataset_id === job.datasetId && dataset.data_epoch === job.dataEpoch)) {
@@ -701,12 +841,6 @@ export default function StrategyResearchApp({
         <InlineAlert tone="danger" className="strategy-research-page-alert"
           action={<Button size="sm" variant="ghost" onClick={() => library.setError(null)}>{t("backtest.close")}</Button>}>
           {library.error}
-        </InlineAlert>
-      )}
-      {advancedError !== null && (
-        <InlineAlert tone="danger" className="strategy-research-page-alert"
-          action={<Button size="sm" variant="ghost" onClick={() => setAdvancedError(null)}>{t("backtest.close")}</Button>}>
-          <span data-testid="strategy-research-advanced-error">{advancedError}</span>
         </InlineAlert>
       )}
       <SettingsModal
@@ -730,7 +864,9 @@ export default function StrategyResearchApp({
     hostStatus: nativeMode ? undefined : researchRun.error ? "FAILED" as const : researchRun.runStatus,
     source,
     ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
-      : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),
+      : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` }
+        : source?.kind === "EXCHANGE_SERIES" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange} · ${
+          new Date(source.startMs).toISOString().slice(0, 16).replace("T", " ")} – ${new Date(source.endMs).toISOString().slice(0, 16).replace("T", " ")} UTC` } : {}),
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
     marketBatchAvailable,
@@ -772,26 +908,6 @@ export default function StrategyResearchApp({
       );
     }
 
-    if (isResearchToolMode(mode)) {
-      // The research tools own their data, navigation and status; the mode rail stays.
-      const task = mode === null ? null : researchTaskForMode(mode);
-      return (
-        <section className="strategy-research-advanced" data-testid="strategy-research-advanced" data-research-mode={mode ?? "pending"}>
-          <MarketDataWorkspaceProvider>
-            <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
-              <BacktestResearchApp
-                {...(researchSearch === null ? {} : { search: researchSearch })}
-                task={task}
-                onTaskResolved={(resolved) => showMode(researchModeForTask(resolved), researchSearch)}
-              />
-            </Suspense>
-          </MarketDataWorkspaceProvider>
-          {(intent.page === "local" || intent.page === "backtest") && (
-            <StrategyResearchCompatNotice page={intent.page} />
-          )}
-        </section>
-      );
-    }
 
     if (importedManifest !== null && analysisStore !== null && selectedInterval !== null && scopedIndicatorPersistence && localIndicatorPersistence) {
       const analysis = (
@@ -826,6 +942,7 @@ export default function StrategyResearchApp({
           settings={settings}
           onSettingsChange={setSettings}
           resolvedTheme={resolvedTheme}
+          overlaySource={researchOverlay.source}
         >
           {({ toolbar, exportOverlay, chart, indicatorPanel }) => (
             <StrategyResearchShell
@@ -861,15 +978,20 @@ export default function StrategyResearchApp({
         toolbar={null}
         exportOverlay={null}
         chart={
-          source?.kind === "CURRENT_CHART"
+          source?.kind === "CURRENT_CHART" || source?.kind === "EXCHANGE_SERIES"
             ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} overlaySource={researchOverlay.source}
+                anchorTimeMs={source.kind === "EXCHANGE_SERIES" ? source.endMs - 1 : null} /></Suspense></MarketDataWorkspaceProvider>
               : <StrategyResearchCurrentChart />
             : (
               <StrategyResearchFirstOpen
                 runtimeMode={runtime.runtimeMode}
                 draftId={state.script.draftId}
                 saving={savingTemplate}
+                {...(CHART_STRATEGY_FOLLOW_ENABLED ? { onSelectPine: () => {
+                  setNativeMode(true);
+                  dispatch({ type: "source/libraryOpen", open: true });
+                } } : {})}
                 onSelectTemplate={selectTemplate}
                 onOpenLibrary={() => dispatch({ type: "source/libraryOpen", open: true })}
               />
@@ -879,5 +1001,5 @@ export default function StrategyResearchApp({
       />
     );
   })();
-  return <ResearchModeRailContext.Provider value={modeRail}>{view}</ResearchModeRailContext.Provider>;
+  return view;
 }

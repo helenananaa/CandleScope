@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api.v1.trading_accounts import router as trading_router
 from app.trading_accounts.journal import locked_plan, phase_at, plan_direction
 from app.trading_accounts.models import TradingAccountError
-from app.trading_accounts.practice import (
+from app.simulation.practice_account import (
     Cursor,
     PathChunk,
     PracticeMatcher,

@@ -1,0 +1,226 @@
+{
+  "families": {
+    "continuous": {
+      "available": false,
+      "reason": "READ_ONLY"
+    },
+    "external": {
+      "available": false,
+      "reason": "ENGINE_UNAVAILABLE"
+    },
+    "follow": {
+      "available": false,
+      "reason": "FOLLOW_UNAVAILABLE"
+    },
+    "host": {
+      "available": true,
+      "reason": null
+    },
+    "native": {
+      "available": true,
+      "reason": null
+    }
+  },
+  "profiles": [
+    {
+      "account_models": [
+        "LINEAR_PERP_ONE_WAY_V1",
+        "LINEAR_PERP_ONE_WAY_V2",
+        "SPOT_CASH_V1"
+      ],
+      "authority": "HOST",
+      "available": true,
+      "clock_policy": "FIXED",
+      "controls": {
+        "cancel": true
+      },
+      "family": "host",
+      "fidelities": [
+        "BAR_APPROX",
+        "AGG_TRADE_TAPE",
+        "AGG_TRADE_EXECUTION"
+      ],
+      "intervals": null,
+      "language": "builtin",
+      "reason": null
+    },
+    {
+      "account_models": [
+        "LINEAR_PERP_ONE_WAY_V1",
+        "LINEAR_PERP_ONE_WAY_V2",
+        "SPOT_CASH_V1"
+      ],
+      "authority": "HOST",
+      "available": true,
+      "clock_policy": "FIXED",
+      "controls": {
+        "cancel": true
+      },
+      "family": "host",
+      "fidelities": [
+        "BAR_APPROX",
+        "AGG_TRADE_TAPE",
+        "AGG_TRADE_EXECUTION"
+      ],
+      "intervals": null,
+      "language": "pine",
+      "reason": null
+    },
+    {
+      "account_models": [
+        "LINEAR_PERP_ONE_WAY_V1",
+        "LINEAR_PERP_ONE_WAY_V2",
+        "SPOT_CASH_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FIXED",
+      "controls": {
+        "cancel": true
+      },
+      "family": "host",
+      "fidelities": [
+        "BAR_APPROX",
+        "AGG_TRADE_TAPE",
+        "AGG_TRADE_EXECUTION"
+      ],
+      "intervals": null,
+      "language": "python",
+      "reason": "FLAG_DISABLED"
+    },
+    {
+      "account_models": null,
+      "authority": "SCRIPT",
+      "available": true,
+      "clock_policy": "FIXED",
+      "controls": {
+        "cancel": true
+      },
+      "family": "native",
+      "fidelities": null,
+      "intervals": null,
+      "language": "pine",
+      "reason": null
+    },
+    {
+      "account_models": null,
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FIXED",
+      "controls": {
+        "cancel": true
+      },
+      "family": "external",
+      "fidelities": [
+        "BAR_APPROX",
+        "TRADE_TAPE",
+        "BOOK_ASSISTED",
+        "BOOK_DEPTH",
+        "BOOK_SAMPLED"
+      ],
+      "intervals": null,
+      "language": "pine",
+      "reason": "ENGINE_UNAVAILABLE"
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FORWARD",
+      "controls": {
+        "cancel": false
+      },
+      "family": "continuous",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "intervals": [
+        "1m"
+      ],
+      "language": "builtin",
+      "reason": "READ_ONLY",
+      "starts": [
+        "HISTORY_LIVE",
+        "LIVE_ONLY"
+      ]
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FORWARD",
+      "controls": {
+        "cancel": false
+      },
+      "family": "continuous",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "intervals": [
+        "1m"
+      ],
+      "language": "python",
+      "reason": "READ_ONLY",
+      "starts": [
+        "HISTORY_LIVE",
+        "LIVE_ONLY"
+      ]
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FOLLOW",
+      "controls": {
+        "cancel": false
+      },
+      "family": "follow",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
+      "language": "builtin",
+      "reason": "FOLLOW_UNAVAILABLE"
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FOLLOW",
+      "controls": {
+        "cancel": false
+      },
+      "family": "follow",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
+      "language": "python",
+      "reason": "FOLLOW_UNAVAILABLE"
+    }
+  ],
+  "schema": "candlescope.strategy-run-capabilities/1",
+  "states": [
+    "QUEUED",
+    "RUNNING",
+    "PAUSED",
+    "BLOCKED",
+    "COMPLETED",
+    "FAILED",
+    "CANCELLED"
+  ]
+}

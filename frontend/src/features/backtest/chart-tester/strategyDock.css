@@ -102,6 +102,9 @@
 .strategy-run-status[data-status=completed] { color: var(--strategy-success); }
 .strategy-run-status:is([data-status=failed], [data-status=unsupported]) { color: var(--strategy-error); }
 .strategy-run-status:is([data-status=needsData], [data-status=needs_data], [data-status=stale], [data-status=cancelled]) { color: var(--strategy-warning); }
+/* A result kept current by live bars (FOLLOW): a slow pulse, not the busy one. */
+.strategy-run-status[data-status=live] { color: var(--strategy-success); }
+.strategy-run-status[data-status=live] > i { animation: strategy-dot-pulse 2.4s ease-in-out infinite; }
 
 /* Notices under the bar: kit alerts, one row each. */
 /* Each notice is one row: title, then the detail on the same line. */

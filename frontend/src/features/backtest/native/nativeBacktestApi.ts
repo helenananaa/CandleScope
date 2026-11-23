@@ -44,6 +44,31 @@ export async function nativeApi<T>(path: string, body?: unknown, key?: string, s
   if (!response.ok) throw new Error(`${response.statusText}\n${JSON.stringify(value)}`);
   return value as T;
 }
+export type NativeExecutionMode = "NATIVE" | "CANDLESCOPE";
+
+/**
+ * Native and CandleScope-matched run endpoints (`/backtests/native|external/runs`).
+ * Only the strategy data manager uses this; components go through the manager
+ * (ADR-BACKTEST-015 P2c).
+ */
+export interface NativeRunClient {
+  create(mode: NativeExecutionMode, body: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<NativeRun>;
+  get(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun>;
+  list(mode: NativeExecutionMode, signal?: AbortSignal): Promise<NativeRun[]>;
+  cancel(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun>;
+}
+
+function nativeRunsPath(mode: NativeExecutionMode | undefined): string {
+  return mode === "CANDLESCOPE" ? "/external/runs" : "/native/runs";
+}
+
+export const defaultNativeRunClient: NativeRunClient = {
+  create: (mode, body, idempotencyKey, signal) => nativeApi<NativeRun>(nativeRunsPath(mode), body, idempotencyKey, signal),
+  get: (mode, runId, signal) => nativeApi<NativeRun>(`${nativeRunsPath(mode)}/${encodeURIComponent(runId)}`, undefined, undefined, signal),
+  list: async (mode, signal) => (await nativeApi<{ runs: NativeRun[] }>(nativeRunsPath(mode), undefined, undefined, signal)).runs,
+  cancel: (mode, runId, signal) => nativeApi<NativeRun>(`${nativeRunsPath(mode)}/${encodeURIComponent(runId)}/cancel`, {}, undefined, signal),
+};
+
 export function nativeTimeframe(interval: string): string {
   const parts = parseIntervalParts(interval);
   if (!parts) throw new Error(`Unsupported interval: ${interval}`);

@@ -42,6 +42,19 @@
 /* One-line notices in a narrow rail. */
 .trading-notice { margin: 0 var(--space-3) var(--space-2); padding: 6px var(--space-2); font-size: var(--font-size-xs); line-height: 1.4; }
 
+/* A forward run's own ledger, read-only, in the same narrow rail (ADR-BACKTEST-015 P6e). */
+.trading-forward-note { margin: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: var(--font-size-xs); line-height: 1.4; }
+.trading-forward-ledger { flex: 1; min-height: 0; overflow: auto; padding: 0 var(--space-3) var(--space-3); font-size: var(--font-size-xs); }
+.trading-forward-ledger p { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
+.trading-forward-ledger h3 { margin: var(--space-3) 0 var(--space-1); font-size: var(--font-size-sm); }
+.trading-forward-ledger dl { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); }
+.trading-forward-ledger dt { color: var(--text-muted); }
+.trading-forward-ledger dd { margin: 2px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.trading-forward-ledger table { width: 100%; border-collapse: collapse; text-align: left; font-variant-numeric: tabular-nums; }
+.trading-forward-ledger :is(th, td) { padding: 2px var(--space-1) 2px 0; overflow-wrap: anywhere; }
+.trading-forward-ledger svg { display: block; width: 100%; max-height: 80px; }
+.trading-forward-ledger .continuous-repair { border: 1px solid var(--border-strong); border-radius: 6px; padding: var(--space-2); margin: var(--space-2) 0; }
+
 /* Five tabs share a rail about 300px wide, also in English. */
 .trading-tabs { flex-shrink: 0; gap: var(--space-2); padding: 0 var(--space-3); }
 .trading-tabs .ui-tab { height: 32px; font-size: var(--font-size-sm); }

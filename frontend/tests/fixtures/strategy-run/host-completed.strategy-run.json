@@ -1,0 +1,16 @@
+{
+  "authority": "HOST",
+  "clock_policy": "FIXED",
+  "error": null,
+  "family": "host",
+  "fidelity": "BAR_APPROX",
+  "generation": 1,
+  "language": null,
+  "result_available": true,
+  "run_id": "bt_fixture",
+  "schema": "candlescope.strategy-run/1",
+  "source_state": "COMPLETED",
+  "state": "COMPLETED",
+  "terminal": true,
+  "version_hash": "sha256:8177f1457b103e86f1f8860b06a2d880df0a49fcd771e7e7c27bfb797959f64c"
+}

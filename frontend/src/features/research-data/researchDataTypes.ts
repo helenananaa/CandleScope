@@ -1,7 +1,7 @@
 export const RESEARCH_SOURCE_SCHEMA = "candlescope.research-source/1" as const;
 export const FROZEN_RESEARCH_CONTEXT_SCHEMA = "candlescope.frozen-research-context/1" as const;
 
-export const RESEARCH_SOURCE_KINDS = ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"] as const;
+export const RESEARCH_SOURCE_KINDS = ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN", "EXCHANGE_SERIES"] as const;
 export type ResearchSourceKind = (typeof RESEARCH_SOURCE_KINDS)[number];
 
 export const RESEARCH_CAPABILITY_IDS = [
@@ -47,10 +47,26 @@ export type CompletedRunSourceRefV1 = {
   snapshotHash: string;
 };
 
+/**
+ * Exchange history chosen in the research workspace itself (ADR-BACKTEST-015 P5a): a series and a fixed
+ * range `[startMs, endMs)`, prepared on demand and frozen into each run's snapshot. Not bound to a chart.
+ */
+export type ExchangeSeriesSourceRefV1 = {
+  schemaVersion: typeof RESEARCH_SOURCE_SCHEMA;
+  kind: "EXCHANGE_SERIES";
+  exchange: string;
+  marketType: string;
+  symbol: string;
+  interval: string;
+  startMs: number;
+  endMs: number;
+};
+
 export type ResearchSourceRefV1 =
   | CurrentChartSourceRefV1
   | ImportedDatasetSourceRefV1
-  | CompletedRunSourceRefV1;
+  | CompletedRunSourceRefV1
+  | ExchangeSeriesSourceRefV1;
 
 export type ResearchQualitySummaryV1 = {
   status: ResearchQualityStatus;

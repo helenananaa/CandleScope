@@ -3,7 +3,9 @@ import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
-import { nativeApi, type NativeRun } from "./nativeBacktestApi.js";
+import type { NativeRun } from "./nativeBacktestApi.js";
+import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
+import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import { normalizeComparison, type NativeComparisonSelection, type PinnedStrategyRun, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 import { comparisonConditions, comparisonMetrics, conditionStatus } from "./nativeStrategyComparisonModel.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -16,11 +18,14 @@ type Pinned = PinnedStrategyRun;
 const CONDITION_KEYS = ["symbol", "interval", "start", "end", "snapshot", "engine", "fill", "initial", "fees", "slippage"] as const;
 const COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399"];
 
-export default function NativeStrategyComparison({ items, context, onOpen, saved, onSave }: {
+export default function NativeStrategyComparison({ items, context, onOpen, saved, onSave, manager: explicitManager }: {
   items: NativeStrategyInstance[]; context: string[]; onOpen(id: string): void;
   saved?: NativeComparisonSelection | undefined; onSave(value: NativeComparisonSelection): void;
+  /** A page with its own data manager passes it; charts use the workspace's. */
+  manager?: StrategyDataManager | null | undefined;
 }) {
   const locale = useLocale();
+  const manager = useStrategyDataManager(explicitManager);
   // Start and end are compared as sent (epoch milliseconds) and shown as UTC dates.
   const conditionValue = (key: (typeof CONDITION_KEYS)[number], value: string | null) =>
     value === null ? "—"
@@ -42,13 +47,14 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
   useEffect(() => {
     const controller = new AbortController();
     setReports({});
+    if (!manager) return () => controller.abort();
     for (const item of pinned) {
-      void nativeApi<NativeRun>(`/${item.mode === "CANDLESCOPE" ? "external" : "native"}/runs/${encodeURIComponent(item.runId)}`, undefined, undefined, controller.signal)
+      void manager.loadNativeRun(item.mode === "CANDLESCOPE" ? "CANDLESCOPE" : "NATIVE", item.runId, controller.signal)
         .then((run) => { if (!controller.signal.aborted) setReports((value) => ({ ...value, [item.id]: { run } })); })
         .catch((reason) => { if (!controller.signal.aborted) setReports((value) => ({ ...value, [item.id]: { error: String(reason) } })); });
     }
     return () => controller.abort();
-  }, [pinned]);
+  }, [manager, pinned]);
   const ready = pinned.flatMap((item, index) => {
     const run = reports[item.id]?.run;
     return run?.state === "COMPLETED" && run.result ? [{ item, index, run, metrics: comparisonMetrics(run), conditions: comparisonConditions(run) }] : [];

@@ -80,6 +80,8 @@ class RunCreateRequest(BaseModel):
     daily_loss_limit: str | None = Field(default=None, max_length=64)
     cooldown_events: int = Field(default=0, ge=0, le=1_000_000)
     execution_model_revision: str | None = Field(default=None, max_length=48)
+    # ADR-BACKTEST-015 P6e3: the practice account model (validated by the service).
+    account_rules: str | None = Field(default=None, max_length=32)
     participation_rate: str | None = Field(default=None, max_length=64)
     latency_ms: int = Field(default=0, ge=0, le=60_000)
     latency_events: int = Field(default=0, ge=0, le=100_000)

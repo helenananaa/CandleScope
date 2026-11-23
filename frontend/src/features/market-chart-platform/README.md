@@ -4,7 +4,10 @@ This package is the source-neutral chart boundary shared by the live market page
 applications. It owns no product UI and opens no REST or WebSocket connection by itself.
 
 - `LIVE_REFERENCE` adapts a Host-owned `MarketDataRuntimeContract`; it has no immutable execution
-  identity and must be rejected as a Run input.
+  identity and must be rejected as a Run input. An imported dataset's paged reader is a reference
+  too (the research workspace's imported chart): a Run reads the backend snapshot, not the chart.
+  So is a result replay, which reveals a Run's bars step by step into a store the page owns
+  (`storeMarketData` serves such a store as offline market data).
 - `FROZEN_SNAPSHOT` owns a copied, offline `SeriesWindowStore` identified by dataset, epoch, and
   snapshot hash.
 - `RUN_RESULT` owns a copied, offline result series identified by Run and report/chart hashes.

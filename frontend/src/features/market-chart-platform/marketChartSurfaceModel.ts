@@ -9,7 +9,9 @@ export type MarketChartSurfaceChartProps = SingleChartPanesProps & RefAttributes
 
 export function backendSyntheticSourceFor(source: MarketChartSourceRuntime) {
   if (!BACKEND_SYNTHETIC_SERIES_ENABLED) return null;
-  if (source.mode === "LIVE_REFERENCE") return source.session;
+  if (source.mode === "LIVE_REFERENCE") return source.syntheticOrigin ? { ...source.session,
+    syntheticOrigin: source.syntheticOrigin,
+    syntheticSeriesKey: String(source.marketData.view.seriesStore?.seriesKey ?? "unavailable") } : source.session;
   if (!source.syntheticOrigin) return capturedSyntheticSource(source.session,
     source.marketData.view.seriesStore?.seriesKey ?? null, JSON.stringify(source.executionIdentity ?? source.sourceId),
     Number(source.marketData.view.seriesStore?.last()?.time ?? 0) * 1000);

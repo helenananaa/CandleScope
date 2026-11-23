@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent
 from .kernel import SimulationKernel
+from .ohlc_path import crosses_limit, triggers_stop  # noqa: F401 - re-exported for path matchers
 from .linear_perp_account_v2 import LinearPerpetualAccountV2
 
 CONTRACT = "candlescope.pine-closing-tick/1"
@@ -97,11 +98,3 @@ def match_closing_tick(kernel, bar, sequence, *, on_fill=None):
         kernel._last_event, kernel.execution_reporter = previous_event, previous_reporter
         if not isinstance(kernel.account, LinearPerpetualAccountV2):
             kernel.account.mark = price
-
-
-def crosses_limit(order, price):
-    return price <= order.limit_price if order.side == "BUY" else price >= order.limit_price
-
-
-def triggers_stop(order, price):
-    return price >= order.stop_price if order.side == "BUY" else price <= order.stop_price

@@ -7,8 +7,8 @@ import type {
   SeriesType,
 } from "lightweight-charts";
 import type {
+  ChartLayerSource,
   PluginChartRenderEntry,
-  PluginChartLayerSource,
 } from "../features/plugins/pluginChartLayerSource.js";
 import type {
   PluginChartBand,
@@ -361,7 +361,7 @@ export function attachPluginChartLayerSource({
   targetSeries,
   recordPerfEvent,
 }: {
-  source: PluginChartLayerSource;
+  source: ChartLayerSource;
   targetSeries: MainSeriesHandle;
   recordPerfEvent: PerfEventRecorder;
 }): () => void {

@@ -35,7 +35,7 @@ from .models import (
     to_decimal,
     valid_id,
 )
-from .practice import (
+from app.simulation.practice_account import (
     BAR_MS,
     Cursor,
     PracticeBuyingPower,
@@ -43,6 +43,8 @@ from .practice import (
     PracticeSettings,
     WorkingOrder,
     advance_cursor,
+    initial_margin,
+    market_leverage,
     reachable,
 )
 from .stats import TradeFacts, compute_stats, journal_tags
@@ -480,8 +482,7 @@ class TradingAccountService(JournalService):
             value = trade.unrealized_pnl(mark)
             unrealized += value or ZERO
             price = mark if mark is not None else (trade.avg_entry_price or ZERO)
-            effective_leverage = leverage if trade.market_type == "futures" else Decimal(1)
-            used_margin += trade.open_qty * price / effective_leverage
+            used_margin += initial_margin(trade.open_qty, price, market_leverage(leverage, trade.market_type))
             view = trade.to_dict(mark=mark)
             view["markAtMs"] = mark_ms
             view["markSource"] = mark_source
@@ -881,8 +882,9 @@ class TradingAccountService(JournalService):
         increases = not reduce_only and (position == 0 or (position > 0) == (direction > 0))
         if increases:
             summary = self.account_summary(account_id)
+            # Spot is fully paid; the account's leverage is read only for futures.
             leverage = Decimal(account["settings"]["leverage"]) if instrument[1] == "futures" else Decimal(1)
-            required = qty * entry_price / leverage
+            required = initial_margin(qty, entry_price, leverage)
             available = Decimal(summary["available"])
             if required > available:
                 raise conflict(
@@ -1190,9 +1192,9 @@ class TradingAccountService(JournalService):
                     marks_available = False
                     continue
                 capital += trade.unrealized_pnl(mark)
-                capital -= trade.open_qty * mark / (leverage if trade.market_type == "futures" else Decimal(1))
+                capital -= initial_margin(trade.open_qty, mark, market_leverage(leverage, trade.market_type))
         return PracticeBuyingPower(capital if marks_available else None,
-                                   leverage if instrument[1] == "futures" else Decimal(1), quantities, trade_ids, committed_ms)
+                                   market_leverage(leverage, instrument[1]), quantities, trade_ids, committed_ms)
 
     def _match_sessions(
         self, instrument: Instrument, rows: list[dict[str, Any]],

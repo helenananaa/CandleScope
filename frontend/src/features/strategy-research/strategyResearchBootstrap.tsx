@@ -17,6 +17,8 @@ import {
   type StrategyResearchPage,
 } from "./strategyResearchLaunch.js";
 import { canonicalStrategyResearchHref } from "./strategyResearchMode.js";
+import { loadResearchHandoff, type ResearchHandoff } from "./strategyResearchHandoff.js";
+import { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 
 const StrategyResearchApp = lazy(() => import("./StrategyResearchApp.js"));
 
@@ -24,10 +26,23 @@ const StrategyResearchApp = lazy(() => import("./StrategyResearchApp.js"));
 export function renderStrategyResearchBootstrap(input: {
   page: StrategyResearchPage;
   location?: { pathname: string; search: string };
+  /** A chart's hand-off, read from the backend before the page mounts (ADR-BACKTEST-015 P3c). */
+  handoff?: ResearchHandoff | null;
 }): ReactNode {
   const location = input.location ?? { pathname: `/${input.page}.html`, search: "" };
   const intent: StrategyResearchLaunchIntent = parseStrategyResearchLaunch(location);
-  return <StrategyResearchApp intent={intent} />;
+  return <StrategyResearchApp intent={intent} {...(input.handoff !== undefined ? { handoff: input.handoff } : {})} />;
+}
+
+/** The page seeds its state from the hand-off when it mounts, so the hand-off is read first. */
+async function preloadHandoff(intent: StrategyResearchLaunchIntent): Promise<ResearchHandoff | null | undefined> {
+  if (intent.kind !== "handoff") return undefined;
+  const manager = new StrategyDataManager();
+  try {
+    return await loadResearchHandoff(intent.id, manager);
+  } finally {
+    manager.dispose();
+  }
 }
 
 export async function mountStrategyResearchPage(input: {
@@ -44,13 +59,13 @@ export async function mountStrategyResearchPage(input: {
   // backtest.html and local.html stay as compatibility URLs: show the canonical address.
   const canonical = canonicalStrategyResearchHref(location, parseStrategyResearchLaunch(location));
   if (canonical !== null) window.history.replaceState(window.history.state, "", canonical);
-  await prepareUnifiedShell();
+  const [handoff] = await Promise.all([preloadHandoff(parseStrategyResearchLaunch(location)), prepareUnifiedShell()]);
   createRoot(root).render(
     <StrictMode>
       <ChartErrorBoundary>
         <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
           <AppProviders>
-            {renderStrategyResearchBootstrap({ page: input.page, location })}
+            {renderStrategyResearchBootstrap({ page: input.page, location, ...(handoff !== undefined ? { handoff } : {}) })}
           </AppProviders>
         </Suspense>
       </ChartErrorBoundary>

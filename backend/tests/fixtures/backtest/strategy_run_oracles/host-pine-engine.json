@@ -1,0 +1,37 @@
+{
+  "description": "Host BAR_APPROX kernel, Pine engine provider (pine-engine-chart-v1)",
+  "digests": {
+    "decision_hash": "ed2c6ad91dc999243763f3cc4359cfd31692935811efe757796719f8bed65e29",
+    "equity_curve": "sha256:24600fed5ac6f7a86f36337fd7802236995bf7171b6e167a28837c9d01cf8eb1",
+    "fill_hash": "fc163184cb350e7574600a4e0f1bbe4b50ca28f830ac5ae7a63d7dfe47f752d5",
+    "ledger_hash": "c98ae40ec215651446a13fdf0ded481fd703468331a47757573aed5bcd5e4c28",
+    "orders": "sha256:c341af87b3a8b11a3c080d543c6d8bbc2f26fb74abe312f52e3661cea1448752"
+  },
+  "path": "host-pine-engine",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.strategy-run-oracle/1",
+  "summary": {
+    "fill_rows": [
+      "719999 BUY 1.0 @ 107.0107 fee 0.03210321",
+      "959999 SELL 1.0 @ 99.99 fee 0.029997",
+      "1139999 BUY 1.0 @ 108.0108 fee 0.03240324",
+      "1379999 SELL 1.0 @ 101.9898 fee 0.03059694",
+      "1679999 BUY 1.0 @ 107.0107 fee 0.03210321",
+      "1919999 SELL 1.0 @ 99.99 fee 0.029997",
+      "2099999 BUY 1.0 @ 108.0108 fee 0.03240324",
+      "2339999 SELL 1.0 @ 101.9898 fee 0.03059694",
+      "2639999 BUY 1.0 @ 107.0107 fee 0.03210321"
+    ],
+    "fills": 9,
+    "final_equity": "9967.62359601",
+    "final_position": "1.0",
+    "orders": 10,
+    "rejected": 0
+  }
+}

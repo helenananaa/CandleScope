@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Checkbox, Field, InlineAlert, Select, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import type { BacktestApiClient, BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
+import type { BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
 import { isPythonTrustedLocalEnabled } from "./backtestFlags.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -12,6 +12,7 @@ import {
   PYTHON_TEMPLATES,
   PYTHON_UNSUPPORTED,
   TRUSTED_LOCAL_FACT_KEYS,
+  TRUSTED_LOCAL_SETTING,
   trustedLocalConfirmLabel,
   assessCoverage,
   assertRequiredBundleFiles,
@@ -26,12 +27,13 @@ import {
   type PythonBundleFileMap,
   type PythonBundleIdentity,
   type PythonRuntimeMode,
+  type PythonStudioApi,
   type PythonStudioGate,
   type StudioFailure,
 } from "./pythonStudio.js";
 
 interface PythonStudioPanelProps {
-  api: BacktestApiClient;
+  api: PythonStudioApi;
   loading: boolean;
   snapshot: BacktestSnapshot | null;
   datasetId: string;
@@ -52,6 +54,10 @@ interface PythonStudioPanelProps {
   onError: (error: string | null) => void;
   onRevisionReady: (revision: StrategyRevisionRecord, identity: PythonBundleIdentity) => void;
   onGateChange: (gate: PythonStudioGate) => void;
+}
+
+function smokeKey(revisionId: string, datasetId: string, startTimeMs: number, endTimeMs: number): string {
+  return JSON.stringify([revisionId, datasetId, startTimeMs, endTimeMs]);
 }
 
 export default function PythonStudioPanel({
@@ -77,7 +83,10 @@ export default function PythonStudioPanel({
   const [files, setFiles] = useState<PythonBundleFileMap>(defaultTemplate.files);
   const [inspectResult, setInspectResult] = useState<Record<string, unknown> | null>(null);
   const [bundleIdentity, setBundleIdentity] = useState<PythonBundleIdentity | null>(restored?.bundleIdentity ?? null);
-  const [smokePassed, setSmokePassed] = useState(Boolean(restored?.smokePassed));
+  // A passed smoke belongs to one revision on one dataset and range; another selection needs its own smoke.
+  const [smokedKey, setSmokedKey] = useState<string | null>(() => restored?.smokePassed && restored.revisionId
+    ? smokeKey(restored.revisionId, datasetId, startTimeMs, endTimeMs) : null);
+  const smokePassed = Boolean(selectedRevisionId) && smokedKey === smokeKey(selectedRevisionId, datasetId, startTimeMs, endTimeMs);
   const [runtimeMode, setRuntimeMode] = useState<PythonRuntimeMode>(restored?.runtimeMode ?? "SANDBOXED_LOCAL");
   const [trustedConfirmed, setTrustedConfirmed] = useState(Boolean(restored?.trustedConfirmed));
   const [showManifest, setShowManifest] = useState(false);
@@ -133,7 +142,7 @@ export default function PythonStudioPanel({
   const applyFiles = useCallback((next: PythonBundleFileMap) => {
     setFiles(next);
     setInspectResult(null);
-    setSmokePassed(false);
+    setSmokedKey(null);
     setFailure(null);
   }, []);
 
@@ -192,7 +201,7 @@ export default function PythonStudioPanel({
         identity.requirements_lock_hash = String(created.requirements_lock_hash);
       }
       setBundleIdentity(identity);
-      setSmokePassed(false);
+      setSmokedKey(null);
       onRevisionReady(revision, identity);
       onNotice(t("python.notice.frozen", {
         bundle: identity.bundle_id ?? "",
@@ -210,6 +219,7 @@ export default function PythonStudioPanel({
     onLoading(true);
     onError(null);
     setFailure(null);
+    const smoked = smokeKey(selectedRevisionId, datasetId, startTimeMs, endTimeMs);
     try {
       const maxWindow = Math.min(endTimeMs, startTimeMs + 7 * 86_400_000);
       await api.smokeStrategyRevision(selectedRevisionId, {
@@ -221,10 +231,10 @@ export default function PythonStudioPanel({
         python_runtime_mode: runtimeMode,
         python_trusted_confirmed: runtimeMode === "TRUSTED_LOCAL" && trustedConfirmed,
       });
-      setSmokePassed(true);
+      setSmokedKey(smoked);
       onNotice(t("python.notice.smoke"));
     } catch (reason) {
-      setSmokePassed(false);
+      setSmokedKey(null);
       reportFailure(reason);
     } finally {
       onLoading(false);
@@ -368,7 +378,7 @@ export default function PythonStudioPanel({
         {runtimeMode === "TRUSTED_LOCAL" && (
           <div className="python-trusted-facts" data-testid="python-trusted-facts">
             <ul>
-              {TRUSTED_LOCAL_FACT_KEYS.map((key) => <li key={key}>{t(key, {}, locale)}</li>)}
+              {TRUSTED_LOCAL_FACT_KEYS.map((key) => <li key={key}>{t(key, { setting: TRUSTED_LOCAL_SETTING }, locale)}</li>)}
             </ul>
             <small>{t("backtest.flagState", { state: trustedFlagEnabled ? t("backtest.flagOn") : t("backtest.flagOff") })}</small>
             <Checkbox

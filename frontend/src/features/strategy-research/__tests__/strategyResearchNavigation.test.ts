@@ -11,8 +11,7 @@ import {
   parseStrategyResearchLaunch,
   strategyResearchDeepLinkSearch,
 } from "../strategyResearchLaunch.js";
-import { strategyResearchAdvancedCellId } from "../strategyResearchAdvanced.js";
-import { researchReturnHref } from "../../backtest/research/backtestResearchModel.js";
+import { researchWorkspaceFocus } from "../strategyResearchMode.js";
 import { StrategyResearchScriptPanel } from "../StrategyResearchScriptPanel.js";
 import {
   createMemoryStrategyDraftAdapter,
@@ -31,7 +30,7 @@ test("TopBar strategy entry is /strategy.html and not a sibling 策略回测 lin
   assert.doesNotMatch(topBar, /shell\.backtest/);
 });
 
-test("backtest.html remains a compatibility deep-link URL into the unified app", () => {
+test("backtest.html and its run, study and context links open in the workspace", () => {
   assert.equal(parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }).kind, "advanced");
   const run = parseStrategyResearchLaunch({
     pathname: "/backtest.html",
@@ -39,14 +38,28 @@ test("backtest.html remains a compatibility deep-link URL into the unified app",
   });
   assert.equal(run.kind, "deep-link");
   assert.equal(strategyResearchDeepLinkSearch(run), "?run=bt_0123456789abcdef");
-  const html = renderToStaticMarkup(
-    React.createElement(StrategyResearchApp, {
-      intent: parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }),
-    }),
-  );
-  assert.match(html, /strategy-research-advanced/);
-  assert.doesNotMatch(html, /research-data-source-bar|strategy-research-status/);
-  assert.doesNotMatch(html, /monaco/i);
+  for (const intent of [parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }), run,
+    parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?study=st_0123456789abcdef" }),
+    parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?context=brc_abcdefgh" })]) {
+    const html = renderToStaticMarkup(React.createElement(StrategyResearchApp, { intent }));
+    assert.doesNotMatch(html, /strategy-research-advanced/, `${intent.kind} opens the workspace (ADR-BACKTEST-015 P5d)`);
+    assert.match(html, /strategy-research-shell/);
+    assert.doesNotMatch(html, /research-mode-rail|monaco/i);
+  }
+});
+
+test("?mode= opens the workspace field each research tool became", () => {
+  assert.deepEqual(researchWorkspaceFocus("quick"), {});
+  assert.deepEqual(researchWorkspaceFocus("precise"), { pane: "conditions", resultTab: "details" });
+  assert.deepEqual(researchWorkspaceFocus("robust"), { robustness: true });
+  assert.deepEqual(researchWorkspaceFocus("python"), { saved: true });
+  assert.deepEqual(researchWorkspaceFocus("multi"), { batch: true });
+  assert.deepEqual(researchWorkspaceFocus("replay"), { resultTab: "details" });
+  const robust = renderToStaticMarkup(React.createElement(StrategyResearchApp, {
+    intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?mode=robust" }), initialMode: "robust",
+  }));
+  assert.doesNotMatch(robust, /strategy-research-advanced/);
+  assert.match(robust, /strategy-research-shell/);
 });
 
 test("invalid deep link shows an actionable error and does not select a dataset", () => {
@@ -63,46 +76,6 @@ test("invalid deep link shows an actionable error and does not select a dataset"
   assert.match(html, /strategy-research-deep-link-error/);
   assert.doesNotMatch(html, /research-dataset-/);
   assert.doesNotMatch(html.toLowerCase(), /dataset id/);
-});
-
-test("imported and current-chart advanced returns stay on strategy.html without reusing live runtime query", () => {
-  assert.equal(strategyResearchAdvancedCellId({
-    schemaVersion: "candlescope.research-source/1",
-    kind: "IMPORTED_DATASET",
-    datasetId: "local-0123456789abcdef0123456789abcdef",
-    dataEpoch: `sha256:${"a".repeat(64)}`,
-    interval: "15m",
-  }), "imported");
-  assert.equal(strategyResearchAdvancedCellId({
-    schemaVersion: "candlescope.research-source/1",
-    kind: "CURRENT_CHART",
-    workspaceId: "ws",
-    cellId: "cell",
-    exchange: "binance",
-    marketType: "spot",
-    symbol: "BTCUSDT",
-    interval: "1m",
-  }), "current");
-  assert.equal(
-    researchReturnHref({
-      schema_version: "candlescope.backtest-research-launch-context/1",
-      context_id: "brc_context_12345678",
-      context_hash: "sha256:context",
-      source_workspace_id: "strategy-research",
-      source_cell_id: "imported",
-      strategy_draft_id: "draft-12345678",
-      strategy_revision_id: null,
-      parameters: {},
-      quick_preset_id: "CRYPTO_SPOT_STANDARD_V1",
-      chart_session: { exchange: "local", market_type: "spot", symbol: "BTC-USDT", interval: "15m" },
-      range: { mode: "ALL_AVAILABLE", start_time_ms: null, end_time_ms: null },
-      dataset_identity: null,
-      latest_run_id: null,
-      baseline_run_id: null,
-      created_at_ms: 1,
-    }),
-    "/strategy.html?source=imported",
-  );
 });
 
 test("ordinary script panel exposes advanced research without internal identity copy", () => {
@@ -124,6 +97,24 @@ test("ordinary script panel exposes advanced research without internal identity 
   );
   assert.match(html, /strategy-research-open-advanced/);
   assert.doesNotMatch(html.toLowerCase(), /dataset id|data epoch|snapshot hash/);
+});
+
+test("as on the chart, the Python strategy panel offers Python only when strategies are named by language", () => {
+  const panel = (languageFixed: boolean) => renderToStaticMarkup(
+    React.createElement(StrategyResearchScriptPanel, {
+      cellScope: "strategy-research",
+      session: { exchange: "local", marketType: "spot", symbol: "BTC-USDT", interval: "15m" },
+      sourceKind: "IMPORTED_DATASET", draftId: null, barOnly: true, runStatus: "READY", needsData: false,
+      onDraftId() {}, onDraftRevision() {}, onRun() {}, onConfirmNeedsData() {}, onOpenAdvanced() {}, languageFixed,
+    }),
+  );
+  const python = panel(true);
+  assert.match(python, /strategy-research-template-PYTHON_SMA/);
+  assert.doesNotMatch(python, /strategy-research-template-PINE_SAMPLED/, "Pine strategies are their own entry (ADR-BACKTEST-015 P5c4)");
+  assert.match(panel(false), /strategy-research-template-PINE_SAMPLED/);
+  const app = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
+  assert.match(app, /strategyList=\{strategyList\}/);
+  assert.match(app, /languageFixed=\{strategyList\}/);
 });
 
 test("ordinary research persists edited source for remount and advanced draft lookup", async () => {
@@ -151,16 +142,18 @@ test("ordinary research persists edited source for remount and advanced draft lo
 
   const panelSource = readFileSync(path.resolve(here, "../StrategyResearchScriptPanel.tsx"), "utf8");
   assert.match(panelSource, /draftStore\.load\(draftId\)/);
-  assert.match(panelSource, /await flushPendingDraft\(\)[\s\S]*onOpenAdvanced\(\)/);
+  assert.match(panelSource, /await flushPendingDraft\(\)[\s\S]*onOpenAdvanced\?\.\(\)/);
   assert.match(panelSource, /beforeunload/);
 });
 
-test("unified app lazily hosts the research tools as modes and carries its context into them", () => {
+test("the unified app no longer hosts the research tool", () => {
   const app = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
-  assert.match(app, /lazy\(\(\) => import\("\.\.\/backtest\/research\/BacktestResearchApp/);
-  assert.doesNotMatch(app, /useBacktestResearchRuntime/);
-  assert.match(app, /createStrategyResearchContextSearch/);
-  assert.match(app, /<StrategyResearchModeRail/);
+  assert.doesNotMatch(app, /BacktestResearchApp|useBacktestResearchRuntime/);
+  assert.doesNotMatch(app, /StrategyResearchModeRail|ResearchModeRailContext|createStrategyResearchContextSearch/);
+  assert.match(app, /loadResearchLaunchContext/);
+  assert.match(app, /experiments\.openStudy/);
   assert.match(app, /window\.history\.replaceState/);
   assert.doesNotMatch(app, /window\.location\.assign|strategy\.advancedNeedSource|strategy\.advancedNeedDraft/);
+  const bridge = readFileSync(path.resolve(here, "../../backtest/chart-tester/ChartStrategyTesterCellBridge.tsx"), "utf8");
+  assert.doesNotMatch(bridge, /buildBacktestResearchLaunchContext|createResearchLaunchContext/, "the chart hands off to the workspace");
 });

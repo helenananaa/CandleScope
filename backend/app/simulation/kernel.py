@@ -7,7 +7,7 @@ from copy import deepcopy
 import hashlib
 import json
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from decimal import Decimal, InvalidOperation
 from collections.abc import Iterable
 from typing import Callable, Mapping
@@ -25,8 +25,16 @@ from app.simulation.account_execution import (
 from app.simulation.execution_realism import (
     BAR_PATH_SCENARIO,
     EXECUTION_REALISM_V2,
+    PINE_BAR_FILL_POLICY,
+    PINE_BAR_PATH_SCENARIO,
     source_event_trace,
 )
+from app.simulation.ohlc_path import (
+    BAR_CLOCK, BAR_CLOCKS, PATH_CLOCKS, PATH_MODEL, PINE_CHART, PINE_PATH, PINE_V2, OhlcPathClock,
+)
+from app.simulation.practice_clock import PRACTICE, PRACTICE_CONTRACT, PRACTICE_FILL_POLICY, PracticeClock
+
+DEFAULT_FILL_POLICY = "BAR_NEXT_BAR_WORST_CASE_V1"
 
 ALLOWED_ORDER_TYPES = frozenset({"MARKET", "LIMIT", "STOP", "STOP_LIMIT"})
 ALLOWED_SIDES = frozenset({"BUY", "SELL"})
@@ -99,7 +107,11 @@ StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
 
 @dataclass(slots=True)
-class SimulationKernel:
+class SimulationKernel(OhlcPathClock, PracticeClock):
+    """The Host bar kernel. ``bar_clock`` declares how a bar is matched (ADR-BACKTEST-015 P6b, P6e3):
+    ``BAR`` decides each bar once in the worst case; the Pine path clocks walk an OHLC path
+    (``ohlc_path``); ``PRACTICE`` matches with the practice account model (``practice_clock``).
+    The clock, like every other setting here, is fixed for the run."""
     process_orders_on_close: bool = field(default=False, kw_only=True)
     account_model: str = "LINEAR_PERP_ONE_WAY_V1"
     funding_mode: str = "OFF"
@@ -115,7 +127,7 @@ class SimulationKernel:
     qty_step: Decimal | None = None
     min_notional: Decimal | None = None
     gap_policy: str = "REJECT"
-    fill_policy: str = "BAR_NEXT_BAR_WORST_CASE_V1"
+    fill_policy: str = DEFAULT_FILL_POLICY
     execution_model_revision: str | None = None
     participation_rate: Decimal | None = None
     latency_ms: int = 0
@@ -169,8 +181,39 @@ class SimulationKernel:
     _native_empty_hash: Callable | None = field(default=None, init=False, repr=False, compare=False)
     _specialized_bar: bool = field(default=False, init=False, repr=False, compare=False)
     _checkpoint_history: object = field(default=None, init=False, repr=False, compare=False)
+    bar_clock: str = BAR_CLOCK
+    # Pine OHLC path clocks: path cursor, chart source cursor, V2 bar state (ohlc_path).
+    path_sequence: int = 0
+    path_level_provider: Callable | None = field(default=None, repr=False)
+    source_sequence: int = 0
+    source_time_ms: int | None = None
+    chart_bar_count: int = 0
+    _capacity_left: Decimal | None = None
+    _auxiliary: list = field(default_factory=list, repr=False)
+    _auxiliary_cursor: int = 0
+    _active_bar: MarketEvent | None = field(default=None, repr=False)
+    _observation_point: MarketEvent | None = field(default=None, repr=False)
+    _pending_callbacks: list = field(default_factory=list, repr=False)
+    _delivered_account_callbacks: list = field(default_factory=list, repr=False)
+    _last_bar_close_ms: int | None = None
+    _last_path_price: Decimal | None = None
+    _callback: object = field(default=None, repr=False)
+    _failed_bar: bool = field(default=False, repr=False)
+    # PRACTICE clock: the practice account's candle cursor and each order's placement time.
+    _practice_cursor: object = field(default=None, repr=False)
+    _practice_created: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
+        if self.bar_clock not in BAR_CLOCKS and self.bar_clock != PRACTICE:
+            raise MarketDatasetError("unknown bar clock", code="FIDELITY_UNSUPPORTED")
+        if self.fill_policy == DEFAULT_FILL_POLICY and self.bar_clock != BAR_CLOCK:
+            self.fill_policy = (PRACTICE_FILL_POLICY if self.bar_clock == PRACTICE
+                                else PINE_BAR_FILL_POLICY if self.bar_clock == PINE_V2 else PATH_MODEL)
+        self._init_account()
+        self._check_path_clock()
+        self._check_practice_clock()
+
+    def _init_account(self) -> None:
         if self.account_model == SPOT_ACCOUNT_MODEL and (self.leverage != 1 or self.funding_mode != "OFF" or self.funding_rate != 0):
             raise MarketDatasetError("Spot cash requires leverage 1 and funding OFF", code="SPOT_ACCOUNT_CONFIG_INVALID")
         if self.execution_model_revision == EXECUTION_REALISM_V2:
@@ -212,7 +255,7 @@ class SimulationKernel:
         )
 
     def _supports_bar_path_scenario(self):
-        return self.bar_path_scenario == BAR_PATH_SCENARIO
+        return self.bar_path_scenario == (PINE_BAR_PATH_SCENARIO if self.bar_clock == PINE_V2 else BAR_PATH_SCENARIO)
 
     @property
     def projected_position_qty(self) -> Decimal:
@@ -233,6 +276,14 @@ class SimulationKernel:
     _account_execution_receipts: dict = field(default_factory=dict)
 
     def snapshot(self, *, history_encoder=None) -> dict:
+        if self.bar_clock == BAR_CLOCK:
+            return self._bar_snapshot(history_encoder)
+        if self.bar_clock == PRACTICE:
+            return self._practice_snapshot(self._bar_snapshot(history_encoder))
+        self._check_path_snapshot()
+        return self._path_snapshot(self._bar_snapshot(history_encoder))
+
+    def _bar_snapshot(self, history_encoder) -> dict:
         return {
             **({"account_execution_receipts": deepcopy(self._account_execution_receipts)}
                if self._account_execution_receipts else {}),
@@ -327,8 +378,22 @@ class SimulationKernel:
         }
 
     def restore(self, payload: Mapping[str, object]) -> None:
-        if payload.get("pine_bar_path") is not None and not hasattr(self, "path_sequence"):
+        if self.bar_clock == PINE_V2:
+            self._restore_v2(payload)
+        elif self.bar_clock == PINE_CHART:
+            self._restore_chart(payload)
+        elif self.bar_clock == PINE_PATH:
+            self._restore_path(payload)
+        elif self.bar_clock == PRACTICE:
+            self._restore_practice(payload)
+        else:
+            self._restore_bar(payload)
+
+    def _restore_bar(self, payload: Mapping[str, object]) -> None:
+        if payload.get("pine_bar_path") is not None and self.bar_clock not in PATH_CLOCKS:
             raise MarketDatasetError("Pine BAR path requires its own matcher", code="CHECKPOINT_CORRUPT")
+        if payload.get("practice_path") is not None and self.bar_clock != PRACTICE:
+            raise MarketDatasetError("a practice path checkpoint requires the practice clock", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("process_orders_on_close")) != self.process_orders_on_close:
             raise MarketDatasetError("closing-tick checkpoint identity changed", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("scale_stream_decisions") or False) != bool(
@@ -468,7 +533,25 @@ class SimulationKernel:
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
         close_callback=None,
+        **clock_options,
     ) -> SimulationResult:
+        if self.bar_clock == PINE_PATH:
+            raise MarketDatasetError("Pine BAR path requires its explicit execution clock", code="FIDELITY_UNSUPPORTED")
+        if self.bar_clock == PRACTICE:
+            if clock_options or close_callback is not None:
+                raise TypeError("the practice clock takes no strategy callbacks or closing ticks")
+            self._run_practice(events, strategy, warmup_events=warmup_events, finalize=finalize,
+                               checkpoint_callback=checkpoint_callback)
+            return self.result()
+        if self.bar_clock != BAR_CLOCK:
+            # Chart clocks take strategy callbacks; a closing-tick handler is not one of them.
+            if close_callback is not None:
+                clock_options["close_callback"] = close_callback
+            run = self._run_v2_clock if self.bar_clock == PINE_V2 else self._run_chart_clock
+            return run(events, strategy, warmup_events=warmup_events, finalize=finalize,
+                       checkpoint_callback=checkpoint_callback, **clock_options)
+        if clock_options:
+            raise TypeError(f"the BAR clock takes no {', '.join(sorted(clock_options))}")
         self._execute_bar_batch(events, strategy, warmup_events=warmup_events, finalize=finalize,
                                 checkpoint_callback=checkpoint_callback, close_callback=close_callback)
         return self.result()
@@ -489,8 +572,14 @@ class SimulationKernel:
         final run((), ..., finalize=True) keeps the historical finishing contract.
         Other execution clocks must opt in through their own qualified path.
         """
-        if type(self) is not SimulationKernel:
+        if type(self) is not SimulationKernel or self.bar_clock not in {BAR_CLOCK, PRACTICE}:
             raise MarketDatasetError("This execution clock has no qualified BAR continuation", code="FIDELITY_UNSUPPORTED")
+        if self.bar_clock == PRACTICE:
+            if close_callback is not None:
+                raise TypeError("the practice clock takes no closing ticks")
+            self._run_practice(events, strategy, warmup_events=warmup_events, finalize=False,
+                               checkpoint_callback=checkpoint_callback, finish_batch=False)
+            return
         self._execute_bar_batch(events, strategy, warmup_events=warmup_events, finalize=False,
                                 checkpoint_callback=checkpoint_callback, close_callback=close_callback, finish_batch=False)
 
@@ -499,7 +588,7 @@ class SimulationKernel:
         if self.process_orders_on_close and close_callback is None:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         loop = (self._run_plain_bars if self._specialized_bar and not self.process_orders_on_close
-                and type(self) is SimulationKernel and type(self.account) is ContractAccount
+                and type(self) is SimulationKernel and self.bar_clock == BAR_CLOCK and type(self.account) is ContractAccount
                 and self.funding_rate == 0 and warmup_events == 0 and self.market_observer is None else self._run_events)
         loop(events, strategy, warmup_events=warmup_events,
                          finalize=finalize, checkpoint_callback=checkpoint_callback, finish_batch=finish_batch,
@@ -759,12 +848,14 @@ class SimulationKernel:
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             ledger["order_events"] = list(self._order_events)
             ledger["decision_count"] = self._decision_count
+        if self.bar_clock == PINE_V2:
+            return self._v2_financial_result(fills, ledger)
         return fills, ledger
 
     def result(self) -> SimulationResult:
         fills, ledger = self._financial_result()
         orders = [_wire_order(order) for order in self.orders]
-        return SimulationResult(
+        result = SimulationResult(
             decision_hash=(
                 self._decision_chain_hash
                 if self.execution_model_revision == EXECUTION_REALISM_V2
@@ -788,6 +879,10 @@ class SimulationKernel:
             ledger=ledger,
             equity_curve=list(self.equity_curve),
         )
+        if self.bar_clock == PRACTICE:
+            return replace(result, report_hash="sha256:" + sha256_hex({
+                "parent": result.report_hash, "path_contract": PRACTICE_CONTRACT, "fill_policy": PRACTICE_FILL_POLICY}))
+        return result if self.bar_clock == BAR_CLOCK else self._path_result(result)
 
     def _accept_event(self, event: MarketEvent) -> bool:
         previous = self._last_event
@@ -843,6 +938,9 @@ class SimulationKernel:
             self._enqueue(intent, current_sequence=current_sequence)
 
     def _enqueue(self, intent: Mapping[str, object], *, current_sequence: int) -> None:
+        if self.bar_clock == PRACTICE:
+            self._practice_enqueue(intent, current_sequence=current_sequence)
+            return
         self._live_orders()
         current_price = (
             None

@@ -15,14 +15,21 @@ export function StrategyResearchFirstOpen({
   draftId,
   saving,
   onSelectTemplate,
+  onSelectPine,
 }: {
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   onOpenLibrary(): void;
   draftId: string | null;
   saving: boolean;
   onSelectTemplate(templateId: string): void;
+  /**
+   * ADR-BACKTEST-015 P5c4: strategies are named by language. Pine is its own entry (the Pine panel and its
+   * starter), so the templates here are Python's and this card opens Pine.
+   */
+  onSelectPine?(): void;
 }) {
   useLocale();
+  const templates = onSelectPine ? RESEARCH_STRATEGY_TEMPLATES.filter((template) => template.language === "python") : RESEARCH_STRATEGY_TEMPLATES;
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +57,7 @@ export function StrategyResearchFirstOpen({
         </div>
       )}
       <div className="strategy-research-templates" data-testid="strategy-research-templates">
-        {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
+        {templates.map((template) => (
           <button
             key={template.id}
             type="button"
@@ -65,6 +72,12 @@ export function StrategyResearchFirstOpen({
             <small>{strategyLanguageLabel(template.language)}</small>
           </button>
         ))}
+        {onSelectPine && <button type="button" className="strategy-template-card" data-testid="strategy-research-pine-strategy"
+          disabled={saving} onClick={onSelectPine}>
+          <strong>{t("researchStrategy.pine")}</strong>
+          <span>{t("researchStrategy.pineDetail")}</span>
+          <small>{strategyLanguageLabel("pine")}</small>
+        </button>}
       </div>
       {saving && <p className="strategy-research-note" role="status">{t("chartTester.autosave.saving")}</p>}
       <div className="strategy-research-first-open-actions" data-testid="strategy-research-current-chart-unavailable">

@@ -17,6 +17,32 @@ def _mismatch(message):
     return BacktestError("DATA_SNAPSHOT_MISMATCH", message)
 
 
+def editor_bundle_source(repository, identity_text):
+    """The editor text of a frozen Python revision: ``strategy.py`` of its single-file editor bundle.
+
+    A Python revision's source is its bundle identity; the code is in the stored bundle.
+    Returns the text and the bundle hash. Other bundles (multi-file, external) are refused.
+    """
+    try:
+        identity = json.loads(identity_text)
+        bundle = repository.get_strategy_bundle(identity["bundle_id"])
+        if bundle is None or bundle["bundle_hash"] != identity["bundle_hash"]:
+            raise _mismatch("Frozen Python bundle is unavailable")
+        inspected = inspect_directory(Path(bundle["store_path"]))
+        if inspected["bundle_hash"] != identity["bundle_hash"]:
+            raise _mismatch("Frozen Python bundle content changed")
+        files = inspected["files"]
+        marker = json.loads(files.get("candlescope-editor.json", b"null"))
+        if (marker != {"schemaVersion": "candlescope.python-editor/1"}
+                or set(files) != {"strategy.json", "strategy.py", "requirements.lock", "candlescope-editor.json"}):
+            raise BacktestError("FIDELITY_UNSUPPORTED", "Select a single-file Python editor version")
+        return files["strategy.py"].decode("utf-8"), inspected["bundle_hash"]
+    except BacktestError:
+        raise
+    except (ValueError, TypeError, KeyError, OSError, StrategyProviderError) as exc:
+        raise _mismatch("Frozen Python bundle could not be read") from exc
+
+
 def selected_run_version(repository, run_id):
     record = repository.get_run_strategy_reference(run_id)
     if record is None:
@@ -52,20 +78,7 @@ def selected_run_version(repository, run_id):
                 raise _mismatch("Frozen Pine library identity is invalid")
             language = "pine"
         elif revision["language"] == "PYTHON_SOURCE":
-            identity = json.loads(source)
-            bundle = repository.get_strategy_bundle(identity["bundle_id"])
-            if bundle is None or bundle["bundle_hash"] != identity["bundle_hash"]:
-                raise _mismatch("Frozen Python bundle is unavailable")
-            inspected = inspect_directory(Path(bundle["store_path"]))
-            if inspected["bundle_hash"] != identity["bundle_hash"]:
-                raise _mismatch("Frozen Python bundle content changed")
-            files = inspected["files"]
-            marker = json.loads(files.get("candlescope-editor.json", b"null"))
-            if (marker != {"schemaVersion": "candlescope.python-editor/1"}
-                    or set(files) != {"strategy.json", "strategy.py", "requirements.lock", "candlescope-editor.json"}):
-                raise BacktestError("FIDELITY_UNSUPPORTED", "Select a single-file Python editor version")
-            source = files["strategy.py"].decode("utf-8")
-            bundle_hash = inspected["bundle_hash"]
+            source, bundle_hash = editor_bundle_source(repository, source)
             language = "python"
         else:
             # Never relabel a legacy runtime, external bundle or builtin as editor code.
