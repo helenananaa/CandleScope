@@ -101,3 +101,9 @@ export function fromDateTimeText(text: string, utc: boolean): number | null {
   const pad = (value: string) => value.padStart(2, "0");
   return fromDateTimeInputValue(`${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}`, utc);
 }
+
+/** The ARIA role of a menu item: a plain action, a toggle (checked) or one choice of a group (checked + radio). */
+export function menuItemRole(item: { checked?: boolean | undefined; radio?: boolean | undefined }): "menuitem" | "menuitemcheckbox" | "menuitemradio" {
+  if (item.checked === undefined) return "menuitem";
+  return item.radio ? "menuitemradio" : "menuitemcheckbox";
+}

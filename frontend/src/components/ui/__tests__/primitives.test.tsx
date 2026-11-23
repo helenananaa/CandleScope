@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  Badge, Button, Checkbox, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
+  Badge, Button, Checkbox, ControlButton, OptionButton, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
   Select, Stat, Switch, TabPanel, Tabs, buttonClassName, choiceKeyTarget, fromDateTimeInputValue, fromDateTimeText, toDateTimeInputValue, toDateTimeText,
 } from "../index.js";
 
@@ -134,4 +134,15 @@ test("the file drop is a labelled file input", () => {
   const id = /<label for="([^"]+)" class="ui-file-drop"/.exec(html)?.[1];
   assert.ok(id);
   assert.match(html, new RegExp(`<input id="${id}" type="file" class="ui-file-drop-input" accept=".csv"`));
+});
+
+test("a control button is the toolbar pill, active while its panel is open", () => {
+  const html = renderToStaticMarkup(<ControlButton size="sm" active icon={<svg />} aria-expanded>1H</ControlButton>);
+  assert.match(html, /^<button type="button" class="ui-control ui-control-sm is-active" aria-expanded="true"><span class="ui-control-icon" aria-hidden="true"><svg><\/svg><\/span>1H<\/button>$/);
+});
+
+test("an option button reports its choice as pressed, or as selected for an option or tab", () => {
+  assert.match(renderToStaticMarkup(<OptionButton selected>A</OptionButton>), /class="ui-option ui-option-card" aria-pressed="true"/);
+  assert.match(renderToStaticMarkup(<OptionButton variant="row" role="option" selected={false}>A</OptionButton>), /role="option" class="ui-option ui-option-row" aria-selected="false"/);
+  assert.doesNotMatch(renderToStaticMarkup(<OptionButton>A</OptionButton>), /aria-(pressed|selected)/);
 });

@@ -47,3 +47,46 @@ export function IconButton({ label, icon, size = "md", variant = "ghost", presse
     </button>
   );
 }
+
+export interface ControlButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: ControlSize;
+  /** Shows the control as on, e.g. while its panel is open. */
+  active?: boolean;
+  icon?: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
+}
+
+/** Toolbar control: the pills, pickers and toggles in bars and headers (.ui-control). */
+export function ControlButton({ size = "md", active = false, icon, className, type = "button", children, ref, ...rest }: ControlButtonProps) {
+  const classes = ["ui-control", size === "sm" ? "ui-control-sm" : null, active ? "is-active" : null, className].filter(Boolean).join(" ");
+  return (
+    <button ref={ref} type={type} className={classes} {...rest}>
+      {icon ? <span className="ui-control-icon" aria-hidden="true">{icon}</span> : null}
+      {children}
+    </button>
+  );
+}
+
+export interface OptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** `card`: a bordered tile (a choice with a title and description); `row`: a list row. */
+  variant?: "card" | "row";
+  /**
+   * Chosen. Reported as aria-pressed, or as aria-selected when the button is an option or a tab
+   * (role="option" / role="tab").
+   */
+  selected?: boolean;
+  ref?: Ref<HTMLButtonElement>;
+}
+
+/**
+ * A block-level choice: a template, a setting with a description, a row in a list. The primitive
+ * owns the box, colour and states; the feature lays out what is inside (title, description, glyph).
+ */
+export function OptionButton({ variant = "card", selected, role, className, type = "button", children, ref, ...rest }: OptionButtonProps) {
+  const state = selected === undefined ? {} : role === "option" || role === "tab" ? { "aria-selected": selected } : { "aria-pressed": selected };
+  return (
+    <button ref={ref} type={type} role={role} className={["ui-option", `ui-option-${variant}`, className].filter(Boolean).join(" ")} {...state} {...rest}>
+      {children}
+    </button>
+  );
+}

@@ -2763,6 +2763,7 @@ export const ru = {
   "css.expand": "Развернуть",
   "css.collapse": "Свернуть",
   "scale.auto": "Автомасштаб",
+  "scale.menu": "Ценовая шкала",
   "scale.invert": "Инвертировать шкалу",
   "scale.regular": "Обычная",
   "scale.log": "Логарифмическая",

@@ -2762,6 +2762,7 @@ export const pl = {
   "css.expand": "Rozwiń",
   "css.collapse": "Zwiń",
   "scale.auto": "Skala automatyczna",
+  "scale.menu": "Skala cen",
   "scale.invert": "Odwróć skalę",
   "scale.regular": "Zwykła",
   "scale.log": "Logarytmiczna",

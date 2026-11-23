@@ -1,4 +1,4 @@
-import { Button } from "../components/ui/index.js";
+import { Button, ControlButton, IconButton } from "../components/ui/index.js";
 import ChartAccountOverlayMenu from "../features/trading-accounts/ChartAccountOverlayMenu.js";
 import type { ChartAccountOverlaySettings } from "../features/chart-workspace/chartAccountOverlaySettings.js";
 import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavigation.js";
@@ -399,10 +399,9 @@ function LiveChartCell({
       : null
     : [nativeEntryName, nativeEntryCount > 1 ? `+${nativeEntryCount - 1}` : ""].filter(Boolean).join(" ") || null;
   const strategyEntryControl = CHART_STRATEGY_TESTER_ENABLED ? (
-    <button
+    <ControlButton
       ref={strategyEntryRef}
-      type="button"
-      className="chart-strategy-entry-button ui-control"
+      className="chart-strategy-entry-button"
       data-chart-strategy-entry={cell.id}
       title={t("chartTester.entryHint")}
       data-state={strategyEntryState}
@@ -416,7 +415,7 @@ function LiveChartCell({
       <i className="chart-strategy-entry-dot" aria-hidden="true" />
       <b className="chart-strategy-entry-label">{t("chartTester.entry")}</b>
       {strategyEntryLabel && <span>{strategyEntryLabel}</span>}
-    </button>
+    </ControlButton>
   ) : null;
   useLayoutEffect(() => {
     recordMultiChartCellCommit(cell.id);
@@ -1108,11 +1107,12 @@ function LiveChartCell({
       >
         <header className="multi-chart-cell-header" onDoubleClick={toggleMaximize}>
           <span className={`multi-chart-cell-status ${sourceMarketData.view.wsStatus}`} aria-hidden="true" />
-          <button
-            type="button"
+          <IconButton
+            size="sm"
             className="multi-chart-cell-drag-handle"
             draggable={!layoutEditingDisabled && !maximized && layoutCellIds.length > 1}
-            aria-label={t("chart.dragAria", { n: cell.id.slice("cell-".length) })}
+            label={t("chart.dragAria", { n: cell.id.slice("cell-".length) })}
+            icon={<Icon name="grip" size={14} />}
             aria-disabled={layoutEditingDisabled || maximized || layoutCellIds.length <= 1}
             title={layoutCellIds.length > 1 ? t("chart.dragTitle") : t("chart.dragNeedSplit")}
             onDragStart={(event) => {
@@ -1123,9 +1123,7 @@ function LiveChartCell({
               writeChartCellDragData(event.dataTransfer, cell.id);
             }}
             onDoubleClick={(event) => event.stopPropagation()}
-          >
-            <Icon name="grip" size={14} />
-          </button>
+          />
           {layoutRole && (
             <span className={`multi-chart-cell-role role-${layoutRole}`}>
               {layoutRole === "main" ? t("chart.roleMain") : t("chart.roleConfirm")}
@@ -1156,13 +1154,11 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
-          {(!replay.key || study.masked) && <button type="button" className="multi-chart-cell-drawing-visibility"
-            aria-label={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-            title={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-            aria-pressed={drawingsHidden} onDoubleClick={event => event.stopPropagation()}
-            onClick={drawings.actions.handleToggleDrawingsHidden}>
-            <Icon name={drawingsHidden ? "eye-off" : "eye"} size={14} />
-          </button>}
+          {(!replay.key || study.masked) && <IconButton size="sm" className="multi-chart-cell-drawing-visibility"
+            label={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+            icon={<Icon name={drawingsHidden ? "eye-off" : "eye"} size={14} />}
+            pressed={drawingsHidden} onDoubleClick={event => event.stopPropagation()}
+            onClick={drawings.actions.handleToggleDrawingsHidden} />}
           <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={!!replay.key || study.masked} />
           <WorkspaceCellLayoutMenu
             portal
@@ -1176,19 +1172,17 @@ function LiveChartCell({
             onClose={onCloseCell}
             onSwap={onSwapCells}
           />
-          <button
-            type="button"
+          <IconButton
+            size="sm"
             className="multi-chart-cell-maximize"
             onClick={(event) => {
               event.stopPropagation();
               toggleMaximize();
             }}
             onDoubleClick={(event) => event.stopPropagation()}
-            aria-label={maximized ? t("chart.restore") : t("chart.maximize")}
-            title={maximized ? t("chart.restore") : t("chart.maximize")}
-          >
-            <Icon name={maximized ? "minimize" : "maximize"} size={14} />
-          </button>
+            label={maximized ? t("chart.restore") : t("chart.maximize")}
+            icon={<Icon name={maximized ? "minimize" : "maximize"} size={14} />}
+          />
         </header>
         <div className="multi-chart-cell-canvas">
           {chartSession.status.exchangeCatalogStatus !== "loading" && !chartSession.status.historyIntervalAvailable ? (

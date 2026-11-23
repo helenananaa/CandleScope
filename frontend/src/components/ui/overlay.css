@@ -254,6 +254,22 @@
   color: var(--text-secondary);
 }
 
+/* A checkable menu keeps a mark column; the check takes the accent */
+.ui-menu-list:has([aria-checked]) .ui-menu-icon {
+  justify-content: center;
+  width: 14px;
+}
+
+.ui-menu-item[aria-checked='true'] .ui-menu-icon {
+  color: var(--text-accent);
+}
+
+.ui-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-subtle);
+}
+
 .ui-menu-label {
   flex: 1 1 auto;
   min-width: 0;

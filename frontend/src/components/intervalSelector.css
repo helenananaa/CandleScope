@@ -38,47 +38,10 @@
   margin: 0 8px;
   flex-shrink: 0;
 }
-.interval-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: var(--font-sans);
-  white-space: nowrap;
-}
-.interval-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.interval-btn.unavailable,
-.interval-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-.interval-btn.unavailable:hover,
-.interval-btn:disabled:hover {
-  background: transparent;
-  color: var(--text-secondary);
-}
-.interval-btn.active {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-}
+/* Interval buttons are kit ghost buttons (.interval-btn and .active stay as the scripts' hooks); a custom one shows its dot. */
 .custom-toolbar-group {
   max-width: 280px;
   overflow: hidden;
-}
-.custom-interval-btn {
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 20%, transparent);
-  background: color-mix(in srgb, var(--accent-blue) 4%, transparent);
 }
 .interval-custom-dot {
   width: 5px;
@@ -122,10 +85,6 @@
 .interval-more-btn {
   flex-shrink: 0;
 }
-.interval-more-btn.active {
-  border-color: var(--accent-blue);
-  color: var(--text-primary);
-}
 .interval-more-label {
   color: var(--text-muted);
 }
@@ -161,22 +120,6 @@
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to   { opacity: 1; transform: none; }
 }
-.interval-panel-close {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-lg);
-  line-height: 1;
-  flex-shrink: 0;
-}
-.interval-panel-close:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
 .interval-panel-search-row {
   display: flex;
   align-items: center;
@@ -202,51 +145,15 @@
 .interval-panel-search::placeholder {
   color: var(--text-muted);
 }
+/* Kit tabs, three equal columns. */
 .interval-panel-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
   padding: 0 8px;
-  border-bottom: 1px solid var(--border-subtle);
 }
-.interval-panel-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.interval-panel-tabs .ui-tab {
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  font-family: var(--font-sans);
-}
-.interval-panel-tab:hover {
-  color: var(--text-primary);
-}
-.interval-panel-tab.active {
-  color: var(--text-accent);
-}
-.interval-panel-tab.active::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--accent-blue);
-  border-radius: 2px 2px 0 0;
-}
-.interval-panel-tab span {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: var(--radius-md);
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  font-size: var(--font-size-xs);
-  line-height: 16px;
 }
 .interval-panel-body {
   flex: 1;
@@ -266,18 +173,6 @@
   gap: 8px;
   color: var(--text-muted);
   font-size: var(--font-size-xs);
-}
-.interval-clear-all {
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  font-size: var(--font-size-xs);
-  font-family: var(--font-sans);
-}
-.interval-clear-all:hover {
-  color: var(--text-down);
 }
 .interval-groups {
   display: grid;
@@ -305,34 +200,14 @@
   position: relative;
   display: inline-flex;
 }
+/* Kit buttons; interval codes in mono. The highlighted chip follows the search field's arrow keys. */
 .interval-chip {
   min-width: 40px;
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: 600 var(--font-size-sm) var(--font-mono);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
+  font-family: var(--font-mono);
 }
-.interval-chip:hover,
 .interval-chip.highlighted {
-  color: var(--text-primary);
   background: var(--surface-hover);
-}
-.interval-chip.active {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
-}
-.interval-chip.unavailable,
-.interval-chip:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
+  color: var(--text-primary);
 }
 .interval-chip-star {
   font-size: var(--font-size-xs);
@@ -358,69 +233,23 @@
 .interval-chip-wrap.manage:focus-within .interval-chip-actions {
   display: inline-flex;
 }
+/* Kit icon buttons, small enough to sit inside a chip. */
 .interval-chip-action {
   width: 18px;
   height: 18px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  line-height: 1;
-}
-.interval-chip-action:hover,
-.interval-chip-action.active {
-  color: var(--text-warning);
-  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
-}
-.interval-chip-action.danger:hover {
-  color: var(--text-down);
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-}
-.interval-chip-add {
-  min-width: 28px;
-  height: 28px;
-  border: 1px dashed var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-lg);
-  line-height: 1;
-}
-.interval-chip-add:hover {
-  color: var(--text-accent);
-  border-color: color-mix(in srgb, var(--accent-blue) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
 }
 .interval-composer {
   padding-top: 2px;
   border-top: 1px solid var(--border-subtle);
 }
+/* Amount, unit and the create button in one row. */
 .interval-split {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) auto;
-  height: 32px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--surface-2);
-}
-.interval-split:focus-within {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  align-items: center;
+  gap: 6px;
 }
 .interval-number-input {
-  width: 100%;
-  height: 32px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-primary);
-  padding: 0 10px;
-  outline: none;
-  font-size: var(--font-size-md);
   font-family: var(--font-mono);
   appearance: textfield;
   -moz-appearance: textfield;
@@ -430,52 +259,9 @@
   -webkit-appearance: none;
   margin: 0;
 }
-.interval-unit-tabs {
-  display: flex;
-  min-width: 0;
-  border-left: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
-}
-.interval-unit-tab {
+.interval-unit-tabs .ui-segment {
   flex: 1;
-  min-width: 28px;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
   font-family: var(--font-mono);
-}
-.interval-unit-tab:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.interval-unit-tab.active {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-}
-.interval-create-btn {
-  height: 32px;
-  border: 0;
-  border-radius: 0;
-  padding: 0 12px;
-  background: var(--accent-solid);
-  color: var(--text-on-accent);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  font-family: var(--font-sans);
-  white-space: nowrap;
-}
-.interval-create-btn:hover {
-  filter: brightness(1.08);
-}
-.interval-create-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: none;
 }
 .interval-create-status {
   margin-top: 6px;
@@ -510,16 +296,6 @@
 .interval-panel-message.error {
   border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
   background: color-mix(in srgb, var(--color-danger) 9%, transparent);
-}
-.interval-panel-message button {
-  border: none;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  color: var(--text-accent);
-  cursor: pointer;
-  padding: 4px 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 700;
 }
 .interval-empty-state {
   padding: 16px 8px;

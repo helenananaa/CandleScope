@@ -2762,6 +2762,7 @@ export const hu = {
   "css.expand": "Kibontás",
   "css.collapse": "Összecsukás",
   "scale.auto": "Automatikus skála",
+  "scale.menu": "Árskála",
   "scale.invert": "Skála megfordítása",
   "scale.regular": "Szokásos",
   "scale.log": "Logaritmikus",

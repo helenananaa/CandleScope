@@ -2768,6 +2768,7 @@ export const he = {
   "css.expand": "הרחבה",
   "css.collapse": "כיווץ",
   "scale.auto": "קנה מידה אוטומטי",
+  "scale.menu": "סולם המחיר",
   "scale.invert": "היפוך קנה מידה",
   "scale.regular": "רגיל",
   "scale.log": "לוגריתמי",

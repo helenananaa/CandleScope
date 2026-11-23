@@ -2762,6 +2762,7 @@ export const ro = {
   "css.expand": "Extinde",
   "css.collapse": "Restrânge",
   "scale.auto": "Scară automată",
+  "scale.menu": "Scara prețului",
   "scale.invert": "Inversează scara",
   "scale.regular": "Regulat",
   "scale.log": "Logaritmic",

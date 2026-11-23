@@ -3281,6 +3281,7 @@ export const ko = {
   "css.expand": "펼치기",
   "css.collapse": "접기",
   "scale.auto": "자동 스케일",
+  "scale.menu": "가격 스케일",
   "scale.invert": "축 반전",
   "scale.regular": "일반",
   "scale.log": "로그",

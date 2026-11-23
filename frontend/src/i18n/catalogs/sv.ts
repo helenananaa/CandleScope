@@ -2762,6 +2762,7 @@ export const sv = {
   "css.expand": "Expandera",
   "css.collapse": "Fäll ihop",
   "scale.auto": "Autoskala",
+  "scale.menu": "Prisskala",
   "scale.invert": "Invertera skala",
   "scale.regular": "Linjär",
   "scale.log": "Logaritmisk",

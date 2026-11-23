@@ -2762,6 +2762,7 @@ export const ms = {
   "css.expand": "Kembangkan",
   "css.collapse": "Runtuhkan",
   "scale.auto": "Skala auto",
+  "scale.menu": "Skala harga",
   "scale.invert": "Songsangkan skala",
   "scale.regular": "Biasa",
   "scale.log": "Logaritma",

@@ -316,44 +316,29 @@
 .multi-chart-cell-status.disconnected {
   background: var(--candle-down);
 }
+/* Kit icon buttons, compact to fit the chart header. */
 .multi-chart-cell-maximize,
 .multi-chart-cell-drawing-visibility,
 .multi-chart-cell-drag-handle,
 .multi-chart-cell-layout-trigger {
-  display: grid;
-  place-items: center;
   width: 22px;
   height: 20px;
-  margin-left: 0;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
 }
-.multi-chart-cell-maximize:hover,
-.multi-chart-cell-drawing-visibility:hover,
-.multi-chart-cell-drawing-visibility[aria-pressed="true"],
-.multi-chart-cell-drag-handle:hover,
-.multi-chart-cell-layout-trigger:hover,
 .multi-chart-cell-layout-trigger[aria-expanded="true"] {
-  border-color: var(--border-subtle);
   background: var(--surface-hover);
   color: var(--text-primary);
 }
 .multi-chart-cell-drag-handle {
   width: 18px;
   margin-left: -3px;
-  font-size: var(--font-size-sm);
   cursor: grab;
 }
 .multi-chart-cell-drag-handle:active {
   cursor: grabbing;
 }
-.multi-chart-cell-drag-handle[aria-disabled="true"],
-.multi-chart-cell-layout-trigger:disabled {
-  opacity: 0.38;
+/* Shown but not usable while the layout cannot change (it keeps its tooltip, so not :disabled). */
+.multi-chart-cell-drag-handle[aria-disabled="true"] {
+  color: var(--text-muted);
   cursor: default;
 }
 .workspace-cell-layout-menu {
@@ -436,7 +421,7 @@
   color: var(--text-primary);
   background: var(--surface-hover);
 }
-.workspace-cell-layout-popover button:disabled,
+.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)):disabled,
 .workspace-cell-layout-popover fieldset:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -481,28 +466,11 @@
   font-size: var(--font-size-xs);
 }
 /* Marker on a chart with its own appearance, beside its menu button. */
+/* Kit icon button; the accent colour is the marker. */
 .chart-appearance-marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 22px;
   height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
   color: var(--text-accent);
-  cursor: pointer;
-}
-.chart-appearance-marker:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-.chart-appearance-marker:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-.workspace-cell-layout-popover .workspace-cell-close-action {
-  color: var(--text-down);
 }
 .multi-chart-cell-canvas {
   position: relative;

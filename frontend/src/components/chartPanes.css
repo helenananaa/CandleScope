@@ -133,33 +133,16 @@
   position: relative;
   overflow: hidden;
 }
+/* A kit primary button floating over the chart when the latest bar is out of view. */
 .chart-return-to-realtime {
   position: absolute;
   right: 72px;
   bottom: 30px;
   z-index: 14;
-  padding: 6px 11px;
-  border: 1px solid color-mix(in srgb, var(--accent-cyan) 45%, transparent);
-  border-radius: var(--radius-full);
-  color: var(--text-on-accent);
-  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
   box-shadow: 0 4px 14px rgba(2, 8, 23, 0.24);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  line-height: 1.2;
-  cursor: pointer;
-}
-.chart-return-to-realtime:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
 }
 .chart-return-to-realtime:disabled {
-  opacity: 0.55;
   cursor: wait;
-}
-[data-theme='light'] .chart-return-to-realtime {
-  color: var(--text-on-accent);
-  border-color: color-mix(in srgb, var(--accent-cyan) 38%, transparent);
-  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
 }
 .synthetic-chart-notice {
   position: relative;
@@ -344,20 +327,10 @@
   pointer-events: auto;
   border-color: color-mix(in srgb, var(--accent-blue) 34%, transparent);
 }
+/* Kit icon buttons, compact to fit the overlay bar. */
 .pane-control-button {
-  appearance: none;
   width: 24px;
   height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  color: var(--text-muted);
-  background: transparent;
-  cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
 }
 .pane-control-button svg {
   width: 15px;
@@ -368,29 +341,6 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
-}
-.pane-control-button:hover:not(:disabled),
-.pane-control-button:focus-visible,
-.pane-control-button.active {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-  outline: none;
-}
-.pane-control-button:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--focus-ring);
-}
-.pane-control-button.active {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
-}
-.pane-control-button.danger:hover:not(:disabled),
-.pane-control-button.danger:focus-visible {
-  color: var(--text-danger);
-  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-}
-.pane-control-button:disabled {
-  opacity: 0.24;
-  cursor: default;
 }
 [data-theme='light'] .pane-control-bar {
   border-color: color-mix(in srgb, var(--text-primary) 13%, transparent);
@@ -446,67 +396,7 @@
   pointer-events: none;
   will-change: transform;
 }
-/* ── Context Menu Divider ────────────────────────────────── */
-.price-scale-menu-divider {
-  height: 1px;
-  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
-  margin: 4px 6px;
-}
-[data-theme='light'] .price-scale-menu-divider {
-  background: rgba(0, 0, 0, 0.08);
-}
-/* ── Price scale context menu ──────────────────────────────── */
-.price-scale-context-menu {
-  position: fixed;
-  z-index: var(--z-menu);
-  width: 220px;
-  min-width: 220px;
-  background: color-mix(in srgb, var(--surface-0) 96%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent);
-  border-radius: var(--radius-md);
-  padding: 4px 0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: column;
-}
-.price-scale-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 14px;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-}
-.price-scale-menu-item:hover {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-}
-.price-scale-menu-item.active {
-  color: var(--text-accent);
-  font-weight: 600;
-}
-.price-scale-menu-price {
-  margin-left: auto;
-  color: var(--text-accent);
-  font-family: var(--font-mono);
-}
-[data-theme='light'] .price-scale-context-menu {
-  background: color-mix(in srgb, var(--surface-0) 97%, transparent);
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-[data-theme='light'] .price-scale-menu-item {
-  color: var(--text-primary);
-}
-[data-theme='light'] .price-scale-menu-item:hover {
-  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
-}
+/* The price scale's context menu is the kit Menu (components/PanePriceScaleMenu.tsx). */
 
 /* Adapt to each chart cell, not the browser viewport. Full values remain in
    the accessible label and native tooltip. */

@@ -2762,6 +2762,7 @@ export const de = {
   "css.expand": "Erweitern",
   "css.collapse": "Einklappen",
   "scale.auto": "Autoskala",
+  "scale.menu": "Preisskala",
   "scale.invert": "Skala umkehren",
   "scale.regular": "Linear",
   "scale.log": "Logarithmisch",

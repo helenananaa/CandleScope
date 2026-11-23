@@ -7,6 +7,7 @@ import type { ChartDisplayScheduler } from "../features/market-data/chartDisplay
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { Button } from "./ui/index.js";
 import { ChartLoadingStatus } from "./ChartLoadingStatus.js";
 import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
@@ -5533,8 +5534,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       />
 
       {showReturnToLatest && (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           className="chart-return-to-realtime"
           disabled={returnToLatestDisabled}
           data-pending={latestWindowRestorePending ? "true" : "false"}
@@ -5547,7 +5549,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           {t(latestWindowRestorePending
             ? "status.returningRealtime"
             : "status.returnToRealtime", {}, locale)}
-        </button>
+        </Button>
       )}
 
       <MainChartLegend

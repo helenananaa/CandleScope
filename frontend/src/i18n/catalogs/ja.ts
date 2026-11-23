@@ -3078,6 +3078,7 @@ export const ja = {
   "css.expand": "展開",
   "css.collapse": "折りたたむ",
   "scale.auto": "自動スケール",
+  "scale.menu": "価格スケール",
   "scale.invert": "軸を反転",
   "scale.regular": "通常",
   "scale.log": "対数",

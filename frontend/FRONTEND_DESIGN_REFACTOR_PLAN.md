@@ -728,7 +728,8 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 |---|---|
 | 8c1 | Static inline styles (literal values only) into classes; dynamic geometry and data colours stay inline. The metric counts static ones as a zero target and leaves browser-test harnesses out |
 | 8c2 | Drawing surfaces' buttons onto the kit: the drawing toolbar, the selected drawing's style bar, the text format bar, Fibonacci levels, the object list, history and position settings, with the `drawing-*` and `fib-*` families and `chart-type-tool-btn` |
-| 8c3 | Chart chrome: the interval selector (`interval-*`, `custom-interval-btn`), pane controls and the price scale menu (`pane-control-button`), the workspace panel and layout menus, the chart cell header and the market rail |
+| 8c3 | Kit primitives for composite buttons (`ControlButton`, `OptionButton`, checkable `Menu` items and a point anchor) and the chart chrome on them: the interval selector, pane controls, the price scale menu, the chart cell header and its menu, the market rail |
+| 8c3b | The workspace panel and layout picker (option cards and rows) on `OptionButton` |
 | 8c4 | Plugin surfaces: live control, management, detail, platform surfaces and toolbar, native fields |
 | 8c5 | The rest (watchlist `wl-*`, symbol search `sym-modal-*`, replay, strategy and backtest, data preparation, alerts, `retry-btn`), the documented raw-button exceptions, and raw `<button>` as a zero target outside them |
 
@@ -745,6 +746,15 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The kit's `IconButton` gains a `danger` variant and a corner `indicator` (the tools' "has variants" mark).
 - Raw `<button>` 263 → 208, `*-btn` families 25 → 19. Three raw buttons stay in the drawing surfaces for 8c5's exceptions: the variant menu's radio items and the two colour swatch grids.
 - Next: 8c3, chart chrome.
+
+**Composite buttons get kit primitives (user decision, 2026-11-23).** About 48 of the remaining raw buttons are composites (option cards, list rows, activity items, accordion rows, context menus with checks). Rather than listing them as exceptions, the kit grows primitives for them, so §7's target of ≤ 20 raw buttons can be met; 8c3 was split so the workspace panel (8c3b) follows on the new primitives.
+
+**Phase 8c3 is done (branch `design/phase-8c3-chrome`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C3.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C3.md).
+
+- Kit: `ControlButton` (the toolbar pill), `OptionButton` (`card` or `row`, box and states owned by the kit, content laid out by the feature), `Menu` with checkbox and radio items, separators and an `anchorPoint` (also on `Popover`); disabled icon buttons fade so they read as off.
+- The interval selector (bar, picker, panel tabs, chips, composer), pane controls, the price scale context menu (now the kit menu, with its keyboard and focus handling), "return to latest", the chart cell header and its menu, and the market rail's activity items and collapsed rows are on the kit. New message `scale.menu` in 30 languages.
+- Raw `<button>` 208 → 171, families 19 → 18. Left here for 8c5's exceptions: the page navigation's replay entry (2).
+- Next: 8c3b, the workspace panel and layout picker.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

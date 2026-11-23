@@ -2762,6 +2762,7 @@ export const tr = {
   "css.expand": "Genişlet",
   "css.collapse": "Daralt",
   "scale.auto": "Otomatik ölçek",
+  "scale.menu": "Fiyat ölçeği",
   "scale.invert": "Ölçeği ters çevir",
   "scale.regular": "Normal",
   "scale.log": "Logaritmik",

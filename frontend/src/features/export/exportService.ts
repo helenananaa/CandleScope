@@ -42,7 +42,6 @@ const EXCLUDED_SELECTORS = [
   ".export-exclude",
   ".text-edit-overlay",
   ".text-format-bar",
-  ".price-scale-context-menu",
   ".tool-flyout",
   ".fib-levels-panel",
   ".position-settings-panel",

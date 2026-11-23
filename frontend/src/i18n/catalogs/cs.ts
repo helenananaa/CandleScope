@@ -2762,6 +2762,7 @@ export const cs = {
   "css.expand": "Rozbalit",
   "css.collapse": "Sbalit",
   "scale.auto": "Automatické měřítko",
+  "scale.menu": "Cenová osa",
   "scale.invert": "Obrátit měřítko",
   "scale.regular": "Běžné",
   "scale.log": "Logaritmické",
