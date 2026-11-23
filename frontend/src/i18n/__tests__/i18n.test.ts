@@ -375,7 +375,7 @@ const PT_BR_PRODUCT_TOKENS = new Set([
   "runtime", "strategy", "local", "volume", "status", "software", "visual",
   "manual", "interface", "layout", "zoom", "editor", "desktop", "web", "total",
   "normal", "original", "capital", "auto", "error", "item", "type", "mode",
-  "model", "regular", "final", "terminal", "stack", "proxy", "ticker", "script",
+  "model", "regular", "final", "terminal", "stack", "proxy", "ticker", "script", "scripts", "site", "linear",
   "offline", "loopback", "fallback", "polling", "decimal", "event", "parameter",
   "value", "window", "hash", "coverage", "dataset", "pending", "empty",
   "rollback", "preset", "language", "archive", "draft", "fidelity", "overview",

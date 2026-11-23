@@ -531,4 +531,40 @@ button.research-row:focus-visible {
   margin: 4px 0;
   background: var(--border-subtle);
 }
+
+/* Phone layout (app/phoneLayout.ts): the mode rail runs across the top and scrolls sideways. */
+@media (max-width: 640px) {
+  .research-mode-layout { flex-direction: column; }
+  .research-mode-rail {
+    flex: 0 0 auto;
+    flex-direction: row;
+    width: auto;
+    padding: 4px 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .research-mode-item {
+    flex: 1 0 auto;
+    width: auto;
+    min-width: 56px;
+    min-height: 46px;
+    padding: 5px 6px 4px;
+  }
+  .research-mode-item[aria-current="page"]::before {
+    inset-block: auto 0;
+    inset-inline: 10px;
+    width: auto;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+  .research-mode-rail-divider {
+    flex: 0 0 1px;
+    width: 1px;
+    height: 28px;
+    margin: 0 2px;
+  }
+}
 }

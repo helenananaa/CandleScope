@@ -7,6 +7,11 @@ import {
 import type { AlertsPanelProps } from "../components/alerts/AlertsPanel.js";
 import type { IndicatorPanelProps } from "../features/indicators/IndicatorPanel.js";
 import type { SettingsModalProps } from "../features/settings/SettingsModal.js";
+import type { SettingsCategory } from "../features/settings/settingsTypes.js";
+import { browserHost } from "./browserHost.js";
+
+// The browser owns the web version's network connection: no proxy to choose.
+const WEB_SETTINGS: readonly SettingsCategory[] = ["appearance", "exchanges", "data", "plugins", "ai", "about"];
 
 export interface LazyFeatureSurfaceModels {
   indicatorPanel: IndicatorPanelProps;
@@ -41,7 +46,7 @@ export default function LazyFeatureSurfaces({ surfaces }: LazyFeatureSurfacesPro
 
       {settingsModal.isOpen && (
         <React.Suspense fallback={null}>
-          <SettingsModal {...settingsModal} />
+          <SettingsModal {...settingsModal} {...(browserHost() ? { allowedCategories: WEB_SETTINGS } : {})} />
         </React.Suspense>
       )}
     </>

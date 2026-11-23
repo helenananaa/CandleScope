@@ -67,7 +67,7 @@ class NormalizeLayer:
                 isinstance(msg.payload, dict)
                 and msg.payload.get("schema") == CCXT_UNIFIED_MARKER
             )
-            if msg.source == DataSource.WEBSOCKET and (
+            if self._cfg.market_source_capture_enabled and msg.source == DataSource.WEBSOCKET and (
                 capture_only
                 or (self._descriptor.stream_type != StreamType.KLINE and not unified)
             ):

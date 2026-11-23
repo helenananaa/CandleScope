@@ -287,7 +287,10 @@ export function buildChartPaneOptions({
         ? { tickMarkFormatter: (time: ChartTime, type: TickMarkType) => tickMarkFormatter(formatterSourceTime(time), type) }
         : loc.timeScale ? { tickMarkFormatter: loc.timeScale.tickMarkFormatter } : {}),
     },
-    handleScroll: { vertTouchDrag: false },
+    // The chart owns vertical touch drags: on the price axis they scale it (which ends auto-scale,
+    // as a mouse drag does), and in the pane they move the price once auto-scale is off. Treated
+    // as page scrolls, they handed the gesture to the browser and the axis never scaled by touch.
+    handleScroll: { vertTouchDrag: true },
   };
 }
 

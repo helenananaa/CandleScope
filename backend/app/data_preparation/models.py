@@ -25,7 +25,7 @@ class PreparationError(ValueError):
 class Requirement(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     exchange: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_-]+$")
-    market_type: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_-]+$")
+    market_type: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_-]+(?:\.[a-z0-9_-]+)?$")
     symbol: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_:/.-]+$")
     role: Literal["BARS", "TRADES", "FUNDING", "MARK_PRICE", "INSTRUMENT_RULES"] = "BARS"
     interval: str = "1m"

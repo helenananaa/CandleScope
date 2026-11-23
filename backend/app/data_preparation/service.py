@@ -327,6 +327,10 @@ class PreparationService:
             await self._storage(self.repository.update, job_id, state="RUNNING", stage="CHECKING", completed=0)
             reuse = getattr(self.adapter, "reuse", None)
             prepared = await reuse(request, job_id) if reuse is not None else None
+            library = getattr(self.adapter, "replay_library", None)
+            if prepared is None and library is not None and "replay_setup" in request.intent:
+                await self._storage(self.repository.update, job_id, stage="FETCHING")
+                prepared = await library.prepare(request, self.adapter, job_id, lambda: self._checkpoint(job_id))
             if prepared is not None:
                 await self._checkpoint(job_id)
                 await self._storage(self.repository.update, job_id, completed=job["total"])

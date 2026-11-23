@@ -242,6 +242,13 @@ function drawingPerfNow(): number {
     : Date.now();
 }
 
+/** Movement after a touch places a two-point drawing's first anchor that makes the release its second. */
+const TOUCH_DRAG_CREATE_SLOP = 12;
+
+function isTouchPointerEvent(event: DrawingDomPointerEvent): event is PointerEvent {
+  return "pointerType" in event && event.pointerType === "touch";
+}
+
 export function scenePaintCoversDrawingHandoff(
   ticket: Readonly<{
     scopeKey: string;
@@ -5104,14 +5111,35 @@ export function useDrawing({
     }
   }, [chartContainerRef, activeTool, interactionSurfaceMode, isLineTool, isFibTool, isShapeTool, isPenTool, isHighlighterTool, isEraserTool, isTextTool, isPositionTool, removePreview, deselectAll, cancelTextEditing, selectedIdRef, clearHoverFeedback, cancelActiveDrawingMove, cancelActiveFreehandStroke, getSavedDrawing, releaseOverlayDrag]);
 
+  // On a touch screen a two-point drawing can also be dragged out: a press that places the first
+  // anchor and moves past TOUCH_DRAG_CREATE_SLOP ends the drawing where the finger lifts, as a
+  // second tap there would. A tap, a second tap still works; a mouse keeps click, move, click.
+  const touchAnchorGestureRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const handleDrawingPointerDown = useCallback((e: DrawingDomPointerEvent) => {
+    const hadAnchor = anchorDataRef.current !== null;
+    handleMouseDown(e);
+    touchAnchorGestureRef.current = isTouchPointerEvent(e) && !hadAnchor && anchorDataRef.current !== null
+      ? { pointerId: e.pointerId, x: e.clientX, y: e.clientY }
+      : null;
+  }, [handleMouseDown]);
+  const handleDrawingPointerUp = useCallback((e: DrawingDomPointerEvent) => {
+    const gesture = touchAnchorGestureRef.current;
+    touchAnchorGestureRef.current = null;
+    if (gesture && isTouchPointerEvent(e) && e.pointerId === gesture.pointerId && anchorDataRef.current !== null
+      && Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) > TOUCH_DRAG_CREATE_SLOP) {
+      handleMouseDown(e);
+    }
+    handleMouseUp();
+  }, [handleMouseDown, handleMouseUp]);
+
   useDrawingPointerEvents({
     chartContainerRef,
     handleDblClick,
     handleContextMenu,
-    handleMouseDown,
+    handleMouseDown: handleDrawingPointerDown,
     handleMouseLeave,
     handleMouseMove,
-    handleMouseUp,
+    handleMouseUp: handleDrawingPointerUp,
     handlePointerCancel,
     ...(interactionSurfaceMode === "overlay" ? { handleWindowBlur: handlePointerCancel } : {}),
   });

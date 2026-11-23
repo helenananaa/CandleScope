@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { getBrowserStorage } from "../shared/browserStorage.js";
+import { isPhoneLayout } from "./phoneLayout.js";
 import type { MarketRailLayoutActions, MarketRailLayoutState } from "./marketRailTypes.js";
 import {
   loadMarketRailLayout,
@@ -13,7 +14,12 @@ export function useMarketRailLayout(): MarketRailLayoutState & {
   actions: MarketRailLayoutActions;
 } {
   const [storage] = useState(getBrowserStorage);
-  const [state, setState] = useState(() => loadMarketRailLayout(storage));
+  // On a phone the panel is a sheet over the chart, so a visit starts with the chart and the
+  // sheet closed; the views chosen last time open when the user taps the bar.
+  const [state, setState] = useState(() => {
+    const saved = loadMarketRailLayout(storage);
+    return isPhoneLayout() ? { ...saved, panelCollapsed: true } : saved;
+  });
 
   const setOpenViewIds = useCallback((ids: readonly string[]) => {
     setState((current) => {

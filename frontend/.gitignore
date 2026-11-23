@@ -24,3 +24,7 @@ desktop-dist
 *.njsproj
 *.sln
 *.sw?
+/dist-web/
+/browser/.host-cache/
+/.wrangler/
+/dist-host/
