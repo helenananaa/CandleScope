@@ -146,6 +146,8 @@ function createSupervisor() {
       ))) : {}),
       ...(app.isPackaged ? {
         PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
+        CANDLESCOPE_MIHOMO: path.join(runtimeRoot, "python-runtime", "mihomo",
+          process.platform === "win32" ? "mihomo.exe" : "mihomo"),
         CANDLESCOPE_BUNDLED_UNIFIED_PYTHON: path.join(runtimeRoot, "python-runtime", "plugins", "unified-python.json"),
         CANDLESCOPE_BUNDLED_UNIFIED_PINE: path.join(runtimeRoot, "python-runtime", "plugins", "unified-pine.json"),
         CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),

@@ -166,6 +166,7 @@ def scope(kind, path, query, origin, headers):
 # the public browser host, including when a frontend calls an endpoint directly.
 DESKTOP_PATHS = (
     "/api/v1/readonly-accounts", "/api/v1/native", "/api/v1/external",
+    "/api/v1/settings/proxy/subscriptions",
     "/api/v1/backtests/native", "/api/v1/backtests/external",
     "/api/v1/backtests/provider-connections", "/api/v1/backtests/continuous",
     "/api/v1/backtests/strategy-bundles", "/api/v1/backtests/strategy-revisions/python",

@@ -1092,8 +1092,16 @@ def save_proxy_settings(mode: str, custom_proxy: str | None, *, routes: list[dic
     from app.core.proxy_pool import normalize_proxy_pool
     routes, strategy = normalize_proxy_pool(routes, strategy)
     PROXY_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(PROXY_SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump({"mode": mode, "custom_proxy": custom_proxy, "routes": routes, "strategy": strategy}, f)
+    import tempfile
+    descriptor, name = tempfile.mkstemp(dir=PROXY_SETTINGS_PATH.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as out:
+            json.dump({"mode": mode, "custom_proxy": custom_proxy, "routes": routes, "strategy": strategy}, out)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(name, PROXY_SETTINGS_PATH)
+    finally:
+        Path(name).unlink(missing_ok=True)
     logger.info("Proxy settings saved: mode=%s", mode)
 
 
@@ -1158,7 +1166,14 @@ def get_effective_proxy() -> str | None:
         routes = [route for route in settings.get("routes", []) if route.get("enabled", True)]
         if not routes:
             raise ValueError("no enabled proxy route")
-        return routes[0]["url"]
+        from app.proxy_subscriptions.runtime import resolve
+        from app.proxy_subscriptions.source import SubscriptionError
+        for route in routes:
+            try:
+                return resolve(route["url"])
+            except SubscriptionError:
+                continue
+        raise ValueError("no available proxy route")
     # mode == "system"
     return _get_system_proxy()
 
