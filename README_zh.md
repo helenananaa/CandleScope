@@ -75,8 +75,8 @@
   绘图与指标按联动组同步。
 - **订单流。** 只要交易所提供数据，就能看盘口、逐笔成交、CVD、成交量差与成交量分布；
   Binance 最完整，有全深度盘口、成交历史和合约实时强平。
-- **指标不限数量。** 现有 Pine 指标直接运行，也可以用 JavaScript 写新的，或从内置
-  指标开始。
+- **指标不限数量。** 现有 Pine 指标由开源的 [pine-compat-runtime](https://github.com/helenananaa/pine-compat-runtime) 直接运行，
+  也可以用 JavaScript 写新的，或从内置指标开始。
 - **警报不限数量。** 用 AND、OR、NOT 嵌套组合价格与任意指标条件；可在实时、K 线更新
   或收盘时触发，并能看到是哪一条成立。送达方式包括应用内、浏览器通知、声音和带签名的
   Webhook。
@@ -153,6 +153,14 @@
 | 自定义数据提供商（插件模板） | 私有行情或任何其他市场 |
 
 插件还可以提供指标、策略与运行时。见[插件开发指南](docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md)。
+
+## 生态
+
+| 项目 | 是什么 | 许可证 |
+|---|---|---|
+| **CandleScope**（本仓库） | 工作台本身：图表、回放、模拟盘、回测与交易日志 | GPL-3.0 |
+| [pine-compat-runtime](https://github.com/helenananaa/pine-compat-runtime) | CandleScope Pine 插件背后的引擎：独立实现、经过测试的 Pine 兼容子集运行时，任何应用都能通过 Rust、Python、WASM 或命令行嵌入 | MIT |
+| [插件 SDK](packages/) | Python、TypeScript、Rust/WASM 与 Java SDK，用于编写数据提供商、指标与策略 | GPL-3.0 |
 
 ## 快速开始
 
@@ -234,7 +242,8 @@ npm run dev
 - 只读账户同步目前支持 OKX。
 - 盘口、订单流、强平、合约信息与历史深度取决于所选交易所或数据提供商能提供的数据。
 - 标准工作区默认最多四张图；16 图与多窗口布局（最多 64 张图）需手动开启。
-- Pine 兼容覆盖已支持的子集；第一方 Pine 插件包目前面向 Windows + CPython 3.12。
+- Pine 兼容覆盖经过测试的子集；第一方 Pine 插件可在桌面版和本地安装中运行，支持 Windows、
+  Linux 与 macOS（Apple 芯片与 Intel），浏览器版暂不支持。
 - 桌面版支持 Windows 与原生 macOS（Apple 芯片与 Intel）；Linux 可使用浏览器版或从源码运行。
 
 ## 文档
