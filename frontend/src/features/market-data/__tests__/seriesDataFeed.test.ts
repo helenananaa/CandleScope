@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ACTIVE_EXACT_REPAIR_POLL_MS,
+  LARGE_EXACT_REPAIR_POLL_MS,
   aggregateResolvedGapRepairResult,
   capContinuationRanges,
   countIntervalBarsInRange,
@@ -81,6 +82,124 @@ test("monthly feed helpers use absolute month anchors and calendar successors", 
 
 const resolvedQuality = { complete: true, retryable: false, history_state: "ready" as const,
   verified_contiguous: true, missing_ranges: [], has_tail_gap: false, all_rows_final: true, truncated: false };
+
+test("pending nested repairs advance independently until one complete proof settles every owner", async () => {
+  const originalNow = Date.now;
+  let now = 1_000_000, ready = false;
+  Date.now = () => now;
+  const requests: number[][] = [], resolved: string[] = [];
+  const pending = (start: number, end: number): KlineFetchResult => ({
+    data: [], start_ms: start*1000, end_ms: end*1000, history_state: "pending",
+    complete: false, retryable: true, verified_contiguous: false,
+    missing_ranges: [{ start_ms: start*1000, end_ms: end*1000 }],
+  });
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async (_symbol, _interval, start, end) => {
+      requests.push([start, end]);
+      return ready ? { ...resolvedQuality, start_ms: start*1000, end_ms: end*1000,
+        data: rows([0, 3_600, 7_200, 10_800]) } : pending(start, end);
+    } },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  try {
+    for (const [name, start, end] of [["parent", 0, 10_800], ["child", 3_600, 7_200],
+      ["point", 7_200, 7_200]] as const) {
+      feed.trackPendingResultRepair(SERIES, pending(start, end), () => resolved.push(name));
+    }
+    assert.equal(await feed.pollPendingRepairs(SERIES, { force: true, maxRequests: 3 }), 3);
+    assert.deepEqual(requests, [[0, 10_800], [3_600, 7_200], [7_200, 7_200]]);
+    assert.equal(feed.pendingRepairCount(SERIES), 3, "partial rows cannot settle any owner");
+    assert.deepEqual(resolved, []);
+    now += ACTIVE_EXACT_REPAIR_POLL_MS-1;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 0);
+    ready = true; now += 1;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 1);
+    assert.deepEqual(requests, [[0, 10_800], [3_600, 7_200], [7_200, 7_200], [0, 10_800]]);
+    assert.deepEqual(resolved.sort(), ["child", "parent", "point"]);
+    assert.equal(feed.pendingRepairCount(SERIES), 0);
+  } finally { Date.now = originalNow; }
+});
+
+test("failed covering repair does not impose its transport backoff on a child", async () => {
+  const originalNow = Date.now;
+  let now = 1_000_000, resolved = 0;
+  Date.now = () => now;
+  const requests: number[][] = [];
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async (_symbol, _interval, start, end) => {
+      requests.push([start, end]);
+      if (start === 0) throw Error("controlled covering request failure");
+      return { ...resolvedQuality, start_ms: start*1000, end_ms: end*1000, data: rows([start, end]) };
+    } },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  try {
+    for (const [start, end] of [[0, 10_800], [3_600, 7_200]] as const) {
+      feed.trackPendingResultRepair(SERIES, { data: [], start_ms: start*1000, end_ms: end*1000,
+        complete: false, retryable: true, history_state: "pending", verified_contiguous: false },
+      start === 0 ? undefined : () => { resolved += 1; });
+    }
+    assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 1);
+    now += ACTIVE_EXACT_REPAIR_POLL_MS;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 0);
+    assert.deepEqual(requests, [[0, 10_800], [3_600, 7_200]]);
+    assert.equal(resolved, 1);
+    assert.equal(feed.pendingRepairCount(SERIES), 1);
+  } finally { Date.now = originalNow; }
+});
+
+test("large-period fallback polls are bounded without suppressing independent pending windows", async () => {
+  const originalNow = Date.now;
+  let now = 1_000_000, calls = 0;
+  Date.now = () => now;
+  const series = { ...SERIES, marketType: "futures", interval: "10007m" };
+  const width = 10007*60;
+  const pending = (start: number, end: number): KlineFetchResult => ({
+    data: [], start_ms: start*1000, end_ms: end*1000, history_state: "pending",
+    complete: false, retryable: true, verified_contiguous: false,
+  });
+  const feed = new SeriesDataFeed({ getActiveSeries: () => series,
+    api: { fetchKlinesRange: async (_symbol, _interval, start, end) => {
+      calls += 1; return pending(start, end);
+    } }, commitMergedChartData: () => {},
+  });
+  try {
+    feed.trackPendingResultRepair(series, pending(0, 3*width));
+    feed.trackPendingResultRepair(series, pending(width, 2*width));
+    now += LARGE_EXACT_REPAIR_POLL_MS-1;
+    assert.equal(await feed.pollPendingRepairs(series), 0);
+    now += 1;
+    assert.equal(await feed.pollPendingRepairs(series), 2);
+    now += ACTIVE_EXACT_REPAIR_POLL_MS;
+    assert.equal(await feed.pollPendingRepairs(series), 0);
+    now += LARGE_EXACT_REPAIR_POLL_MS-ACTIVE_EXACT_REPAIR_POLL_MS;
+    assert.equal(await feed.pollPendingRepairs(series), 2);
+    assert.equal(calls, 4);
+    assert.equal(feed.pendingRepairCount(series), 2);
+  } finally { Date.now = originalNow; }
+});
+
+test("a covering proof cannot settle a successor generation created by its callback", async () => {
+  let oldChild = 0, successor = 0;
+  const pending = (start: number, end: number): KlineFetchResult => ({
+    data: [], start_ms: start*1000, end_ms: end*1000, history_state: "pending",
+    complete: false, retryable: true, verified_contiguous: false,
+  });
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async () => ({ ...resolvedQuality, start_ms: 0, end_ms: 10_800_000,
+      data: rows([0, 3_600, 7_200, 10_800]) }) },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  feed.trackPendingResultRepair(SERIES, pending(0, 10_800), () => {
+    feed.clearPendingResultRepair(SERIES, { start: epochSeconds(0), end: epochSeconds(10_800) });
+    feed.trackPendingResultRepair(SERIES, pending(3_600, 7_200), () => { successor += 1; });
+  });
+  feed.trackPendingResultRepair(SERIES, pending(3_600, 7_200), () => { oldChild += 1; });
+  assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 1);
+  assert.equal(oldChild, 0);
+  assert.equal(successor, 0);
+  assert.equal(feed.pendingRepairCount(SERIES), 1, "old proof cannot clear a new owner's obligation");
+});
 
 function rows(times: number[]): KlineBar[] {
   return times.map((time) => ({ time: epochSeconds(time), close: time }));
@@ -4148,3 +4267,94 @@ test("an unproven capped parent retains its window owner until a full external p
   assert.equal(feed.pendingRepairCount(series), 0);
   assert.equal(buffer.hasPending("cap"), false);
 });
+
+test("a same-epoch stale readback retains its unresolved initial callback until a fresh proof", async () => {
+  const series = { ...SERIES, interval: "10007m" };
+  let cleared = 0, calls = 0;
+  const feed = new SeriesDataFeed({ getActiveSeries: () => series, commitMergedChartData: () => {} });
+  const start = epochSeconds(1_200), end = epochSeconds(601_620);
+  const getRange = feed.getRange.bind(feed);
+  feed.getRange = async () => ++calls === 1
+    ? { data: [], rows: [], stale: true, active: true, complete: false, retryable: true,
+      history_state: "pending", start_ms: start*1000, end_ms: end*1000 }
+    : { ...resolvedQuality, data: rows([start,end]), rows: rows([start,end]),
+      start_ms: start*1000, end_ms: end*1000 };
+  feed.trackPendingResultRepair(series, { data: [], start_ms: start*1000, end_ms: end*1000,
+    complete: false, retryable: true, history_state: "pending" }, () => { cleared += 1; });
+  try {
+    await feed.pollPendingRepairs(series, { force: true, maxRequests: 1 });
+    assert.equal(cleared, 0, "a rejected read cannot release the original loading owner");
+    assert.equal(feed.pendingRepairCount(series), 1, "stale evidence cannot erase an unresolved obligation");
+    await feed.pollPendingRepairs(series, { force: true, maxRequests: 1 });
+    assert.equal(calls, 2);
+    assert.equal(cleared, 1);
+    assert.equal(feed.pendingRepairCount(series), 0);
+  } finally { feed.getRange = getRange; }
+});
+
+test("repeated stream gaps preserve initial repair ownership while fencing pre-gap reads", async () => {
+  const series = { ...SERIES, interval: "1m" };
+  let finish!: (result: KlineFetchResult) => void;
+  let first = true;
+  const committed: number[][] = [];
+  let resolved = 0;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    api: { fetchKlinesRange: async () => {
+      if (first) { first = false; return new Promise((resolve) => { finish = resolve; }); }
+      return { ...resolvedQuality, data: rows([60, 120]), complete: true, retryable: false,
+        verified_contiguous: true, truncated: false, missing_ranges: [], history_state: "ready" };
+    } },
+    commitMergedChartData: (_s, _i, data) => { committed.push(data.map(row => Number(row.time))); },
+  });
+  const epoch = feed.beginEpoch(series);
+  feed.trackPendingResultRepair(series, { data: rows([60]), start_ms: 60_000, end_ms: 120_000,
+    complete: false, retryable: true, verified_contiguous: false, history_state: "pending" }, () => {
+    assert.equal(feed.isCurrent(series, epoch), true);
+    resolved += 1;
+  });
+  const pending = [...feed.pendingGapRepairs.values()][0]!;
+  pending.indicatorWindowOwner = "initial-owner";
+  pending.indicatorWindowEpoch = epoch;
+  const old = feed.getRange(series, { startSec: 60, endSec: 120 });
+  while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, rows([60, 120]));
+  recovery.capture(feed, series, rows([60, 120]));
+  assert.equal(feed.currentEpoch(series), epoch, "a stream gap does not retire the chart session");
+  assert.equal(feed.pendingGapRepairs.size, 1);
+  assert.equal([...feed.pendingGapRepairs.values()][0]?.indicatorWindowOwner, "initial-owner");
+  finish({ data: rows([60, 120]), complete: true, verified_contiguous: true });
+  assert.equal((await old).stale, true);
+  assert.deepEqual(committed, []);
+  assert.equal(resolved, 0, "pre-gap coverage cannot settle the original callback");
+  await recovery.recover(feed, () => true);
+  await feed.pollPendingRepairs(series, { force: true });
+  assert.equal(resolved, 1);
+  assert.equal(feed.pendingGapRepairs.size, 0);
+  assert.equal(recovery.required, false);
+  recovery.close();
+});
+
+for (const endpoint of ["history", "before", "range", "latest"] as const) {
+  test(`a stream gap rejects an older ${endpoint} response without cancelling the chart epoch`, async () => {
+    let finish!: (result: KlineFetchResult) => void;
+    let commits = 0;
+    const read = () => new Promise<KlineFetchResult>((resolve) => { finish = resolve; });
+    const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES,
+      api: { fetchKlinesHistory: read, fetchKlinesBefore: read, fetchKlinesRange: read, fetchLatestKlines: read },
+      commitMergedChartData: () => { commits += 1; }, commitPatchedChartData: () => { commits += 1; },
+    });
+    const epoch = feed.beginEpoch(SERIES);
+    const request = endpoint === "history" ? feed.getHistory(SERIES)
+      : endpoint === "before" ? feed.getBefore(SERIES, { before: epochSeconds(120), bars: 2 })
+      : endpoint === "latest" ? feed.getLatest(SERIES)
+      : feed.getRange(SERIES, { startSec: 60, endSec: 120 });
+    while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
+    feed.fenceDisconnectedRequests(SERIES);
+    finish({ ...resolvedQuality, data: rows([60, 120]) });
+    assert.equal((await request).stale, true);
+    assert.equal(commits, 0);
+    assert.equal(feed.isCurrent(SERIES, epoch), true);
+  });
+}
