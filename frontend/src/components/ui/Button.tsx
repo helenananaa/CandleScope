@@ -72,7 +72,8 @@ export interface OptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   variant?: "card" | "row";
   /**
    * Chosen. Reported as aria-pressed, or as aria-selected when the button is an option or a tab
-   * (role="option" / role="tab").
+   * (role="option" / role="tab"). A row that opens the item it names (the current one in a
+   * master list) passes `aria-current` instead, which shows as chosen too.
    */
   selected?: boolean;
   ref?: Ref<HTMLButtonElement>;

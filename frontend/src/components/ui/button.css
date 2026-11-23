@@ -216,12 +216,12 @@
   background: var(--surface-hover);
 }
 
-.ui-option:is([aria-pressed='true'], [aria-selected='true']) {
+.ui-option:is([aria-pressed='true'], [aria-selected='true'], [aria-current='true'], [aria-current='page']) {
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-primary);
 }
 
-.ui-option-card:is([aria-pressed='true'], [aria-selected='true']) {
+.ui-option-card:is([aria-pressed='true'], [aria-selected='true'], [aria-current='true'], [aria-current='page']) {
   border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
 }
 

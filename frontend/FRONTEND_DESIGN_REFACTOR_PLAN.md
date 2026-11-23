@@ -763,6 +763,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Raw `<button>` 171 → 145; the panel and picker have none left.
 - Next: 8c4, the plugin surfaces.
 
+**Phase 8c4 is done (branch `design/phase-8c4-plugins`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C4.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C4.md).
+
+- The plugin surfaces are on the kit: the toolbar (`ControlButton`, the live control button keeping its tone), the command palette (`row` `OptionButton`s), settings, view and dialog close buttons (`IconButton`), the notice and the live control banner (`row` `OptionButton`s keeping their strip look), the plugin center's list (`row` `OptionButton`s marked `aria-current`) and detail (kit `Tabs` with the page as their panel, ghost back button), and every action in the live control window, management sections, native fields and sandbox frame (`Button`; destructive ones `danger`, a surface's main action `primary`). The plugin stylesheets' own button rules are gone.
+- Kit: an `OptionButton` marked `aria-current` shows as chosen, as one marked pressed or selected does.
+- Raw `<button>` 145 → 92; the plugin surfaces have none left.
+- Next: 8c5, the rest, the documented exceptions and raw `<button>` as a zero target outside them.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

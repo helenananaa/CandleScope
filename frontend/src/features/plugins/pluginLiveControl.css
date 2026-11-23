@@ -13,6 +13,7 @@
   min-height: 28px;
   border: 0;
   border-top: 1px solid color-mix(in srgb, var(--live-banner-tone) 70%, transparent);
+  border-radius: 0;
   padding: 4px 12px;
   background: color-mix(in srgb, var(--live-banner-tone) 14%, var(--surface-1));
   color: var(--text-primary);
