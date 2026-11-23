@@ -125,3 +125,18 @@ test("large imports are sent in bounded batches", async () => {
   assert.deepEqual(server.calls.filter((call) => call.startsWith("import")), ["import:200", "import:200", "import:50"]);
   assert.equal(server.drafts.size, 450);
 });
+
+// Drafts saved by builds before PR #105 may say `language: "pyne"`. They are
+// never imported, shown or relabelled, and the browser copy stays as it was.
+test("retired Pyne drafts are not imported, listed or rewritten", async () => {
+  const server = backend();
+  const pyne = { ...record("draft-oldpyne1", 4, "plot(close)"), language: "pyne" } as unknown as StrategyDraftRecord;
+  const legacy = legacyStorage([record("draft-current1", 2), pyne]);
+  const original = legacy.items.get(STRATEGY_DRAFT_STORAGE_KEY);
+  const adapter = createBackendStrategyDraftAdapter(server.client, legacy);
+  assert.equal(await adapter.imported(), true);
+  assert.deepEqual([...server.drafts.keys()], ["draft-current1"]);
+  assert.deepEqual((await adapter.list() as StrategyDraftRecord[]).map((item) => item.id), ["draft-current1"]);
+  assert.equal(await legacy.adapter.load("draft-oldpyne1"), null, "never read back as another language");
+  assert.equal(legacy.items.get(STRATEGY_DRAFT_STORAGE_KEY), original, "the original Pyne draft stays byte-identical");
+});

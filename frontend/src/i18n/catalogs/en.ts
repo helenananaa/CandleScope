@@ -1139,6 +1139,8 @@ export const en = {
   "indicator.search": "Search indicators...",
   "indicator.loading": "Loading...",
   "indicator.customBadge": "Custom",
+  "indicator.retiredBadge": "Retired",
+  "indicator.pyneRetired": "Pyne is retired. This saved script is kept unchanged but never runs, and it is not treated as Pine.",
   "indicator.default": "Default",
   "indicator.mainPane": "Main",
   "indicator.subPane": "Pane",

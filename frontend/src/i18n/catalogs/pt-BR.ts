@@ -1360,6 +1360,8 @@ export const ptBR = {
   "indicator.search": "Buscar indicadores...",
   "indicator.loading": "Carregando...",
   "indicator.customBadge": "Personalizado",
+  "indicator.retiredBadge": "Descontinuado",
+  "indicator.pyneRetired": "O Pyne foi descontinuado. Este script salvo é mantido sem alterações, mas nunca é executado e não é tratado como Pine.",
   "indicator.default": "Padrão",
   "indicator.mainPane": "Principal",
   "indicator.subPane": "Painel",

@@ -825,6 +825,8 @@ export const fr = {
   "indicator.search": "Rechercher des indicateurs...",
   "indicator.loading": "Chargement...",
   "indicator.customBadge": "Personnalisé",
+  "indicator.retiredBadge": "Retiré",
+  "indicator.pyneRetired": "Pyne n'est plus pris en charge. Ce script enregistré est conservé tel quel, mais il ne s'exécute jamais et n'est pas traité comme du Pine.",
   "indicator.default": "Par défaut",
   "indicator.mainPane": "Principal",
   "indicator.subPane": "Volet",

@@ -826,6 +826,8 @@ export const ar = {
   "indicator.search": "البحث في المؤشرات...",
   "indicator.loading": "جارٍ التحميل...",
   "indicator.customBadge": "مخصص",
+  "indicator.retiredBadge": "متوقف",
+  "indicator.pyneRetired": "تم إيقاف Pyne. يُحتفظ بهذا البرنامج النصي المحفوظ دون تغيير، لكنه لا يعمل أبدًا ولا يُعامل على أنه Pine.",
   "indicator.default": "افتراضي",
   "indicator.mainPane": "رئيسي",
   "indicator.subPane": "لوحة",

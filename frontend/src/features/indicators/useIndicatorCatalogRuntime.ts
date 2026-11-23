@@ -12,6 +12,7 @@ import type {
   IndicatorDefinition,
   IndicatorPreset,
 } from "./indicatorTypes.js";
+import { RETIRED_PYNE_LANGUAGE } from "./retiredScriptIndicator.js";
 
 export type CatalogCustomIndicator = CustomIndicatorRecord
   & Omit<IndicatorDefinition, keyof CustomIndicatorRecord>
@@ -57,7 +58,8 @@ function buildCustomIndicatorForChart(preset: CatalogCustomIndicator): Indicator
     name: preset.name,
     engineName: null,
     script: preset.script,
-    ...(preset.language ? { language: preset.language } : {}),
+    // Always explicit: a saved record without a language is legacy Pyne.
+    language: preset.language || RETIRED_PYNE_LANGUAGE,
     params: preset.params || {},
     description: preset.description || "",
     category: preset.category || "custom",

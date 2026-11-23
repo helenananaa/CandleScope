@@ -826,6 +826,8 @@ export const th = {
   "indicator.search": "ค้นหาอินดิเคเตอร์...",
   "indicator.loading": "กำลังโหลด...",
   "indicator.customBadge": "กำหนดเอง",
+  "indicator.retiredBadge": "เลิกใช้แล้ว",
+  "indicator.pyneRetired": "Pyne เลิกใช้แล้ว สคริปต์ที่บันทึกไว้นี้จะถูกเก็บไว้ตามเดิม แต่จะไม่ทำงานและไม่ถือว่าเป็น Pine",
   "indicator.default": "ค่าเริ่มต้น",
   "indicator.mainPane": "หลัก",
   "indicator.subPane": "แผง",

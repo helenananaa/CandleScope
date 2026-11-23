@@ -825,6 +825,8 @@ export const tr = {
   "indicator.search": "Gösterge ara...",
   "indicator.loading": "Yükleniyor...",
   "indicator.customBadge": "Özel",
+  "indicator.retiredBadge": "Kullanımdan kaldırıldı",
+  "indicator.pyneRetired": "Pyne kullanımdan kaldırıldı. Kaydedilen bu betik değiştirilmeden korunur, ancak hiçbir zaman çalıştırılmaz ve Pine olarak ele alınmaz.",
   "indicator.default": "Varsayılan",
   "indicator.mainPane": "Ana",
   "indicator.subPane": "Panel",

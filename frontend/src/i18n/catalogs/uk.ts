@@ -826,6 +826,8 @@ export const uk = {
   "indicator.search": "Пошук індикаторів...",
   "indicator.loading": "Завантаження...",
   "indicator.customBadge": "Користувацький",
+  "indicator.retiredBadge": "Припинено",
+  "indicator.pyneRetired": "Підтримку Pyne припинено. Цей збережений скрипт залишається без змін, але ніколи не запускається і не вважається скриптом Pine.",
   "indicator.default": "Типовий",
   "indicator.mainPane": "Головна",
   "indicator.subPane": "Панель",

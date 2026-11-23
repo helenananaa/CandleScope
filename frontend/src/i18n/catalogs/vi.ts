@@ -825,6 +825,8 @@ export const vi = {
   "indicator.search": "Tìm chỉ báo...",
   "indicator.loading": "Đang tải...",
   "indicator.customBadge": "Tùy chỉnh",
+  "indicator.retiredBadge": "Đã ngừng",
+  "indicator.pyneRetired": "Pyne đã ngừng hỗ trợ. Tập lệnh đã lưu này được giữ nguyên nhưng không bao giờ chạy và không được coi là Pine.",
   "indicator.default": "Mặc định",
   "indicator.mainPane": "Chính",
   "indicator.subPane": "Ngăn",

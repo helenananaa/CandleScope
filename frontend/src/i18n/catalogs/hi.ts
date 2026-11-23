@@ -826,6 +826,8 @@ export const hi = {
   "indicator.search": "इंडिकेटर खोजें...",
   "indicator.loading": "लोड हो रहा है...",
   "indicator.customBadge": "कस्टम",
+  "indicator.retiredBadge": "बंद",
+  "indicator.pyneRetired": "Pyne बंद कर दिया गया है। यह सहेजी गई स्क्रिप्ट बिना बदलाव के रखी गई है, लेकिन यह कभी नहीं चलती और इसे Pine नहीं माना जाता।",
   "indicator.default": "डिफ़ॉल्ट",
   "indicator.mainPane": "मुख्य",
   "indicator.subPane": "पेन",

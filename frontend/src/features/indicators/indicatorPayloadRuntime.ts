@@ -21,6 +21,7 @@ import type {
 } from "./indicatorTypes.js";
 import type { KlineBar } from "../market-data/marketDataTypes.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
+import { isRetiredScriptIndicator } from "./retiredScriptIndicator.js";
 
 const ENGINE_SCRIPT_MARKER = "# __ENGINE__:";
 
@@ -126,6 +127,7 @@ export function isWsHostedIndicator(
   indicator: IndicatorDefinition | null | undefined,
 ): boolean {
   if (indicator?.executionTarget === "local" || isFrontendScript(indicator)) return false;
+  if (isRetiredScriptIndicator(indicator)) return false;
   return isBuiltinIndicator(indicator) || Boolean(indicator?.script);
 }
 

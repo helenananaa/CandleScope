@@ -1343,6 +1343,8 @@ export const ko = {
   "indicator.search": "지표 검색…",
   "indicator.loading": "불러오는 중…",
   "indicator.customBadge": "사용자 지정",
+  "indicator.retiredBadge": "지원 종료",
+  "indicator.pyneRetired": "Pyne 지원이 종료되었습니다. 저장된 이 스크립트는 그대로 보존되지만 실행되지 않으며 Pine으로 처리되지도 않습니다.",
   "indicator.default": "기본",
   "indicator.mainPane": "메인",
   "indicator.subPane": "보조",

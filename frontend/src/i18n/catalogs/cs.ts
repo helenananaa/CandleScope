@@ -826,6 +826,8 @@ export const cs = {
   "indicator.search": "Hledat indikátory…",
   "indicator.loading": "Načítání…",
   "indicator.customBadge": "Vlastní",
+  "indicator.retiredBadge": "Ukončeno",
+  "indicator.pyneRetired": "Pyne již není podporován. Tento uložený skript zůstává beze změny, ale nikdy se nespustí a nepovažuje se za Pine.",
   "indicator.default": "Výchozí",
   "indicator.mainPane": "Hlavní",
   "indicator.subPane": "Panel",

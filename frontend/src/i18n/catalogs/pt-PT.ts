@@ -826,6 +826,8 @@ export const ptPT = {
   "indicator.search": "Pesquisar indicadores...",
   "indicator.loading": "A carregar...",
   "indicator.customBadge": "Personalizado",
+  "indicator.retiredBadge": "Descontinuado",
+  "indicator.pyneRetired": "O Pyne foi descontinuado. Este script guardado é mantido sem alterações, mas nunca é executado e não é tratado como Pine.",
   "indicator.default": "Predefinição",
   "indicator.mainPane": "Principal",
   "indicator.subPane": "Painel",

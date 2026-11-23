@@ -826,6 +826,8 @@ export const nl = {
   "indicator.search": "Indicatoren zoeken...",
   "indicator.loading": "Laden...",
   "indicator.customBadge": "Aangepast",
+  "indicator.retiredBadge": "Stopgezet",
+  "indicator.pyneRetired": "Pyne wordt niet meer ondersteund. Dit opgeslagen script blijft ongewijzigd bewaard, maar wordt nooit uitgevoerd en niet als Pine behandeld.",
   "indicator.default": "Standaard",
   "indicator.mainPane": "Hoofd",
   "indicator.subPane": "Deelvenster",

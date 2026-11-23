@@ -826,6 +826,8 @@ export const hu = {
   "indicator.search": "Indikátorok keresése...",
   "indicator.loading": "Betöltés...",
   "indicator.customBadge": "Egyéni",
+  "indicator.retiredBadge": "Megszüntetve",
+  "indicator.pyneRetired": "A Pyne támogatása megszűnt. Ez a mentett szkript változatlanul megmarad, de soha nem fut le, és nem számít Pine-nak.",
   "indicator.default": "Alapértelmezett",
   "indicator.mainPane": "Fő",
   "indicator.subPane": "Panel",

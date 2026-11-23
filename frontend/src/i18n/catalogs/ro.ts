@@ -826,6 +826,8 @@ export const ro = {
   "indicator.search": "Caută indicatori...",
   "indicator.loading": "Se încarcă...",
   "indicator.customBadge": "Personalizat",
+  "indicator.retiredBadge": "Retras",
+  "indicator.pyneRetired": "Pyne a fost retras. Acest script salvat este păstrat neschimbat, dar nu rulează niciodată și nu este tratat ca Pine.",
   "indicator.default": "Implicit",
   "indicator.mainPane": "Principal",
   "indicator.subPane": "Panou",

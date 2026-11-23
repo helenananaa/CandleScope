@@ -3,6 +3,7 @@ import type { ChartSettingsRuntime } from "../settings/chartAppearanceSettings.j
 import { normalizeSettings } from "../settings/chartAppearanceSettings.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
+import { explicitScriptLanguage, isUserScriptIndicator } from "../indicators/retiredScriptIndicator.js";
 import type { MarketDataRuntime } from "../market-data/useMarketDataRuntime.js";
 import type { ChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { DrawingRuntime } from "../drawings/useDrawingRuntime.js";
@@ -21,7 +22,12 @@ export const indicatorDefinitionSchema = schema<IndicatorDefinition>(indicatorIn
   if (v && typeof v === "object" && "language" in v && String(v.language).trim().toLowerCase() === "pyne") {
     throw new Error("PYNE_RETIRED: Pyne scripts are no longer supported");
   }
-  return indicatorInput.parse(v) as IndicatorDefinition;
+  const definition = indicatorInput.parse(v) as IndicatorDefinition;
+  // New scripts name their language; a missing one is never read as Pine.
+  if (isUserScriptIndicator(definition) && explicitScriptLanguage(definition) === null) {
+    throw new Error("INDICATOR_LANGUAGE_REQUIRED: script indicators must name their language");
+  }
+  return definition;
 });
 
 export function chartCommands(input: { cellId: string; session: ChartSessionRuntime; indicators: IndicatorRuntime;
