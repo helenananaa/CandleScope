@@ -216,9 +216,11 @@ def test_unrelated_save_keeps_the_legacy_record_as_stored(legacy_store):
     stored = json.loads(legacy_store.read_text(encoding="utf-8"))["items"]
     legacy = next(item for item in stored if item["id"] == _LEGACY_ID)
     assert legacy == _LEGACY_RECORD and "language" not in legacy and "retired" not in legacy
-    # Byte-for-byte: the record's serialised block is unchanged inside the new file.
+    # Byte-for-byte: the record's serialised block is unchanged inside the new file. The store
+    # is written in text mode, so Windows ends lines with CRLF (as 0.3.0 did); compare the block
+    # with line endings normalised.
     block = json.dumps(_LEGACY_RECORD, ensure_ascii=False, indent=2).replace("\n", "\n    ")
-    assert ("    " + block).encode("utf-8") in legacy_store.read_bytes()
+    assert ("    " + block).encode("utf-8") in legacy_store.read_bytes().replace(b"\r\n", b"\n")
 
 
 def test_a_legacy_record_cannot_be_overwritten_or_relabelled(legacy_store):
