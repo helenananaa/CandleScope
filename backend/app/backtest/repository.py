@@ -1838,32 +1838,42 @@ class BacktestRepository:
         return None if row is None else dict(row)
 
     @_locked
-    def next_audit_ordinal(self, run_id: str) -> int:
-        row = self.connection.execute(
-            "SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal FROM backtest_audit WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-        return int(row["max_ordinal"]) + 1
-
-    @_locked
-    def append_audit(
+    def append_next_audit(
         self,
         run_id: str,
-        ordinal: int,
         action: str,
         actor: str,
         details_json: str,
-        chain_hash: str,
-    ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO backtest_audit(
-                run_id, ordinal, action, actor, details_json, chain_hash
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (run_id, ordinal, action, actor, details_json, chain_hash),
-        )
-        self.connection.commit()
+        chain_hash: Callable[[int], str],
+    ) -> int:
+        """Append the run's next audit entry and return its ordinal.
+
+        Each worker slot has its own service and connection, so the API's
+        "create" entry and a slot that has just claimed the run can write at
+        once. The ordinal is read and inserted under one write lock; reading it
+        first in a separate call let both writers pick the same ordinal.
+        """
+        connection = self.connection
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal FROM backtest_audit WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            ordinal = int(row["max_ordinal"]) + 1
+            connection.execute(
+                """
+                INSERT INTO backtest_audit(
+                    run_id, ordinal, action, actor, details_json, chain_hash
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (run_id, ordinal, action, actor, details_json, chain_hash(ordinal)),
+            )
+            connection.commit()
+            return ordinal
+        except Exception:
+            connection.rollback()
+            raise
 
     @_locked
     def list_audit(self, run_id: str) -> list[dict[str, Any]]:
