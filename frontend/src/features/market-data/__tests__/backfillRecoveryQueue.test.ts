@@ -57,3 +57,24 @@ test("queued overlapping chunks merge and trigger one initial verification after
   queue.enqueue("btc", job(1, "b", 3, 5));
   assert.equal(reads.length, 2);
 });
+
+test("new revision events coalesce across a completed read's cooldown", async () => {
+  let now = 0;
+  const sleeps: number[] = [], reads: number[][] = [];
+  let wake!: () => void;
+  const queue = new BackfillRecoveryQueue<Job>({
+    merge: (held, incoming) => { held.to = Math.max(held.to, incoming.to); incoming.eventKeys.forEach(id => held.eventKeys.add(id)); return true; },
+    read: async next => { reads.push([next.from, next.to]); return false; },
+    verify: async () => assert.fail("a complete read needs no second verification"), needsVerification: () => false,
+    isCurrent: () => true, cooldown: () => 3_000, now: () => now,
+    sleep: ms => { sleeps.push(ms); return new Promise(resolve => { wake = () => { now += ms; resolve(); }; }); },
+    onError: error => { throw error; },
+  });
+  queue.enqueue("btc", job(1, "revision-1")); await queue.whenIdle("btc");
+  queue.enqueue("btc", job(1, "revision-2", 1, 3));
+  for (let revision = 3; revision <= 100; revision++) queue.enqueue("btc", job(1, `revision-${revision}`, 1, revision));
+  assert.deepEqual(reads, [[1, 2]]);
+  assert.deepEqual(sleeps, [3_000]);
+  wake(); await queue.whenIdle("btc");
+  assert.deepEqual(reads, [[1, 2], [1, 100]]);
+});

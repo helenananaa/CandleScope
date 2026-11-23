@@ -107,8 +107,8 @@ function physicalOptions<TOptions extends KlineRequestOptions>(
 
 function readBoundary(options: KlineRequestOptions): readonly unknown[] {
   const context = options.clientContext;
-  return context && (context.epoch || context.scope || context.realtimeVersion)
-    ? ["read-boundary", context.epoch ?? 0, context.scope ?? null, context.realtimeVersion ?? 0]
+  return context && (context.epoch || context.scope || context.realtimeVersion || context.transportGeneration)
+    ? ["read-boundary", context.epoch ?? 0, context.scope ?? null, context.realtimeVersion ?? 0, context.transportGeneration ?? 0]
     : [];
 }
 
