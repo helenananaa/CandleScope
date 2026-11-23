@@ -4,7 +4,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  Badge, Button, Checkbox, ControlButton, OptionButton, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
+  Badge, Button, Checkbox, ControlButton, MenuItemButton, OptionButton, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
   Select, Stat, Switch, TabPanel, Tabs, buttonClassName, choiceKeyTarget, fromDateTimeInputValue, fromDateTimeText, toDateTimeInputValue, toDateTimeText,
 } from "../index.js";
 
@@ -146,6 +146,20 @@ test("an option button reports its choice as pressed, or as selected for an opti
   assert.match(renderToStaticMarkup(<OptionButton selected>A</OptionButton>), /class="ui-option ui-option-card" aria-pressed="true"/);
   assert.match(renderToStaticMarkup(<OptionButton variant="row" role="option" selected={false}>A</OptionButton>), /role="option" class="ui-option ui-option-row" aria-selected="false"/);
   assert.doesNotMatch(renderToStaticMarkup(<OptionButton>A</OptionButton>), /aria-(pressed|selected)/);
+});
+
+test("an option button in a radio group reports its choice as checked, and a held-back choice fades", () => {
+  assert.match(renderToStaticMarkup(<OptionButton role="radio" selected>A</OptionButton>), /role="radio" class="ui-option ui-option-card" aria-checked="true"/);
+  const css = readFileSync(new URL("../button.css", import.meta.url), "utf8");
+  assert.match(css, /\.ui-option-card:is\([^)]*\[aria-checked='true'\]/);
+  assert.match(css, /\.ui-option:is\(:disabled, \[aria-disabled='true'\]\) \{/);
+});
+
+test("a menu item button lays out a mark, a label and a hint, and keeps an empty mark column for null", () => {
+  assert.equal(renderToStaticMarkup(<MenuItemButton icon={<svg />} hint="BN" tone="danger">Binance</MenuItemButton>),
+    '<button type="button" class="ui-menu-item" data-tone="danger"><span class="ui-menu-icon" aria-hidden="true"><svg></svg></span><span class="ui-menu-label">Binance</span><span class="ui-menu-hint">BN</span></button>');
+  assert.match(renderToStaticMarkup(<MenuItemButton icon={null}>A</MenuItemButton>), /<span class="ui-menu-icon" aria-hidden="true"><\/span><span class="ui-menu-label">A<\/span><\/button>$/);
+  assert.doesNotMatch(renderToStaticMarkup(<MenuItemButton>A</MenuItemButton>), /ui-menu-icon|ui-menu-hint/);
 });
 
 test("an option row marked as the current item shows as chosen", () => {

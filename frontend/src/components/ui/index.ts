@@ -1,8 +1,8 @@
 // Shared UI primitives. Each owns its box, colour and type (styles in the primitives layer);
 // features add layout only. Gallery: /ui-gallery.html in the Vite dev server.
 // Overlays (Dialog, Drawer, Popover, Menu, Tooltip, toasts) share one stack: see overlay/overlayStack.ts.
-export { Button, ControlButton, IconButton, OptionButton } from "./Button.js";
-export type { ButtonProps, ButtonVariant, ControlButtonProps, ControlSize, IconButtonProps, OptionButtonProps } from "./Button.js";
+export { Button, ControlButton, IconButton, MenuItemButton, OptionButton } from "./Button.js";
+export type { ButtonProps, ButtonVariant, ControlButtonProps, ControlSize, IconButtonProps, MenuItemButtonProps, OptionButtonProps } from "./Button.js";
 export { Checkbox, Field, Input, Select, Switch, Textarea } from "./Field.js";
 export type { CheckboxProps, FieldProps, InputProps, SelectProps, SwitchProps, TextareaProps } from "./Field.js";
 export { SegmentedControl, TabPanel, Tabs } from "./Choice.js";

@@ -412,8 +412,10 @@
 .sym-source-option > .ui-menu-item[aria-pressed='true'] {
   background: var(--surface-hover);
 }
-.sym-source-check {
-  display: inline-flex;
+/* The chosen source's check sits in the rows' mark column, as in the kit menu. */
+.sym-source-options .ui-menu-icon {
+  justify-content: center;
+  width: 12px;
   color: var(--text-accent);
 }
 .sym-source-star[aria-pressed='true'] {

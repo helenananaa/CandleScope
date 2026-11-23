@@ -1,4 +1,4 @@
-import { Badge, Button, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, Select, Stat } from "../../components/ui/index.js";
+import { Badge, Button, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, OptionButton, Select, Stat } from "../../components/ui/index.js";
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -288,10 +288,10 @@ export default function DataWorkbenchModal({
         : t("workbench.summaryNoGaps", {}, locale);
 
   const instrumentHead = (open: boolean, onToggle: (() => void) | null, name: ReactNode, chips: ReactNode, stats: ReactNode) => onToggle ? (
-    <button aria-expanded={open} className="dw-instrument-head" onClick={onToggle} type="button">
+    <OptionButton variant="row" aria-expanded={open} className="dw-instrument-head" onClick={onToggle}>
       <span aria-hidden="true" className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span>
       {name}{chips}{stats}
-    </button>
+    </OptionButton>
   ) : (
     <div className="dw-instrument-head static">
       <span className="dw-fold-chevron spacer" aria-hidden="true" />

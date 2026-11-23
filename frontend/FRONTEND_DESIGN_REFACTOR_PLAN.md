@@ -732,6 +732,9 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 | 8c3b | The workspace panel and layout picker (option cards and rows) on `OptionButton` |
 | 8c4 | Plugin surfaces: live control, management, detail, platform surfaces and toolbar, native fields |
 | 8c5 | The rest (watchlist `wl-*`, symbol search `sym-modal-*`, replay, strategy and backtest, data preparation, alerts, `retry-btn`), the documented raw-button exceptions, and raw `<button>` as a zero target outside them |
+| 8c5a | The market page, settings and accounts: watchlist, symbol search and its source picker, header actions, the chart load error and `retry-btn` (with replay's state panel, which shares it), the time navigation dialog, settings, the data workbench, trading accounts; a kit `MenuItemButton` for menus a feature lays out itself |
+| 8c5b | Replay: the training page shell, chart workspace, watchlist, right rail, integrity review |
+| 8c5c | Strategy, backtest, data preparation, research data and local analysis; the documented raw-button exceptions; raw `<button>` as a zero target outside them |
 
 **Phase 8c1 is done (branch `design/phase-8c-kit`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C1.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C1.md).
 
@@ -769,6 +772,16 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Kit: an `OptionButton` marked `aria-current` shows as chosen, as one marked pressed or selected does.
 - Raw `<button>` 145 → 92; the plugin surfaces have none left.
 - Next: 8c5, the rest, the documented exceptions and raw `<button>` as a zero target outside them.
+
+**8c5 lands in three parts** (split 2026-11-24, when it started: 92 raw buttons in 38 files across every area). 8c5a and 8c5b move areas onto the kit; 8c5c finishes the last area and makes the target strict.
+
+**Phase 8c5a is done (branch `design/phase-8c5a-market`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5A.md).
+
+- Kit: `MenuItemButton`, the menu row (`.ui-menu-item`) as a primitive, which the kit `Menu` renders too, for menus a feature lays out itself (a header, groups, a search field); a danger row's icon takes its colour. `OptionButton` reports `aria-checked` in a radio group, and one marked `aria-disabled` fades like a disabled one.
+- The watchlist (sort headers, header and row icons, the row control, the collapsed rail's lists, the row and list menus), symbol search (trigger, source picker, coverage sources, add-to-watchlist menu), header actions, the chart load error and replay state panel's recovery actions, the time navigation dialog, the settings rail and its theme, proxy and storage cards and exchange rows, the data workbench's instrument rows, and trading accounts' rows and account kinds are on the kit.
+- The time navigation dialog is centred again (the reset had taken away a native dialog's automatic margin).
+- Raw `<button>` 92 → 57, `*-btn` families 18 → 13 (`retry-btn`, `trading-row-button`, `wl-add-list-btn` and `interval-create-btn` are gone; `wl-collapse-btn` is a declared hook).
+- Next: 8c5b, replay.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

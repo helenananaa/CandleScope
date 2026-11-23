@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Button, Dialog, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
+import { Badge, Button, Dialog, Field, InlineAlert, Input, OptionButton, SegmentedControl } from "../../components/ui/index.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
@@ -69,21 +69,18 @@ export default function AddAccountDialog({
     >
       <div className="trading-preset-grid" role="radiogroup" aria-label={t("trading.add.kind")}>
         {PRESETS.map((item) => (
-          <button
+          <OptionButton
             key={item.id}
-            type="button"
             role="radio"
-            aria-checked={preset === item.id}
+            selected={preset === item.id}
             aria-disabled={item.planned}
             className="trading-preset"
-            data-selected={preset === item.id}
-            data-planned={item.planned}
             onClick={() => { if (!item.planned) setPreset(item.id); }}
           >
             <strong>{t(item.titleKey)}</strong>
             <span>{t(item.bodyKey)}</span>
             {item.planned && <Badge className="trading-preset-badge">{t("trading.add.planned")}</Badge>}
-          </button>
+          </OptionButton>
         ))}
       </div>
       <Field label={t("trading.add.name")}>

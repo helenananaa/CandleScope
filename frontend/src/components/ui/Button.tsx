@@ -71,9 +71,11 @@ export interface OptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   /** `card`: a bordered tile (a choice with a title and description); `row`: a list row. */
   variant?: "card" | "row";
   /**
-   * Chosen. Reported as aria-pressed, or as aria-selected when the button is an option or a tab
-   * (role="option" / role="tab"). A row that opens the item it names (the current one in a
-   * master list) passes `aria-current` instead, which shows as chosen too.
+   * Chosen. Reported as aria-pressed; as aria-selected when the button is an option or a tab
+   * (role="option" / role="tab"); as aria-checked when it is a radio (role="radio", in a
+   * radiogroup). A row that opens the item it names (the current one in a master list) passes
+   * `aria-current` instead, which shows as chosen too. A choice that cannot be made yet but stays
+   * focusable passes `aria-disabled`, which fades it like `disabled`.
    */
   selected?: boolean;
   ref?: Ref<HTMLButtonElement>;
@@ -84,10 +86,36 @@ export interface OptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
  * owns the box, colour and states; the feature lays out what is inside (title, description, glyph).
  */
 export function OptionButton({ variant = "card", selected, role, className, type = "button", children, ref, ...rest }: OptionButtonProps) {
-  const state = selected === undefined ? {} : role === "option" || role === "tab" ? { "aria-selected": selected } : { "aria-pressed": selected };
+  const state = selected === undefined ? {}
+    : role === "option" || role === "tab" ? { "aria-selected": selected }
+      : role === "radio" ? { "aria-checked": selected }
+        : { "aria-pressed": selected };
   return (
     <button ref={ref} type={type} role={role} className={["ui-option", `ui-option-${variant}`, className].filter(Boolean).join(" ")} {...state} {...rest}>
       {children}
+    </button>
+  );
+}
+
+export interface MenuItemButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Leading mark (an icon, a colour dot, a check). `null` keeps an empty mark column so labels line up. */
+  icon?: ReactNode;
+  /** Trailing note: a shortcut, an id, a status. */
+  hint?: ReactNode;
+  tone?: "danger" | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
+}
+
+/**
+ * A menu row (`.ui-menu-item`, styled in overlay.css): the kit `Menu`'s items, and the rows of a
+ * menu or list a feature lays out itself (one with a header, groups or a search field).
+ */
+export function MenuItemButton({ icon, hint, tone, className, type = "button", children, ref, ...rest }: MenuItemButtonProps) {
+  return (
+    <button ref={ref} type={type} className={["ui-menu-item", className].filter(Boolean).join(" ")} data-tone={tone} {...rest}>
+      {icon !== undefined ? <span className="ui-menu-icon" aria-hidden="true">{icon}</span> : null}
+      <span className="ui-menu-label">{children}</span>
+      {hint ? <span className="ui-menu-hint">{hint}</span> : null}
     </button>
   );
 }

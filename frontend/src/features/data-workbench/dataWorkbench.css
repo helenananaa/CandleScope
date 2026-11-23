@@ -61,14 +61,12 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border: 0;
-  color: var(--text-primary);
-  background: transparent;
+  border-radius: 0;
   font: inherit;
   text-align: start;
 }
-button.dw-instrument-head { cursor: pointer; }
-button.dw-instrument-head:hover { background: var(--surface-2); }
-button.dw-instrument-head:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* The head of an instrument that folds is a kit row option, flush in its box. */
+.dw-instrument-head.ui-option:focus-visible { outline-offset: -2px; }
 .dw-fold-chevron { display: inline-flex; color: var(--text-muted); transition: transform var(--motion-fast) var(--ease-out); }
 .dw-fold-chevron.spacer { width: 12px; }
 .dw-instrument-head.static { cursor: default; }

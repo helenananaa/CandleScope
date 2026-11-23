@@ -244,6 +244,10 @@
   color: var(--text-danger);
 }
 
+.ui-menu-item[data-tone='danger'] .ui-menu-icon {
+  color: inherit;
+}
+
 .ui-menu-item:disabled {
   color: var(--text-muted);
   cursor: not-allowed;

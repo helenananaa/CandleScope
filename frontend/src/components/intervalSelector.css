@@ -329,11 +329,6 @@
     grid-template-columns: 56px minmax(0, 1fr);
     height: auto;
   }
-
-  .interval-create-btn {
-    grid-column: 1 / -1;
-    height: 32px;
-  }
 }
 /* ── 图表 + 画图工具栏容器 ───────────────────────────────── */
 .chart-with-toolbar {

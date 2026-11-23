@@ -103,21 +103,12 @@
 .chart-load-error-diagnostic { width: 100%; max-width: 520px; color: var(--text-primary); background: var(--surface-0); }
 /* An interval the market cannot serve (app/ChartIntervalUnavailable.tsx). */
 .error-overlay.chart-interval-unavailable { padding: 16px; }
-.retry-btn {
-  padding: 8px 20px;
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  color: var(--text-on-accent);
-  background: var(--accent-solid);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: var(--font-sans);
-}
-.retry-btn:hover {
-  background: var(--accent-solid-hover);
-  box-shadow: var(--shadow-glow-blue);
+/* The overlay's recovery actions (app/ChartLoadError.tsx, replay's ReplayStatePanel.tsx). */
+.error-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 /* ══════════════════════════════════════════════════════════════

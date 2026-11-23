@@ -83,34 +83,22 @@
   padding: 0 8px;
 }
 
+/* Category rows are kit row options (the current one is aria-current); the rail lays them out. */
 .st-nav-item {
-  display: flex;
-  align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: none;
-  background: transparent;
+  border: 0;
   color: var(--text-secondary);
   font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all 0.15s ease;
-  text-align: left;
+  line-height: normal;
 }
 
-.st-nav-item:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+/* The rail rests quiet; the row pointed at and the current one read at full strength. */
+.st-nav-item:is(:hover, [aria-current='page']) {
   color: var(--text-primary);
 }
 
-.st-nav-item.active {
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-  color: var(--text-accent);
-}
-
 .st-nav-item:focus-visible {
-  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -124,7 +112,7 @@
 }
 
 .st-nav-item:hover .st-nav-icon,
-.st-nav-item.active .st-nav-icon {
+.st-nav-item[aria-current='page'] .st-nav-icon {
   color: inherit;
 }
 
@@ -236,30 +224,12 @@ html[lang="ru"] .st-theme-label {
   grid-template-columns: repeat(4, 1fr);
 }
 
+/* Theme and proxy mode choices are kit option cards; the grid lays them out. */
 .st-theme-card {
-  display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 16px 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-2);
-  color: var(--text-primary);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.st-theme-card:hover {
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  transform: translateY(-1px);
-}
-
-.st-theme-card.active {
-  border-color: var(--accent-blue);
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 
 .st-theme-icon {
@@ -267,7 +237,7 @@ html[lang="ru"] .st-theme-label {
   color: var(--text-secondary);
 }
 
-.st-theme-card.active .st-theme-icon {
+.st-theme-card[aria-pressed='true'] .st-theme-icon {
   color: var(--text-accent);
 }
 
@@ -333,28 +303,12 @@ html[lang="ru"] .st-theme-label {
   gap: 10px;
 }
 
+/* Storage presets are kit option cards. */
 .st-preset-card {
-  display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 14px 8px 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-2);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.st-preset-card:hover {
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-  transform: translateY(-1px);
-}
-
-.st-preset-card.active {
-  border-color: var(--accent-blue);
-  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 25%, transparent);
 }
 
 .st-preset-level {
@@ -379,7 +333,7 @@ html[lang="ru"] .st-theme-label {
   background: var(--text-secondary);
 }
 
-.st-preset-card.active .st-preset-level > span.on {
+.st-preset-card[aria-pressed='true'] .st-preset-level > span.on {
   background: var(--accent-blue);
 }
 
@@ -873,10 +827,6 @@ html[lang="ru"] .st-theme-label {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }
-.st-nav-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .st-ai-status {
   display: flex;
 }
@@ -922,25 +872,18 @@ html[lang="ru"] .st-theme-label {
 .st-ex-item[data-current] {
   box-shadow: inset 2px 0 0 var(--accent-blue);
 }
+/* An exchange's row is a kit row option, flush in its list; its expanded detail follows. */
 .st-ex-row {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: start;
   gap: 10px;
-  width: 100%;
   padding: 12px 14px;
   border: 0;
-  background: transparent;
-  color: inherit;
+  border-radius: 0;
   font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.st-ex-row:hover {
-  background: var(--surface-hover);
 }
 .st-ex-row:focus-visible {
-  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .st-ex-chevron {

@@ -26,6 +26,7 @@ export const HOOK_CLASSES = new Set([
   "custom-interval-btn", // IntervalSelector.test checks that custom intervals on the bar are marked (kit Buttons)
   "drawing-text-style-bar", // drawingModel.ts keeps pointer events inside the text toolbar
   "settings-btn", // scripts/smoke.mjs finds the Settings button on every page
+  "wl-collapse-btn", // scripts/replay-soak.mjs finds the watchlist's collapse button (a kit IconButton)
   "indicator-toggle-btn", // scripts/smoke.mjs and multi-chart-capacity.mjs find the indicators toggle (a kit icon button)
   "export-workspace", // scripts/export-matrix.mjs finds the export dialog
   "indicator-editor-console", // frontendScript browser test reads script output
@@ -50,7 +51,7 @@ export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "l
 
 // Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
 // its ratchet. Lower a ratchet when its count falls; never raise it.
-export const RATCHETS = { rawButtons: 92, buttonClassFamilies: 18 };
+export const RATCHETS = { rawButtons: 57, buttonClassFamilies: 13 };
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

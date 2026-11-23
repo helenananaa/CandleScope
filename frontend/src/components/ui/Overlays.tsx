@@ -4,7 +4,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
-import { IconButton } from "./Button.js";
+import { IconButton, MenuItemButton } from "./Button.js";
 import { menuItemRole, moveMenuFocus } from "./helpers.js";
 import { overlayHost, useOverlayLayer } from "./overlay/overlayRuntime.js";
 import { placePopover, type Placement } from "./overlay/position.js";
@@ -324,17 +324,15 @@ export function Menu({ open, onClose, anchorRef, anchorPoint, label, items, plac
         {items.map((item, index) => (
           <Fragment key={item.id}>
             {item.separatorBefore && index > 0 ? <div className="ui-menu-separator" role="separator" /> : null}
-            <button ref={index === firstEnabled ? firstRef : undefined} type="button" disabled={item.disabled}
+            <MenuItemButton ref={index === firstEnabled ? firstRef : undefined} disabled={item.disabled}
               role={menuItemRole(item)}
               aria-checked={item.checked}
-              className="ui-menu-item" data-tone={item.tone} tabIndex={-1}
+              tone={item.tone} tabIndex={-1}
+              icon={item.icon || checkable ? item.icon ?? (item.checked ? <CheckGlyph /> : null) : undefined}
+              hint={item.hint}
               onClick={() => { onClose(); item.onSelect(); }}>
-              {item.icon || checkable
-                ? <span className="ui-menu-icon" aria-hidden="true">{item.icon ?? (item.checked ? <CheckGlyph /> : null)}</span>
-                : null}
-              <span className="ui-menu-label">{item.label}</span>
-              {item.hint ? <span className="ui-menu-hint">{item.hint}</span> : null}
-            </button>
+              {item.label}
+            </MenuItemButton>
           </Fragment>
         ))}
       </div>

@@ -1,3 +1,4 @@
+import { Button } from "../../../components/ui/Button.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayRuntime } from "../useReplayRuntime.js";
@@ -23,9 +24,11 @@ export default function ReplayStatePanel({ runtime }: { readonly runtime: StateR
             {error?.code ?? "REPLAY_RUNTIME_ERROR"}: {error?.message ?? "Unknown replay error"}
             <small>{t("replay.shell.failClosed")}</small>
           </div>
-          {runtime.phase === "ERROR" && <button className="retry-btn" type="button" onClick={runtime.actions.retry}>{t("replay.shell.retryCaps")}</button>}
-          {!terminalError && <button className="retry-btn" type="button" data-replay-action="resync"
-            onClick={() => runtime.actions.requestResync("manual recovery")}>{t("replay.control.resync")}</button>}
+          <div className="error-overlay-actions">
+            {runtime.phase === "ERROR" && <Button variant="primary" onClick={runtime.actions.retry}>{t("replay.shell.retryCaps")}</Button>}
+            {!terminalError && <Button variant="primary" data-replay-action="resync"
+              onClick={() => runtime.actions.requestResync("manual recovery")}>{t("replay.control.resync")}</Button>}
+          </div>
         </div>
       </div>
     );

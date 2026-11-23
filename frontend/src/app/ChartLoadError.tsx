@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "../components/ui/Button.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { buildChartLoadDiagnostic, copyChartLoadDiagnostic } from "./chartLoadDiagnostic.js";
@@ -28,8 +29,10 @@ export function ChartLoadError({ error, context, onRetry }: { error: string; con
             <pre>{error}</pre>
           </details>
         </div>
-        <button className="retry-btn" onClick={onRetry} id="retry-btn">{t("shell.retry")}</button>
-        <button className="retry-btn" onClick={() => void copy()}>{t("chart.copyDiagnostic")}</button>
+        <div className="error-overlay-actions">
+          <Button variant="primary" onClick={onRetry} id="retry-btn">{t("shell.retry")}</Button>
+          <Button onClick={() => void copy()}>{t("chart.copyDiagnostic")}</Button>
+        </div>
         {result && <div role="status">{t(result.success ? "chart.diagnosticCopied" : "chart.diagnosticCopyFailed")}</div>}
         {result?.success === false && (
           <textarea

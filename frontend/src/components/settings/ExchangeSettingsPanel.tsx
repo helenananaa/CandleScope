@@ -23,7 +23,7 @@ import {
     type ExchangeSupportFilter,
 } from "../../features/exchange-support/exchangeSupportModel.js";
 import { Icon } from "../icons/Icon.js";
-import { Button } from "../ui/Button.js";
+import { Button, OptionButton } from "../ui/Button.js";
 import { SegmentedControl } from "../ui/Choice.js";
 import { Badge, Disclosure, InlineAlert, Stat } from "../ui/Display.js";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -435,8 +435,8 @@ export default function ExchangeSettingsPanel({
                             data-current={isCurrent ? "true" : undefined}
                             data-unroutable={isRoutable ? undefined : "true"}
                         >
-                            <button
-                                type="button"
+                            <OptionButton
+                                variant="row"
                                 className="st-ex-row"
                                 onClick={() => setExpandedExchange(isExpanded ? "" : exchange.exchange)}
                                 aria-expanded={isExpanded}
@@ -454,7 +454,7 @@ export default function ExchangeSettingsPanel({
                                     {isCurrent && <Badge tone="accent">{t("settings.exchange.current")}</Badge>}
                                     {!isRoutable && <Badge tone="danger">{t("settings.exchange.unroutable")}</Badge>}
                                 </span>
-                            </button>
+                            </OptionButton>
 
                             {isExpanded && (
                                 <div className="st-ex-detail">

@@ -212,21 +212,21 @@
   background: var(--surface-1);
 }
 
-.ui-option:hover:not(:disabled) {
+.ui-option:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--surface-hover);
 }
 
-.ui-option:is([aria-pressed='true'], [aria-selected='true'], [aria-current='true'], [aria-current='page']) {
+.ui-option:is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], [aria-current='true'], [aria-current='page']) {
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-primary);
 }
 
-.ui-option-card:is([aria-pressed='true'], [aria-selected='true'], [aria-current='true'], [aria-current='page']) {
+.ui-option-card:is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], [aria-current='true'], [aria-current='page']) {
   border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
 }
 
 /* Fades as well, like a disabled icon button: muted text alone reads as enabled in the dark theme. */
-.ui-option:disabled {
+.ui-option:is(:disabled, [aria-disabled='true']) {
   color: var(--text-muted);
   opacity: 0.5;
   cursor: not-allowed;

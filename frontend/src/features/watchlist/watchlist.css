@@ -16,19 +16,17 @@
   overflow: hidden;
 }
 
-.wl-collapse-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
-.wl-add-list-btn:hover { color: var(--text-accent); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
-
-.wl-table-header > button {
+/* Column sort buttons keep the header row's height and type. */
+.wl-table-header > .ui-btn {
+  height: auto;
   border: 0;
-  background: transparent;
+  gap: 0;
+  line-height: normal;
   padding-top: 3px;
   padding-bottom: 3px;
   padding-right: 0;
-  cursor: pointer;
 }
-.wl-table-header > button:hover { color: var(--text-primary); }
-.wl-table-header > button:focus-visible { outline: 2px solid var(--focus-ring); }
+.wl-table-header > .ui-btn:hover:not(:disabled) { color: var(--text-primary); }
 
 /* ── Collapsed view ── */
 .wl-collapsed-icons {
@@ -38,38 +36,14 @@
   padding: 8px 0;
   gap: 4px;
 }
-.wl-collapsed-icon,
 .wl-collapsed-tab {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-}
-.wl-collapsed-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.15s;
-}
-.wl-collapsed-icon:hover { color: var(--text-accent); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
-.wl-collapsed-tab {
-  display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.15s;
+  padding: 0;
   gap: 2px;
 }
-.wl-collapsed-tab:hover { background: var(--surface-hover); }
 .wl-collapsed-dot {
   width: 6px;
   height: 6px;
@@ -100,8 +74,6 @@
 }
 
 .wl-list-header:hover .wl-list-grip { opacity: 0.8; }
-
-.wl-list-toggle:hover { color: var(--text-primary); background: var(--surface-hover); }
 
 /* ── List body ── */
 .wl-list-body {
@@ -189,7 +161,6 @@
 .wl-sym-row .wl-sym-select:focus-visible { outline-offset: -1px; }
 /* Shown while the row is pointed at or has keyboard focus, so a focused delete button is seen. */
 .wl-sym-row:is(:hover, :focus-within) .wl-sym-del { opacity: 1; }
-.wl-sym-del:hover { color: var(--text-down); background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
 /* ── Drag-and-drop indicators ── */
 .wl-drop-bar {
   height: 2px;
@@ -246,25 +217,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.wl-ctx-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: all 0.12s;
-  text-align: left;
-}
-.wl-ctx-item:hover { background: var(--surface-hover); }
-.wl-ctx-item-danger { color: var(--text-down); }
-.wl-ctx-item-danger:hover { background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 
 .wl-ctx-divider {
   height: 1px;
@@ -279,14 +231,13 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.wl-ctx-item-selected {
-  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+/* A tier's description is prose, not a shortcut. */
+.wl-context-menu .ui-menu-hint {
+  font-family: var(--font-sans);
 }
-.wl-ctx-item-desc {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  margin-left: auto;
-  padding-left: 8px;
+/* The chosen subscription tier: its mark is a coloured dot, so the row is tinted. */
+.wl-context-menu .ui-menu-item[aria-checked='true'] {
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
 }
 
 .wl-tier-dot.wl-tier-full {
@@ -318,20 +269,9 @@
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.04);
 }
-.wl-collapse-btn,
-.wl-add-list-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.wl-header .ui-icon-btn {
   width: 24px;
   height: 24px;
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
 }
 
 .wl-header-title {
@@ -355,7 +295,7 @@
   user-select: none;
 }
 .wl-table-header > span,
-.wl-table-header > button {
+.wl-table-header > .ui-btn {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-muted);
@@ -370,16 +310,19 @@
 }
 .wl-th-price {
   width: 76px;
+  justify-content: flex-end;
   text-align: right;
   flex-shrink: 0;
 }
 .wl-th-change {
   width: 72px;
+  justify-content: flex-end;
   text-align: right;
   flex-shrink: 0;
 }
 .wl-th-changepct {
   width: 62px;
+  justify-content: flex-end;
   text-align: right;
   flex-shrink: 0;
 }
@@ -425,19 +368,9 @@
 
 /* Collapse toggle */
 .wl-list-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 18px;
   height: 18px;
-  background: none;
-  border: none;
   border-radius: var(--radius-xs);
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.15s;
-  padding: 0;
 }
 
 /* List name */
@@ -608,20 +541,10 @@
 }
 
 .wl-sym-del {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 18px;
   height: 18px;
-  background: none;
-  border: none;
   border-radius: 50%;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
   opacity: 0;
-  flex-shrink: 0;
-  padding: 0;
 }
 
 /* ── Resize handle (left edge of rail panel content) ── */
