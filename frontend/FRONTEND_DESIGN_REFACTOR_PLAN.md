@@ -698,6 +698,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Hindi and Arabic (152 visits, the 19 states that open without the local service): Arabic is the first right-to-left language of row 7c4, and two existing right-to-left faults are fixed. The layout menu's popover was anchored by `right: 0` and opened past the window's left edge (cut at every width); it now uses `inset-inline-end`. The header's wordmark read "ScopeCandle"; it keeps left-to-right order. What remains is cut with its full text on hover. The CSV import's volume option already fits in both. The rail's tab titles fit. Both scripts draw in system fonts, since the interface font has no Devanagari or Arabic (known gap).
 - Next: row 7c4's last language, Hebrew (7c13), right-to-left like Arabic.
 
+**Phase 7c13 is done (branch `design/phase-7c13-he`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C13.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C13.md). With it row 7c4 and Phase 7 are complete: every catalog carries the seven feature blocks in its own language.
+
+- Hebrew has its own feature file (`catalogs/hebrewFeatureMessages.ts`: the seven feature blocks, 1,218 messages, loaded only with Hebrew), its inline English translated (141), and the 27 English duplicates that hid the native block removed. Messages shown in English: Hebrew 1,123 → 12; what is left is names and trading terms that read the same.
+- Layout in Hebrew (76 visits, the 19 states that open without the local service): 12 findings on both builds, all the read-only account summary with its full text on hover. Phase 7c12's right-to-left fixes hold in Hebrew (the layout menu opens inside the window; the wordmark reads CandleScope). The CSV import's volume option fits. The rail's tab titles fit. Hebrew draws in a system font, since the interface font has no Hebrew (known gap).
+- Next: Phase 8, cleanup (the legacy `--bg-*` aliases, dead CSS, guardrails from warn to error).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
