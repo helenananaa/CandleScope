@@ -49,6 +49,8 @@
 }
 .brand-wordmark {
   display: inline-flex;
+  /* A Latin name: a right-to-left page would otherwise lay its two parts out as "ScopeCandle". */
+  direction: ltr;
   letter-spacing: -0.025em;
 }
 .brand-wordmark-scope {

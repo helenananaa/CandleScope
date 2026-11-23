@@ -692,6 +692,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Vietnamese and Thai (152 visits, the 19 states that open without the local service): the CSV import's volume option, cut in both, is shorter, and the Vietnamese rail's tape summary ("Giao dịch trực tiếp") now fits at 1024 px. What remains is cut with its full text on hover. The rail's tab titles fit. Thai draws in the system's Thai font, since the interface font has no Thai (known gap).
 - Next: row 7c4's last 3 languages, Hindi, Arabic and Hebrew, from Phase 7c12.
 
+**Phase 7c12 is done (branch `design/phase-7c12-hi-ar`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C12.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C12.md).
+
+- Hindi and Arabic have their own feature files (`catalogs/hindiFeatureMessages.ts`, `catalogs/arabicFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (138 Hindi, 124 Arabic), and the 27 English duplicates that hid the native block removed. Messages shown in English: Hindi 1,121 → 14, Arabic 1,113 → 10; what is left is names and trading terms that read the same.
+- Layout in Hindi and Arabic (152 visits, the 19 states that open without the local service): Arabic is the first right-to-left language of row 7c4, and two existing right-to-left faults are fixed. The layout menu's popover was anchored by `right: 0` and opened past the window's left edge (cut at every width); it now uses `inset-inline-end`. The header's wordmark read "ScopeCandle"; it keeps left-to-right order. What remains is cut with its full text on hover. The CSV import's volume option already fits in both. The rail's tab titles fit. Both scripts draw in system fonts, since the interface font has no Devanagari or Arabic (known gap).
+- Next: row 7c4's last language, Hebrew (7c13), right-to-left like Arabic.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

@@ -1087,7 +1087,9 @@
 .workspace-layout-popover {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  /* The picker's inline end: right in left-to-right pages, left in right-to-left ones,
+     where the picker sits near the left edge and a right-aligned popover was cut off. */
+  inset-inline-end: 0;
   z-index: var(--z-menu);
   width: 252px;
   padding: var(--space-2);
