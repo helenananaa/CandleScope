@@ -41,14 +41,24 @@ function workerMain() {
 export function frontendScriptSandboxDocument(): string {
   const worker = JSON.stringify(`(${workerMain.toString()})();`).replaceAll("<", "\\u003c");
   return `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>
+let activeStop = null;
 addEventListener('message', function start(event) {
   if (event.source !== parent || !event.ports[0]) return;
-  removeEventListener('message', start);
   const port = event.ports[0];
+  if (activeStop) { port.postMessage('{"error":"Frontend script isolation is busy"}'); port.close(); return; }
   const url = URL.createObjectURL(new Blob([${worker}], {type: 'text/javascript'}));
   let worker;
   let ready = false, started = false;
-  const stop = () => { if (worker) worker.terminate(); URL.revokeObjectURL(url); };
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (worker) worker.terminate();
+    URL.revokeObjectURL(url);
+    removeEventListener('pagehide', stop);
+    activeStop = null;
+  };
+  activeStop = stop;
   port.onmessage = (message) => {
     if (message.data === 'run' && ready && !started) {
       started = true;
