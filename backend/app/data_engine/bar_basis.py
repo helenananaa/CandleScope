@@ -197,6 +197,11 @@ def native_bar_spec(provider: str, market_type: str, interval: str, purpose: str
     # The official Bybit 5-minute WS fixture includes both start and end.
     # Other native periods remain unknown until independently qualified.
     bybit_fixture = provider == "bybit" and interval == "5m"
+    if (purpose == "history" and provider in {"bybit", "bitget"}
+            and market_type in {"spot", "swap.linear"} and interval == "1m"):
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "fixture_verified", "backend/tests/fixtures/bar_basis/replay-minute-rest.json",
+                             protocol_version=f"{provider}/rest-minute/1")
     if provider == "gate" and market_type == "spot" and interval == "1m":
         # The official WS example labels 1606292580 as a 1m open; captured
         # REST rows independently preserve these UTC minute boundaries.

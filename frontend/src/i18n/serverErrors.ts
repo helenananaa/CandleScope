@@ -36,6 +36,12 @@ const SUMMARY_KEYS: Record<ServerErrorKind, MessageKey> = {
 const CODE_KEYS: Readonly<Partial<Record<string, MessageKey>>> = {
   HISTORY_ORIGIN_UNAVAILABLE: "serverError.code.historyOriginUnavailable",
   SUBSCRIBE_FAILED: "serverError.code.subscribeFailed",
+  // The web version (browser/host) answers desktop-only routes and its library downloads with these.
+  DESKTOP_REQUIRED: "serverError.code.desktopRequired",
+  LIBRARY_SOURCE_UNSUPPORTED: "serverError.code.librarySourceUnsupported",
+  LIBRARY_RANGE_INVALID: "serverError.code.libraryRangeInvalid",
+  LIBRARY_RANGE_TOO_LARGE: "serverError.code.libraryRangeTooLarge",
+  LIBRARY_DOWNLOAD_ENDED: "serverError.code.libraryDownloadEnded",
 };
 
 const CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,127}$/;

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import heapq
 import logging
+import sys
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -61,6 +62,7 @@ _MAINTENANCE_BACKFILL_REASONS = (
 )
 
 _SCHEDULER_OUTCOME_HISTORY_LIMIT = 256
+_PROBE_RECHECK_SECONDS = 0.25
 _PERSISTENT_INTEREST_LIMIT = 64
 _INTEREST_METADATA_KEYS = (
     "app_id", "workspace_id", "window_id", "cell_id", "demand_owner_id",
@@ -1573,6 +1575,15 @@ class BackfillScheduler:
             int(time.time() * 1000)
             + max(1, int((eligible_at - now_monotonic) * 1000))
         )
+        if (sys.platform == "emscripten" and isinstance(exc, RateLimitDeferred)
+                and exc.reason == "probe_in_flight"):
+            # The deferral names the probe's fail-safe lease (30 s), not when
+            # its response arrives. In a browser tab the first request of a
+            # start is the venue catalog, which takes seconds on a visitor's
+            # connection; a chart that asked meanwhile stayed empty until the
+            # lease ran out. Look again shortly instead.
+            eligible_at = min(eligible_at, now_monotonic + _PROBE_RECHECK_SECONDS)
+            retry_at_ms = min(int(retry_at_ms), int(time.time() * 1000) + int(_PROBE_RECHECK_SECONDS * 1000))
         chunk.eligible_at_monotonic = eligible_at
         chunk.retry_at_ms = int(retry_at_ms)
         chunk.defer_reason = exc.reason

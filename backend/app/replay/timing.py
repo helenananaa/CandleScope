@@ -8,8 +8,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from functools import partial
 from threading import Lock
-from time import perf_counter, thread_time
+from time import perf_counter
 from typing import Any, TypeVar
+
+try:
+    from time import thread_time
+except ImportError:  # WASM workers have a single Python thread.
+    from time import process_time as thread_time
 
 T = TypeVar("T")
 

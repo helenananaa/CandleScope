@@ -51,6 +51,25 @@ test("a code with its own message shows only that message, without the English s
   assert.equal(describeError(boundary, "fallback"), "Couldn't read where the exchange's history begins. Try again shortly.");
 });
 
+test("web version codes read as what the person can do, in their language", () => {
+  setLocale("zh-CN");
+  assert.equal(
+    describeError(new CodedError("DESKTOP_REQUIRED", "This needs the CandleScope desktop app"), "fallback"),
+    "这项功能需要 CandleScope 桌面版。",
+  );
+  setLocale("en");
+  assert.equal(
+    describeError(new CodedError("LIBRARY_RANGE_TOO_LARGE", "The range is larger than the replay library can hold"), "fallback"),
+    "The range is more than the library can hold. Choose a shorter one.",
+  );
+  // Other download failures keep the backend's own words after a translated summary.
+  setLocale("zh-CN");
+  assert.equal(
+    describeError(new CodedError("LIBRARY_DOWNLOAD_FAILED", "The exchange returned invalid trades"), "fallback"),
+    "操作失败（The exchange returned invalid trades）",
+  );
+});
+
 class HttpError extends Error {
   constructor(readonly status: number, message: string, readonly code: string | null = null) {
     super(message);

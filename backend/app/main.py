@@ -22,6 +22,7 @@ an explicit capability error and never silently fall back.
 import asyncio
 import logging
 import os
+import sys
 
 # ── Monkey-patch: websockets recv_messages bug ──────────────────
 # websockets ≥15 initializes ``recv_messages`` in ``connection_made``,
@@ -347,6 +348,21 @@ async def _init_continuous_strategies() -> None:
         logger.warning("Continuous strategies unavailable: %s",failure,exc_info=True)
 
 
+async def _start_library_replay(library):
+    from dataclasses import replace
+    from app.replay.local_bar_repository import LocalReplayBarRepository
+    from app.replay.local_trade_repository import LocalReplayTradeRepository
+    from app.replay.runtime import start_replay_runtime
+
+    settings = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
+                       replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
+    bars = LocalReplayBarRepository(library, max_rows=settings.max_bar_dataset_rows)
+    return await startup_factory(app, "replay", start_replay_runtime)(
+        settings=settings, repository=bars, native_intervals=bars.native_intervals,
+        raw_trade_archive=LocalReplayTradeRepository(library),
+    )
+
+
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
@@ -359,10 +375,13 @@ async def _init_replay_runtime() -> None:
     async def refresh_instrument_metadata(exchange: str, market_type: str):
         return await refresh_exchange_metadata(exchange, market_type=market_type)
 
-    runtime = await startup_factory(app, "replay", start_replay_runtime)(
-        instrument_metadata_resolver=get_cached_symbol_metadata,
-        instrument_metadata_refresher=refresh_instrument_metadata,
-    )
+    if sys.platform == "emscripten":
+        runtime = await _start_library_replay(app.state.local_data_service)
+    else:
+        runtime = await startup_factory(app, "replay", start_replay_runtime)(
+            instrument_metadata_resolver=get_cached_symbol_metadata,
+            instrument_metadata_refresher=refresh_instrument_metadata,
+        )
     app.state.replay_runtime = runtime
     app.state.replay_service = runtime.service
 
@@ -561,19 +580,7 @@ async def _startup_event_impl() -> None:
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
                 )
-            from dataclasses import replace
-            from app.replay.local_bar_repository import LocalReplayBarRepository
-            from app.replay.local_trade_repository import LocalReplayTradeRepository
-            from app.replay.runtime import start_replay_runtime
-
-            offline_replay = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
-                replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
-            imported_bars = LocalReplayBarRepository(local_runtime.service,
-                max_rows=offline_replay.max_bar_dataset_rows)
-            replay_runtime = await startup_factory(app, "replay", start_replay_runtime)(
-                settings=offline_replay, repository=imported_bars,
-                native_intervals=imported_bars.native_intervals,
-                raw_trade_archive=LocalReplayTradeRepository(local_runtime.service))
+            replay_runtime = await _start_library_replay(local_runtime.service)
             app.state.replay_runtime = replay_runtime
             app.state.replay_service = replay_runtime.service
             if replay_runtime.service is not None:
@@ -599,7 +606,8 @@ async def _startup_event_impl() -> None:
     # Parse the CCXT CA bundle off the loop before feeds open their clients.
     from app.exchanges.ccxt_ext.tls import start_shared_ssl_context_warmup
 
-    start_shared_ssl_context_warmup()
+    if sys.platform != "emscripten":  # Fetch and WebSocket use the browser TLS stack.
+        start_shared_ssl_context_warmup()
 
     # 1. Initialize registered market-storage schemas through one composition root.
     storage_bootstrap = startup_factory(app, "market-storage", initialize_market_storage)(
@@ -638,6 +646,7 @@ async def _startup_event_impl() -> None:
             data_runtime = getattr(app.state, "local_data_runtime")
             backtest_runtime = BacktestRuntime.start(
                 BACKTEST_SETTINGS,
+                start_worker=sys.platform != "emscripten",
                 local_data_service=data_runtime.service,
                 trade_archive_dir=REPLAY_AGG_TRADE_ARCHIVE_DIR,
             )
@@ -690,6 +699,7 @@ async def _startup_event_impl() -> None:
                 local_data=getattr(app.state, "local_data_service", None),
                 backtest_runtime=getattr(app.state, "backtest_runtime", None),
                 host_history_path=KLINES_DB_PATH,
+                replay_library=getattr(app.state, "replay_library", None),
             ),
             enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
         )
@@ -798,7 +808,12 @@ def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
             from app.exchanges.symbol_catalog import refresh_exchange_metadata
 
             await _wait_for_catalog_foreground_quiet()
-            counts = await refresh_exchange_metadata()
+            if sys.platform == "emscripten":
+                # Warm only the initial market on visitors' network connections.
+                # The usual catalog API can discover more sources on demand.
+                counts = await refresh_exchange_metadata("binance", market_type="spot")
+            else:
+                counts = await refresh_exchange_metadata()
             print(f"[startup] Exchange info loaded [ok] {counts}")
         except asyncio.CancelledError:
             raise

@@ -3,6 +3,7 @@ import type { ErrorInfo, PropsWithChildren, ReactNode } from "react";
 import { t } from "../i18n/index.js";
 import { ExtensionRecovery } from "../features/extensions/ExtensionManager.js";
 import { startUnified } from "../features/extensions/unifiedRuntime.js";
+import { installTouchLongPress } from "./touchLongPress.js";
 
 export type ChartErrorBoundaryProps = PropsWithChildren;
 
@@ -61,5 +62,6 @@ export class ChartErrorBoundary extends React.Component<
 
 export default function AppProviders({ children }: PropsWithChildren): ReactNode {
   useEffect(() => { startUnified(); }, []);
+  useEffect(() => installTouchLongPress(), []);
   return <>{children}<ExtensionRecovery /></>;
 }

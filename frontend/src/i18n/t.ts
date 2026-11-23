@@ -61,6 +61,8 @@ export function translateMarketType(marketType: string, locale: LocaleId = getLo
   if (marketType === "spot") return t("market.spot", {}, locale);
   if (marketType === "futures") return t("market.futures", {}, locale);
   if (marketType === "swap") return t("market.swap", {}, locale);
+  if (marketType === "swap.linear") return t("market.swapLinear", {}, locale);
+  if (marketType === "local_bar") return t("market.library", {}, locale);
   return marketType;
 }
 
