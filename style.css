@@ -608,6 +608,8 @@ h1 {
 .ext-tag { align-self: flex-start; padding: 3px 8px; border-radius: 6px; background: rgba(18, 191, 174, 0.12); color: var(--teal-hi); font: 600 11px/1.2 var(--mono); }
 .ext h3 { font-size: 18px; }
 .ext p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+.ext-more { margin-top: auto; padding-top: 6px; font-size: 13px; color: var(--teal-hi); }
+.ext-link:hover .ext-more { text-decoration: underline; text-underline-offset: 3px; }
 .ext-cta { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 18px; border-style: dashed; border-color: rgba(52, 227, 207, 0.4); }
 .ext-cta:hover { border-color: var(--teal-hi); }
 .ext-cta p { color: var(--teal-hi); margin-top: 4px; }

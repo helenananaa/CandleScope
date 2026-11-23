@@ -334,7 +334,7 @@
           <h2 id="indicators-title" data-en="Unlimited indicators. Bring your Pine scripts.">指标不设上限，Pine 指标直接迁移。</h2>
           <p class="section-sub" data-en="Stack as many studies on one chart as you like. The Pine interpreter plugin runs the Pine indicators you already have — or write new ones in JavaScript.">一张图上想叠多少指标都行。Pine 解释器插件直接运行你现有的 Pine 指标，也可以用 JavaScript 写新的。</p>
           <ul class="ticks">
-            <li><b data-en="Pine interpreter plugin">Pine 解释器插件</b><span data-en="Migrate your indicators without rewriting them.">迁移指标，无需重写。</span></li>
+            <li><b data-en="Pine interpreter plugin">Pine 解释器插件</b><span data-en="Migrate your indicators without rewriting them, on the open-source pine-compat-runtime.">迁移指标，无需重写；引擎是开源的 pine-compat-runtime。</span></li>
             <li><b data-en="JavaScript indicators">JavaScript 指标</b><span data-en="Build your own studies in the frontend.">在前端编写属于你的指标。</span></li>
             <li><b data-en="Built-in studies">内置指标</b><span data-en="Moving averages, oscillators, volume and more.">均线、震荡指标、成交量等开箱即用。</span></li>
           </ul>
@@ -640,7 +640,7 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
           <article class="ext reveal" data-spot><span class="ext-tag" data-en="Built in">内置</span><h3 data-en="Native Binance &amp; OKX">Binance 与 OKX 原生适配</h3><p data-en="Deeper trade and contract data: full-depth books and liquidations on Binance, funding and open interest on both.">更完整的成交与合约数据：Binance 有全深度盘口与强平，两家都有资金费率与持仓量。</p></article>
           <article class="ext reveal" data-spot><span class="ext-tag" data-en="Data plugin">数据插件</span><h3>Twelve Data</h3><p data-en="US stocks, ETFs, forex and commodities.">美股、ETF、外汇与大宗商品。</p></article>
           <article class="ext reveal" data-spot><span class="ext-tag" data-en="Plugin template">插件模板</span><h3 data-en="Your data provider">自定义数据提供商</h3><p data-en="Start from the template to chart a private feed or any market.">从模板开始，接入私有行情或任何市场。</p></article>
-          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Indicator plugin">指标插件</span><h3 data-en="Pine interpreter">Pine 解释器</h3><p data-en="Runs and migrates your Pine indicators and strategies.">运行并迁移你的 Pine 指标与策略。</p></article>
+          <a class="ext ext-link reveal" data-spot href="https://github.com/helenananaa/pine-compat-runtime"><span class="ext-tag" data-en="Open-source engine · MIT">开源引擎 · MIT</span><h3 data-en="Pine interpreter">Pine 解释器</h3><p data-en="Runs and migrates your Pine indicators and strategies. The engine, pine-compat-runtime, is its own MIT project that any app can embed.">运行并迁移你的 Pine 指标与策略。引擎 pine-compat-runtime 是独立的 MIT 开源项目，任何应用都能嵌入。</p><span class="ext-more" data-en="pine-compat-runtime on GitHub →">在 GitHub 查看 pine-compat-runtime →</span></a>
           <article class="ext reveal" data-spot><span class="ext-tag" data-en="Strategy SDK">策略 SDK</span><h3 data-en="External models">外部量化模型</h3><p data-en="Plug your model into backtests; CandleScope handles matching and accounts.">把你的模型接进回测，撮合与账户由 CandleScope 负责。</p></article>
           <a class="ext ext-cta reveal" href="https://github.com/helenananaa/CandleScope/blob/main/docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md">
             <span class="ext-plus" aria-hidden="true">+</span>
@@ -776,7 +776,7 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
             <li data-en="Replay and paper trading use simulated orders and never route live exchange orders. Exchange account sync is read-only and currently supports OKX.">回放与模拟盘使用模拟委托，不会向交易所发送真实订单；交易所账户同步为只读，目前支持 OKX。</li>
             <li data-en="History depth and advanced market views (order book, order flow, liquidations, contract data) depend on what the selected exchange or provider serves.">历史深度与高级市场视图（盘口、订单流、强平、合约信息）取决于所选交易所或数据提供商能提供的数据。</li>
             <li data-en="The standard workspace shows up to four charts; 16-chart and multi-window layouts (up to 64 charts) are opt-in.">标准工作区默认最多四张图；16 图与多窗口布局（最多 64 张图）需手动开启。</li>
-            <li data-en="Pine compatibility covers a supported subset. The first-party Pine plugin bundles currently target Windows with CPython 3.12.">Pine 兼容覆盖已支持的子集；第一方 Pine 插件包目前面向 Windows + CPython 3.12。</li>
+            <li data-en="Pine compatibility covers a tested subset. The first-party Pine plugin runs in the desktop app and local installs on Windows, Linux and macOS (Apple Silicon and Intel), not in the web app.">Pine 兼容覆盖经过测试的子集；第一方 Pine 插件可在桌面版和本地安装中运行，支持 Windows、Linux 与 macOS（Apple 芯片与 Intel），网页版暂不支持。</li>
             <li data-en="The local MCP endpoint and proxy subscriptions are desktop-only. MCP is off by default and offers no order entry, script execution or file access.">本地 MCP 与代理订阅仅限桌面版；MCP 默认关闭，不提供下单、脚本执行与文件访问。</li>
             <li data-en="The browser app runs on Windows, Linux and macOS. The optional desktop shell supports Windows and native macOS test packages.">浏览器版运行于 Windows、Linux 与 macOS；可选桌面版支持 Windows 与原生 macOS 测试包。</li>
           </ul>
@@ -826,6 +826,7 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
         <h4 data-en="Project">项目</h4>
         <a href="https://github.com/helenananaa/CandleScope">GitHub</a>
         <a href="https://github.com/helenananaa/CandleScope/issues" data-en="Report an issue">反馈问题</a>
+        <a href="https://github.com/helenananaa/pine-compat-runtime" data-en="Pine runtime">Pine 运行时</a>
         <a href="https://github.com/helenananaa/CandleScope/blob/main/LICENSE" data-en="GPL-3.0 license">GPL-3.0 许可证</a>
       </div>
     </div>
