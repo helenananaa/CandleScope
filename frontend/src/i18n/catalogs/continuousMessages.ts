@@ -492,7 +492,7 @@ export const continuousPortuguese: Record<keyof typeof continuousEnglish, string
   "strategyFollow.waiting": "Aguardando novos candles · último candle {time} UTC", "strategyFollow.stopped": "Atualizações em tempo real interrompidas · último candle {time} UTC", "strategyFollow.unavailable": "Este resultado não pode ser atualizado em tempo real",
   "strategyForward.title": "Acompanhamento prospectivo", "strategyForward.start": "Início", "strategyForward.fromDate": "A partir de uma data passada",
   "strategyList.python": "Estratégia Python", "strategyList.addPine": "Adicionar estratégia Pine", "strategyExecution.title": "Execuções e conta",
-  "strategyExecution.bookFileRequired": "Os níveis de livro executam contra um ficheiro de negócios e livro carregado. Carregue um (um ficheiro de livro de gráfico da pesquisa também serve) ou escolha execução por barras ou por fita de negócios.",
+  "strategyExecution.bookFileRequired": "Os níveis do livro são executados com base em um arquivo enviado de negócios e livro. Envie um (um arquivo de livro do gráfico da pesquisa também serve) ou escolha execução por barras ou pela fita de negócios.",
   "researchStrategy.pine": "Estratégia Pine", "researchStrategy.pineDetail": "Escreva ou cole Pine. Executa como o script declara ou com a execução do CandleScope.",
   "researchSaved.title": "Pacotes Python e estratégias integradas",
   "researchSaved.help": "Execute uma estratégia guardada em vez do rascunho do editor: um pacote Python de vários ficheiros fixado no estúdio, ou o modelo integrado RSI (Wilder) long/short. Corre nestas velas com as configurações de execução da página.",
