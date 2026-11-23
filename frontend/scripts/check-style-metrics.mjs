@@ -22,6 +22,7 @@ export const HOOK_CLASSES = new Set([
   "export-exclude", // export.ts drops these nodes from screenshots
   "chart-strategy-run-button", // ChartStrategyTesterPanel.test finds the tester's Run button (a kit Button)
   "pane-overlay-anchor", // positioning anchor read by pane overlays
+  "chart-type-tool-btn", // scripts/chart-type-matrix.mjs and drawing-rollback-lifecycle-browser.mjs find the chart type button (a kit IconButton)
   "drawing-text-style-bar", // drawingModel.ts keeps pointer events inside the text toolbar
   "settings-btn", // scripts/smoke.mjs finds the Settings button on every page
   "indicator-toggle-btn", // scripts/smoke.mjs and multi-chart-capacity.mjs find the indicators toggle (a kit icon button)
@@ -48,7 +49,7 @@ export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "l
 
 // Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
 // its ratchet. Lower a ratchet when its count falls; never raise it.
-export const RATCHETS = { rawButtons: 263, buttonClassFamilies: 25 };
+export const RATCHETS = { rawButtons: 208, buttonClassFamilies: 19 };
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

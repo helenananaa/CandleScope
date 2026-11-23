@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
+import { Button } from "../../components/ui/index.js";
 import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
 import type { DrawingStylePatch } from "./drawingInteractionController.js";
 import { changeStyleTemplate, readStyleTemplates, STYLE_TEMPLATE_EVENT, STYLE_TEMPLATE_KEY, styleFamily, type TemplateError } from "./drawingStyleTemplateStore.js";
@@ -39,21 +40,21 @@ export default function DrawingStyleTemplates({ drawing, onApply }: {
         {templates.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
       </select></label>
       <div className="drawing-template-actions">
-        <button type="button" disabled={!selected} onClick={() => { if (selected) { onApply(selected.style); setStatus("applied"); setError(null); } }}>{t("drawing.templates.apply")}</button>
-        <button type="button" disabled={!selected} onClick={() => {
+        <Button size="sm" disabled={!selected} onClick={() => { if (selected) { onApply(selected.style); setStatus("applied"); setError(null); } }}>{t("drawing.templates.apply")}</Button>
+        <Button size="sm" variant="danger" disabled={!selected} onClick={() => {
           if (!selected) return;
           const result = changeStyleTemplate({ kind: "delete", family, name: selected.name });
           if (result.ok) { setLoaded(result); setChoice(""); setStatus("deleted"); setError(null); }
           else { setError(result.error); setStatus(null); }
-        }}>{t("drawing.templates.delete")}</button>
+        }}>{t("drawing.templates.delete")}</Button>
       </div>
       <label>{t("drawing.templates.name")}<input value={name} maxLength={32} placeholder={t("drawing.templates.name")}
         onChange={(event) => { setName(event.target.value); setError(null); setStatus(null); }} /></label>
-      <button type="button" disabled={!name.trim() || !loaded.ok} onClick={() => {
+      <Button size="sm" disabled={!name.trim() || !loaded.ok} onClick={() => {
         const result = changeStyleTemplate({ kind: "save", family, name, style: drawing });
         if (result.ok) { setLoaded(result); setChoice(name.trim()); setName(""); setStatus("saved"); setError(null); }
         else { setError(result.error); setStatus(null); }
-      }}>{t("drawing.templates.save")}</button>
+      }}>{t("drawing.templates.save")}</Button>
       {problem && <p className="drawing-field-error" role="alert">{t(`drawing.templates.error.${problem}`)}</p>}
       {status && <p className="drawing-control-caption" role="status">{t(`drawing.templates.${status}`)}</p>}
     </div>

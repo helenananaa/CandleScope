@@ -62,6 +62,8 @@ export default function Gallery() {
           <IconButton label="Close" icon={<CloseIcon />} variant="secondary" />
           <IconButton label="Pin" icon={<PlusIcon />} pressed />
           <IconButton label="Small" icon={<CloseIcon />} size="sm" />
+          <IconButton label="Delete" icon={<CloseIcon />} variant="danger" />
+          <IconButton label="With variants" icon={<PlusIcon />} indicator={<svg width="6" height="6" viewBox="0 0 6 6"><polygon points="6,0 6,6 0,6" fill="currentColor" /></svg>} />
           <button type="button" className="ui-control">Toolbar control</button>
           <button type="button" className="ui-control is-active">Active control</button>
         </Row>

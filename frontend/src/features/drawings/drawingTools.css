@@ -21,34 +21,7 @@
 .drawing-toolbar-loading {
   opacity: 0.65;
 }
-.drawing-tool-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.drawing-tool-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-  border-color: var(--border-subtle);
-}
-.drawing-tool-btn.active {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-  border-color: var(--accent-blue);
-}
-.drawing-tool-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
+/* Tool buttons are kit IconButtons (.drawing-tool-btn is their hook and short-window size). */
 .drawing-toolbar-divider {
   width: 24px;
   height: 1px;
@@ -94,13 +67,7 @@
   background: transparent;
 }
 .drawing-clear-btn {
-  color: var(--text-muted);
   margin-bottom: 4px;
-}
-.drawing-clear-btn:hover {
-  color: var(--text-down);
-  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-  border-color: var(--candle-down);
 }
 /* ── 文字工具字号选择器 ──────────────────────────────────── */
 .drawing-font-size-select {
@@ -129,14 +96,11 @@
   background: var(--surface-1);
   color: var(--text-primary);
 }
-.drawing-format-btn {
-  width: 28px;
-  height: 28px;
-  font-family: var(--font-sans);
-}
-.drawing-format-btn:is(.drawing-format-bold, .drawing-format-italic) { min-width: 28px; font-size: 14px; }
-.drawing-format-btn.drawing-format-bold { font-weight: bold; }
-.drawing-format-btn.drawing-format-italic { font-style: italic; }
+/* Bold, italic and underline toggles show their letter as the icon. */
+.drawing-format-glyph { font: 14px/1 var(--font-sans); }
+.drawing-format-bold { font-weight: 700; }
+.drawing-format-italic { font-style: italic; }
+.drawing-format-underline { text-decoration: underline; }
 /* Pushes the export, visibility and clear buttons to the end of the drawing toolbar. */
 .drawing-toolbar-spacer { flex: 1; }
 /* ── 文字编辑浮层 ────────────────────────────────────────── */
@@ -194,10 +158,8 @@
 
 .selected-drawing-style-bar :is(button, summary, input, select):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-.selected-drawing-style-bar .drawing-delete-button:hover { color: #ef4444; background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .drawing-toolbar-divider { width: 1px; height: 20px; margin: 0 4px; background: var(--drawing-border); }
 .drawing-color-control { position: relative; }
-.drawing-color-control > button { list-style: none; }
 .drawing-color-swatch { width: 18px; height: 18px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--text-secondary) 40%, transparent); }
 .drawing-chevron { opacity: .6; font-size: var(--font-size-sm); }
 .drawing-color-popover { position: fixed; inset: auto; margin: 0; box-sizing: border-box; color: inherit; font: inherit; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; z-index: 3; width: 236px; padding: 14px; border: 1px solid var(--drawing-border); border-radius: var(--radius-md); background: var(--drawing-surface); box-shadow: 0 8px 28px #0004; }
@@ -212,11 +174,13 @@
 .drawing-width-control { display: flex; align-items: center; gap: 6px; padding-left: 8px; }
 .drawing-width-control select { width: 62px; height: 32px; border: 0; background: var(--drawing-surface); cursor: pointer; }
 .drawing-line-sample { display: inline-block; width: 23px; border-top: 2px solid currentColor; }
+.drawing-line-sample-dashed { border-top-style: dashed; }
+.drawing-line-sample-dotted { border-top-style: dotted; }
 .drawing-line-options { display: flex; gap: 2px; }
  .drawing-properties-panel { position: fixed; inset: auto; margin: 0; padding: 0; box-sizing: border-box; color: inherit; font: inherit; width: min(320px, calc(100vw - 16px)); max-height: min(580px, calc(100dvh - 16px)); overflow: hidden; background: var(--drawing-surface); border: 1px solid var(--drawing-border); border-radius: var(--radius-lg); box-shadow: 0 12px 36px #0004; outline: none; }
 .drawing-properties-panel[open] { display: flex; flex-direction: column; }
 .drawing-properties-panel::backdrop { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
-.selected-drawing-style-bar .drawing-drag-handle { cursor: grab; touch-action: none; color: var(--text-secondary); min-width: 24px; padding: 0 3px; }
+.selected-drawing-style-bar .drawing-drag-handle { cursor: grab; touch-action: none; }
 .selected-drawing-style-bar .drawing-drag-handle:active { cursor: grabbing; }
 .drawing-properties-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 14px; border-bottom: 1px solid var(--drawing-border); }
 .drawing-properties-header h3 { font-size: var(--font-size-lg); font-weight: 600; margin: 3px 0 0; }
@@ -227,15 +191,12 @@
 .drawing-properties-footer { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--drawing-border); }
 
 .drawing-properties-footer { flex-wrap: wrap; }
-.drawing-properties-footer .drawing-reset-button { margin-right: auto; color: var(--text-secondary); border-color: transparent; }
-.selected-drawing-style-bar .drawing-save-button { background: var(--accent-solid); color: white; border-color: transparent; }
-.selected-drawing-style-bar .drawing-save-button:hover { filter: brightness(1.12); }
+.drawing-properties-footer .drawing-reset-button { margin-right: auto; }
 .selected-drawing-fib-levels { display: grid; gap: 8px; }
 .drawing-fib-row { padding: 5px 0; border-bottom: 1px solid var(--drawing-border); }
 .drawing-fib-add { display: flex; gap: 8px; padding-top: 4px; }
 .selected-drawing-style-bar .drawing-fib-add input { flex: 1; width: auto; }
 .drawing-field-error { color: var(--text-danger); font-size: var(--font-size-xs); line-height: 1.6; margin: 0; }
-.selected-drawing-style-bar button:disabled { opacity: .4; cursor: not-allowed; }
 .selected-drawing-fib-levels > label, .drawing-fib-row { display: flex; align-items: center; gap: 12px; }
 .drawing-fib-row > span { flex: 1; font-variant-numeric: tabular-nums; }
 
@@ -248,25 +209,6 @@
 /* ── 工具按钮容器（含弹出菜单） ──────────────────────────── */
 .drawing-tool-wrapper {
   position: relative;
-}
-.drawing-tool-wrapper .drawing-tool-btn {
-  position: relative;
-}
-.chart-type-tool-btn:not(.active) {
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 5%, transparent);
-  border-color: color-mix(in srgb, var(--accent-blue) 18%, transparent);
-}
-.chart-type-tool-btn:not(.active):hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 13%, transparent);
-  border-color: color-mix(in srgb, var(--accent-blue) 38%, transparent);
-}
-.tool-variant-indicator {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  pointer-events: none;
 }
 /* ── 弹出菜单（右键/双击切换工具变体） ───────────────────── */
 .tool-flyout {
@@ -375,7 +317,7 @@
   padding: 0;
   z-index: calc(var(--z-panel) + 50);
   animation: flyout-in 0.12s ease-out;
-  max-height: 420px;
+  max-height: 444px;
   display: flex;
   flex-direction: column;
 }
@@ -390,48 +332,16 @@
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
-.fib-levels-close {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  padding: 0 2px;
-  line-height: 1;
-}
-.fib-levels-close:hover {
-  color: var(--text-primary);
-}
 .fib-invert-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 10px;
   flex-shrink: 0;
 }
 .fib-invert-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-}
-.fib-invert-btn {
-  padding: 2px 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  transition: all 0.12s ease;
-}
-.fib-invert-btn.active {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  border-color: var(--accent-blue);
-  color: var(--text-accent);
-}
-.fib-invert-btn:hover:not(.active) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
 }
 .fib-levels-divider {
   height: 1px;
@@ -491,22 +401,9 @@
   color: var(--text-muted);
   text-decoration: line-through;
 }
-.fib-level-remove {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  padding: 0 2px;
-  line-height: 1;
+/* A custom level's remove button shows on the row's hover or focus. */
+.fib-level-row:not(:hover, :focus-within) .fib-level-remove {
   opacity: 0;
-  transition: opacity 0.12s;
-}
-.fib-level-row:hover .fib-level-remove {
-  opacity: 1;
-}
-.fib-level-remove:hover {
-  color: var(--text-down);
 }
 .fib-add-level-row {
   display: flex;
@@ -534,27 +431,6 @@
 .fib-add-level-input::placeholder {
   color: var(--text-muted);
   font-size: var(--font-size-xs);
-}
-.fib-add-level-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  flex-shrink: 0;
-  transition: all 0.12s ease;
-}
-.fib-add-level-btn:hover {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  border-color: var(--accent-blue);
-  color: var(--text-accent);
 }
 /* ── 仓位设置面板 ─────────────────────────────────────── */
 .position-settings-panel {
@@ -603,32 +479,6 @@
   flex-wrap: wrap;
   gap: 4px;
 }
-.position-size-preset {
-  padding: 3px 8px;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  font-family: var(--font-sans);
-  color: var(--text-secondary);
-  background: var(--surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.position-size-preset:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--accent-blue);
-}
-.position-size-preset.active {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  border-color: var(--accent-blue);
-  color: var(--text-accent);
-}
-/* Its type and colour are in styles/overrides.css: they win over every toolbar's button styles. */
-.position-settings-trigger {
-  white-space: nowrap;
-}
 
 /* Phase 5 drawing feedback surfaces. Geometry is clipped to the adapter-owned
    main plot rect; these layers never participate in pointer hit testing. */
@@ -676,17 +526,19 @@
 .drawing-style-fields > label.drawing-property-check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent-blue); }
 .drawing-object-list { position: absolute; top: 8px; right: 282px; z-index: calc(var(--z-topbar) + 9); color: var(--text-primary); --drawing-surface: var(--surface-1); --drawing-border: var(--border-subtle); }
 
-.drawing-object-list .drawing-object-trigger { height: 34px; width: 34px; background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: 0 2px 8px #0001; }
+/* Over the chart the trigger floats on its own shadow; in a chart header it sits flat. */
+.drawing-object-list .drawing-object-trigger { box-shadow: 0 2px 8px #0001; }
 
 .chart-cell-drawing-controls[hidden] { display: none; }
 .drawing-object-list[data-placement='header'] { position: static; }
-.drawing-object-list[data-placement='header'] .drawing-object-trigger { width: 24px; height: 22px; min-width: 24px; padding: 0; background: transparent; border: 0; box-shadow: none; }
+.drawing-object-list[data-placement='header'] .drawing-object-trigger { width: 24px; height: 22px; box-shadow: none; }
 .drawing-object-panel { width: min(360px, calc(100vw - 16px)); }
 .drawing-object-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 10px 12px; }
 
 .drawing-object-group li { border-bottom: 1px solid var(--drawing-border); padding: 5px 0; }
 .drawing-object-row { display: flex; align-items: center; gap: 2px; }
-.drawing-object-list .drawing-object-select { flex: 1; min-width: 0; height: 42px; justify-content: flex-start; gap: 9px; text-align: left; }
+/* Choosing a drawing is a ghost button laid out as the row's label. */
+.drawing-object-list .drawing-object-select { flex: 1; min-width: 0; height: 42px; justify-content: flex-start; gap: 9px; padding: 0 6px; text-align: left; line-height: normal; }
 .drawing-object-select > span:last-child { min-width: 0; }
 .drawing-object-select strong, .drawing-object-select small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
@@ -695,19 +547,9 @@
 @media (max-width: 600px) { .drawing-object-list { right: 80px; } }
 
 .selected-drawing-style-bar-main strong { font-size: var(--font-size-sm); font-weight: 500; padding: 0 9px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.selected-drawing-style-bar button, .selected-drawing-style-bar summary, .selected-drawing-style-bar select, .selected-drawing-style-bar input { font: inherit; color: inherit; }
-.selected-drawing-style-bar button, .drawing-color-control > button {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  min-width: 32px; height: 32px; padding: 0 7px; border: 1px solid transparent;
-  background: transparent; border-radius: var(--radius-control); cursor: pointer;
-}
-.selected-drawing-style-bar button:hover, .drawing-color-control > button:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
-
-.selected-drawing-style-bar button[aria-pressed='true'] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); border-color: var(--accent-blue); }
-
-.selected-drawing-style-bar .drawing-color-grid button { min-width: 0; width: 24px; height: 24px; padding: 0; border: 2px solid transparent; border-radius: var(--radius-control); }
-
-.drawing-properties-footer button { padding: 0 12px; border-color: var(--drawing-border); }
+.selected-drawing-style-bar :is(summary, select, input) { font: inherit; color: inherit; }
+/* Colour swatches: the button is the colour (a raw button by design; the rest of the editor is kit controls). */
+.selected-drawing-style-bar .drawing-color-grid button { width: 24px; height: 24px; padding: 0; border: 2px solid transparent; border-radius: var(--radius-control); cursor: pointer; }
 
 @media (max-width: 600px) { .selected-drawing-style-bar { right: 12px; } .selected-drawing-style-bar-main strong { max-width: 65px; padding: 0 4px; } }
 

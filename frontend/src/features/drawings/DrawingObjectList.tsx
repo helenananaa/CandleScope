@@ -2,6 +2,7 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Button, IconButton } from "../../components/ui/index.js";
 import type { DrawingEngineApi } from "./DrawingEngineHost.js";
 import type { DrawingObjectApi } from "./drawingObjectApi.js";
 import { savedDrawingFromEntity } from "./core/drawingCodec.js";
@@ -43,29 +44,24 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
     <ul>{objects.map(({ id, drawing, name, intervalHidden }) => {
       return <li key={id} data-drawing-object={id}>
         <div className="drawing-object-row">
-          <button className="drawing-object-select" type="button" disabled={readOnly || drawing.hidden || intervalHidden}
+          <Button variant="ghost" className="drawing-object-select" disabled={readOnly || drawing.hidden || intervalHidden}
             title={name} onClick={() => { if (run(() => api.selectObject(id))) close(); }}>
             <span className="drawing-object-swatch" style={{ backgroundColor: "color" in drawing ? drawing.color : undefined }} />
             <span><strong>{name}</strong><small>{id}{drawing.hidden ? ` · ${t("drawing.objects.hidden")}` : ""}</small></span>
-          </button>
-          <button type="button" aria-label={t("drawing.objects.front")} title={t("drawing.objects.front")}
-            disabled={readOnly || document.zOrder.at(-1) === id} onClick={() => run(() => api.reorderObject(id, "front"))}>
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h16M12 20V8m-5 5 5-5 5 5" /></svg>
-          </button>
-          <button type="button" aria-label={t("drawing.objects.back")} title={t("drawing.objects.back")}
-            disabled={document.zOrder[0] === id} onClick={() => run(() => api.reorderObject(id, "back"))}>
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 20h16M12 4v12m-5-5 5 5 5-5" /></svg>
-          </button>
-          <button type="button" aria-label={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} aria-pressed={!!drawing.hidden}
-            disabled={readOnly} title={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} onClick={() => run(() => api.updateObject(id, { hidden: !drawing.hidden }))}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{drawing.hidden && <path d="m3 3 18 18" />}</svg>
-          </button>
-          <button type="button" aria-label={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} aria-pressed={!!drawing.locked}
-            disabled={readOnly} title={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} onClick={() => run(() => api.updateObject(id, { locked: !drawing.locked }))}><StyleIcon name={drawing.locked ? "lock" : "unlock"} /></button>
-          <button type="button" disabled={readOnly} aria-label={t("format.delete")} title={t("format.delete")} onClick={() => run(() => api.deleteObject(id))}><StyleIcon name="delete" /></button>
+          </Button>
+          <IconButton size="sm" label={t("drawing.objects.front")} disabled={readOnly || document.zOrder.at(-1) === id} onClick={() => run(() => api.reorderObject(id, "front"))}
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h16M12 20V8m-5 5 5-5 5 5" /></svg>} />
+          <IconButton size="sm" label={t("drawing.objects.back")} disabled={document.zOrder[0] === id} onClick={() => run(() => api.reorderObject(id, "back"))}
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 20h16M12 4v12m-5-5 5 5 5-5" /></svg>} />
+          <IconButton size="sm" label={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} pressed={!!drawing.hidden}
+            disabled={readOnly} onClick={() => run(() => api.updateObject(id, { hidden: !drawing.hidden }))}
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{drawing.hidden && <path d="m3 3 18 18" />}</svg>} />
+          <IconButton size="sm" label={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} pressed={!!drawing.locked}
+            disabled={readOnly} onClick={() => run(() => api.updateObject(id, { locked: !drawing.locked }))} icon={<StyleIcon name={drawing.locked ? "lock" : "unlock"} />} />
+          <IconButton size="sm" variant="danger" disabled={readOnly} label={t("format.delete")} onClick={() => run(() => api.deleteObject(id))} icon={<StyleIcon name="delete" />} />
         </div>
         {intervalHidden && <div className="drawing-object-interval"><span>{t("drawing.objects.otherIntervals")}</span>
-          <button type="button" disabled={readOnly} onClick={() => run(() => api.updateObject(id, { visibleIntervals: null }))}>{t("drawing.visibility.all")}</button></div>}
+          <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => run(() => api.updateObject(id, { visibleIntervals: null }))}>{t("drawing.visibility.all")}</Button></div>}
       </li>;
     })}</ul>
     {failed && <p role="alert" className="drawing-control-caption">{t("drawing.objects.failed")}</p>}
@@ -93,22 +89,21 @@ export default function DrawingObjectList({ apis, currentInterval, panes, onSele
   const content = <div className="drawing-object-list" data-placement={host ? "header" : "overlay"} onPointerDown={event => event.stopPropagation()}
     onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
     onKeyDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
-    <button className="drawing-object-trigger" ref={trigger} type="button" aria-label={t("drawing.objects.title")}
-      title={t("drawing.objects.title")} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m3 7 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 17l9 5 9-5" /></svg>
-    </button>
+    <IconButton className="drawing-object-trigger" ref={trigger} label={t("drawing.objects.title")}
+      variant={host ? "ghost" : "secondary"} size={host ? "sm" : "md"} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}
+      icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m3 7 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 17l9 5 9-5" /></svg>} />
     {open && <dialog ref={dialog} className="drawing-properties-panel drawing-object-panel" style={placement}
       aria-label={t("drawing.objects.title")} onCancel={event => { event.preventDefault(); close(); }}>
       <header className="drawing-properties-header"><div><span className="drawing-control-caption">{t("drawing.objects.hint")}</span><h3>{t("drawing.objects.title")}</h3></div>
-        <button type="button" aria-label={t("settings.close")} onClick={close}><StyleIcon name="close" /></button></header>
+        <IconButton label={t("settings.close")} icon={<StyleIcon name="close" />} onClick={close} /></header>
       <div className="drawing-object-search">
         <input type="search" aria-label={t("drawing.objects.search")} placeholder={t("drawing.objects.search")}
           value={query} onChange={event => setQuery(event.target.value)} />
-        {(query || filter !== "all") && <button type="button" onClick={() => { setQuery(""); setFilter("all"); }}>{t("drawing.objects.reset")}</button>}
+        {(query || filter !== "all") && <Button variant="ghost" onClick={() => { setQuery(""); setFilter("all"); }}>{t("drawing.objects.reset")}</Button>}
       </div>
       <div className="drawing-object-filters" role="group" aria-label={t("drawing.objects.filter")}>
-        {(["all", "hidden", "locked", "otherIntervals"] as const).map(value => <button key={value} type="button"
-          aria-pressed={filter === value} onClick={() => setFilter(value)}>{t(`drawing.objects.${value}`)}</button>)}
+        {(["all", "hidden", "locked", "otherIntervals"] as const).map(value => <Button key={value} size="sm" variant="ghost"
+          aria-pressed={filter === value} onClick={() => setFilter(value)}>{t(`drawing.objects.${value}`)}</Button>)}
       </div>
       <div className="drawing-object-content">{sources.map(source => <ObjectGroup key={`${source.id}:${source.api.getObjectDocument().scopeKey}`}
         readOnly={readOnly} api={source.api} label={source.label} interval={currentInterval} query={query} filter={filter} close={() => { onSelectPane(source.id); close(); }} />)}</div>

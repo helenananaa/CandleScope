@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.js";
+import { IconButton } from "../ui/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 
 const ExportIcon = (
@@ -46,31 +47,31 @@ export default function DrawingActionButtons({
   return (
     <>
       <div className="drawing-toolbar-spacer" />
-      <button
-        className={`drawing-tool-btn ${exportPanelOpen ? "active" : ""}`}
+      <IconButton
+        className="drawing-tool-btn"
+        label={exportInProgress ? t("drawing.exporting") : t("drawing.export")}
+        icon={ExportIcon}
+        pressed={exportPanelOpen}
         data-drawing-action="export"
         onClick={onToggleExportPanel}
         disabled={exportInProgress}
-        title={exportInProgress ? t("drawing.exporting") : t("drawing.export")}
-      >
-        {ExportIcon}
-      </button>
-      <button
-        className={`drawing-tool-btn ${drawingsHidden ? "active" : ""}`}
+      />
+      <IconButton
+        className="drawing-tool-btn"
+        label={drawingsHidden ? t("drawing.showAll") : t("drawing.hideAll")}
+        icon={drawingsHidden ? EyeOffIcon : EyeIcon}
+        pressed={drawingsHidden}
         data-drawing-action="toggle-hidden"
         onClick={onToggleDrawingsHidden}
-        title={drawingsHidden ? t("drawing.showAll") : t("drawing.hideAll")}
-      >
-        {drawingsHidden ? EyeOffIcon : EyeIcon}
-      </button>
-      <button
+      />
+      <IconButton
         className="drawing-tool-btn drawing-clear-btn"
+        label={t("drawing.clearAll")}
+        icon={ClearIcon}
+        variant="danger"
         data-drawing-action="clear"
         onClick={onClearAll}
-        title={t("drawing.clearAll")}
-      >
-        {ClearIcon}
-      </button>
+      />
     </>
   );
 }

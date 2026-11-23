@@ -119,6 +119,24 @@
   color: var(--text-primary);
 }
 
+.ui-icon-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--text-danger);
+}
+
+/* A corner mark (IconButton's indicator), e.g. that a tool has variants */
+.ui-icon-btn:has(> .ui-icon-btn-indicator) {
+  position: relative;
+}
+
+.ui-icon-btn-indicator {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  pointer-events: none;
+}
+
 .ui-icon-btn[aria-pressed='true'] {
   background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
   color: var(--text-accent);

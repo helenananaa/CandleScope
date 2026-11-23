@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useDrawingSurfacePlacement } from "./useDrawingEditorLayout.js";
 import { t } from "../../i18n/index.js";
+import { Button, SegmentedControl } from "../../components/ui/index.js";
 
 const colors = ["#e2e8f0", "#64748b", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899"];
 // Session-only convenience; the drawing document remains the style authority.
@@ -41,7 +42,7 @@ export function ColorControl({ color, label, onCommit }: { color: string; label:
   const dismiss = () => { popup.current?.hidePopover(); trigger.current?.focus(); };
   const commitHex = () => { if (!cancelled.current) choose(hex); cancelled.current = false; };
   return <div className="drawing-color-control">
-    <button ref={trigger} type="button" popoverTarget={id} aria-expanded={open} aria-label={label} title={label}><span className="drawing-color-swatch" style={{ backgroundColor: color }} /><span className="drawing-chevron" aria-hidden="true">⌄</span></button>
+    <Button ref={trigger} variant="ghost" popoverTarget={id} aria-expanded={open} aria-label={label} title={label}><span className="drawing-color-swatch" style={{ backgroundColor: color }} /><span className="drawing-chevron" aria-hidden="true">⌄</span></Button>
     <div id={id} ref={popup} popover="auto" style={popupStyle} className="drawing-color-popover" role="group" aria-label={label}
       onToggle={(event) => { const visible = event.newState === "open"; setOpen(visible); if (visible) setRecent(recentColors); }}
       onKeyDown={(event) => {
@@ -76,7 +77,11 @@ export function WidthControl({ value, onCommit }: { value: number; onCommit(valu
 }
 
 export function LineStyleControl({ value, onCommit }: { value: "solid" | "dashed" | "dotted"; onCommit(value: "solid" | "dashed" | "dotted"): void }) {
-  return <div className="drawing-line-options" role="group" aria-label={t("drawing.settings.lineStyle")}>
-    {(["solid", "dashed", "dotted"] as const).map((style) => <button key={style} type="button" title={t(`drawing.settings.${style}`)} aria-label={t(`drawing.settings.${style}`)} aria-pressed={value === style} onClick={() => onCommit(style)}><span className="drawing-line-sample" style={{ borderTopStyle: style }} /></button>)}
-  </div>;
+  return <SegmentedControl size="sm" label={t("drawing.settings.lineStyle")} value={value} onChange={onCommit}
+    options={(["solid", "dashed", "dotted"] as const).map((style) => ({
+      value: style,
+      ariaLabel: t(`drawing.settings.${style}`),
+      title: t(`drawing.settings.${style}`),
+      label: <span className={`drawing-line-sample drawing-line-sample-${style}`} />,
+    }))} />;
 }

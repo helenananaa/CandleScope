@@ -739,6 +739,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - A pair comparison (each changed element added to its real container in its old and new form, plain and with hover and focus forced, both themes) finds no styling difference.
 - Next: 8c2, the drawing surfaces' buttons.
 
+**Phase 8c2 is done (branch `design/phase-8c2-drawing`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C2.md).
+
+- The drawing toolbar, the Fibonacci and position panels, the selected drawing's style bar and text bar with their properties, style templates, the object list and the history bar are on kit `Button`, `IconButton`, `SegmentedControl` and `Tabs`; their own button CSS is gone and layout stays. Tools report `aria-pressed`; the chart type button reports `aria-expanded`.
+- The kit's `IconButton` gains a `danger` variant and a corner `indicator` (the tools' "has variants" mark).
+- Raw `<button>` 263 → 208, `*-btn` families 25 → 19. Three raw buttons stay in the drawing surfaces for 8c5's exceptions: the variant menu's radio items and the two colour swatch grids.
+- Next: 8c3, chart chrome.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

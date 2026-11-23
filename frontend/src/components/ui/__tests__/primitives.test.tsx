@@ -22,6 +22,13 @@ test("icon buttons always have an accessible name and report toggle state", () =
   assert.match(html, /aria-pressed="false"/);
 });
 
+test("icon buttons take a danger variant and a corner indicator", () => {
+  const html = renderToStaticMarkup(<IconButton label="Delete" icon={<svg />} variant="danger" indicator={<svg data-mark="" />} />);
+  assert.match(html, /class="ui-icon-btn ui-icon-btn-danger"/);
+  assert.match(html, /<span class="ui-icon-btn-indicator" aria-hidden="true"><svg data-mark=""><\/svg><\/span><\/button>$/);
+  assert.doesNotMatch(renderToStaticMarkup(<IconButton label="Close" icon={<svg />} />), /ui-icon-btn-indicator/);
+});
+
 test("a field links its label, control and message", () => {
   const html = renderToStaticMarkup(<Field label="Price" hint="In USDT" required><Input /></Field>);
   const id = /<label class="ui-field-label" for="([^"]+)"/.exec(html)?.[1];

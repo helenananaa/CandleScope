@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import type { DrawingChartAdapter } from "./drawingTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { IconButton } from "../../components/ui/index.js";
 
 let owner: string | null = null;
 function claim(scope: string) { owner = scope; }
@@ -56,7 +57,9 @@ export default function DrawingHistoryBar({ container, adapter, scope, canUndo, 
   }, [container, scope, canUndo, canRedo, replay]);
   if (!canUndo && !canRedo) return null;
   return <div ref={bar} className="drawing-history-bar" style={{ top }} onPointerDown={(event) => { claim(scope); event.stopPropagation(); }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-    <button type="button" aria-label={t("workspace.undo")} title={`${t("workspace.undo")} · Ctrl/⌘ Z`} disabled={!canUndo} onClick={() => replay("undo")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m9 5-5 5 5 5M4 10h10a6 6 0 0 1 0 12" /></svg></button>
-    <button type="button" aria-label={t("workspace.redo")} title={`${t("workspace.redo")} · Ctrl/⌘ Shift Z`} disabled={!canRedo} onClick={() => replay("redo")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m15 5 5 5-5 5M20 10H10a6 6 0 0 0 0 12" /></svg></button>
+    <IconButton size="sm" label={t("workspace.undo")} title={`${t("workspace.undo")} · Ctrl/⌘ Z`} disabled={!canUndo} onClick={() => replay("undo")}
+      icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m9 5-5 5 5 5M4 10h10a6 6 0 0 1 0 12" /></svg>} />
+    <IconButton size="sm" label={t("workspace.redo")} title={`${t("workspace.redo")} · Ctrl/⌘ Shift Z`} disabled={!canRedo} onClick={() => replay("redo")}
+      icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m15 5 5 5-5 5M20 10H10a6 6 0 0 0 0 12" /></svg>} />
   </div>;
 }

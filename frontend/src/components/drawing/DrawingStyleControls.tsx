@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { flushSync } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Button, IconButton } from "../ui/index.js";
 
 const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32];
 const COLOR_INPUT_FALLBACK_COMMIT_MS = 400;
@@ -228,35 +229,36 @@ export default function DrawingStyleControls({
             </select>
           </div>
           <div className="drawing-tool-option">
-            <button
-              className={`drawing-tool-btn drawing-format-btn drawing-format-bold ${textBold ? "active" : ""}`}
+            <IconButton
+              size="sm"
+              label={t("drawing.settings.bold")}
+              icon={<span className="drawing-format-glyph drawing-format-bold">B</span>}
+              pressed={textBold}
               onClick={() => onTextBoldChange?.(!textBold)}
-              title={t("drawing.settings.bold")}
-            >
-              B
-            </button>
+            />
           </div>
           <div className="drawing-tool-option">
-            <button
-              className={`drawing-tool-btn drawing-format-btn drawing-format-italic ${textItalic ? "active" : ""}`}
+            <IconButton
+              size="sm"
+              label={t("drawing.settings.italic")}
+              icon={<span className="drawing-format-glyph drawing-format-italic">I</span>}
+              pressed={textItalic}
               onClick={() => onTextItalicChange?.(!textItalic)}
-              title={t("drawing.settings.italic")}
-            >
-              I
-            </button>
+            />
           </div>
         </>
       )}
 
       {showPositionOptions && (
         <div className="drawing-tool-option" title={t("drawing.settings.positionSize")}>
-          <button
-            className="drawing-tool-btn drawing-format-btn position-settings-trigger"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onOpenPositionSettings}
             title={t("drawing.settings.position")}
           >
             ${formatPositionSize(positionSize)}
-          </button>
+          </Button>
         </div>
       )}
     </>
