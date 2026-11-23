@@ -1354,6 +1354,8 @@ export const zhCN = {
   "indicator.search": "搜索指标...",
   "indicator.loading": "加载中...",
   "indicator.customBadge": "自定义",
+  "indicator.retiredBadge": "已退役",
+  "indicator.pyneRetired": "Pyne 已退役。此已保存的脚本保持不变，但不会运行，也不会被当作 Pine。",
   "indicator.default": "默认",
   "indicator.mainPane": "主图",
   "indicator.subPane": "副图",

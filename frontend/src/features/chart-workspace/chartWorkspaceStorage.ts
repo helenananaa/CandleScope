@@ -12,6 +12,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { resolveKlineSeriesIdentity } from "../market-data/klineSeriesIdentity.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { loadActiveIndicators } from "../indicators/activeIndicatorStore.js";
+import { upgradePersistedIndicator } from "../indicators/retiredScriptIndicator.js";
 import {
   CHART_CELL_IDS,
   CHART_DRAWING_LAYER_SET_IDS,
@@ -155,7 +156,11 @@ function isIndicatorDefinition(value: unknown): value is IndicatorDefinition {
 }
 
 function normalizeIndicators(value: unknown): IndicatorDefinition[] {
-  return Array.isArray(value) ? value.filter(isIndicatorDefinition) : [];
+  // Pre-#105 Pyne scripts were stored without `language`; they load as
+  // retired Pyne and stay in the workspace, never as Pine.
+  return Array.isArray(value)
+    ? value.filter(isIndicatorDefinition).map(upgradePersistedIndicator)
+    : [];
 }
 
 function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {

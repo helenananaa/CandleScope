@@ -826,6 +826,8 @@ export const ms = {
   "indicator.search": "Cari penunjuk...",
   "indicator.loading": "Memuatkan...",
   "indicator.customBadge": "Tersuai",
+  "indicator.retiredBadge": "Dihentikan",
+  "indicator.pyneRetired": "Pyne telah dihentikan. Skrip tersimpan ini dikekalkan tanpa perubahan, tetapi tidak akan dijalankan dan tidak dianggap sebagai Pine.",
   "indicator.default": "Lalai",
   "indicator.mainPane": "Utama",
   "indicator.subPane": "Anak tetingkap",

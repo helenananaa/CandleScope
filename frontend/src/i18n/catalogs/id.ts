@@ -825,6 +825,8 @@ export const id = {
   "indicator.search": "Cari indikator...",
   "indicator.loading": "Memuat...",
   "indicator.customBadge": "Kustom",
+  "indicator.retiredBadge": "Dihentikan",
+  "indicator.pyneRetired": "Pyne sudah dihentikan. Skrip tersimpan ini disimpan tanpa perubahan, tetapi tidak pernah dijalankan dan tidak diperlakukan sebagai Pine.",
   "indicator.default": "Bawaan",
   "indicator.mainPane": "Utama",
   "indicator.subPane": "Panel",

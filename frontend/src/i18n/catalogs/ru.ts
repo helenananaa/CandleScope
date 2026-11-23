@@ -825,6 +825,8 @@ export const ru = {
   "indicator.search": "Поиск индикаторов...",
   "indicator.loading": "Загрузка...",
   "indicator.customBadge": "Пользовательский",
+  "indicator.retiredBadge": "Снят с поддержки",
+  "indicator.pyneRetired": "Pyne больше не поддерживается. Этот сохранённый скрипт остаётся без изменений, но никогда не запускается и не считается скриптом Pine.",
   "indicator.default": "По умолчанию",
   "indicator.mainPane": "Основная",
   "indicator.subPane": "Панель",

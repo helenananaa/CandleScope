@@ -825,6 +825,8 @@ export const de = {
   "indicator.search": "Indikatoren suchen...",
   "indicator.loading": "Laden...",
   "indicator.customBadge": "Benutzerdefiniert",
+  "indicator.retiredBadge": "Eingestellt",
+  "indicator.pyneRetired": "Pyne wird nicht mehr unterstützt. Dieses gespeicherte Skript bleibt unverändert erhalten, wird aber nie ausgeführt und nicht als Pine behandelt.",
   "indicator.default": "Standard",
   "indicator.mainPane": "Haupt",
   "indicator.subPane": "Bereich",

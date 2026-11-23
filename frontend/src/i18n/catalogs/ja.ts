@@ -1140,6 +1140,8 @@ export const ja = {
   "indicator.search": "インジケーターを検索...",
   "indicator.loading": "読み込み中...",
   "indicator.customBadge": "カスタム",
+  "indicator.retiredBadge": "提供終了",
+  "indicator.pyneRetired": "Pyne は提供を終了しました。保存済みのこのスクリプトは変更されずに保持されますが、実行されることはなく、Pine としても扱われません。",
   "indicator.default": "デフォルト",
   "indicator.mainPane": "メイン",
   "indicator.subPane": "ペイン",

@@ -10,12 +10,16 @@ import { isWsHostedIndicator } from "../indicatorPayloadRuntime.js";
 
 test("existing builtin and script indicators remain hosted unless local is explicit", () => {
   const builtin = { id: "ma", engineName: "MA", params: {} };
-  const script = { id: "custom", script: "plot(close)", params: {} };
+  const script = { id: "custom", script: "plot(close)", language: "pine", params: {} };
   assert.equal(resolveLocalIndicatorExecution(builtin).kind, "hosted");
   assert.equal(resolveLocalIndicatorExecution(script).kind, "hosted");
   assert.equal(isWsHostedIndicator(builtin), true);
   assert.equal(isWsHostedIndicator(script), true);
   assert.equal(resolveLocalIndicatorExecution({ id: "incomplete" }).kind, "invalid");
+  // A script that names no language is pre-#105 Pyne, never Pine.
+  const { language: _language, ...unnamed } = script;
+  assert.equal(resolveLocalIndicatorExecution(unnamed).kind, "invalid");
+  assert.equal(isWsHostedIndicator(unnamed), false);
 });
 
 test("explicit local execution is valid only with a complete builtin or script descriptor", () => {
@@ -29,6 +33,7 @@ test("explicit local execution is valid only with a complete builtin or script d
     id: "custom",
     executionTarget: "local" as const,
     script: "plot(close)",
+    language: "pine",
   };
   assert.deepEqual(resolveLocalIndicatorExecution(builtin), {
     kind: "local",
@@ -75,8 +80,8 @@ test("local script job keys normalize and separate runtime languages", () => {
     params: {},
   });
 
-  assert.equal(buildKey("  PYNE  "), buildKey("pyne"));
-  assert.notEqual(buildKey("pyne"), buildKey("pine"));
+  assert.equal(buildKey("  PINE  "), buildKey("pine"));
+  assert.notEqual(buildKey("pine"), buildKey("python"));
 });
 
 test("job keys canonicalize parameter order and stay bounded", () => {
@@ -84,6 +89,7 @@ test("job keys canonicalize parameter order and stay bounded", () => {
     id: "local-script",
     executionTarget: "local" as const,
     script: "plot(close)",
+    language: "pine",
     securityMode: "safe",
   };
   const first = buildIndicatorComputeJobKey({
@@ -113,6 +119,7 @@ test("job keys include resolved script, security mode, lifecycle, and force gene
     id: "local-script",
     executionTarget: "local" as const,
     script: "plot(close)",
+    language: "pine",
     securityMode: "safe",
   };
   const base = buildIndicatorComputeJobKey({

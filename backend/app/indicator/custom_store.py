@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,46 @@ from app.core.config import DATA_DIR
 
 
 _SCRIPT_LANGUAGE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$")
+
+RETIRED_PYNE_LANGUAGE = "pyne"
+PYNE_RETIRED_CODE = "PYNE_RETIRED"
+PYNE_RETIRED_MESSAGE = "Pyne is retired and cannot be executed."
+
+
+class PyneRetiredError(ValueError):
+    """A saved or requested script is Pyne, which CandleScope no longer runs."""
+
+    code = PYNE_RETIRED_CODE
+
+    def __init__(self, message: str = PYNE_RETIRED_MESSAGE) -> None:
+        super().__init__(message)
+
+
+def stored_record_language(record: Mapping[str, Any]) -> str:
+    """Return the language a saved record was written in.
+
+    Builds from before Pyne's removal (PR #105, 2026-10-26) defaulted to Pyne
+    and left ``language`` out for it, while writing it for every other
+    language. Current builds always write it. A record without ``language``
+    can therefore only be a Pyne script from such a build: it resolves to the
+    retired language, never to Pine.
+    """
+    language = str(record.get("language") or "").strip().lower()
+    return language or RETIRED_PYNE_LANGUAGE
+
+
+def is_retired_record(record: Mapping[str, Any]) -> bool:
+    return stored_record_language(record) == RETIRED_PYNE_LANGUAGE
+
+
+def present_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a listing copy with the resolved language and retired flag.
+
+    The copy is for callers only. It is never written back, so a legacy
+    record stays in the file exactly as the old build stored it.
+    """
+    language = stored_record_language(record)
+    return {**record, "language": language, "retired": language == RETIRED_PYNE_LANGUAGE}
 
 
 class CustomIndicatorStore:
@@ -41,6 +82,13 @@ class CustomIndicatorStore:
             now = int(time.time())
             indicator_id = (item.get("id") or "").strip() or self._new_id()
             existing = items.get(indicator_id, {})
+            if existing and is_retired_record(existing):
+                # Updating would relabel the old Pyne source as another
+                # language and replace the user's original record.
+                raise PyneRetiredError(
+                    f"Saved indicator '{indicator_id}' is a retired Pyne script "
+                    "and cannot be updated; save the script as a new indicator."
+                )
             raw_language = item.get("language")
             if raw_language is not None and not _SCRIPT_LANGUAGE.fullmatch(
                 str(raw_language).strip().lower()
@@ -133,7 +181,7 @@ class CustomIndicatorStore:
         if item.get("securityMode") not in {None, "safe", "research", "unsafe"}:
             raise ValueError("Custom indicator securityMode must be 'safe', 'research', or 'unsafe'")
         language = item.get("language")
-        if language == "pyne":
-            raise ValueError("Unsupported custom indicator language: pyne")
+        if language == RETIRED_PYNE_LANGUAGE:
+            raise PyneRetiredError("Unsupported custom indicator language: pyne")
         if language is not None and not _SCRIPT_LANGUAGE.fullmatch(str(language)):
             raise ValueError("Custom indicator language must be a lowercase identifier")

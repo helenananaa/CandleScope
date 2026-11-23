@@ -19,6 +19,7 @@ import type {
 import { useIndicatorComputeController } from "./indicatorComputeController.js";
 import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import { resolveLocalIndicatorExecution } from "./indicatorComputeJobRuntime.js";
+import { explicitScriptLanguage } from "./retiredScriptIndicator.js";
 import {
   createIndicatorOutputState,
   filterIndicatorOutputStateByVisibility,
@@ -81,7 +82,9 @@ function useLatestRef<T>(value: T): MutableRefObject<T> {
 }
 
 function normalizedScriptLanguage(indicator: IndicatorDefinition): string {
-  return String(indicator.language || "pine").trim().toLowerCase();
+  // No default: resolveLocalIndicatorExecution already rejected scripts that
+  // name no language or name the retired Pyne language.
+  return explicitScriptLanguage(indicator) ?? "";
 }
 
 export function providedBarsIndicatorSupport(

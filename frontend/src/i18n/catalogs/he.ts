@@ -832,6 +832,8 @@ export const he = {
   "indicator.search": "חיפוש אינדיקטורים...",
   "indicator.loading": "טוען...",
   "indicator.customBadge": "מותאם",
+  "indicator.retiredBadge": "הופסק",
+  "indicator.pyneRetired": "התמיכה ב-Pyne הופסקה. הסקריפט השמור הזה נשמר ללא שינוי, אבל הוא אף פעם לא רץ ואינו נחשב Pine.",
   "indicator.default": "ברירת מחדל",
   "indicator.mainPane": "ראשי",
   "indicator.subPane": "חלונית",

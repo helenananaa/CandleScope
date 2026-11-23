@@ -826,6 +826,8 @@ export const sv = {
   "indicator.search": "Sök indikatorer...",
   "indicator.loading": "Laddar...",
   "indicator.customBadge": "Anpassad",
+  "indicator.retiredBadge": "Utfasad",
+  "indicator.pyneRetired": "Pyne stöds inte längre. Det här sparade skriptet behålls oförändrat men körs aldrig och behandlas inte som Pine.",
   "indicator.default": "Standard",
   "indicator.mainPane": "Huvud",
   "indicator.subPane": "Panel",

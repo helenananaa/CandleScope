@@ -81,7 +81,9 @@ test("input revisions and workspace replacement revoke every runtime's result; s
   assert.equal(results.read(js, context).state, "unavailable");
   assert.equal(results.snapshot(js, context, normalized(), [], { inputVersion: version }), null);
   assert.equal(results.snapshot(js, { ...context, inputSource: createIndicatorCacheInputSource(seeded()) }, normalized()), null);
-  assert.throws(() => results.snapshot({ id: "old", language: "pyne", script: "legacy" }, context, normalized()), /retired/);
+  // Retired Pyne scripts never publish a result.
+  assert.equal(results.snapshot({ id: "old", language: "pyne", script: "legacy" }, context, normalized()), null);
+  assert.equal(results.snapshot({ id: "old", script: "legacy" }, context, normalized()), null);
   results.dispose();
   assert.equal(results.snapshot(js, context, normalized()), null);
 });

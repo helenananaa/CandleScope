@@ -830,6 +830,8 @@ export const zhMO = {
   "indicator.search": "搜尋指標...",
   "indicator.loading": "載入中...",
   "indicator.customBadge": "自訂",
+  "indicator.retiredBadge": "已退役",
+  "indicator.pyneRetired": "Pyne 已退役。此已儲存的腳本保持不變，但不會執行，也不會被當作 Pine。",
   "indicator.default": "預設",
   "indicator.mainPane": "主圖",
   "indicator.subPane": "副圖",

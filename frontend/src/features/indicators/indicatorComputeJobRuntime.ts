@@ -8,6 +8,11 @@ import type {
   IndicatorParams,
 } from "./indicatorTypes.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
+import {
+  explicitScriptLanguage,
+  isRetiredScriptIndicator,
+  PYNE_RETIRED_ERROR,
+} from "./retiredScriptIndicator.js";
 
 export interface LocalIndicatorExecution {
   mode: "builtin" | "script";
@@ -25,6 +30,7 @@ export type LocalIndicatorExecutionResolution =
 export function resolveLocalIndicatorExecution(
   indicator: IndicatorDefinition | null | undefined,
 ): LocalIndicatorExecutionResolution {
+  if (isRetiredScriptIndicator(indicator)) return { kind: "invalid", error: PYNE_RETIRED_ERROR };
   if (indicator?.executionTarget !== "local" && !isFrontendScript(indicator)) {
     return isWsHostedIndicator(indicator)
       ? { kind: "hosted" }
@@ -108,7 +114,7 @@ export function buildIndicatorComputeJobKey({
   const resolution = resolveLocalIndicatorExecution(indicator);
   const execution = resolution.kind === "local" ? resolution.execution : null;
   const normalizedLanguage = execution?.mode === "script"
-    ? String(indicator.language || "pine").trim().toLowerCase()
+    ? explicitScriptLanguage(indicator) ?? ""
     : "";
   const executionIdentity = canonicalStringify({
     indicatorId: indicator.id,

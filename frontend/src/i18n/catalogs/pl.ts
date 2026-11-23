@@ -825,6 +825,8 @@ export const pl = {
   "indicator.search": "Szukaj wskaźników…",
   "indicator.loading": "Ładowanie…",
   "indicator.customBadge": "Własny",
+  "indicator.retiredBadge": "Wycofany",
+  "indicator.pyneRetired": "Pyne został wycofany. Ten zapisany skrypt pozostaje bez zmian, ale nigdy nie jest uruchamiany i nie jest traktowany jako Pine.",
   "indicator.default": "Domyślny",
   "indicator.mainPane": "Główny",
   "indicator.subPane": "Panel",
