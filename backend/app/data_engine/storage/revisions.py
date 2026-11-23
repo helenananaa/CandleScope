@@ -167,7 +167,6 @@ def init_revision_storage(conn):
         footprint = _block_change_sql(values, watermark_predicate, revision,
                                       f"{alias}.open_time", f"{alias}.open_time")
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
-        derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mode = "(SELECT mode FROM kline_mutation_context WHERE singleton=1)"
         direct = f"{mode} NOT IN ('bar_delivery', 'derived_materialization')"
@@ -199,6 +198,9 @@ def init_revision_storage(conn):
         mutation_condition = "(" + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ") AND " if operation == "update" else ""
         # Avoid a K-line range scan for every row of an ordinary native import
         # when the semantic family has no registered derived projections.
+        # When it has them, name their intervals: an inequality on interval
+        # ends the primary-key seek at symbol, so every mutated source row
+        # would read the whole family instead of only its derived series.
         _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
@@ -210,8 +212,8 @@ def init_revision_storage(conn):
             BEGIN
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {family_predicate}
-                    AND interval<>{alias}.interval
-                    AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {derived_predicate})
+                    AND interval IN (SELECT d.interval FROM kline_derived_series d
+                                     WHERE {dependent_family} AND d.interval<>{alias}.interval)
                     AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                     AND open_time<=COALESCE({alias}.close_time,{alias}.open_time)
                     AND COALESCE(close_time,open_time)>={alias}.open_time;
@@ -248,7 +250,6 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
         migration_end = "COMMIT;"
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
-        match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         predicate = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values))
         readback = _readback_receipt_sql(",".join(values), head, f"{alias}.start_ms", f"{alias}.end_ms")
         conn.executescript(f"""
@@ -266,7 +267,7 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
                 {readback}
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {selected_family} AND
-                    EXISTS(SELECT 1 FROM kline_derived_series d WHERE {match} AND {family} AND d.interval<>{interval})
+                    interval IN (SELECT d.interval FROM kline_derived_series d WHERE {family} AND d.interval<>{interval})
                     AND open_time<={alias}.end_ms AND COALESCE(close_time,open_time)>={alias}.start_ms
                     AND (SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention';
                 UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
