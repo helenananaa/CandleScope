@@ -1,0 +1,26 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "real DataManager cache/query/events, HTTP/WS and mounted Chromium Renko/HA renderer",
+        "initialBricks": 9,
+        "updatedBricks": 11,
+        "haPreviewClose": 118,
+        "browserComputation": 0,
+        "state": {
+          "instances": 0,
+          "leases": 0
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

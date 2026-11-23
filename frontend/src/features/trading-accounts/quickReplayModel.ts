@@ -217,8 +217,11 @@ export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: num
   const notes: ReplayJournalEntry[] = [];
   const reviewNotes: JournalEntry[] = [];
   for (const entry of entries) {
+    const { positionSide, ...source } = entry;
+    const knownLink = entry.tradeId !== null && (entry.tradeLinkedAtMs ?? entry.updatedAtMs) < cut;
+    const visibleEntry = knownLink && positionSide ? { ...source, positionSide } : source;
     if (entry.marketTimeMs !== null) {
-      if (entry.marketTimeMs < cut) reviewNotes.push({ ...entry,
+      if (entry.marketTimeMs < cut) reviewNotes.push({ ...visibleEntry,
         // Linking a note also updates entry metadata; it is not a text save.
         updatedAtMs: entry.revisions?.at(-1)?.savedAtMs ?? entry.updatedAtMs,
       });
@@ -227,7 +230,7 @@ export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: num
     if (entry.createdAtMs >= cut) continue;
     const revision = entry.revisions?.filter((item) => item.savedAtMs < cut).at(-1);
     const historyUnavailable = !revision?.historyComplete;
-    notes.push({ ...entry,
+    notes.push({ ...visibleEntry,
       fields: historyUnavailable ? {} : revision.fields,
       body: historyUnavailable ? "" : revision.body,
       updatedAtMs: revision?.savedAtMs ?? entry.createdAtMs,

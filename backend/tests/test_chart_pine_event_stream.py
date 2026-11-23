@@ -37,11 +37,7 @@ def events():
         for i,p in enumerate((10,13,15,12,14)))
 
 
-def test_chart_event_trial_resets_the_ledger_and_restores_the_exact_physical_sources(service,monkeypatch):
-    from app.backtest import native
-    runtime=dict(command=[os.environ["PINE_EVENT_TEST_PYTHON"],"-I","-m","candlescope_plugin_pine_compat.native_strategy"],
-        plugin_id="candlescope.pine-compat")
-    monkeypatch.setattr(native,"resolve_plugin",lambda language:deepcopy(runtime))
+def test_chart_event_trial_resets_the_ledger_and_restores_the_exact_physical_sources(service):
     value=config(service,source=SOURCE,cost_sensitivity_mode="SKIP")
     record=service.create_run(value,idempotency_key="event-ledger",now_ms=3)
     provider=RecordingProvider()

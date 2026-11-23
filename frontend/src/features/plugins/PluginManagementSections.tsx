@@ -1,8 +1,10 @@
-import { describeError } from "../../i18n/serverErrors.js";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
+import { Badge } from "../../components/ui/Display.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import type { JsonValue, PluginManagementDetail, PluginPlatformRuntime, PluginProviderContribution, PluginPaperContribution, PluginMarketplaceStatus, PluginRuntimeRegistryStatus, PluginTrustSummary, PluginLocalInstallCandidate, PluginTrustReview, PluginTrustChangeReview } from "./pluginPlatformTypes.js";
+import type { JsonValue, PluginManagementDetail, PluginPlatformRuntime, PluginProviderContribution, PluginPaperContribution, PluginMarketplaceStatus, PluginRuntimeRegistryStatus, PluginTrustSummary, PluginTrustChangeReview } from "./pluginPlatformTypes.js";
+import { permissionDecisionLabel, permissionKindLabel, releaseChannelLabel, releaseChannelOrder, runtimeVerificationLabel, sandboxStatusLabel, trustModeLabel } from "./pluginLabels.js";
 export function PermissionRows({ runtime, detail, reload }: {
   runtime: PluginPlatformRuntime;
   detail: PluginManagementDetail;
@@ -29,7 +31,7 @@ export function PermissionRows({ runtime, detail, reload }: {
     <div className="plugin-permissions">
       {permissions.map((permission) => (
         <article key={permission.permissionId}>
-          <div><strong>{permission.permissionId}</strong><span>{permission.kind} · {permission.decision}</span></div>
+          <div><strong>{permission.permissionId}</strong><span>{permissionKindLabel(permission.kind)} · {permissionDecisionLabel(permission.decision)}</span></div>
           <pre>{JSON.stringify(permission.requestedScope, null, 2)}</pre>
           <div className="plugin-action-row">
             {permission.decision !== "granted" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "grant", permission.requestedScope)}>{t("plugin.host.grantScope")}</button>}
@@ -107,7 +109,7 @@ export function PaperRows({
   const toggleKillSwitch = async () => {
     if (!paper) return;
     const next = !paper.killSwitchEnabled;
-    if (!next && !window.confirm(t("plugin.host.paperResumeConfirm"))) return;
+    if (!next && !(await confirmAction({ title: t("plugin.host.paperResumeConfirm"), confirmLabel: t("plugin.host.resumePaperOrders") }))) return;
     try {
       await runtime.actions.setPaperKillSwitch(next);
       await reload();
@@ -200,7 +202,7 @@ export function MarketplacePanel({
       <details className="plugin-technical-details">
         <summary>{t("plugin.market.policy")}</summary>
         <p>{t("plugin.market.policyHint")}</p>
-        {catalog.rollout && <p>{t("plugin.market.channel", { channel: catalog.rollout.channel })}</p>}
+        {catalog.rollout && <p>{t("plugin.market.channel", { channel: releaseChannelLabel(catalog.rollout.channel), order: releaseChannelOrder() })}</p>}
         {status?.telemetry && (
           <p data-marketplace-telemetry={status.telemetry.enabled ? "enabled" : "disabled"}>
             {t("plugin.market.telemetry", {
@@ -237,13 +239,12 @@ export function MarketplacePanel({
       <div className="plugin-marketplace-list">
         {entries.map((entry) => {
           const candidate = status?.candidates.find((item) => item.pluginId === entry.pluginId) ?? null;
-          const update = status?.updates.find((item) => item.pluginId === entry.pluginId) ?? null;
-          const installed = runtime.view.catalog?.plugins.find((item) => item.id === entry.pluginId) ?? null;
-          const prepareAvailable = entry.installedVersion === null || update?.available === true;
-          const activationReady = installed?.permissions.activationReady === true;
+          const approval = candidate?.unifiedApproval;
+          const rollback = entry.legacyRollback;
           const selectedArtifact = entry.latest.artifacts?.find(
             (artifact) => artifact.artifactId === entry.assurances?.platform.artifactId,
           ) ?? entry.latest.artifact;
+          const unifiedRelease = selectedArtifact.packageFormat === "candlescope.unified-bundle/1";
           return (
             <article key={entry.pluginId} data-marketplace-plugin={entry.pluginId}>
               <div className="plugin-marketplace-title">
@@ -297,6 +298,7 @@ export function MarketplacePanel({
                 {t("plugin.market.installed", { version: entry.installedVersion ?? t("plugin.market.notInstalled") })}
                 {candidate ? t("plugin.market.candidate", { version: candidate.version, phase: candidate.phase }) : ""}
               </p>
+              {!unifiedRelease && <p>{t("unified.legacyUpgrade")}</p>}
               {candidate && (
                 <div className="plugin-marketplace-candidate" data-marketplace-candidate-phase={candidate.phase}>
                   <p>
@@ -327,7 +329,7 @@ export function MarketplacePanel({
                 <button
                   type="button"
                   data-marketplace-prepare={entry.pluginId}
-                  disabled={!runtime.view.managementAvailable || !catalog.enabled || !entry.installable || !prepareAvailable || busy !== null}
+                  disabled={!runtime.view.managementAvailable || !catalog.enabled || !entry.installable || !unifiedRelease || busy !== null}
                   onClick={() => void run(
                     `prepare:${entry.pluginId}`,
                     () => runtime.actions.prepareMarketplaceRelease(entry.pluginId, entry.latest.version),
@@ -335,7 +337,7 @@ export function MarketplacePanel({
                 >
                   {busy === `prepare:${entry.pluginId}` ? t("plugin.market.downloading") : t("plugin.market.downloadStage")}
                 </button>
-                {candidate?.phase === "verified-staged" && (
+                {approval && candidate?.phase === "verified-staged" && (
                   <button
                     type="button"
                     data-marketplace-apply={entry.pluginId}
@@ -348,26 +350,52 @@ export function MarketplacePanel({
                     {busy === `apply:${entry.pluginId}` ? t("plugin.market.probing") : t("plugin.market.applyStaged")}
                   </button>
                 )}
-                {candidate?.phase === "activation-staged" && (
+                {approval && candidate?.phase === "activation-staged" && (
                   <button
                     type="button"
                     data-marketplace-activate={entry.pluginId}
-                    disabled={!runtime.view.managementAvailable || !activationReady || busy !== null}
-                    onClick={() => {
-                      if (!window.confirm(t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }))) return;
+                    disabled={!runtime.view.managementAvailable || busy !== null}
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }),
+                        message: [
+                          t("plugin.market.approveUnified", {
+                            digest: approval.packageSha256,
+                            permissions: approval.permissions.length
+                              ? `${t("plugin.market.chartScope")} (${approval.permissions.join(", ")})`
+                              : t("format.none"),
+                          }),
+                          approval.legacy ? t("plugin.market.copyLegacyData") : "",
+                        ].filter(Boolean).join(" "),
+                        confirmLabel: t("plugin.market.activateObserve"),
+                      }))) return;
                       void run(
                         `activate:${entry.pluginId}`,
-                        () => runtime.actions.activateMarketplaceRelease(entry.pluginId),
+                        () => runtime.actions.activateMarketplaceRelease(entry.pluginId, approval),
                       );
-                    }}
+                    })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
                   </button>
                 )}
+                {rollback && candidate?.phase !== "observing" && (
+                  <button
+                    type="button"
+                    data-marketplace-rollback={entry.pluginId}
+                    disabled={!runtime.view.managementAvailable || busy !== null}
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.rollbackAvailable", { target: `${entry.pluginId} ${rollback.version}` }),
+                        message: [t("plugin.dataRetentionHint"), t("unified.legacyUpgrade")].join(" "),
+                        confirmLabel: t("plugin.rollback"),
+                      }))) return;
+                      void run(`rollback:${entry.pluginId}`, () => runtime.actions.rollbackMarketplaceMigration(entry.pluginId, rollback));
+                    })()}
+                  >
+                    {t("plugin.rollback")}
+                  </button>
+                )}
               </div>
-              {candidate?.phase === "activation-staged" && !activationReady && (
-                <small>{t("plugin.host.grantEveryPermission")}</small>
-              )}
             </article>
           );
         })}
@@ -400,12 +428,12 @@ export function RuntimeRegistryPanel({ status }: { status: PluginRuntimeRegistry
             {t("plugin.host.registryRevision", { id: status.active.registryId, revision: status.active.revision })} · {t("plugin.runtime.autoUpdateOff")}
           </p>
         </div>
-        <span className="plugin-state-pill is-muted">{t("plugin.count", { count: status.runtimes.length })}</span>
+        <Badge>{t("plugin.count", { count: status.runtimes.length })}</Badge>
       </header>
       {status.runtimes.map((item) => (
         <article key={`${item.runtimeId}:${item.kind}:${item.os}:${item.arch}`} className="plugin-runtime-registry-row">
           <strong>{item.runtimeId} · {item.version}</strong>
-          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {item.verificationStatus}</p>
+          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {runtimeVerificationLabel(item.verificationStatus)}</p>
           <small>
             {t("plugin.host.runtimeFingerprint", {
               owner: t("plugin.host.hostManaged"),
@@ -466,211 +494,6 @@ export function TrustRequestMatrix({ trust }: { trust: PluginTrustSummary["reque
         <span>{t("plugin.trust.subprocessLimit", { count: trust.subprocess.maxProcesses })}</span>
       </div>
     </div>
-  );
-}
-
-export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: PluginPlatformRuntime; onPendingChange?(pending: boolean): void }) {
-  useLocale();
-  const [installed, setInstalled] = useState(false);
-  const [installError, setInstallError] = useState<string | null>(null);
-  const [candidate, setCandidate] = useState<PluginLocalInstallCandidate | null>(null);
-  const [reason, setReason] = useState("");
-  const [accepted, setAccepted] = useState<Set<string>>(new Set());
-  const [review, setReview] = useState<PluginTrustReview | null>(null);
-  const [busy, setBusy] = useState<"prepare" | "review" | "confirm" | null>(null);
-  useEffect(() => { onPendingChange?.(busy !== null); }, [busy, onPendingChange]);
-
-  const resetReview = () => setReview(null);
-  const prepare = async (file: File) => {
-    setBusy("prepare");
-    setInstalled(false);
-    setInstallError(null);
-    setCandidate(null);
-    setReason("");
-    setAccepted(new Set());
-    setReview(null);
-    try { setCandidate(await runtime.actions.prepareLocalInstall(file)); } catch (error) { setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
-    finally { setBusy(null); }
-  };
-  const required = candidate?.preview.requiredAcknowledgements ?? [];
-  const allAccepted = required.length > 0 && required.every((item) => accepted.has(item));
-  const firstConfirmation = async () => {
-    if (!candidate || !allAccepted || busy || !runtime.view.managementAvailable) return;
-    setBusy("review");
-    setInstallError(null);
-    try {
-      setReview(await runtime.actions.reviewLocalInstall(
-        candidate.candidateId,
-        candidate.previewSha256,
-        reason.trim(),
-        [...accepted].sort(),
-      ));
-    } catch (error) { setReview(null); setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
-    finally { setBusy(null); }
-  };
-  const secondConfirmation = async () => {
-    if (!candidate || !review || busy || !runtime.view.managementAvailable) return;
-    setBusy("confirm");
-    setInstallError(null);
-    try {
-      await runtime.actions.confirmLocalInstall(
-        candidate.candidateId,
-        candidate.previewSha256,
-        review.confirmationToken,
-      );
-      setInstalled(true);
-      setCandidate(null);
-      setReview(null);
-      setAccepted(new Set());
-      setReason("");
-    } catch (error) { setReview(null); setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
-    finally { setBusy(null); }
-  };
-
-  return (
-    <section className="plugin-settings-card plugin-install-card plugin-trust-install-card" data-plugin-trust-flow="itemized-double-confirmation">
-      <header className="plugin-settings-card-header">
-        <div>
-          <h3>{t("plugin.localInstall")}</h3>
-          <p>{t("plugin.trust.localHint")}</p>
-        </div>
-        <span className="plugin-state-pill is-warn">{t("plugin.trust.localCode")}</span>
-      </header>
-      <ol className="pc-install-steps" aria-label={t("pc.install")}>
-        <li aria-current={!candidate && !installed ? "step" : undefined}>{t("plugin.localInstall")}</li>
-        <li aria-current={candidate && !review ? "step" : undefined}>{t("plugin.permissions")}</li>
-        <li aria-current={review ? "step" : undefined}>{t("plugin.trust.secondInstall")}</li>
-      </ol>
-      {installError && <p role="alert">{installError}</p>}
-      {installed && <p role="status">{t("plugin.installedHint")}</p>}
-      <div className="plugin-install-row">
-        <label className="plugin-install-button">
-          <input
-            type="file"
-            accept=".cspkg,application/vnd.candlescope.plugin+zip"
-            data-plugin-install-input
-            disabled={!runtime.view.managementAvailable || busy !== null}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void prepare(file);
-            }}
-          />
-          <span>{busy === "prepare" ? t("plugin.trust.verifying") : t("plugin.trust.pickReview")}</span>
-        </label>
-        <small>{t("plugin.trust.prepareHint")}</small>
-      </div>
-      {candidate && (
-        <fieldset disabled={busy !== null || !runtime.view.managementAvailable} className="plugin-trust-review" data-preview-sha256={candidate.previewSha256}>
-          <div className="plugin-trust-source">
-            <strong>{candidate.preview.plugin.name} {candidate.preview.plugin.version}</strong>
-            <span>{candidate.preview.plugin.publisher} · {candidate.preview.source.source}</span>
-            <small>
-              {t("plugin.trust.publisherId", { identity: candidate.preview.source.publisherIdentity })}
-              {candidate.preview.source.signatureRoot
-                ? t("plugin.signedRoot", { root: candidate.preview.source.signatureRoot })
-                : t("plugin.unsignedLocal")}
-            </small>
-            <code>{candidate.preview.plugin.bundleSha256}</code>
-          </div>
-          <p className="plugin-trust-warning">{candidate.preview.warning}</p>
-          <h4>{t("plugin.trust.whatRuns")}</h4>
-          {candidate.preview.executionModel === "script-runtime" ? (
-            <div className="plugin-trust-runtime">
-              <p className="plugin-trust-warning">{t("plugin.trust.scriptRuntimeExecution")}</p>
-              {candidate.preview.authorization.entrypoints.map((entrypoint) => (
-                <div key={entrypoint.entrypointId}>
-                  <strong>{entrypoint.entrypointId} · {entrypoint.runtimeKind} · {entrypoint.runtimeId}</strong>
-                  {entrypoint.systemRuntimePath && <code>{entrypoint.systemRuntimePath}</code>}
-                </div>
-              ))}
-            </div>
-          ) : <>
-          {candidate.preview.authorization.entrypoints.map((entrypoint) => (
-            <div className="plugin-trust-runtime" key={entrypoint.entrypointId}>
-              <strong>{entrypoint.entrypointId}</strong>
-              <span>{entrypoint.runtimeKind} · {entrypoint.runtimeId} · {entrypoint.supplySource}</span>
-              <small>
-                  {entrypoint.hostManaged ? t("plugin.host.hostManaged") : t("plugin.bundledRuntime")}
-                {` · ${entrypoint.profile.profileId} · maxProcesses=${entrypoint.profile.limits.maxProcesses}`}
-              </small>
-              {entrypoint.systemRuntimePath && <code>{entrypoint.systemRuntimePath}</code>}
-            </div>
-          ))}
-          <p data-sandbox-status={candidate.preview.authorization.sandbox.status}>
-            {t("plugin.trust.sandboxMode", {
-              status: candidate.preview.authorization.sandbox.status,
-              mode: candidate.preview.authorization.mode,
-            })}
-          </p>
-          <TrustRequestMatrix trust={candidate.preview.requests} />
-          <div className="plugin-trust-diffs">
-            <div>
-              <strong>{t("plugin.host.runtimeDiff")}</strong>
-              <span>{candidate.preview.runtimeDiff.changed ? t("plugin.trust.changedMustConfirm") : t("plugin.trust.unchanged")}</span>
-              <small>
-                {t("plugin.host.kindOrId", { state: changedLabel(candidate.preview.runtimeDiff.kindOrIdChanged) })}
-                {` · ${t("plugin.diff.sigRoot", { state: changedLabel(candidate.preview.runtimeDiff.signatureRootChanged) })}`}
-                {` · ${t("plugin.diff.sysPath", { state: changedLabel(candidate.preview.runtimeDiff.systemRuntimePathChanged) })}`}
-              </small>
-            </div>
-            <div>
-              <strong>{t("plugin.host.permissionDiff")}</strong>
-              <span>{candidate.preview.permissionDiff.requiresConfirmation ? t("plugin.trust.needReconfirm") : t("plugin.trust.noExpansion")}</span>
-              <small>{candidate.preview.permissionDiff.permissions.map((item) => `${item.permissionId}: ${item.change}`).join(" · ") || t("plugin.trust.noHostApi")}</small>
-            </div>
-          </div>
-          </>}
-          <label className="plugin-trust-reason">
-            <span>{t("plugin.trust.reason")}</span>
-            <textarea
-              value={reason}
-              maxLength={500}
-              onChange={(event) => { setReason(event.target.value); resetReview(); }}
-              placeholder={t("plugin.trust.reasonPh")}
-            />
-          </label>
-          <fieldset className="plugin-trust-acknowledgements">
-            <legend>{t("plugin.trust.itemized")}</legend>
-            {required.map((item) => (
-              <label key={item}>
-                <input
-                  type="checkbox"
-                  checked={accepted.has(item)}
-                  onChange={(event) => {
-                    const next = new Set(accepted);
-                    if (event.target.checked) next.add(item); else next.delete(item);
-                    setAccepted(next);
-                    resetReview();
-                  }}
-                />
-                <span>{trustAcknowledgementLabel(item)}</span>
-              </label>
-            ))}
-          </fieldset>
-          <div className="plugin-action-row plugin-trust-confirmations">
-            <button
-              type="button"
-              data-trust-confirmation-step="1"
-              disabled={!allAccepted || reason.trim().length < 12 || busy !== null || review !== null}
-              onClick={() => void firstConfirmation()}
-            >
-              {busy === "review" ? t("plugin.trust.recording") : t("plugin.trust.firstReview")}
-            </button>
-            <button
-              type="button"
-              data-trust-confirmation-step="2"
-              className="is-danger"
-              disabled={review === null || busy !== null}
-              onClick={() => void secondConfirmation()}
-            >
-              {busy === "confirm" ? t("plugin.trust.installing") : t("plugin.trust.secondInstall")}
-            </button>
-          </div>
-          {review && <small>{t("plugin.trust.firstRecorded", { expires: review.expiresAt })}</small>}
-        </fieldset>
-      )}
-    </section>
   );
 }
 
@@ -740,10 +563,10 @@ export function TrustModeControl({
         <div className="plugin-trust-diffs" data-trust-change-preview={review.previewSha256}>
           <div>
             <strong>{t("plugin.trust.frozenBoundary")}</strong>
-            <span>{review.preview.to.mode} · {review.preview.to.sandbox.status}</span>
+            <span>{trustModeLabel(review.preview.to.mode)} · {sandboxStatusLabel(review.preview.to.sandbox.status)}</span>
             <small>
               {t("plugin.diff.runtime", { state: changedLabel(review.preview.runtimeDiff.changed) })}
-              {` · kind/id ${changedLabel(review.preview.runtimeDiff.kindOrIdChanged)}`}
+              {` · ${t("plugin.host.kindOrId", { state: changedLabel(review.preview.runtimeDiff.kindOrIdChanged) })}`}
               {` · ${t("plugin.diff.sigRoot", { state: changedLabel(review.preview.runtimeDiff.signatureRootChanged) })}`}
               {` · ${t("plugin.diff.sysPath", { state: changedLabel(review.preview.runtimeDiff.systemRuntimePathChanged) })}`}
             </small>
@@ -759,7 +582,7 @@ export function TrustModeControl({
       )}
       <div className="plugin-action-row">
         <button type="button" disabled={busy || !allAccepted || reason.trim().length < 12 || review !== null} onClick={() => void begin()}>
-          {t("plugin.trust.firstReviewTarget", { target })}
+          {t("plugin.trust.firstReviewTarget", { target: trustModeLabel(target) })}
         </button>
         <button type="button" disabled={busy || review === null} onClick={() => void confirm()}>
           {t("plugin.trust.secondApply")}

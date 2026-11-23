@@ -27,6 +27,8 @@ export interface UseOrderBookRuntimeOptions {
   /** Whether the order-book rail view is currently open. */
   orderBookOpen: boolean;
   capability: ExchangeCapabilityPayload | null;
+  /** The exchange catalog has not answered yet: support is unknown, not absent. */
+  capabilityLoading?: boolean;
 }
 
 function normalizeIdentity(identity: OrderBookIdentity): OrderBookIdentity {
@@ -72,6 +74,7 @@ export function useOrderBookRuntime({
   identity: rawIdentity,
   orderBookOpen,
   capability,
+  capabilityLoading = false,
 }: UseOrderBookRuntimeOptions): OrderBookRuntime {
   const { exchange, marketType, symbol } = rawIdentity;
   const identity = useMemo(() => normalizeIdentity({ exchange, marketType, symbol }), [
@@ -92,8 +95,10 @@ export function useOrderBookRuntime({
     () => exchangeMarketProductSupport(capability, identity.marketType),
     [capability, identity.marketType],
   );
-  const message = supportMessage(identity, capability);
-  const supported = message === null;
+  // The verdict needs the exchange catalog. Until it answers the panel waits.
+  const pending = capabilityLoading && !supportsOrderBookProduct(capability, identity.marketType);
+  const message = pending ? null : supportMessage(identity, capability);
+  const supported = message === null && !pending;
   const fullModeSupported = productSupport?.order_book.strict_full_depth === true;
   const snapshotMode = productSupport?.order_book.snapshot_mode ?? null;
   const enabled = supported && orderBookOpen;
@@ -129,6 +134,10 @@ export function useOrderBookRuntime({
   }, [identity, effectiveMode, store]);
 
   useEffect(() => {
+    if (pending && orderBookOpen) {
+      store.publishStatus("connecting", { clearBook: true });
+      return undefined;
+    }
     if (!supported) {
       store.reset("unsupported", message);
       return undefined;
@@ -168,6 +177,7 @@ export function useOrderBookRuntime({
     preferences.partialDepth,
     effectiveUpdateIntervalMs,
     orderBookOpen,
+    pending,
     retryRevision,
     store,
     streamPriceGrouping,

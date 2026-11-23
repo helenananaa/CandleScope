@@ -1,11 +1,25 @@
+import { Button } from "../ui/Button.js";
+import { Disclosure } from "../ui/Display.js";
+import { Field, Select, Textarea } from "../ui/Field.js";
+import { buttonClassName } from "../ui/helpers.js";
 import { useEffect, useState } from "react";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
-import { t } from "../../i18n/index.js";
+import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import BrandMark from "../brand/BrandMark.js";
 import { Icon } from "../icons/Icon.js";
 import { APP_BUILD, APP_VERSION, SUPPORT_REPOSITORY, createSupportBundle, downloadSupportBundle,
     environmentInfo, fetchBackendSupport, issueUrl, type BackendSupport } from "../../features/settings/supportDiagnostics.js";
+
+/** Open-source projects CandleScope is built on, named in the credits (names, not translated). */
+const CREDITED_LIBRARIES = ["React", "Lightweight Charts", "FastAPI", "SQLite"];
+
+/** The names as a list in the current language; Chinese gets a space between "和" and a Latin name. */
+function creditedLibraries(): string {
+    return new Intl.ListFormat(getDateTimeLocale(), { style: "long", type: "conjunction" })
+        .format(CREDITED_LIBRARIES)
+        .replace(/(?<=[A-Za-z0-9])(和|及)(?=[A-Za-z0-9])/g, " $1 ");
+}
 
 export type AboutSettingsPanelProps = Record<string, never>;
 
@@ -55,25 +69,26 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
             <h3 id="support-heading" className="st-group-title">{t("settings.support.title")}</h3>
             <p className="st-support-description">{t("settings.support.description")}</p>
             <div className="st-support-actions">
-                <a className="st-btn st-btn-primary" href={issueUrl(environment)} target="_blank" rel="noopener noreferrer">{t("settings.support.issue")}</a>
-                <button className="st-btn st-btn-secondary" onClick={() => void copyEnvironment()}>{t("settings.support.copy")}</button>
+                <a className={buttonClassName({ variant: "primary" })} href={issueUrl(environment)} target="_blank" rel="noopener noreferrer">{t("settings.support.issue")}</a>
+                <Button onClick={() => void copyEnvironment()}>{t("settings.support.copy")}</Button>
             </div>
             <p className="st-support-hint">{t("settings.support.issueHint")}</p>
-            <details className="st-support-export">
-                <summary>{t("settings.support.export")}</summary>
+            <Disclosure summary={t("settings.support.export")} className="st-support-export">
                 <p className="st-support-description">{t("settings.support.exportHint")}</p>
                 <p className="st-support-hint">{t("settings.support.privacy")}</p>
                 <div className="st-support-actions">
-                    <label>{t("settings.support.range")} <select value={minutes} disabled={exporting} onChange={event => setMinutes(Number(event.target.value))}>
-                        {[5, 15, 60].map(value => <option key={value} value={value}>{t("settings.support.minutes", { count: value })}</option>)}
-                    </select></label>
-                    <button className="st-btn st-btn-primary" disabled={exporting} onClick={() => void exportDiagnostics()}>
+                    <Field label={t("settings.support.range")} className="st-inline-field">
+                        <Select size="sm" value={minutes} disabled={exporting} onChange={event => setMinutes(Number(event.target.value))}>
+                            {[5, 15, 60].map(value => <option key={value} value={value}>{t("settings.support.minutes", { count: value })}</option>)}
+                        </Select>
+                    </Field>
+                    <Button variant="primary" disabled={exporting} onClick={() => void exportDiagnostics()}>
                         {t(exporting ? "settings.support.exporting" : "settings.support.download")}
-                    </button>
+                    </Button>
                 </div>
-            </details>
+            </Disclosure>
             <p className="st-support-hint" role="status" aria-live="polite">{feedback ? t(`settings.support.${feedback}`) : ""}</p>
-            {manualCopy && <textarea className="st-support-manual" aria-label={t("settings.support.environment")} readOnly value={manualCopy} onFocus={event => event.target.select()} />}
+            {manualCopy && <Textarea className="st-code" rows={6} aria-label={t("settings.support.environment")} readOnly value={manualCopy} onFocus={event => event.target.select()} />}
         </section>
         <section className="st-group" aria-labelledby="support-environment">
             <h3 id="support-environment" className="st-group-title">{t("settings.support.environment")}</h3>
@@ -95,9 +110,8 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                     ["", t("settings.support.source")], ["/blob/main/LICENSE", t("settings.support.license")],
                 ].map(([path, label]) => <a key={label} href={`${SUPPORT_REPOSITORY}${path}`} target="_blank" rel="noopener noreferrer">{label}<span aria-hidden="true" className="st-external-icon"><Icon name="external" size={12} /></span></a>)}
             </div>
-            <details className="st-support-export">
-                <summary>{t("settings.support.help")}</summary>
-                <p className="st-support-hint">{t("settings.support.credits")}</p>
+            <Disclosure summary={t("settings.support.help")} className="st-support-export">
+                <p className="st-support-hint">{t("settings.support.credits", { libraries: creditedLibraries() })}</p>
                 <div className="st-about-stack">
                     {[
                         [`${modifier} + K`, t("settings.about.shortcutSearch")],
@@ -105,9 +119,12 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                         ["Esc", t("settings.about.shortcutSearchClose")],
                         [`${modifier} + Z`, t("settings.about.shortcutWorkspaceUndo")],
                         [`${modifier} + Shift + Z`, t("settings.about.shortcutWorkspaceRedo")],
+                        ["Shift + F10", t("settings.about.shortcutContextMenu")],
+                        ["→", t("settings.about.shortcutToolVariants")],
+                        [modifier === "⌘" ? "Ctrl + Shift + M" : "Ctrl + M", t("settings.about.shortcutEditorTab")],
                     ].map(([keys, description]) => <div className="st-stack-item st-shortcut-item" key={keys}><kbd className="st-stack-value">{keys}</kbd><span className="st-stack-label">{description}</span></div>)}
                 </div>
-            </details>
+            </Disclosure>
         </section>
     </>;
 }

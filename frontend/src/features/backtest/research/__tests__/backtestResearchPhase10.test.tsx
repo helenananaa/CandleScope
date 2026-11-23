@@ -1,7 +1,7 @@
+import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 
 import { createBacktestApi } from "../../backtestApi.js";
 import type { BacktestDataset, BacktestSnapshot } from "../../backtestApi.js";
@@ -25,7 +25,8 @@ import {
   backtestResearchContextHref,
   buildBacktestResearchLaunchContext,
 } from "../backtestResearchLaunch.js";
-import ResearchTaskPicker from "../ResearchTaskPicker.js";
+import { researchModeForTask, researchTaskForMode, strategyResearchModeHref, STRATEGY_RESEARCH_MODES } from "../backtestResearchModes.js";
+import { BACKTEST_RESEARCH_TASKS } from "../backtestResearchTypes.js";
 
 const context: BacktestResearchLaunchContext = {
   schema_version: "candlescope.backtest-research-launch-context/1",
@@ -64,13 +65,14 @@ test("five research tasks expose only their declared shared panel composition", 
   assert.deepEqual(backtestResearchPanels("REPLAY_REVIEW"), ["RUN", "REPLAY", "RESULTS"]);
 });
 
-test("task home renders five functional task entries without mounting a chart", () => {
-  const html = renderToStaticMarkup(
-    <ResearchTaskPicker returnHref="/" onSelect={() => undefined} />,
-  );
-  assert.equal((html.match(/data-research-task=/g) ?? []).length, 5);
-  assert.match(html, /research-task-home/);
-  assert.doesNotMatch(html, /chart-area/);
+test("the five research tasks are modes of the strategy research page, with no task home", () => {
+  assert.deepEqual(STRATEGY_RESEARCH_MODES, ["quick", "precise", "robust", "python", "multi", "replay"]);
+  assert.equal(researchTaskForMode("quick"), null);
+  for (const task of BACKTEST_RESEARCH_TASKS) assert.equal(researchTaskForMode(researchModeForTask(task)), task);
+  assert.equal(strategyResearchModeHref("robust", { study: "st_0123456789", run: null }), "/strategy.html?mode=robust&study=st_0123456789");
+  assert.equal(backtestResearchContextHref("brc_abcdefgh"), "/strategy.html?mode=precise&context=brc_abcdefgh");
+  assert.equal(backtestResearchContextHref("brc_abcdefgh", "PARAMETER_ROBUSTNESS"), "/strategy.html?mode=robust&context=brc_abcdefgh");
+  assert.equal(existsSync(new URL("../ResearchTaskPicker.tsx", import.meta.url)), false);
 });
 
 test("authority restores context session and safely returns to a scoped chart", () => {
@@ -294,7 +296,7 @@ test("quick tester launch context carries IDs and frozen selection without sourc
   assert.deepEqual(payload.range, { mode: "CUSTOM", start_time_ms: 10, end_time_ms: 20 });
   assert.equal("source" in payload, false);
   assert.equal(payload.entry_task, "PARAMETER_ROBUSTNESS");
-  assert.equal(backtestResearchContextHref("brc_context_12345678"), "/backtest.html?context=brc_context_12345678");
+  assert.equal(backtestResearchContextHref("brc_context_12345678"), "/strategy.html?mode=precise&context=brc_context_12345678");
 });
 
 test("research context API posts payload and re-reads by opaque ID", async () => {

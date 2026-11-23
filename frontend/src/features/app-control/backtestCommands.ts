@@ -2,7 +2,7 @@ import type { BacktestResearchRuntime } from "../backtest/research/backtestResea
 import { BACKTEST_RESEARCH_TASKS } from "../backtest/research/backtestResearchTypes.js";
 import { MARKET_CHART_SOURCE_MODES } from "../market-chart-platform/marketChartSourceRuntime.js";
 import { command, type ControlCommandGroup } from "./commandRegistry.js";
-import { choice, empty, json, nullable, number, object, record, text } from "./commandSchema.js";
+import { choice, empty, json, number, object, record, text } from "./commandSchema.js";
 import { publishControlFile } from "./controlFiles.js";
 
 export function backtestCommands(runtime: BacktestResearchRuntime): ControlCommandGroup {
@@ -17,7 +17,7 @@ export function backtestCommands(runtime: BacktestResearchRuntime): ControlComma
     run: v.activeRun?.run_id, study: v.activeStudy?.study_id, range: [v.startTimeMs, v.endTimeMs], runDraft: v.runDraftText, studyDraft: v.studyDraftText,
   }), snapshot: () => ({ ...v, chart: v.chart ? { symbol: v.chart.symbol, interval: v.chart.interval } : null, report: v.report,
     revisions: v.revisions.slice(0, 100), datasets: v.datasets.slice(0, 100), runs: v.runs.slice(0, 100), studies: v.studies.slice(0, 100) }), commands: [
-    command("selectTask", "Select an existing advanced research task.", object({ task: nullable(choice(BACKTEST_RESEARCH_TASKS)) }), ({ task }) => a.selectTask(task)),
+    command("selectTask", "Open a research tool (the page's mode rail follows).", object({ task: choice(BACKTEST_RESEARCH_TASKS) }), ({ task }) => a.selectTask(task)),
     command("sourceMode", "Switch the chart source mode; frozen/run results retain domain availability guards.", object({ mode: choice(MARKET_CHART_SOURCE_MODES) }), ({ mode }) => a.selectSourceMode(mode)),
     command("selectDataset", "Select an existing dataset and its current epoch.", object({ datasetId: text(128) }), ({ datasetId }) => {
       if (!v.datasets.some((d) => d.dataset_id === datasetId)) throw new Error("DATASET_UNAVAILABLE"); a.selectDataset(datasetId);

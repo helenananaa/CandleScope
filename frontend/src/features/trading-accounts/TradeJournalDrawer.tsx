@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
-import { t } from "../../i18n/index.js";
+import { Icon } from "../../components/icons/Icon.js";
+import { Badge, Button, Disclosure, Drawer, Field, InlineAlert, Input, Textarea } from "../../components/ui/index.js";
+import { t, translateExchangeName, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
   PRE_TRADE_FIELD_KEYS,
@@ -101,7 +102,7 @@ export default function TradeJournalDrawer({
     () => ({ exchange: source.exchange, marketType: source.marketType, symbol: source.symbol }),
     [source.exchange, source.marketType, source.symbol],
   );
-  const instrumentLabel = `${instrument.symbol} · ${instrument.exchange} ${instrument.marketType}`;
+  const instrumentLabel = `${instrument.symbol} · ${translateExchangeName(instrument.exchange)} ${translateMarketType(instrument.marketType)}`;
   const stage = stageOf(trade);
   const template = templateFor(note?.templateId);
 
@@ -248,138 +249,150 @@ export default function TradeJournalDrawer({
       );
     }
     const value = fields[field.key] ?? "";
-    return (
-      <div key={field.key} className="trading-journal-field">
-        <label className="trading-journal-label" htmlFor={id}>
-          {t(field.labelKey)}
-          {hindsight && <em className="trading-badge" data-tone="warning">{t("trading.journal.afterEntry")}</em>}
-        </label>
-        {field.kind === "choice" ? (
-          <div className="trading-segmented" role="group" id={id}>
+    const label = <>
+      {t(field.labelKey)}
+      {hindsight && <Badge tone="warning">{t("trading.journal.afterEntry")}</Badge>}
+    </>;
+    const hint = field.hintKey ? t(field.hintKey) : undefined;
+    if (field.kind === "choice") {
+      return (
+        <div key={field.key} className="trading-journal-field">
+          <span className="trading-journal-label" id={id}>{label}</span>
+          <div className="trading-choice" role="group" aria-labelledby={id}>
             {field.choices?.map((choice) => (
-              <button
+              <Button
                 key={choice.value}
-                type="button"
-                data-active={value === choice.value}
+                size="sm"
+                aria-pressed={value === choice.value}
                 onClick={() => setField(field.key, value === choice.value ? "" : choice.value)}
               >
                 {t(choice.labelKey)}
-              </button>
+              </Button>
             ))}
           </div>
-        ) : field.kind === "longText" ? (
-          <textarea id={id} rows={2} value={value} onChange={(event) => setField(field.key, event.target.value)} />
+          {hint && <small className="trading-help">{hint}</small>}
+        </div>
+      );
+    }
+    return (
+      <Field key={field.key} className="trading-journal-field" label={label} {...(hint ? { hint } : {})}>
+        {field.kind === "longText" ? (
+          <Textarea rows={2} value={value} onChange={(event) => setField(field.key, event.target.value)} />
         ) : (
-          <input
-            id={id}
+          <Input
+            size="sm"
             inputMode={field.kind === "price" || field.kind === "number" ? "decimal" : "text"}
             value={value}
             onChange={(event) => setField(field.key, event.target.value)}
           />
         )}
-        {field.hintKey && <small className="trading-help">{t(field.hintKey)}</small>}
-      </div>
+      </Field>
     );
   };
 
-  return createPortal(
-    <aside className="trading-drawer" role="dialog" aria-label={t("trading.journal.title")}>
-      <header className="trading-drawer-header">
-        <div>
-          <h2>{trade ? t("trading.journal.tradeTitle", { symbol: trade.symbol }) : t("trading.journal.planTitle", { symbol: instrument.symbol })}</h2>
-          <p>
-            <span className="trading-badge" data-tone={stage === "pre" ? "info" : stage === "open" ? "accent" : "muted"}>
-              {t(`trading.stage.${stage}` as const)}
-            </span>
-            {" "}{instrumentLabel}
-            {trade && ` · ${t(trade.direction === "long" ? "trading.long" : "trading.short")} ${formatQty(trade.maxQty)}`}
-          </p>
-        </div>
+  // Save first, then close: from the close button, Escape, or another right-hand drawer opening.
+  const requestClose = () => {
+    if (!editorState.ready) { onClose(); return; }
+    void flush().then((saved) => { if (saved) onClose(); });
+  };
+
+  return (
+    <Drawer
+      open
+      onClose={requestClose}
+      side="right"
+      className="trading-drawer"
+      title={trade ? t("trading.journal.tradeTitle", { symbol: trade.symbol }) : t("trading.journal.planTitle", { symbol: instrument.symbol })}
+      actions={<>
         <span className="trading-save-state" data-state={saveState} role="status">
           {saveState === "saving" ? t("trading.journal.saving")
             : saveState === "saved" ? t("trading.journal.saved")
               : saveState === "failed" ? t("trading.journal.saveFailed") : ""}
         </span>
-        <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={() => {
-          if (!editorState.ready) { onClose(); return; }
-          void flush().then((saved) => { if (saved) onClose(); });
-        }}>×</button>
-      </header>
-      <div className="trading-drawer-body">
-        {(error || editorError) && <p className="trading-error" role="alert">{editorError ?? error}</p>}
-        {editorState.recovered && <p className="trading-help" role="status">{t("trading.journal.draftRecovered")}</p>}
-        <button type="button" className="trading-button" disabled={!editorState.ready || saveState === "saving"}
-          onClick={() => { void flush(); }}>{t("trading.journal.saveNow")}</button>
-        <fieldset disabled={!editorState.ready} style={{ border: 0, padding: 0, margin: 0 }}>
+        <Button size="sm" disabled={!editorState.ready || saveState === "saving"} onClick={() => { void flush(); }}>
+          {t("trading.journal.saveNow")}
+        </Button>
+      </>}
+    >
+      <p className="trading-drawer-meta">
+        <Badge tone={stage === "pre" ? "accent" : stage === "open" ? "success" : "neutral"}>{t(`trading.stage.${stage}` as const)}</Badge>
+        <span>
+          {instrumentLabel}
+          {trade && ` · ${t(trade.direction === "long" ? "trading.long" : "trading.short")} ${formatQty(trade.maxQty)}`}
+        </span>
+      </p>
+      {(error || editorError) && <InlineAlert tone="danger">{editorError ?? error}</InlineAlert>}
+      {editorState.recovered && <InlineAlert tone="info">{t("trading.journal.draftRecovered")}</InlineAlert>}
+      <fieldset className="trading-journal-form" disabled={!editorState.ready}>
         {trade && (
           <div className="trading-trade-strip">
             <span>{formatDateTime(trade.openedAtMs)}{trade.closedAtMs ? ` · ${formatDuration(trade.openedAtMs, trade.closedAtMs)}` : ""}</span>
             <strong data-tone={pnlTone(trade.status === "closed" ? trade.netPnl : trade.unrealizedPnl)}>
               {formatSigned(trade.status === "closed" ? trade.netPnl : trade.unrealizedPnl)}
             </strong>
-            <button type="button" className="trading-button" onClick={() => { void flush().then((saved) => { if (saved) onOpenQuickReplay(trade); }); }}>
+            <Button size="sm" onClick={() => { void flush().then((saved) => { if (saved) onOpenQuickReplay(trade); }); }}>
               {t("trading.replay.open")}
-            </button>
+            </Button>
           </div>
         )}
-        {trade?.readonlySource && <details className="trading-help">
-          <summary>{t("account.review.source", { instrument: trade.readonlySource.instrument, currency: trade.readonlySource.currency })}</summary>
-          <p>{t("account.review.identity", { uid: trade.readonlySource.accountUid, margin: trade.readonlySource.marginMode, position: trade.readonlySource.positionId })}</p>
-          <p>{t("account.review.verified", { time: formatDateTime(trade.readonlySource.verifiedAtMs) })}</p>
-          {trade.readonlySource.fills.map((fill) => <p key={fill.fillId}>{t("account.review.fillIdentity", { fill: fill.fillId, trade: fill.tradeId, order: fill.orderId ?? "—", contracts: fill.contracts })}</p>)}
-          <p>{t("account.review.noR")}</p>
-        </details>}
+        {trade?.readonlySource && (
+          <Disclosure className="trading-source" summary={t("account.review.source", { instrument: trade.readonlySource.instrument, currency: trade.readonlySource.currency })}>
+            <p>{t("account.review.identity", { uid: trade.readonlySource.accountUid, margin: trade.readonlySource.marginMode, position: trade.readonlySource.positionId })}</p>
+            <p>{t("account.review.verified", { time: formatDateTime(trade.readonlySource.verifiedAtMs) })}</p>
+            {trade.readonlySource.fills.map((fill) => <p key={fill.fillId}>{t("account.review.fillIdentity", { fill: fill.fillId, trade: fill.tradeId, order: fill.orderId ?? "—", contracts: fill.contracts })}</p>)}
+            <p>{t("account.review.noR")}</p>
+          </Disclosure>
+        )}
         {plan && (
-          <p className="trading-locked" data-edited={riskEdited}>
+          <InlineAlert tone={riskEdited ? "warning" : "info"}>
             {t("trading.journal.locked", {
               entry: formatPrice(plan.entryPrice), stop: formatPrice(plan.stopPrice),
               target: formatPrice(plan.targetPrice), risk: formatAmount(plan.riskUsdt),
             })}
             {riskEdited && ` ${t("trading.journal.lockedEdited")}`}
-          </p>
+          </InlineAlert>
         )}
         {trade && !plan && trade.entries.every((entry) => entry.kind !== "note") && trade.linkSuggestions.length > 0 && (
           <div className="trading-suggestions">
             <span>{t("trading.journal.suggestions")}</span>
             {trade.linkSuggestions.map((item) => (
-              <button key={item.id} type="button" className="trading-button" onClick={() => { void link(item.id); }}>
+              <Button key={item.id} size="sm" onClick={() => { void link(item.id); }}>
                 {linkSuggestionLabel(item)}
-              </button>
+              </Button>
             ))}
           </div>
         )}
         {template.sections.map((section) => {
           const open = expanded[section.id] ?? sectionExpanded(section, stage);
           return (
-            <section key={section.id} className="trading-journal-section" data-open={open}>
-              <button
-                type="button"
-                className="trading-journal-section-toggle"
-                aria-expanded={open}
-                onClick={() => setExpanded((current) => ({ ...current, [section.id]: !open }))}
-              >
-                {t(section.titleKey)}
-              </button>
-              {open && section.fields.map((field) => renderField(section, field))}
-            </section>
+            <Disclosure
+              key={section.id}
+              className="trading-journal-section"
+              summary={t(section.titleKey)}
+              open={open}
+              onToggle={(next) => { if (next !== open) setExpanded((current) => ({ ...current, [section.id]: next })); }}
+            >
+              {section.fields.map((field) => renderField(section, field))}
+            </Disclosure>
           );
         })}
         {trade && (
-          <section className="trading-journal-section" data-open="true">
+          <section className="trading-journal-block">
             <h3>{t("trading.journal.quickNotes")}</h3>
             <ul className="trading-quick-notes">
               {quickNotes.map((entry) => (
                 <li key={entry.id}>
-                  <span className="trading-badge" data-tone={entry.reviewNote ? "muted" : "info"}>
+                  <Badge tone={entry.reviewNote ? "neutral" : "accent"}>
                     {entry.reviewNote ? t("trading.journal.reviewNote") : t(`trading.stage.${entry.stage}` as const)}
-                  </span>
+                  </Badge>
                   <time>{formatDateTime(entry.marketTimeMs ?? entry.createdAtMs)}</time>
                   <p>{entry.body}</p>
                 </li>
               ))}
             </ul>
-            <input
-              className="trading-quick-input"
+            <Input
+              size="sm"
+              aria-label={t("trading.journal.quickNotes")}
               value={quickText}
               placeholder={t("trading.journal.quickPlaceholder")}
               onChange={(event) => editor.editQuick(event.target.value)}
@@ -387,31 +400,31 @@ export default function TradeJournalDrawer({
             />
           </section>
         )}
-        <section className="trading-journal-section" data-open="true">
+        <section className="trading-journal-block">
           <h3>{t("trading.journal.snapshots")}</h3>
-          <div className="trading-snapshots">
-            {(note?.snapshots ?? []).map((snapshot) => (
-              <figure key={snapshot.id}>
-                {snapshot.hasImage
-                  ? <JournalImage api={api} id={snapshot.id} time={snapshot.createdAtMs} />
-                  : <span className="trading-help">{t("trading.journal.snapshotNoImage")}</span>}
-                <figcaption>{formatDateTime(snapshot.createdAtMs)} · {String(snapshot.state.symbol ?? "")} {String(snapshot.state.interval ?? "")}</figcaption>
-              </figure>
-            ))}
-          </div>
+          {(note?.snapshots ?? []).length > 0 && (
+            <div className="trading-snapshots">
+              {(note?.snapshots ?? []).map((snapshot) => (
+                <figure key={snapshot.id}>
+                  {snapshot.hasImage
+                    ? <JournalImage api={api} id={snapshot.id} time={snapshot.createdAtMs} />
+                    : <span className="trading-help">{t("trading.journal.snapshotNoImage")}</span>}
+                  <figcaption>{formatDateTime(snapshot.createdAtMs)} · {String(snapshot.state.symbol ?? "")} {String(snapshot.state.interval ?? "")}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
           <div className="trading-actions">
-            <button type="button" className="trading-button" onClick={() => { void capture(); }}>
+            <Button size="sm" icon={<Icon name="camera" size={14} />} onClick={() => { void capture(); }}>
               {t("trading.journal.capture", { symbol: context.symbol, interval: context.interval })}
-            </button>
-            <button type="button" className="trading-button" onClick={() => { void copyMarkdown(); }}>
+            </Button>
+            <Button size="sm" onClick={() => { void copyMarkdown(); }}>
               {copied ? t("trading.journal.copied") : t("trading.journal.copyMarkdown")}
-            </button>
+            </Button>
           </div>
         </section>
-        </fieldset>
-      </div>
-    </aside>,
-    document.body,
+      </fieldset>
+    </Drawer>
   );
 }
 

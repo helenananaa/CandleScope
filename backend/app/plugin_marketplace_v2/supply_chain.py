@@ -22,6 +22,7 @@ from .models import (
     MAX_ARTIFACT_BYTES,
     MAX_CLOCK_SKEW,
     MAX_RELEASES,
+    UNIFIED_PACKAGE_FORMAT,
     ZERO_SHA256,
     DependencyRecord,
     PublisherRecord,
@@ -254,6 +255,7 @@ class SignedArtifactRecord:
     provenance: ArtifactProvenance
     review_policy: MarketplaceReviewPolicy
     signature: dict[str, str]
+    package_format: str | None = None
 
     @property
     def platform(self) -> tuple[str, str]:
@@ -264,7 +266,7 @@ class SignedArtifactRecord:
         return tuple(sorted({item.runtime_kind for item in self.runtime_bindings}))
 
     def statement_wire(self) -> dict[str, Any]:
-        return {
+        result = {
             "artifactId": self.artifact_id,
             "os": self.operating_system,
             "arch": self.architecture,
@@ -279,6 +281,10 @@ class SignedArtifactRecord:
             "provenance": self.provenance.to_wire(),
             "reviewPolicy": self.review_policy.to_wire(),
         }
+
+        if self.package_format is not None:
+            result["packageFormat"] = self.package_format
+        return result
 
     def to_wire(self) -> dict[str, Any]:
         return {**self.statement_wire(), "signature": dict(self.signature)}
@@ -585,9 +591,16 @@ def _artifact(
             "provenance",
             "reviewPolicy",
             "signature",
-        },
+        }
+        | ({"packageFormat"} & item.keys()),
         label,
     )
+    package_format = item.get("packageFormat")
+    if "packageFormat" in item and package_format != UNIFIED_PACKAGE_FORMAT:
+        raise MarketplaceError(
+            "PLUGIN_MARKETPLACE_ARTIFACT_INVALID",
+            f"{label}.packageFormat is unsupported",
+        )
     operating_system = _string(item["os"], f"{label}.os", maximum=16)
     architecture = _string(item["arch"], f"{label}.arch", maximum=16)
     if operating_system not in _OPERATING_SYSTEMS or architecture not in _ARCHITECTURES:
@@ -609,7 +622,7 @@ def _artifact(
     )
     binding_ids = [binding.entrypoint_id for binding in bindings]
     if (
-        not bindings
+        (not bindings and package_format is None)
         or binding_ids != sorted(binding_ids)
         or len(set(binding_ids)) != len(binding_ids)
     ):
@@ -640,6 +653,8 @@ def _artifact(
             item["reviewPolicy"], f"{label}.reviewPolicy"
         ).to_wire(),
     }
+    if package_format is not None:
+        statement["packageFormat"] = package_format
     signature_statement = {
         "pluginId": plugin_id,
         "version": version,
@@ -667,6 +682,7 @@ def _artifact(
         _provenance(item["provenance"], f"{label}.provenance"),
         _review_policy(item["reviewPolicy"], f"{label}.reviewPolicy"),
         signature,
+        package_format,
     )
 
 

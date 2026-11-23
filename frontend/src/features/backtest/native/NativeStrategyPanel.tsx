@@ -1,3 +1,4 @@
+import { sameChartSignalInput } from "../chart-tester/chartStrategySignalInput.js";
 import { pineContractMetadata } from "../../indicators/pineContractMetadata.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
@@ -19,6 +20,9 @@ import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdv
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
+import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, SegmentedControl, Select, Tabs, Textarea } from "../../../components/ui/index.js";
+import { researchStateTone } from "../research/researchStateTone.js";
+import { chartContextStatusLabel, researchStateLabel } from "../research/researchLabels.js";
 import { reportAnalytics } from "./nativeReportAnalytics.js";
 import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
@@ -33,6 +37,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command, contextReference } from "../../app-control/commandRegistry.js";
 import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
 import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -41,6 +46,7 @@ const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as 
 const ignoreCursor = () => undefined;
 
 type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
   onStatusChange?: (status: NativeFeedbackStatus) => void;
@@ -80,10 +86,10 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
       <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} activeId={collection.activeId} onSelect={strategies.select}
         actions={nativeStrategySwitcherActions(strategies)} renaming={strategies.renaming} onRename={strategies.rename} />
     </div>}
-    {strategies.storageError && <p role="alert">{strategies.storageError}</p>}
+    {strategies.storageError && <InlineAlert tone="danger">{strategies.storageError}</InlineAlert>}
     <StrategyDockPane hidden={!comparing}>
       <StrategyDockSlot name="tabs"><strong className="strategy-dock-view-title">{t("strategyCompare.title")}</strong></StrategyDockSlot>
-      <StrategyDockSlot name="actions"><button type="button" className="strategy-dock-button" onClick={() => strategies.setComparing(false)}>{t("chartTester.close")}</button></StrategyDockSlot>
+      <StrategyDockSlot name="actions"><Button size="sm" variant="ghost" onClick={() => strategies.setComparing(false)}>{t("chartTester.close")}</Button></StrategyDockSlot>
       <NativeStrategyComparison items={collection.items}
         context={contextParts}
         saved={collection.comparisons?.[context]}
@@ -92,7 +98,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
     </StrategyDockPane>
     {!collection.items.length && !comparing && <div className="strategy-dock-empty">
       <p>{t("strategyDock.empty")}</p>
-      <button type="button" className="strategy-run-button" onClick={() => strategies.add(false)}><Icon name="plus" size={13} />{t("strategyCollection.add")}</button>
+      <Button size="sm" variant="primary" icon={<Icon name="plus" size={13} />} onClick={() => strategies.add(false)}>{t("strategyCollection.add")}</Button>
     </div>}
     {collection.items.map((item) => <StrategyDockPane key={item.id} hidden={comparing || item.id !== collection.activeId}>
       <NativeStrategyInstancePanel {...props} instance={item} onInstanceChange={strategies.updateInstance} onInstanceBusy={strategies.setInstanceBusy}
@@ -106,10 +112,11 @@ type InstanceProps = NativeStrategyPanelProps & {
   onInstanceBusy(id: string, busy: boolean): void;
 };
 function NativeStrategyInstancePanel(props: InstanceProps) {
-  const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.instance.executionMode ?? "NATIVE");
+  const [selectedMode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.instance.executionMode ?? "NATIVE");
+  const mode = props.signalChart ? "CANDLESCOPE" : selectedMode;
   const [visited, setVisited] = useState(() => new Set([mode]));
-  const switchMode = (next: typeof mode) => { props.onInstanceChange(props.instance.id, { executionMode: next }); setMode(next); setVisited((items) => new Set([...items, next])); };
-  return <>{([...visited]).map((item) => <StrategyDockPane key={item} hidden={mode !== item}>
+  const switchMode = (next: typeof mode) => { if (props.signalChart && next === "NATIVE") return; props.onInstanceChange(props.instance.id, { executionMode: next }); setMode(next); setVisited((items) => new Set([...items, next])); };
+  return <>{([...new Set([...visited, mode])]).map((item) => <StrategyDockPane key={item} hidden={mode !== item}>
     <NativeStrategySession {...props} active={(props.active ?? true) && mode === item} executionMode={item} onExecutionModeChange={switchMode} />
   </StrategyDockPane>)}</>;
 }
@@ -334,7 +341,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const inputs = await freezeAdvancedInputs(advanced, language, {
           start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
         });
-        const submission = { language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
+        const submission = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
           ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
           ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
           ...(automaticExecution === null ? {} : { execution: automaticExecution }),
@@ -358,7 +365,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           end_time_ms: dataset.last_close_ms, interval: context.interval, ...market };
         const snapshot = await nativeApi<{ snapshot_hash: string }>("/datasets/snapshot", data);
         const inputs = await freezeAdvancedInputs(advanced, language, data);
-        const payload = { ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
+        const payload = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
           language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) } };
         if (prepareTrades) { await prepareRun("/external-strategy", { run: payload }); return; }
         const result = await nativeApi<NativeRun>(runPath, payload, crypto.randomUUID());
@@ -379,7 +386,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms!,
         exchange: context.exchange, market_type: context.marketType,
       });
-      const result = await nativeApi<NativeRun>(runPath, { ...inputs, ...execution,
+      const result = await nativeApi<NativeRun>(runPath, { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
         language, source, parameters: params, dataset_id: frozen.dataset_id, data_epoch: frozen.data_epoch,
         snapshot_hash: frozen.snapshot_hash, start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms,
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms,
@@ -398,7 +405,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     && sameExecutionData(reportRun?.config?.account_data, accountData), [accountDataState, reportRun?.config?.account_data, accountData]);
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
-  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged
+  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged || !sameChartSignalInput(reportRun.config?.signal_chart, props.signalChart)
     || datasetIdentityChanged(reportRun.config, props.dataset)
     || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
       { hostSettings, fidelity, fillRecalculation: fillRecalculation && (language === "pine" || fidelity !== "BAR_APPROX"),
@@ -422,14 +429,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const percent = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? "—" : `${number.format(value)}%`;
   const returnPercent = summary?.series.at(-1)?.returnPercent ?? null;
   const runNow = () => { if (!runDisabled) void start(); };
-  const tabKey = (event: KeyboardEvent<HTMLButtonElement>, item: typeof tab) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const next = SESSION_TABS[(SESSION_TABS.indexOf(item) + (event.key === "ArrowRight" ? 1 : -1) + SESSION_TABS.length) % SESSION_TABS.length]!;
-    selectTab(next);
-    const list = event.currentTarget.parentElement;
-    requestAnimationFrame(() => list?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus());
-  };
   useControlCommands(() => ({ id: `native:${props.cellScope}:${mode}`, title: "Native strategy draft, run and report",
     context: () => ({ session: props.session, dataset: props.dataset, mode, language, source, parameters, hostSettings, fidelity, fillRecalculation,
       historyStart, historyEnd, automaticContexts, executionOrigin, advanced: contextReference(advanced), executionData: contextReference(executionData), runId: run?.run_id, historicalRunId: historicalRun?.run_id, allHistory, busy, executionDataState }),
@@ -491,11 +490,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           reportHash: reportRun?.result?.report_hash, total: reportRun?.result?.[section].length ?? 0, items: reportRun?.result?.[section].slice(offset, offset + limit) ?? [] }), { readOnly: true }),
     ] }), props.active !== false);
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
-    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
-    {props.docked && <StrategyDockSlot name="tabs"><div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
-      {SESSION_TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} tabIndex={tab === item ? 0 : -1}
-        onClick={() => selectTab(item)} onKeyDown={(event) => tabKey(event, item)}>{t(item === "history" ? "ux.history" : `chartTester.tab.${item}`)}</button>)}
-    </div></StrategyDockSlot>}
+    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><IconButton size="sm" label={t("backtest.close")} icon={<Icon name="close" size={14} />} onClick={props.onClose} /></header>}
+    {props.docked && <StrategyDockSlot name="tabs"><Tabs className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={tab} onChange={selectTab}
+      tabs={SESSION_TABS.map((item) => ({ value: item, label: t(item === "history" ? "ux.history" : `chartTester.tab.${item}`) }))} /></StrategyDockSlot>}
     <StrategyDockSlot name="actions"><div className="strategy-dock-run">
       {summary && <button type="button" className="strategy-summary" data-stale={resultStale && !historicalRun} onClick={() => selectTab("overview")}
         title={resultStale && !historicalRun ? t("chartTester.result.staleGuidanceTitle") : t("chartTester.tab.overview")}>
@@ -504,39 +501,40 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <span><small>{t("report.winRate")}</small><b>{percent(summary.winRate)}</b></span>
       </button>}
       {status !== "idle" && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
-      {run && !nativeTerminal(run.state) && <button type="button" className="strategy-dock-button" onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>
-        <Icon name="stop" size={11} filled />{t("native.cancel")}</button>}
-      <button type="button" className="strategy-run-button" disabled={runDisabled} onClick={runNow}
+      {run && !nativeTerminal(run.state) && <Button size="sm" variant="ghost" icon={<Icon name="stop" size={11} filled />}
+        onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>
+        {t("native.cancel")}</Button>}
+      <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}
         title={t(mode === "NATIVE" ? "native.run" : "native.external.run")}>
-        <Icon name="play" size={11} filled />{t("chartTester.run")}</button>
+        {t("chartTester.run")}</Button>
     </div></StrategyDockSlot>
     <StrategyDockSlot name="notice">
-      {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <div className="strategy-notice" data-tone="info" role="status">
-        <strong>{t("preparation.title")} · {preparation.completed}/{preparation.total}</strong>
+      {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <InlineAlert
+        title={`${t("preparation.title")} · ${preparation.completed}/${preparation.total}`}
+        action={<Button size="sm" variant="ghost" disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</Button>}>
         <PreparationWaiting job={preparation} />
-        <button type="button" disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</button>
-      </div>}
-      {resolution && resolution.status !== "READY" && <div className="strategy-notice" data-tone="warning" role="status">
-        <strong>{t("strategyReview.status.needsData")}</strong><span>{resolution.status}</span>
-        <button type="button" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</button>
-      </div>}
-      {errorDetails && <div className="strategy-notice" data-tone="error" role="alert">
-        <strong>{t("strategyReview.status.failed")}</strong><span>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
-          : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</span>
-        {errorLocation && <button type="button" onClick={() => {
+      </InlineAlert>}
+      {resolution && resolution.status !== "READY" && <InlineAlert tone="warning" title={t("strategyReview.status.needsData")}
+        action={<Button size="sm" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</Button>}>
+        {chartContextStatusLabel(resolution.status)}
+      </InlineAlert>}
+      {errorDetails && <InlineAlert tone="danger" title={t("strategyReview.status.failed")}
+        action={errorLocation ? <Button size="sm" variant="ghost" onClick={() => {
           selectTab("script");
           setErrorFocus({ line: errorLocation.line, column: errorLocation.column });
-        }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</button>}
-        <details><summary>{t("plugin.techDetails")}</summary><pre>{errorDetails}</pre></details>
-      </div>}
-      {capabilities && !engineReady && <div className="strategy-notice" data-tone="info" role="status">
-        <span>{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</span>
-        {available?.reason && <details><summary>{t("plugin.techDetails")}</summary><p>{available.reason}</p></details>}
-      </div>}
-      {historicalRun && <div className="strategy-notice" data-tone="info" role="status">
-        <strong>{t("strategyHistory.viewing")}</strong><code>{historicalRun.run_id}</code>
-        <button type="button" onClick={() => setHistoricalRun(null)}>{t("strategyHistory.latest")}</button>
-      </div>}
+        }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</Button> : undefined}>
+        <p>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
+          : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</p>
+        <Disclosure summary={t("plugin.techDetails")}><pre className="strategy-dock-detail">{errorDetails}</pre></Disclosure>
+      </InlineAlert>}
+      {capabilities && !engineReady && <InlineAlert>
+        <p>{browserHost() ? t("browser.scripts.desktopOnly") : `${t("indicator.editor.runtimeUnavailableHelp")} ${t("native.platformHelp")}`}</p>
+        {available?.reason && <Disclosure summary={t("plugin.techDetails")}><p>{available.reason}</p></Disclosure>}
+      </InlineAlert>}
+      {historicalRun && <InlineAlert title={t("strategyHistory.viewing")}
+        action={<Button size="sm" variant="ghost" onClick={() => setHistoricalRun(null)}>{t("strategyHistory.latest")}</Button>}>
+        <code>{historicalRun.run_id}</code>
+      </InlineAlert>}
     </StrategyDockSlot>
     <div className="native-dock-scroll" ref={scrollPane} onScroll={(event) => { scrollPositions.current[tab] = event.currentTarget.scrollTop; }}>
     <div hidden={props.docked && tab !== "script"} className="native-code">
@@ -547,19 +545,25 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         </Suspense>}
       </div>
       <aside className="native-code-side">
-        <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
-          {(["pine"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
-            onClick={() => props.onInstanceChange(props.instance.id, { language: item })}>{t(`chartTester.language.${item}`)}</button>)}
-          {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>{strategyLanguageLabel("python")}</button>}
-        </div>
-        <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} /></label>
+        <SegmentedControl size="sm" label={t("native.language")} value={language}
+          options={[
+            { value: "pine", label: t("chartTester.language.pine"), disabled: busy },
+            ...(props.onSelectPython ? [{ value: "python", label: strategyLanguageLabel("python"), disabled: busy }] : []),
+          ]}
+          onChange={(value) => {
+            if (value === "python") props.onSelectPython?.();
+            else props.onInstanceChange(props.instance.id, { language: "pine" });
+          }} />
+        <Field label={t("native.parameters")}>
+          <Textarea className="native-parameters" value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} />
+        </Field>
       </aside>
     </div>
     <div hidden={props.docked && tab !== "settings"} className="native-dock-settings">
       <section className="strategy-settings-section">
         <h3>{t("native.mode")}</h3>
         <div className="strategy-engine-options" role="radiogroup" aria-label={t("native.mode")}>
-          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" role="radio" aria-checked={mode === engine} disabled={busy}
+          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" className="strategy-engine-option" role="radio" aria-checked={mode === engine} disabled={busy || (!!props.signalChart && engine === "NATIVE")}
             onClick={() => { if (mode !== engine) props.onExecutionModeChange(engine); }}>
             <strong>{t(engine === "NATIVE" ? "native.title" : "native.external.title")}</strong>
             <span>{t(engine === "NATIVE" ? "native.description" : "native.external.description")}</span>
@@ -569,8 +573,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       {automatic && automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions) !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.date")}</h3>
         <div className="strategy-settings-grid">
-          <label>{t("preparation.startDate")}<input type="date" disabled={busy} value={historyStart} onChange={(event) => { setHistoryStart(event.target.value); save(source, parameters, automaticContexts, event.target.value, historyEnd); }} /></label>
-          <label>{t("preparation.endDate")}<input type="date" disabled={busy} value={historyEnd} onChange={(event) => { setHistoryEnd(event.target.value); save(source, parameters, automaticContexts, historyStart, event.target.value); }} /></label>
+          <Field label={t("preparation.startDate")}><Input size="sm" type="date" disabled={busy} value={historyStart} onChange={(event) => { setHistoryStart(event.target.value); save(source, parameters, automaticContexts, event.target.value, historyEnd); }} /></Field>
+          <Field label={t("preparation.endDate")}><Input size="sm" type="date" disabled={busy} value={historyEnd} onChange={(event) => { setHistoryEnd(event.target.value); save(source, parameters, automaticContexts, historyStart, event.target.value); }} /></Field>
         </div>
         <NativePreparationContexts
           value={automaticContexts} onChange={(value) => { setAutomaticContexts(value); save(source, parameters, value); }} disabled={busy}
@@ -578,25 +582,24 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </section>}
       {mode === "CANDLESCOPE" && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.fee")}</h3>
-        <div className="strategy-settings-grid">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).filter((field) => field !== "price_tick" || accountDraft.accountModel !== "LINEAR_PERP_ONE_WAY_V2").map((field) => <label key={field}>{t(`native.external.${field}`)}
-          <input type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => {
+        <div className="strategy-settings-grid">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).filter((field) => field !== "price_tick" || accountDraft.accountModel !== "LINEAR_PERP_ONE_WAY_V2").map((field) => <Field key={field} label={t(`native.external.${field}`)}>
+          <Input size="sm" type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => {
             const next = { ...hostSettings, [field]: Number(event.target.value) }; setHostSettings(next); saveExecution({ hostSettings: next });
           }} />
-        </label>)}</div>
+        </Field>)}</div>
       </section>}
       {mode === "CANDLESCOPE" && <section className="strategy-settings-section">
         <h3>{t("native.external.fidelity")}</h3>
         <div className="strategy-settings-grid">
-          <label>{t("native.external.fidelity")}<select disabled={busy} value={fidelity} onChange={(event) => { setFidelity(event.target.value); saveExecution({ fidelity: event.target.value }); }}>
+          <Field label={t("native.external.fidelity")}><Select size="sm" disabled={busy} value={fidelity} onChange={(event) => { setFidelity(event.target.value); saveExecution({ fidelity: event.target.value }); }}>
             <option value="BAR_APPROX">BAR_APPROX</option><option value="TRADE_TAPE">TRADE_TAPE</option><option value="BOOK_ASSISTED">BOOK_ASSISTED</option><option value="BOOK_DEPTH">BOOK_DEPTH</option>
             <option value="BOOK_SAMPLED">{t("native.external.sampledLabel")}</option>
-          </select></label>
+          </Select></Field>
           {automatic && props.dataset && props.session.exchange === "local" && fidelity === "TRADE_TAPE" && executionData === null &&
-            <label>{t("native.external.executionOrigin")}<select disabled={busy} value={executionOrigin} onChange={(event) => {
+            <Field label={t("native.external.executionOrigin")}><Select size="sm" disabled={busy} value={executionOrigin} onChange={(event) => {
               setExecutionOrigin(event.target.value); save(source, parameters, automaticContexts, historyStart, historyEnd, event.target.value);
-            }}><option value="">{t("native.external.originRequired")}</option><option value="binance-futures">{t("native.external.binanceUsdm")}</option></select></label>}
-          {fidelity !== "BAR_APPROX" && <label>{t("native.external.executionData")}<input key={executionInputKey} type="file" accept="application/json,.json" disabled={busy} onChange={(event) => {
-            const file = event.target.files?.[0];
+            }}><option value="">{t("native.external.originRequired")}</option><option value="binance-futures">{t("native.external.binanceUsdm")}</option></Select></Field>}
+          {fidelity !== "BAR_APPROX" && <FileDrop key={executionInputKey} compact label={t("native.external.executionData")} hint=".json" accept="application/json,.json" disabled={busy} onFiles={([file]) => {
             const upload = ++executionUpload.current;
             setExecutionData(null);
             setExecutionDataState(file ? "loading" : "ready");
@@ -608,39 +611,38 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
               if (upload !== executionUpload.current) return;
               setExecutionDataState("invalid"); setError(String(reason));
             });
-          }} /></label>}
+          }} />}
         </div>
         {fidelity !== "BAR_APPROX" && executionDataState === "missing" && <p role="status">{t("native.external.uploadMissing")}</p>}
-        {fidelity !== "BAR_APPROX" && (executionData !== null || executionDataState !== "ready") && <button type="button" disabled={busy} onClick={() => {
+        {fidelity !== "BAR_APPROX" && (executionData !== null || executionDataState !== "ready") && <Button size="sm" variant="ghost" className="strategy-settings-action" disabled={busy} onClick={() => {
           executionUpload.current += 1; setExecutionInputKey((key) => key + 1); setExecutionData(null); setExecutionDataState("ready"); setError(""); saveExecution({ uploaded: false });
-        }}>{t("native.external.clearUpload")}</button>}
+        }}>{t("native.external.clearUpload")}</Button>}
         {fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}
         {fidelity === "BOOK_SAMPLED" && <p>{t("native.external.sampledHint")}</p>}
-        {(fidelity !== "BAR_APPROX" || language === "pine") && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && fidelity !== "BAR_APPROX" && <p>{t("native.external.dataHint")}</p>}</>}
+        {(fidelity !== "BAR_APPROX" || language === "pine") && <><Checkbox disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }}
+          label={t("native.external.fillRecalculation")} description={t("native.external.fillHint")} />{fidelity !== "BOOK_SAMPLED" && fidelity !== "BAR_APPROX" && <p>{t("native.external.dataHint")}</p>}</>}
       </section>}
       {mode === "CANDLESCOPE" && language === "pine" && <WorkbenchAccountSettings value={accountDraft} data={accountData}
         state={accountDataState} inputKey={accountInputKey} disabled={busy} error={accountError}
         onChange={(value) => { setAccountDraft(value); saveExecution({ account: value }); }} onFile={uploadAccount} />}
       {mode === "CANDLESCOPE" && language === "pine" && <section className="strategy-settings-section">
-        <label className="strategy-settings-check"><input type="checkbox" checked={costSensitivityMode === "AUTO"} disabled={busy}
-          onChange={(event) => { const value = event.target.checked ? "AUTO" : "SKIP"; setCostSensitivityMode(value); saveExecution({ costSensitivityMode: value }); }} />{t("native.cost.enable")}</label>
-        <p>{t("native.cost.enableHelp")}</p>
+        <Checkbox checked={costSensitivityMode === "AUTO"} disabled={busy}
+          onChange={(event) => { const value = event.target.checked ? "AUTO" : "SKIP"; setCostSensitivityMode(value); saveExecution({ costSensitivityMode: value }); }}
+          label={t("native.cost.enable")} description={t("native.cost.enableHelp")} />
       </section>}
-      <details className="strategy-settings-section"><summary>{t("replay.hub.sectionAdvanced")}</summary>
+      <Disclosure className="strategy-settings-advanced" summary={t("replay.hub.sectionAdvanced")}>
         <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={(next) => {
           setAdvanced(next);
           save(source, parameters, automaticContexts, historyStart, historyEnd, executionOrigin, next);
         }} language={language} disabled={busy} exchange={props.session.exchange} />
-      </details>
+      </Disclosure>
     </div>
     <div className="native-dock-report" data-view={tab} hidden={props.docked && tab !== "overview" && tab !== "trades"}>
-      {resultStale && !historicalRun && <div className="strategy-notice" data-tone="warning" role="status">
-        <strong>{t("chartTester.result.staleGuidanceTitle")}</strong>
-        <button type="button" disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</button>
-      </div>}
+      {resultStale && !historicalRun && <InlineAlert tone="warning" title={t("chartTester.result.staleGuidanceTitle")}
+        action={<Button size="sm" disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>} />}
       {!reportRun?.result && props.docked && <div className="strategy-dock-empty">
         <p>{t("strategyDock.empty")}</p>
-        <button type="button" className="strategy-run-button" disabled={runDisabled} onClick={runNow}><Icon name="play" size={11} filled />{t("chartTester.run")}</button>
+        <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
       {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
         stale={(!historicalRun && resultStale) || datasetIdentityChanged(reportRun.config, props.dataset)}
@@ -648,19 +650,18 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     </div>
     <div hidden={props.docked && tab !== "history"} className="native-history">
       <div className="native-history-head">
-        <label className="strategy-settings-check"><input type="checkbox" checked={allHistory} onChange={(event) => setAllHistory(event.target.checked)} />{t("strategyHistory.all")}</label>
-        <p>{t("strategyHistory.ownership")}</p>
+        <Checkbox checked={allHistory} onChange={(event) => setAllHistory(event.target.checked)} label={t("strategyHistory.all")} description={t("strategyHistory.ownership")} />
       </div>
-      {!visibleHistory.length && <p className="strategy-dock-empty">{t("strategyHistory.empty")}</p>}
+      {!visibleHistory.length && <EmptyState compact title={t("strategyHistory.empty")} />}
       {visibleHistory.length > 0 && <ul className="native-history-list" aria-label={t(mode === "NATIVE" ? "native.history" : "native.external.history")}>
         {visibleHistory.map((item) => <li key={item.run_id}><button type="button" disabled={busy} aria-current={reportRun?.run_id === item.run_id}
           onClick={() => void nativeApi<NativeRun>(`${runPath}/${item.run_id}`).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
           <time dateTime={new Date(item.created_at_ms).toISOString()}>{new Date(item.created_at_ms).toLocaleString(locale)}</time>
           <span>{item.runtime_identity.engine.package}</span>
-          <span className="strategy-run-status" data-status={item.state === "COMPLETED" ? "completed" : item.state === "FAILED" || item.state === "INTERRUPTED" ? "failed" : item.state === "CANCELLED" ? "cancelled" : "running"}><i aria-hidden="true" />{item.state}</span>
+          <Badge tone={researchStateTone(item.state === "INTERRUPTED" ? "FAILED" : item.state)}>{researchStateLabel(item.state)}</Badge>
         </button></li>)}
       </ul>}
-      {feedbackRun?.config?.source && <details><summary>{t("native.source")}</summary><pre>{feedbackRun.config.source}</pre></details>}
+      {feedbackRun?.config?.source && <Disclosure summary={t("native.source")}><pre className="native-source">{feedbackRun.config.source}</pre></Disclosure>}
     </div>
     </div>
   </section>;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { tradingApi } from "./tradingApi.js";
@@ -57,35 +58,36 @@ export default function ManualFillForm({
   return (
     <section className="trading-ticket" aria-label={t("trading.manual.title")}>
       <p className="trading-help">{t("trading.manual.help", { symbol: context.symbol })}</p>
-      <div className="trading-segmented" role="group" aria-label={t("trading.ticket.side")}>
-        <button type="button" data-active={side === "buy"} data-tone="up" onClick={() => setSide("buy")}>{t("trading.ticket.buy")}</button>
-        <button type="button" data-active={side === "sell"} data-tone="down" onClick={() => setSide("sell")}>{t("trading.ticket.sell")}</button>
-      </div>
+      <SegmentedControl
+        className="trading-side"
+        size="sm"
+        fullWidth
+        label={t("trading.ticket.side")}
+        value={side}
+        onChange={setSide}
+        options={[{ value: "buy", label: t("trading.ticket.buy") }, { value: "sell", label: t("trading.ticket.sell") }]}
+      />
       <div className="trading-field-row">
-        <label className="trading-field">
-          <span>{t("trading.manual.qty")}</span>
-          <input inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
-        </label>
-        <label className="trading-field">
-          <span>{t("trading.manual.price")}</span>
-          <input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
-        </label>
+        <Field label={t("trading.manual.qty")}>
+          <Input size="sm" inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
+        </Field>
+        <Field label={t("trading.manual.price")}>
+          <Input size="sm" inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
+        </Field>
       </div>
-      <div className="trading-field-row">
-        <label className="trading-field">
-          <span>{t("trading.manual.fee")}</span>
-          <input inputMode="decimal" value={fee} placeholder="0" onChange={(event) => setFee(event.target.value)} />
-        </label>
-        <label className="trading-field">
-          <span>{t("trading.manual.time")}</span>
-          <input type="datetime-local" value={time} onChange={(event) => setTime(event.target.value)} />
-        </label>
+      <div className="trading-field-row trading-field-row-wrap">
+        <Field label={t("trading.manual.fee")}>
+          <Input size="sm" inputMode="decimal" value={fee} placeholder="0" onChange={(event) => setFee(event.target.value)} />
+        </Field>
+        <Field label={t("trading.manual.time")}>
+          <Input size="sm" type="datetime-local" value={time} onChange={(event) => setTime(event.target.value)} />
+        </Field>
       </div>
-      {error && <p className="trading-error" role="alert">{error}</p>}
+      {error && <InlineAlert tone="danger">{error}</InlineAlert>}
       <div className="trading-actions">
-        <button type="button" className="trading-button" data-variant="primary" disabled={busy || !qty || !price} onClick={() => { void submit(); }}>
+        <Button size="sm" variant="primary" disabled={busy || !qty || !price} onClick={() => { void submit(); }}>
           {t("trading.manual.add")}
-        </button>
+        </Button>
       </div>
     </section>
   );

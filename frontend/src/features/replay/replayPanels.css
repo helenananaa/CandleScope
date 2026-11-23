@@ -1,0 +1,52 @@
+
+
+.replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
+
+/* Too narrow for the rail beside the chart; a phone shows it as a bar along the bottom instead
+   (app/marketRail.css), where it sits above the replay controls. */
+@media (min-width: 641px) and (max-width: 760px) {
+  .right-market-rail[data-runtime-source="replay"] { display: none; }
+}
+
+@media (max-width: 640px) {
+  .main-content-area > .replay-bottom-control-dock { order: 2; }
+  /* Clear of the rail's bar and the replay controls below the chart. */
+  .replay-history-boundary-notice { bottom: 156px; }
+}
+
+@media (max-width: 760px) {
+
+  .replay-identity-readonly { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replay-launcher-overlay { padding: 8px; }
+  .replay-launcher-popup-blocked { top: 14px; right: 14px; left: 14px; flex-wrap: wrap; }
+
+}
+
+.replay-liquidation-case > summary,
+.replay-liquidation-steps > details > summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.replay-liquidation-case > summary > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.replay-liquidation-legs > article > header,
+.replay-liquidation-order > header,
+.replay-liquidation-adl > header {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.replay-chart-cell > .chart-area { flex: 1; min-height: 0; }

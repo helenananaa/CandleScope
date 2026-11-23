@@ -6,7 +6,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ResearchSourceRefV1 } from "../../research-data/researchDataTypes.js";
 import { ResearchDataSourceBar } from "../../research-data/ResearchDataSourceBar.js";
-import { resolveResearchDataLibraryEnabled } from "../../research-data/researchDataFlags.js";
 import { ResearchDataDrawer } from "../../research-data/ResearchDataDrawer.js";
 import { StrategyResearchRuntime } from "../StrategyResearchRuntime.js";
 import {
@@ -55,7 +54,7 @@ test("editor content revision stales a completed run without rewriting the draft
 });
 
 test("viewing data does not create a run", () => {
-  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false, libraryEnabled: true });
+  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false });
   runtime.dispatch({ type: "source/select", source: imported });
   runtime.dispatch({ type: "source/libraryOpen", open: true });
   assert.equal(runtime.state.result.runId, null);
@@ -111,13 +110,11 @@ test("this workspace never treats current chart as runnable", () => {
   const live = new StrategyResearchRuntime({
     restoreWorkspace: false,
     runtimeMode: "LIVE",
-    libraryEnabled: true,
   });
   assert.equal(live.currentChartRunnable(), false);
   const runtime = new StrategyResearchRuntime({
     restoreWorkspace: false,
     runtimeMode: "LOCAL_OFFLINE",
-    libraryEnabled: true,
   });
   assert.equal(runtime.currentChartRunnable(), false);
   const html = renderToStaticMarkup(
@@ -125,7 +122,6 @@ test("this workspace never treats current chart as runnable", () => {
       open: true,
       runtimeMode: "LOCAL_OFFLINE",
       capabilities: runtime.capabilitiesFor("CURRENT_CHART"),
-      libraryEnabled: true,
       settings,
       events: [],
       onSelectKind() {},
@@ -139,7 +135,6 @@ test("this workspace never treats current chart as runnable", () => {
       open: true,
       runtimeMode: "LIVE",
       capabilities: live.capabilitiesFor("CURRENT_CHART"),
-      libraryEnabled: true,
       settings,
       events: [],
       onSelectKind() {},
@@ -150,42 +145,23 @@ test("this workspace never treats current chart as runnable", () => {
   assert.doesNotMatch(html.toLowerCase(), /dataset id|data epoch|snapshot hash/);
 });
 
-test("default-on flag keeps explicit rollback for the import entry", () => {
-  assert.equal(resolveResearchDataLibraryEnabled({}), true);
-  assert.equal(resolveResearchDataLibraryEnabled({ VITE_RESEARCH_DATA_LIBRARY_ENABLED: "0" }), false);
-  assert.equal(resolveResearchDataLibraryEnabled({ VITE_RESEARCH_DATA_LIBRARY_ENABLED: "1" }), true);
-  const hidden = renderToStaticMarkup(
+test("the source bar always offers the library", () => {
+  const bar = renderToStaticMarkup(
     React.createElement(ResearchDataSourceBar, {
       source: null,
-      libraryEnabled: false,
       onOpenLibrary() {},
       onSelectCurrentChart() {},
     }),
   );
-  assert.match(hidden, /research-data-source-bar/);
-  assert.match(hidden, /research-source-use-current-chart/);
-  assert.doesNotMatch(hidden, /research.source.openLibrary|Open local library|打开本地资料库/);
-  const chartOnly = renderToStaticMarkup(
-    React.createElement(ResearchDataDrawer, {
-      open: true,
-      runtimeMode: "LIVE",
-      capabilities: null,
-      libraryEnabled: false,
-      settings,
-      events: [],
-      onSelectKind() {},
-      onClose() {},
-    }),
-  );
-  assert.doesNotMatch(chartOnly, /research-source-card-IMPORTED_DATASET/);
-  assert.match(chartOnly, /research-source-card-CURRENT_CHART/);
+  assert.match(bar, /research-data-source-bar/);
+  assert.match(bar, /research-source-use-current-chart/);
+  assert.match(bar, /research\.source\.openLibrary|Open local library|打开本地资料库/);
 });
 
 test("selecting a source does not mention internal identity in ordinary copy", () => {
   const html = renderToStaticMarkup(
     React.createElement(ResearchDataSourceBar, {
       source: imported,
-      libraryEnabled: true,
       onOpenLibrary() {},
     }),
   );

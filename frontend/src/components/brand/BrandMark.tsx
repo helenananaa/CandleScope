@@ -32,7 +32,7 @@ export default function BrandMark({
 export function BrandWordmark() {
   return (
     <span className="logo-text brand-wordmark" aria-label="CandleScope">
-      <span className="brand-wordmark-candle" aria-hidden="true">Candle</span>
+      <span aria-hidden="true">Candle</span>
       <span className="brand-wordmark-scope" aria-hidden="true">Scope</span>
     </span>
   );

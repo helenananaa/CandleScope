@@ -1,0 +1,17 @@
+{
+  "schema": "candlescope.layout/1",
+  "page": [
+    "topBar",
+    "intervalSelector",
+    "workspace",
+    "statusBar",
+    "featureSurfaces"
+  ],
+  "workspace": [
+    "rightRail",
+    "chart",
+    "toolbar",
+    "bottomPanel",
+    "exportOverlay"
+  ]
+}

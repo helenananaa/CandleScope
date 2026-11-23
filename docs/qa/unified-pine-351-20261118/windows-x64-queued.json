@@ -1,0 +1,123 @@
+{
+  "platform": "win32",
+  "arch": "x64",
+  "phases": [
+    {
+      "name": "seed-compute-run-save",
+      "electron": "43.3.0",
+      "instance": "ab828177a60c4ba69b37d0d59f166b07",
+      "pointValues": [
+        20,
+        20,
+        20,
+        40,
+        40
+      ],
+      "rejectedFrames": [
+        "beyond-visible-horizon",
+        "different-document"
+      ],
+      "queuedChart": {
+        "id": "bt_e7c704d06ecd40aca3844beba246744c",
+        "sourceHash": "3c942d42c3f8492828beb72295f6868213710fb98043ae66e1c67e961519743c",
+        "bars": 30,
+        "fills": 11,
+        "fillCallbacks": 11
+      },
+      "invalidInput": "NATIVE_EXECUTION_FAILED",
+      "run": {
+        "id": "native_d7c85d6799154810bf6149bc2e1462f7",
+        "orders": 239,
+        "trades": 119,
+        "equity": 600,
+        "graphics": 1,
+        "engine": {
+          "adapter": "pine-native/3",
+          "bar_boundaries": "host-bar-boundaries/1",
+          "engine": {
+            "code_sha256": "0ee39e4ae999c036534974cde7c5d76149ea69d4d7bfc53c1adbe4198e246cf9",
+            "package": "pine-compat-runtime",
+            "version": "0.3.3+cs.1"
+          },
+          "historical_session": "fixed-history/1",
+          "plugin": {
+            "code_sha256": "6f4a3b93e6f61caf8fdcd9660a970531d2cf50a89d3a3f393d24a1ca73760d84",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.4.0"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "session_identity": "candlescope.session-identity/1",
+          "transport": {
+            "code_sha256": "a6d2b4233b14b868910e7958da120e16eb970c8133633cbcf559ad70c1782e5c",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.1"
+          }
+        }
+      },
+      "replay": {
+        "id": "nr_59985146a0564ff689ced5abc2965674",
+        "cursor": 60,
+        "snapshot": "nrs_d6adcc6d895b4631aa2ac66589e0c8e6",
+        "method": "FIXED_HORIZON_INCREMENTAL"
+      },
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": [],
+      "ownedProcesses": 10,
+      "retainedExecutionTrees": 0
+    },
+    {
+      "name": "restart-restore-complete-disable",
+      "electron": "43.3.0",
+      "instance": "ff43fcae394247e3b8044d78d22381a1",
+      "restoredBars": 60,
+      "completedBars": 600,
+      "ledgerMatchesBatch": true,
+      "updatedTo": {
+        "pluginId": "candlescope.pine-compat",
+        "version": "0.4.1",
+        "packageSha256": "sha256:140fd7060e0be5ff26650ecc07f4c40b085fec7338ba2fa81a5a5af518dcf3de",
+        "generation": 3
+      },
+      "rolledBackTo": {
+        "pluginId": "candlescope.pine-compat",
+        "version": "0.4.0",
+        "packageSha256": "sha256:d555dd28ee2c292fa149a0b7aa1090554c3cfc6a6cce92c5e6d123e5a4f7e1d7",
+        "generation": 4
+      },
+      "disabled": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": [],
+      "ownedProcesses": 10,
+      "retainedExecutionTrees": 0
+    },
+    {
+      "name": "restart-disabled",
+      "electron": "43.3.0",
+      "savedRunPreserved": true,
+      "blockedNetworkAttempts": 0,
+      "remainingOwnedProcesses": [],
+      "ownedProcesses": 7,
+      "retainedExecutionTrees": 0
+    }
+  ],
+  "package": {
+    "schema": "candlescope.bundled-unified-pine/1",
+    "filename": "candlescope-pine-unified-0.4.0-Windows-AMD64.cspkg",
+    "sha256": "sha256:d555dd28ee2c292fa149a0b7aa1090554c3cfc6a6cce92c5e6d123e5a4f7e1d7",
+    "size": 13556318
+  },
+  "asarSha256": "99527c978b7025153738c37729f8163d055f98e91978662d0f31e4a57c27e0be",
+  "signatureVerified": null,
+  "dataset": {
+    "name": "Unified Pine 600",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "startMs": 1700000040000,
+    "bars": 600,
+    "csvSha256": "73021eb524ef05b0fbf17c5bd7368147bd90376fed476d30cbdb93e90ed502a1"
+  },
+  "strategySha256": "0e37e93998b799075ac926badf6e40399d16ce893033670131309addfd1acd71",
+  "ok": true,
+  "sourceHead": "c8da9f1102f0d118c6df8f6947b62bb787ea7ab1",
+  "workflowRun": 44298348170
+}

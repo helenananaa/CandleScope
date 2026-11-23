@@ -51,6 +51,8 @@ class WorkingOrder:
     bracket_stop: Decimal | None = None
     bracket_target: Decimal | None = None
     parent_id: str | None = None
+    position_side: str | None = None
+    protection_trade_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -62,6 +64,8 @@ class MatchFill:
     fee: Decimal
     liquidity: str
     ts_ms: int
+    position_side: str | None = None
+    fill_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -188,6 +192,28 @@ def reachable(order: WorkingOrder, low: Decimal, high: Decimal) -> bool:
     return _trigger(order, low, high) is not None
 
 
+@dataclass(slots=True)
+class PracticeBuyingPower:
+    """Capital after other markets and the signed entry cost of this market.
+
+    Adding the marked net inventory yields equity available to this market.
+    Margin is charged on gross inventory, including equal opposing positions.
+    """
+    capital: Decimal | None
+    leverage: Decimal
+    quantities: dict[str | None, Decimal]
+    trade_ids: dict[str | None, str]
+    committed_ms: int
+
+    def can_open(self, qty: Decimal, side: Decimal, execution: Decimal, mark: Decimal, fee: Decimal) -> bool:
+        if self.capital is None:
+            return False
+        net = sum(self.quantities.values(), ZERO)
+        gross = sum((abs(value) for value in self.quantities.values()), ZERO)
+        equity = self.capital + net * mark + side * qty * (mark - execution) - fee
+        return equity >= (gross + qty) * mark / self.leverage
+
+
 class PracticeMatcher:
     """Mutable matching session for one instrument of one account."""
 
@@ -198,11 +224,15 @@ class PracticeMatcher:
         settings: PracticeSettings,
         *,
         new_order_id,
+        buying_power: PracticeBuyingPower | None = None,
+        new_fill_id=None,
     ) -> None:
         self.orders: dict[str, WorkingOrder] = {order.id: order for order in orders}
         self.settings = settings
         self.result = MatchResult(position=position)
         self._new_order_id = new_order_id
+        self._new_fill_id = new_fill_id
+        self.buying_power = buying_power
         # Bracket exits created by a fill inside this session follow the path
         # from that fill onward, so the creation-time filter does not apply.
         self._born_here: set[str] = set()
@@ -222,9 +252,20 @@ class PracticeMatcher:
     def execute(self, order: WorkingOrder, price: Decimal, ts_ms: int, *, liquidity: str) -> bool:
         """Fill ``order`` completely (reduce-only orders clamp to the position)."""
         qty = order.qty
-        position = self.result.position
+        book = self.buying_power
+        leg = order.position_side
+        position = book.quantities.get(leg, ZERO) if book else self.result.position
+        if leg and book:
+            # A delayed candle can trigger an older working order after a newer
+            # market fill committed. Keep the simulated ledger and its lot IDs
+            # in commit order; equal effective times are ordered by fill seq.
+            ts_ms = max(ts_ms, book.committed_ms)
+        mark = price
         direction = ONE if order.side == "buy" else -ONE
         if order.reduce_only:
+            if leg and book and order.protection_trade_id != book.trade_ids.get(leg):
+                self.cancel(order.id, "position_closed", ts_ms)
+                return False
             if position == 0 or (position > 0) == (direction > 0):
                 self.cancel(order.id, "nothing_to_reduce", ts_ms)
                 return False
@@ -236,18 +277,31 @@ class PracticeMatcher:
             price = slipped(price, order.side, self.settings.slippage_bps)
         rate = self.settings.maker_fee_rate if liquidity == "maker" else self.settings.taker_fee_rate
         fee = fee_for(qty, price, rate)
+        opens_position = not order.reduce_only and (leg is not None or direction > 0)
+        if book and opens_position and not book.can_open(qty, direction, price, mark, fee):
+            self.cancel(order.id, "valuation_unavailable" if book.capital is None else "insufficient_balance", ts_ms)
+            return False
+        fill_id = self._new_fill_id() if book else None
+        remaining = position + direction * qty
+        if book:
+            book.committed_ms = ts_ms
+            book.quantities[leg] = remaining
+            if book.capital is not None:
+                book.capital -= direction * qty * price + fee
+            if not position:
+                book.trade_ids[leg] = fill_id
         self.orders.pop(order.id, None)
-        self.result.fills.append(MatchFill(order.id, order.side, qty, price, fee, liquidity, ts_ms))
+        self.result.fills.append(MatchFill(order.id, order.side, qty, price, fee, liquidity, ts_ms, leg, fill_id))
         self.result.filled[order.id] = (price, ts_ms, qty)
-        self.result.position = position + direction * qty
+        self.result.position = sum(book.quantities.values(), ZERO) if book else remaining
 
         if order.oco_group:
             for sibling in list(self.orders.values()):
                 if sibling.oco_group == order.oco_group:
                     self.cancel(sibling.id, "oco_sibling_filled", ts_ms)
-        if self.result.position == 0:
+        if remaining == 0:
             for other in list(self.orders.values()):
-                if other.reduce_only:
+                if other.reduce_only and other.position_side == leg:
                     self.cancel(other.id, "position_closed", ts_ms)
         if not order.reduce_only and (order.bracket_stop is not None or order.bracket_target is not None):
             self._create_bracket(order, qty, ts_ms)
@@ -260,6 +314,8 @@ class PracticeMatcher:
             child = WorkingOrder(
                 id=self._new_order_id(), side=exit_side, type="stop", qty=qty,
                 created_at_ms=ts_ms, stop_price=entry.bracket_stop, reduce_only=True,
+                position_side=entry.position_side,
+                protection_trade_id=self.buying_power.trade_ids.get(entry.position_side) if self.buying_power else None,
                 oco_group=group, tag="stop_loss", parent_id=entry.id,
             )
             self.orders[child.id] = child
@@ -269,6 +325,8 @@ class PracticeMatcher:
             child = WorkingOrder(
                 id=self._new_order_id(), side=exit_side, type="limit", qty=qty,
                 created_at_ms=ts_ms, limit_price=entry.bracket_target, reduce_only=True,
+                position_side=entry.position_side,
+                protection_trade_id=self.buying_power.trade_ids.get(entry.position_side) if self.buying_power else None,
                 oco_group=group, tag="take_profit", parent_id=entry.id,
             )
             self.orders[child.id] = child

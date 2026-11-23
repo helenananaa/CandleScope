@@ -1,0 +1,5 @@
+{
+  "status": "PASS",
+  "bundledFrontendFiles": 175,
+  "scope": "normal production frontend files equal packaged app.asar"
+}

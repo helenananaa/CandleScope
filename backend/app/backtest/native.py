@@ -18,11 +18,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
-from app.plugin_runtime.registry import default_runtime_registry_path, load_runtime_registry
 from .errors import BacktestError
 
 PROTOCOL = "candlescope.native-strategy/1"
-MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.native_strategy")}
+NATIVE_LANGUAGES = ("pine",)
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
 MAX_BYTES = 64 * 1024 * 1024
 _CANONICAL_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
@@ -71,26 +70,36 @@ def frozen_boundaries(interval, bars):
 
 
 def resolve_plugin(language):
-    if language not in MODULES:
+    if language not in NATIVE_LANGUAGES:
         raise BacktestError("NATIVE_INPUT_UNSUPPORTED", "unsupported strategy language")
     env = runtime_environment()
     if env.get("CANDLESCOPE_PLUGIN_HOST_ENABLED", "1").lower() in {"0", "false", "off"}:
         raise BacktestError("FLAG_DISABLED", "plugin host is disabled")
-    default = default_runtime_registry_path(env)
-    native_registry = default.with_name("native-strategy-registry.json")
-    path = env.get("CANDLESCOPE_NATIVE_RUNTIME_REGISTRY") or env.get("CANDLESCOPE_RUNTIME_REGISTRY")
-    registry = load_runtime_registry(path or (native_registry if native_registry.exists() else default), allow_missing=True)
-    runtime_id, module = MODULES[language]
-    spec = registry.by_id().get(runtime_id)
-    if spec is None or not spec.enabled:
-        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", f"install and enable {runtime_id} with native strategy support")
-    return {"command": [str(spec.executable), "-I", "-m", module],
-            "plugin_id": runtime_id, "plugin_version": spec.expected_version,
-            "installation": spec.managed.to_wire() if spec.managed else None}
+    from app.plugin_lifecycle.pine import strategy_launch
+    from app.plugin_lifecycle.store import LifecycleError
+
+    try:
+        unified = strategy_launch()
+    except LifecycleError as exc:
+        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", str(exc)) from exc
+    return unified
+
+
+def pin_native_launch(plugin, *, restore=False):
+    from app.plugin_lifecycle.pine import pin_strategy_launch
+    from app.plugin_lifecycle.store import LifecycleError
+
+    try:
+        return pin_strategy_launch(plugin, restore=restore)
+    except LifecycleError as exc:
+        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", str(exc)) from exc
 
 
 def invoke(plugin, payload, cancelled=None, timeout=120):
     """File-backed IPC bounds memory; timeout/cancellation kill and reap the child."""
+    from app.plugin_lifecycle.pine import track_strategy_process, untrack_strategy_process
+
+    plugin = pin_native_launch(plugin)
     raw = encoded(payload).encode("utf-8")
     if len(raw) > MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")
@@ -103,6 +112,7 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.monotonic() + timeout
         try:
+            track_strategy_process(plugin, process)
             while process.poll() is None:
                 if cancelled is not None and cancelled.is_set():
                     raise BacktestError("NATIVE_CANCELLED", "native execution cancelled")
@@ -124,11 +134,15 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
             if not isinstance(response, dict) or response.get("ok") is not True:
                 raise BacktestError("NATIVE_EXECUTION_FAILED", "native engine rejected the run",
                                     details={"diagnostics": response.get("diagnostics", []) if isinstance(response, dict) else []})
+            pin_native_launch(plugin)
             return response
         finally:
-            if process.poll() is None:
-                process.kill()
-            process.wait()
+            try:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+            finally:
+                untrack_strategy_process(plugin, process)
 
 
 class NativeBacktests:
@@ -161,7 +175,7 @@ class NativeBacktests:
 
     def capabilities(self):
         result = []
-        for language in MODULES:
+        for language in NATIVE_LANGUAGES:
             try:
                 plugin = self.resolver(language)
                 description = self.runner(plugin, {"operation": "describe"}, timeout=15)
@@ -227,6 +241,12 @@ class NativeBacktests:
     def create(self, payload, key):
         if not self.runtime.settings.bar_effective:
             raise BacktestError("FLAG_DISABLED", "BAR backtests are disabled")
+        if payload.get("signal_chart") is not None:
+            from app.data_engine.synthetic_series.signals import normalize_signal_chart
+            try:payload = {**payload, "signal_chart": normalize_signal_chart(payload["signal_chart"])}
+            except ValueError as exc:raise BacktestError("NATIVE_INPUT_INVALID",str(exc)) from exc
+            if payload.get("execution_mode") != "CANDLESCOPE":
+                raise BacktestError("EXTERNAL_UNSUPPORTED", "Chart strategy signals require Host matching with real market prices")
         fingerprint = digest(payload)
         with self.lock:
             existing = self.db.execute("SELECT hash,record FROM runs WHERE key=?", (key,)).fetchone()
@@ -310,6 +330,10 @@ class NativeBacktests:
                     "parameters": payload.get("parameters", {}), "bars": bars, "contexts": contexts,
                     "interval": parse_interval_spec(payload["interval"]).canonical,
                     "libraries": payload.get("libraries", {}), "context": payload["context"], "magnifier": magnifier}
+            if payload.get("signal_chart"):
+                if identity.get("ordered_chart_strategy") != "ordered-chart-strategy/1":
+                    raise BacktestError("EXTERNAL_UNSUPPORTED", "Install an ordered chart strategy runtime")
+                wire.update(signal_chart=payload["signal_chart"], chart_signal_contract="ordered-chart-strategy/1")
             if payload.get("currency_rates") is not None:
                 wire["currency_rates"] = payload["currency_rates"]
             if payload["language"] == "pine":
@@ -370,6 +394,18 @@ class NativeBacktests:
                                 cost_sensitivity_mode=account_settings.cost_sensitivity_mode)
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
+                if wire.get("signal_chart"):
+                    control=(wire.get("pine_host_control") or {}).get("execution") or {}
+                    if control.get("calcOnEveryHistoryTick"):
+                        raise BacktestError("EXTERNAL_UNSUPPORTED","Special chart tick recalculation requires physical prints")
+                    if wire.get("fill_recalculation") or wire.get("pine_print_tick_contract"):
+                        if identity.get("chart_signal_events")!="candlescope.chart-signal-events/1":
+                            raise BacktestError("EXTERNAL_UNSUPPORTED","Install the chart event runtime")
+                        wire.update(chart_event_contract="candlescope.chart-signal-events/1",chart_every_tick=bool(wire.get("pine_print_tick_contract")))
+                        wire.pop("pine_print_tick_contract",None)
+                        wire.pop("fixed_history_contract",None)
+                    elif wire.get("fixed_history_contract"):
+                        raise BacktestError("EXTERNAL_UNSUPPORTED","Chart close signals require causal endpoint-independent Pine")
                 from .pine_workbench_v2 import freeze_account
                 freeze_account(wire, payload, settings=account_settings if payload["language"] == "pine" else None)
                 wire["execution_events"] = freeze_execution(self, payload, bars,

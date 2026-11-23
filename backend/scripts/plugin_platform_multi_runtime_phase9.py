@@ -252,13 +252,50 @@ def _v3(*arguments: str) -> list[str]:
 def _v2(root: Path, *arguments: str) -> list[str]:
     return [
         sys.executable,
-        str(CLI_PATH),
-        "v2",
-        "--root",
+        str(Path(__file__).resolve()),
+        "--retained-installation-fixture",
         str(root),
-        "--json",
         *arguments,
     ]
+
+
+def _retained_installation_fixture(root: Path, command: str, *arguments: str) -> int:
+    # The frozen qualification uses an isolated temporary store through the old
+    # implementation directly. The application CLI accepts unified installs.
+    sys.path.insert(0, str(BACKEND_ROOT))
+    from plugin_sdk_isolation import pin_in_repo_plugin_sdk
+
+    pin_in_repo_plugin_sdk(BACKEND_ROOT)
+    from app.plugin_installer_v2.errors import PlatformInstallerBaseError
+    from app.plugin_installer_v2.installer import PlatformPluginInstaller
+
+    installer = PlatformPluginInstaller(root=root)
+    try:
+        if command == "install":
+            bundle, digest_flag, digest, enable_flag = arguments
+            if (digest_flag, enable_flag) != ("--sha256", "--enable"):
+                raise Phase9GateError("legacy fixture install arguments changed")
+            payload = {
+                "installation": installer.install(
+                    bundle, expected_sha256=digest, enabled=True
+                ).to_wire()
+            }
+        elif command == "check":
+            payload = {"check": installer.check(arguments[0]).to_wire()}
+        elif command == "list":
+            payload = {"plugins": list(installer.list_plugins())}
+        else:
+            change = {
+                "disable": installer.disable,
+                "enable": installer.enable,
+                "uninstall": installer.uninstall,
+            }[command]
+            payload = {"change": change(arguments[0]).to_wire()}
+    except PlatformInstallerBaseError as exc:
+        print(json.dumps({"ok": False, "error": exc.to_dict()}), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, **payload}))
+    return 0
 
 
 def run_gate() -> dict[str, Any]:
@@ -528,4 +565,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--retained-installation-fixture"]:
+        raise SystemExit(_retained_installation_fixture(Path(sys.argv[2]), *sys.argv[3:]))
     raise SystemExit(main())

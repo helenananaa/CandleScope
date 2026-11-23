@@ -38,7 +38,9 @@ def requested_data(request, requirements, data_manager):
         }
     bars = request.bars
     last = bars[-1]
-    asof = parse_interval_spec(request.context.interval).next_ms(last.time * 1000)
+    chart_input = request.options.get("chartInput")
+    clock = chart_input["sourceTimes"][-1] if chart_input else last.time
+    asof = parse_interval_spec(request.context.interval).next_ms(clock * 1000)
     revealed = request.options.get("pineRevealedBoundaryMs")
     if revealed is not None:
         # Replay cursors include the millisecond at the candle's close. Provider

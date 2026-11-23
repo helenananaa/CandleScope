@@ -1,0 +1,12 @@
+Resolved 4 packages in 3ms
+Prepared 4 packages in 41ms
+Uninstalled 4 packages in 24ms
+Installed 4 packages in 4ms
+ - candlescope-plugin-pine-compat==0.4.0 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/packages/candlescope-plugin-pine-compat)
+ + candlescope-plugin-pine-compat==0.4.0 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-plugin-build/candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl)
+ - candlescope-plugin-python-indicator==0.1.0 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-signal-plugin-build/candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl)
+ + candlescope-plugin-python-indicator==0.1.0 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-plugin-build/candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl)
+ - candlescope-plugin-sdk==0.2.1 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-signal-plugin-build/candlescope_plugin_sdk-0.2.1-py3-none-any.whl)
+ + candlescope-plugin-sdk==0.2.1 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-plugin-build/candlescope_plugin_sdk-0.2.1-py3-none-any.whl)
+ - pine-compat-runtime==0.3.3+cs.1 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-wheels/pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl)
+ + pine-compat-runtime==0.3.3+cs.1 (from file:///Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/output/chart-event-plugin-build/pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl)

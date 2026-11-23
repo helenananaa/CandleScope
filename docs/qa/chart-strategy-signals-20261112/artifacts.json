@@ -1,0 +1,62 @@
+{
+  "timestamp_utc": "2026-11-12T08:44:43.653840+00:00",
+  "platform": "Darwin-arm64",
+  "base_head": "016a6f364dad593cc9b1afa8b59b153aa208cae1",
+  "signal_contract": "candlescope.chart-signal-input/1",
+  "signal_algorithm": "causal-close-source/1",
+  "recipe": {
+    "commit": "c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+    "version": "0.3.3+cs.1",
+    "archive": {
+      "filename": "pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc.tar.gz",
+      "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+      "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
+    },
+    "bridge": "candlescope-plugin-pine-compat",
+    "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v4.patch",
+    "patchSha256": "sha256:91d4806e79d38701c55e510c91133a34bd6476441bc5b3627dc356121bde632b"
+  },
+  "artifacts": {
+    "candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg": {
+      "sha256": "sha256:f377071e92aaa72860555a8cbb4116020333f267d909d261484de5a70d696212",
+      "bytes": 5045171
+    },
+    "candlescope-plugin-pine-compat.lock.json": {
+      "sha256": "sha256:aa40f2a913db0ee410db1ba71992fbccdd83590f1e3c7a421bd396223b865c74",
+      "bytes": 2872
+    },
+    "candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg": {
+      "sha256": "sha256:8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461",
+      "bytes": 521208
+    },
+    "candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl": {
+      "sha256": "sha256:8a57b00b54bcc1325fa933b7a477e07230224cbd91e0ecc9600a4370aeadb5a3",
+      "bytes": 253394
+    },
+    "candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl": {
+      "sha256": "sha256:6b1f1543fa557dd9d840a95f91c511c0d2aa8823474b19cd5fe99822ae372c56",
+      "bytes": 23745
+    },
+    "candlescope_plugin_sdk-0.2.1-py3-none-any.whl": {
+      "sha256": "sha256:1d86850cf9a25d9a1dfadfcc8d13bdd93896bb8c043ae7bca6e2a03fe6e6aeab",
+      "bytes": 495067
+    },
+    "indicator-runtime-routes.json": {
+      "sha256": "sha256:21d82acc94b455ccbfa6ed0a7cdb3de0c8c035a61db310198c446be80e64fbc0",
+      "bytes": 268
+    },
+    "manifest.json": {
+      "sha256": "sha256:539792d944949327db1951612a5e9fbdb69c268f609d03907a61b17fe6f2ac7c",
+      "bytes": 1073
+    },
+    "pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl": {
+      "sha256": "sha256:b033bf09953999ee44d99f1399fde38ebb88fd7de153640bccdc636e0de740a3",
+      "bytes": 4293845
+    },
+    "python-indicator.lock.json": {
+      "sha256": "sha256:37b5867c17718947494cd8d0ed2187ade536eae96dc436d12098f7d877cb52f8",
+      "bytes": 710
+    }
+  },
+  "acceptance": "source-and-isolated-runtime; desktop-save-exit-restart-and-Windows-unproven"
+}

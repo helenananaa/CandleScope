@@ -8,6 +8,7 @@ import { Agent as HttpsAgent } from 'node:https'
 import { resolve } from 'node:path'
 import { loopbackAliasPlugin } from './scripts/vite-loopback-alias.mjs'
 import { desktopRuntimeConfigPlugin } from './desktop/runtime-config.mjs'
+import { vendorCssLayerPlugin } from './scripts/vite-css-layers.mjs'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:18080'
 const devServerPort = Number(process.env.VITE_DEV_PORT || 15173)
@@ -53,7 +54,7 @@ export default defineConfig({
     'import.meta.env.VITE_APP_BUILD': JSON.stringify(appBuild),
   },
   base: process.env.VITE_DESKTOP_BUILD === '1' ? './' : '/',
-  plugins: [react(), loopbackAliasPlugin(), desktopRuntimeConfigPlugin()],
+  plugins: [react(), loopbackAliasPlugin(), desktopRuntimeConfigPlugin(), vendorCssLayerPlugin()],
   build: {
     rollupOptions: {
       ...(replaySoakProjectionEnabled

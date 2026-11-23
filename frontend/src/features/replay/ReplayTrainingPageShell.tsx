@@ -1,3 +1,6 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
+import { PanelToggle } from "../../app/PanelToggle.js";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
@@ -6,12 +9,12 @@ import { ReplayReviewHistory } from "./replayReviewHistory.js";
 import type { ReplayCanonicalBinding } from "./replayCanonicalIndicators.js";
 import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
-import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import AppHeader from "../../app/AppHeader.js";
 import { AlertRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import type { ChartSurfaceActions, ChartSurfaceHandle, ChartSurfaceVisibleRange } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { RefObject, ComponentType, ReactNode } from "react";
@@ -83,6 +86,7 @@ import { useReplayPublicTimeRuntime } from "./useReplayPublicTimeRuntime.js";
 import type {
   ReplaySharedIndicatorRuntime,
 } from "./useReplaySharedIndicatorRuntime.js";
+import { excludeIncompleteReplayHistory, selectRevealedIndicatorBars } from "./useReplaySharedIndicatorRuntime.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
@@ -97,6 +101,8 @@ import { captureReplayNoteChart } from "./replayNoteChartCapture.js";
 import type { ReplayNoteContext } from "./replayNotes.js";
 import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
+import { replaySyntheticSource } from "./replaySyntheticSource.js";
+import { replayCapabilityStateLabel, replayQualityLabel, replayStateLabel, trainingExchangeLabel, trainingMarketTypeLabel, trainingSourceKindLabel } from "./trainingHubLabels.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
@@ -192,7 +198,7 @@ export default function ReplayTrainingPageShell({
   } = useCustomIntervals();
   const { intervalNotice, showIntervalNotice } = useIntervalNoticeRuntime();
   const lastRemovedIntervalRef = useRef<CustomIntervalRecord | null>(null);
-  const integrityToggleRef = useRef<HTMLButtonElement | null>(null);
+  const integrityToggleRef = useRef<HTMLElement | null>(null);
   const integrityDrawerRef = useRef<HTMLElement | null>(null);
   const [priceScale] = useState(() => {
     const preferences = loadUserPrefs();
@@ -243,22 +249,6 @@ export default function ReplayTrainingPageShell({
   useEffect(() => {
     if (review !== null) setIndicatorPanelOpen(false);
   }, [review]);
-  useEffect(() => {
-    if (!integrityOpen) return undefined;
-    const drawer = integrityDrawerRef.current;
-    const toggle = integrityToggleRef.current;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setIntegrityOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    requestAnimationFrame(() => drawer?.focus());
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      requestAnimationFrame(() => toggle?.focus());
-    };
-  }, [integrityOpen]);
   const liveDrawingScopeBase = cell?.drawingScope ?? (integrityRuntime.runId === null
     ? `replay-run:pending`
     : `replay-run:${integrityRuntime.runId}`);
@@ -304,7 +294,7 @@ export default function ReplayTrainingPageShell({
   const [reviewLoadedPrefixKey, setReviewLoadedPrefixKey] = useState<string | null>(null);
   const [reviewIndicatorBinding, setReviewIndicatorBinding] = useState<ReplayCanonicalBinding | null>(null);
   const reviewIndicators = useReplayReviewIndicators({ seriesStore: reviewSeriesStore,
-    sourceBinding: reviewIndicatorBinding,
+    sourceBinding: reviewIndicatorBinding, appearance: settings,
     requestedKey: reviewPrefixKey, loadedKey: reviewLoadedPrefixKey, cursorMs: reviewCursorVirtualTimeMs,
     definitions: indicators.view.activeIndicators,
     exchange: typeof reviewProjectedExchange === "string" ? reviewProjectedExchange : "",
@@ -696,6 +686,25 @@ export default function ReplayTrainingPageShell({
   const displayedSymbol = review !== null && typeof reviewSelectedTrack?.symbol === "string"
     ? reviewSelectedTrack.symbol
     : activeSelectedTrack?.symbol ?? config?.symbol ?? "--";
+  const displayedSyntheticSource = replaySyntheticSource({
+    market: { symbol: displayedSymbol, interval: displayedInterval,
+      exchange: typeof reviewSelectedTrack?.exchange === "string" ? reviewSelectedTrack.exchange
+        : activeSelectedTrack?.exchange ?? config?.exchange ?? "",
+      marketType: typeof reviewSelectedTrack?.market_type === "string" ? reviewSelectedTrack.market_type
+        : activeSelectedTrack?.market_type ?? config?.market_type ?? "" },
+    seriesKey: displayedSeriesStore.seriesKey,
+    sessionId: review === null ? runtime.store.sessionId : reviewIndicatorBinding?.sessionId ?? null,
+    trackId: review === null ? viewer.viewerState?.selected_track_id ?? null : reviewIndicatorBinding?.trackId ?? null,
+    dataEpoch: review === null ? runtime.store.dataEpoch : reviewIndicatorBinding?.dataEpoch ?? null,
+    revealedBoundaryMs: review === null
+      ? (viewer.tapeObservation === undefined ? runtime.store.virtualTimeMs : viewer.tapeObservation?.virtualTimeMs ?? null)
+      : reviewIndicatorBinding?.revealedBoundaryMs ?? null,
+    sourceSequence: review === null
+      ? (viewer.tapeObservation === undefined ? runtime.store.sourceSequence : viewer.tapeObservation?.sourceSequence ?? null)
+      : reviewIndicatorBinding?.sourceSequence ?? (reviewIndicatorBinding ? 0 : null),
+    ...((review === null ? viewer.tapeObservation?.historyEpoch : reviewIndicatorBinding?.historyEpoch)
+      ? { historyEpoch: review === null ? viewer.tapeObservation!.historyEpoch : reviewIndicatorBinding!.historyEpoch! } : {}),
+  });
   const ownPageExportRef = useRef<HTMLDivElement | null>(null);
   const exportMetadata = useMemo(() => ({
     exchange: activeSelectedTrack?.exchange ?? config?.exchange ?? "",
@@ -852,6 +861,33 @@ export default function ReplayTrainingPageShell({
     ? (reviewProjectedTrack && reviewLoadedPrefixKey === reviewPrefixKey ? reviewCursorVirtualTimeMs : null)
     : (runtime.store.hasAuthoritativeSnapshot && runtime.store.virtualTimeMs !== null && cell?.projectionBoundaryMs != null
       ? Math.min(runtime.store.virtualTimeMs, cell.projectionBoundaryMs) : null);
+  const chartMountId = useId();
+  const pluginRunId = integrityRuntime.runId ?? viewer.viewerState?.run_id;
+  const chartAvailable = active && !viewer.error && !viewer.viewerPending
+    && (isReview ? !reviewChartLoading && !reviewChartError && !reviewDrawingError
+      && reviewLoadedPrefixKey === reviewPrefixKey : !viewer.loading && !liveDrawingError);
+  usePluginChartSource(
+    cell ? `${cell.workspaceId}:${cell.cellId}` : `replay:${chartMountId}`,
+    chartAvailable && pluginRunId && noteTrackId && noteCutoff !== null && viewerBarCount ? {
+      observe: () => Number(displayedSeriesStore.version) === viewerVersion ? {
+        mode: isReview ? "replay-review" : "replay", runId: pluginRunId, trackId: noteTrackId,
+        seriesId: JSON.stringify([viewerSeriesKey, displayedSymbol, displayedInterval]), symbol: displayedSymbol, interval: displayedInterval,
+        dataRevision: JSON.stringify([runtime.store.dataEpoch, runtime.store.generation, pluginProjectionRevision(displayedSeriesStore), viewerVersion,
+          review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence]),
+        visibleThroughMs: noteCutoff,
+      } : null,
+      bars: ({ visibleThroughMs }) => {
+        const tail = displayedSeriesStore.snapshot().slice(-MAX_PLUGIN_CHART_BARS);
+        const revealed = selectRevealedIndicatorBars(excludeIncompleteReplayHistory(tail, visibleThroughMs), visibleThroughMs);
+        return revealed.flatMap(bar => {
+          const open = Number(bar.time) * 1000;
+          const closed = (bar.replayClosed ?? bar.is_closed) === true;
+          return observePluginBar(open, closed ? Number(bar.replayCloseTimeMs) : visibleThroughMs, closed, bar);
+        });
+      },
+      subscribe: listener => displayedSeriesStore.subscribe(listener),
+    } : null,
+  );
   const noteBinding = cell?.accountOverlay?.notes && integrityRuntime.runId && noteTrackId && runtime.store.dataEpoch
     ? { runId: integrityRuntime.runId, trackId: noteTrackId, dataEpoch: runtime.store.dataEpoch,
       reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,
@@ -1023,6 +1059,7 @@ export default function ReplayTrainingPageShell({
     <SingleChartPanes
       ref={chartSurfaceRef}
       seriesStore={displayedSeriesStore}
+      backendSyntheticSource={displayedSyntheticSource}
       symbol={displayedSymbol}
       drawingKeyBase={drawingScopeBase}
       {...(cell ? { drawingsHidden: cell.drawingsHidden } : {})}
@@ -1233,14 +1270,14 @@ export default function ReplayTrainingPageShell({
       toolbar={drawingToolbar}
       rightRail={rightRail}
       topBar={(
-        <MarketTopBarFrame
+        <AppHeader
           source="replay"
           className="replay-top-bar"
-          navigation={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
-          identity={config && (
+          badge={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
+          context={config && (
             <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
               {review === null
-                ? `${activeSelectedTrack?.exchange ?? config.exchange} · ${activeSelectedTrack?.market_type ?? config.market_type} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
+                ? `${trainingExchangeLabel(activeSelectedTrack?.exchange ?? config.exchange)} · ${trainingMarketTypeLabel(activeSelectedTrack?.market_type ?? config.market_type)} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
                 : t("replay.reviewIdentity", {
                   symbol: String(review.projection.tracks.find((track) => (
                     track.track_id === review.projection.viewer_state.selected_track_id
@@ -1249,82 +1286,59 @@ export default function ReplayTrainingPageShell({
                 })}
             </button>
           )}
-          intervals={replayIntervalSelector}
-          controls={<>
-            {cell?.controls}
-            {dateNavigation.available && <button type="button" className="ui-control"
-              onClick={() => dateNavigation.setOpen(true)}>{t("study.viewDate")}</button>}
-            <button type="button" className="settings-btn indicator-toggle-btn"
-              aria-label={t("shell.settings")} title={t("shell.settings")}
-              onClick={() => setChartSettingsOpen(true)}><Icon name="palette" size={18} /></button>
-            <button
-              className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
-              type="button"
+          panels={<>
+            <PanelToggle
+              className="indicator-toggle-btn"
               disabled={review !== null}
-              aria-expanded={indicatorPanelOpen}
-              aria-controls="replay-indicator-panel"
-              aria-label={`${t("shell.indicators")} ${review === null ? indicators.status.activeIndicatorCount : "R/O"}`}
-              onClick={() => setIndicatorPanelOpen((open) => !open)}
+              open={indicatorPanelOpen}
+              controls="replay-indicator-panel"
+              label={`${t("shell.indicators")} ${review === null ? indicators.status.activeIndicatorCount : "R/O"}`}
               title={review === null ? t("replay.shell.manageIndicators") : t("replay.shell.reviewBlocksIndicators")}
-            >
-              <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
-              <span className="indicator-badge">
-                {review === null ? indicators.status.activeIndicatorCount : "R/O"}
-              </span>
-            </button>
-            <button className="indicator-toggle-btn alert-toggle-btn" type="button" disabled
-              aria-label={t("shell.alerts")} title={capabilities.ALERTS.state}>
-              <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
-            </button>
+              icon={<ProfileRailIcon />}
+              badge={review === null ? indicators.status.activeIndicatorCount : "R/O"}
+              onToggle={() => setIndicatorPanelOpen((open) => !open)}
+            />
+            <PanelToggle className="indicator-toggle-btn alert-toggle-btn" disabled open={false} onToggle={() => undefined}
+              label={t("shell.alerts")} title={capabilities.ALERTS.detail} icon={<AlertRailIcon />} />
           </>}
-          quote={last && (
+          settings={{ onOpen: () => setChartSettingsOpen(true) }}
+          extras={cell?.controls}
+          tools={<>
+            {replayIntervalSelector}
+            {last && (
             <div className="price-info"><span className={`current-price ${isUp ? "price-up" : "price-down"}`}>{last.close}</span><span className="price-change">{isUp ? "▲" : "▼"} {t("replay.priceLabel")}</span></div>
           )}
-          marketMetrics={(
-            <div className="advanced-market-summary advanced-market-summary-unsupported" aria-label={t("replay.derivativesAria")}>
+            <div className="advanced-market-summary" aria-label={t("replay.derivativesAria")}>
               {(["MARK_PRICE", "INDEX_PRICE", "BASIS"] as const).map((id) => (
                 <div className="advanced-market-chip" key={id} data-market-metric={id.toLowerCase()} data-capability-state={capabilities[id].state}>
                   <span className="advanced-market-chip-label">{capabilities[id].label}</span>
                   <span className="advanced-market-chip-value">--</span>
-                  <span className="advanced-market-chip-suffix">{capabilities[id].state}</span>
+                  <span className="advanced-market-chip-suffix">{replayCapabilityStateLabel(capabilities[id].state)}</span>
                 </div>
               ))}
             </div>
-          )}
-          trailing={<>
-            {active && (
-              <button
-                ref={integrityToggleRef}
-                className="replay-integrity-toggle ui-control"
-                type="button"
-                data-replay-action="toggle-integrity"
-                data-review-active={review === null ? "false" : "true"}
-                aria-controls="replay-integrity-drawer"
-                aria-expanded={integrityOpen}
-                onClick={() => {
-                  setTrainingResultsOpen(false);
-                  setIntegrityOpen((open) => !open);
-                }}
-              >
-                {review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing")}
-              </button>
-            )}
-            {active && integrityRuntime.runId !== null && (
-              <button
-                className="replay-integrity-toggle ui-control"
-                type="button"
-                data-replay-action="toggle-training-results"
-                aria-controls="replay-training-results-drawer"
-                aria-expanded={trainingResultsOpen}
-                onClick={() => {
-                  setIntegrityOpen(false);
-                  setTrainingResultsOpen((open) => !open);
-                }}
-              >{t("replay.shell.results")}</button>
-            )}
-            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub ui-control" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
-            <a className="replay-live-link ui-control" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
           </>}
+          actions={[
+            ...(dateNavigation.available ? [{ id: "view-date", label: t("study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
+            ...(active ? [{
+              id: "integrity", label: review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing"),
+              expanded: integrityOpen, controls: "replay-integrity-drawer", anchorRef: integrityToggleRef,
+              data: { "replay-action": "toggle-integrity", "review-active": review === null ? "false" : "true" },
+              onSelect: () => { setTrainingResultsOpen(false); setIntegrityOpen((open) => !open); },
+            }] : []),
+            ...(active && integrityRuntime.runId !== null ? [{
+              id: "results", label: t("replay.shell.results"), expanded: trainingResultsOpen, controls: "replay-training-results-drawer",
+              data: { "replay-action": "toggle-training-results" },
+              onSelect: () => { setIntegrityOpen(false); setTrainingResultsOpen((open) => !open); },
+            }] : []),
+            ...(active && viewer.viewerState?.run_id !== undefined ? [{
+              id: "return-hub", label: returningToHub ? t("replay.shell.saving") : t("replay.shell.hub"),
+              disabled: returningToHub || review !== null,
+              title: review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint"),
+              onSelect: () => void returnToHub(),
+            }] : []),
+            { id: "live", label: t("replay.shell.liveLink"), href: "/", onSelect: () => undefined },
+          ]}
         />
       )}
       intervalSelector={null}
@@ -1364,7 +1378,7 @@ export default function ReplayTrainingPageShell({
         )}
         {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}
         {review === null && indicatorPanelOpen && (
-          <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
+          <div id="replay-indicator-panel">
             <IndicatorPanel
               allowedScriptLanguages={["pine", "frontend-js"]}
               isOpen
@@ -1393,7 +1407,9 @@ export default function ReplayTrainingPageShell({
             />
           </div>
         )}
+        {/* Right-hand drawers on the overlay stack (with indicators): opening one closes the other. */}
         {integrityOpen && (
+          <OverlayLayer kind="drawer" side="right" onClose={() => setIntegrityOpen(false)} initialFocusRef={integrityDrawerRef} returnFocusRef={integrityToggleRef}>
           <aside
             ref={integrityDrawerRef}
             id="replay-integrity-drawer"
@@ -1408,11 +1424,13 @@ export default function ReplayTrainingPageShell({
               onClose={() => setIntegrityOpen(false)}
             />
           </aside>
+          </OverlayLayer>
         )}
         {trainingResultsOpen && integrityRuntime.runId !== null && (
+          <OverlayLayer kind="drawer" side="right" onClose={() => setTrainingResultsOpen(false)}>
           <aside
             id="replay-training-results-drawer"
-            className="replay-integrity-drawer replay-training-results-drawer"
+            className="replay-integrity-drawer"
             aria-label={t("replay.shell.results")}
             tabIndex={-1}
           >
@@ -1423,6 +1441,7 @@ export default function ReplayTrainingPageShell({
               onClose={() => setTrainingResultsOpen(false)}
             />
           </aside>
+          </OverlayLayer>
         )}
       </> : null}
       statusBar={(
@@ -1484,7 +1503,7 @@ export default function ReplayTrainingPageShell({
           }}
           left={<>
             <span><span className={`status-dot ${runtime.store.connectionState === "connected" ? "connected" : "loading"}`} />{t("replay.shell.status")}</span>
-            <span>{review === null ? effectiveState ?? runtime.phase : `REVIEW ${review.playback_state}`}</span>
+            <span>{review === null ? replayStateLabel(effectiveState ?? runtime.phase) : t("replay.shell.reviewState", { state: replayStateLabel(review.playback_state) })}</span>
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
             {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
@@ -1497,7 +1516,7 @@ export default function ReplayTrainingPageShell({
           </>}
           right={<>
             <span>{review === null ? t("replay.shell.controller", { who: ownsController ? t("replay.shell.controllerHere") : runtime.store.controllerClientId ? t("replay.shell.controllerOther") : t("replay.shell.controllerNone") }) : t("replay.originalControllerIsolated")}</span>
-            <span>{config?.source_kind.toUpperCase() ?? "BAR"} · {config?.quality_mode.toUpperCase() ?? "EXACT"}</span>
+            <span>{config?.source_kind === "agg_trade" ? trainingSourceKindLabel("AGG_TRADE") : trainingSourceKindLabel("BAR")} · {replayQualityLabel(config?.quality_mode)}</span>
             <span>{t("replay.shell.isolated")}</span>
           </>}
         />

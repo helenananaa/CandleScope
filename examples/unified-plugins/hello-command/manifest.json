@@ -1,0 +1,15 @@
+{
+  "schema": "candlescope.unified-plugin/1",
+  "id": "candlescope.hello-command",
+  "name": "Hello Command",
+  "version": "0.2.0",
+  "hostApiVersion": 1,
+  "trust": "full-trust",
+  "permissions": [],
+  "entries": [
+    {"id": "main", "kind": "sidecar", "runtime": "python-module", "path": "worker.py"}
+  ],
+  "commands": [
+    {"id": "hello", "entryId": "main", "title": "Say hello", "exampleInput": {"name": "world"}}
+  ]
+}

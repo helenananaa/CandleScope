@@ -17,7 +17,6 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.plugin_installer_v2.errors import PlatformInstallerBaseError
-from app.plugin_installer_v2.bundle import verify_platform_bundle
 from app.plugin_live_v2 import LiveBrokerError
 from app.plugin_marketplace_v2 import MarketplaceError
 from app.plugin_marketplace_v2.models import MAX_INDEX_BYTES
@@ -26,7 +25,8 @@ from app.plugin_security_v2.errors import PlatformSecurityError
 from app.plugin_security_v2.management import LocalManagementGuard
 
 from app.plugin_runtime.errors import PluginHostError
-from .runtime_install import is_runtime_bundle, install_runtime_bundle, review_runtime_bundle
+from .local_bundle import verify_local_platform_bundle
+from .marketplace_migration import export_marketplace_data
 from .errors import CorePluginError
 from .runtime import CorePluginPlatform, DisabledCorePluginPlatform
 
@@ -105,6 +105,39 @@ async def _guarded_platform(request: Request) -> CorePluginPlatform:
     return platform
 
 
+def _legacy_package_update() -> HTTPException:
+    return HTTPException(
+        status_code=410,
+        detail={
+            "code": "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
+            "message": "Install an updated unified package in the plugin center.",
+        },
+    )
+
+
+async def _guarded_legacy_platform(request: Request) -> CorePluginPlatform:
+    platform = await _guarded_platform(request)
+    if not platform.allow_legacy_execution:
+        raise _legacy_package_update()
+    return platform
+
+
+def _reject_legacy_install(request: Request) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        raise _legacy_package_update()
+
+
+async def _reject_staged_legacy_change(
+    platform: CorePluginPlatform, request: Request, plugin_id: str
+) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        source = await asyncio.to_thread(
+            platform.installer.capture_activation_state, plugin_id
+        )
+        if source.activation is not None and source.activation.state == "staged":
+            _reject_legacy_install(request)
+
+
 async def _background_platform(request: Request) -> CorePluginPlatform:
     platform = _platform(request)
     guard = getattr(request.app.state, "plugin_platform_v2_management_guard", None)
@@ -114,16 +147,6 @@ async def _background_platform(request: Request) -> CorePluginPlatform:
         raise HTTPException(status_code=503, detail="plugin platform v2 is disabled")
     await guard.authorize_background(request)
     return platform
-
-
-def _v1_compatibility(platform: CorePluginPlatform) -> Any:
-    compatibility = getattr(platform, "v1_compatibility", None)
-    if compatibility is None:
-        raise HTTPException(
-            status_code=503,
-            detail="v1 script runtime compatibility bridge is unavailable",
-        )
-    return compatibility
 
 
 async def _body(
@@ -354,6 +377,8 @@ def create_core_plugin_router() -> APIRouter:
             platform, CorePluginPlatform
         ) or not _endpoint_request_is_local(request):
             raise HTTPException(status_code=404, detail="plugin endpoint unavailable")
+        if not platform.allow_legacy_execution:
+            raise _legacy_package_update()
         try:
             maximum, methods = platform.integration.endpoints.limits(
                 plugin_id, endpoint_id
@@ -439,58 +464,6 @@ def create_core_plugin_router() -> APIRouter:
         except Exception as exc:
             _raise_api_error(exc)
 
-    @router.get("/manage/compatibility/v1/status")
-    async def v1_compatibility_status(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).public_catalog)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.get("/manage/compatibility/v1/import-preview")
-    async def v1_compatibility_import_preview(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).import_preview)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.post("/manage/compatibility/v1/import")
-    async def v1_compatibility_import(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        payload = await _body(request, required={"previewSha256"})
-        try:
-            return await asyncio.to_thread(
-                platform.apply_v1_compatibility_import,
-                payload["previewSha256"],
-                trace_id=f"management-{request.state.plugin_user_action}",
-            )
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.get("/manage/compatibility/v1/rollback-preview")
-    async def v1_compatibility_rollback_preview(
-        request: Request,
-    ) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).rollback_preview)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.post("/manage/compatibility/v1/rollback")
-    async def v1_compatibility_rollback(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        payload = await _body(request, required={"previewSha256"})
-        try:
-            return await asyncio.to_thread(
-                platform.apply_v1_compatibility_rollback,
-                payload["previewSha256"],
-                trace_id=f"management-{request.state.plugin_user_action}",
-            )
-        except Exception as exc:
-            _raise_api_error(exc)
-
     @router.get("/manage/marketplace/status")
     async def marketplace_status(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
@@ -505,7 +478,176 @@ def create_core_plugin_router() -> APIRouter:
         disabled = await asyncio.to_thread(platform.marketplace.enforce_trust_policy)
         for plugin_id in disabled:
             await platform.reconcile_plugin(plugin_id)
-        return list(disabled)
+        runtime = platform.marketplace.unified
+        if runtime is None:
+            return list(disabled)
+        await runtime.reconcile()
+        return sorted(set(disabled) | runtime.marketplace_blocked)
+
+    async def _restore_marketplace_predecessor(
+        platform, plugin_id, generation, revision
+    ):
+        marketplace = platform.marketplace
+        runtime = marketplace.unified
+        if plugin_id in runtime.packages or plugin_id in runtime.quarantined:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_STOP_REQUIRED",
+                "unified runtime cleanup must complete before restoring the previous owner",
+            )
+        record = await asyncio.to_thread(
+            marketplace.release_migration,
+            plugin_id,
+            generation,
+            expected_revision=revision,
+        )
+        await platform.reconcile_plugin(plugin_id)
+        runtime_ready = False
+        if record.enabled and platform.allow_legacy_execution:
+            try:
+                await platform.observe_plugin_health(plugin_id)
+                runtime_ready = True
+            except Exception:  # noqa: BLE001 -- report restored desired state independently of runtime health
+                pass
+        return {"restoredVersion": record.version, "runtimeReady": runtime_ready}
+
+    async def _observe_unified_release(platform, plugin_id, approval):
+        marketplace = platform.marketplace
+        async with marketplace.cutover_lock:
+            activation = await asyncio.to_thread(
+                marketplace.begin_unified_activation, plugin_id, approval
+            )
+            generation = activation["generation"]
+            digest = approval["packageSha256"]
+            migration = activation["migration"]
+            runtime = marketplace.unified
+            health_error = None
+            try:
+                if migration is not None:
+                    await platform.reconcile_plugin(plugin_id)
+                    await asyncio.to_thread(
+                        export_marketplace_data, platform, plugin_id, migration
+                    )
+                    marketplace.migration_ready.add(
+                        (plugin_id, migration["generation"])
+                    )
+                evidence = await runtime.observe_marketplace(
+                    plugin_id, digest, generation
+                )
+                detail = f"Host runtime health passed for {len(evidence)} entrypoint(s)"
+            except Exception as exc:  # noqa: BLE001 -- any executor failure requires compensation
+                health_error = exc
+                evidence = []
+                detail = str(exc) or type(exc).__name__
+            observation = await asyncio.to_thread(
+                marketplace.finish_unified_activation,
+                plugin_id,
+                generation,
+                healthy=health_error is None,
+                detail=detail,
+            )
+            if not observation["healthy"]:
+                await runtime.reconcile()
+                restored = runtime.packages.get(plugin_id)
+                rollback = {
+                    "restoredVersion": observation["restoredVersion"],
+                    "runtimeReady": bool(
+                        restored
+                        and restored["coreReady"]
+                        and restored["identity"].plugin_version
+                        == observation["restoredVersion"]
+                    ),
+                }
+                if migration is not None:
+                    marketplace.migration_ready.discard(
+                        (plugin_id, migration["generation"])
+                    )
+                    try:
+                        rollback = await _restore_marketplace_predecessor(
+                            platform,
+                            plugin_id,
+                            migration["generation"],
+                            (await asyncio.to_thread(runtime.store.snapshot))[
+                                "revision"
+                            ],
+                        )
+                    except (
+                        MarketplaceError,
+                        PlatformInstallerBaseError,
+                        OSError,
+                    ) as rollback_error:
+                        rollback["recoveryBlocked"] = str(rollback_error)
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK",
+                    "unified marketplace activation was rolled back",
+                    details={**rollback, "healthError": observation["detail"]},
+                    status_code=409,
+                ) from health_error
+            return {
+                "activation": activation,
+                "observation": observation,
+                "health": evidence,
+            }
+
+    @router.post("/manage/marketplace/{plugin_id}/rollback-migration")
+    async def rollback_marketplace_migration(
+        plugin_id: str, request: Request
+    ) -> dict[str, Any]:
+        platform = await _guarded_platform(request)
+        review = await _body(
+            request, required={"migrationGeneration", "registryRevision"}
+        )
+        if any(type(value) is not int or value <= 0 for value in review.values()):
+            raise HTTPException(400, "marketplace migration review is invalid")
+
+        async def rollback():
+            marketplace = platform.marketplace
+            async with marketplace.cutover_lock:
+                runtime = marketplace.unified
+                if runtime is None or not runtime.ready or runtime.safe_mode:
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_UNIFIED_UNAVAILABLE",
+                        "unified runtime is unavailable",
+                    )
+                snapshot = await asyncio.to_thread(runtime.store.snapshot)
+                revision = review["registryRevision"]
+                migration = snapshot.get("marketplaceMigrations", {}).get(plugin_id)
+                if (
+                    migration is None
+                    or migration["generation"] != review["migrationGeneration"]
+                    or snapshot["revision"] != revision
+                ):
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_MIGRATION_STALE",
+                        "migration rollback review is stale",
+                    )
+                await asyncio.to_thread(
+                    marketplace.migration_source,
+                    plugin_id,
+                    migration,
+                    for_rollback=True,
+                )
+                try:
+                    if snapshot["plugins"].get(plugin_id, {}).get("enabled"):
+                        snapshot = await asyncio.to_thread(
+                            runtime.store.disable, plugin_id, expected_revision=revision
+                        )
+                except ValueError as exc:
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_MIGRATION_STALE", str(exc)
+                    ) from exc
+                await runtime.reconcile()
+                return await _restore_marketplace_predecessor(
+                    platform, plugin_id, migration["generation"], snapshot["revision"]
+                )
+
+        try:
+            task = asyncio.create_task(rollback())
+            task.add_done_callback(
+                lambda done: None if done.cancelled() else done.exception()
+            )
+            return await asyncio.shield(task)
+        except Exception as exc:
+            _raise_api_error(exc)
 
     @router.post("/manage/marketplace/{marketplace_id}/refresh")
     async def refresh_marketplace(
@@ -616,7 +758,8 @@ def create_core_plugin_router() -> APIRouter:
                 platform.marketplace.apply,
                 plugin_id,
             )
-            await platform.reconcile_plugin(plugin_id)
+            if "unifiedApproval" not in result["candidate"]:
+                await platform.reconcile_plugin(plugin_id)
             return result
         except Exception as exc:
             _raise_api_error(exc)
@@ -628,84 +771,105 @@ def create_core_plugin_router() -> APIRouter:
     ) -> dict[str, Any]:
         platform = await _guarded_platform(request)
         try:
-            activation = await asyncio.to_thread(
-                platform.marketplace.begin_activation,
-                plugin_id,
-            )
-            try:
-                await platform.reconcile_plugin(plugin_id)
-                health_evidence = await platform.observe_plugin_health(plugin_id)
-                observation = await asyncio.to_thread(
-                    platform.marketplace.finish_observation,
-                    plugin_id,
-                    healthy=True,
-                    detail=(
-                        f"Host runtime health passed for {len(health_evidence)} "
-                        "entrypoint(s)"
-                    ),
+            marketplace = platform.marketplace
+            if await asyncio.to_thread(marketplace.is_unified_candidate, plugin_id):
+                approval = await _body(
+                    request,
+                    required={"packageSha256", "permissions", "previousGeneration"},
+                    optional={"legacy"},
                 )
-            except Exception as health_error:
-                rollback_steps: list[dict[str, Any]] = []
-                candidate_digest = activation["candidate"]["bundleSha256"]
-                for _attempt in range(8):
-                    current = next(
-                        (
-                            item
-                            for item in await asyncio.to_thread(
-                                platform.installer.list_plugins
-                            )
-                            if item["pluginId"] == plugin_id
-                        ),
-                        None,
-                    )
-                    if current is None or current["bundleSha256"] != candidate_digest:
-                        break
-                    rollback_status = await asyncio.to_thread(
-                        platform.installer.rollback_status,
+                # Complete health compensation even if the HTTP client disconnects.
+                task = asyncio.create_task(
+                    _observe_unified_release(platform, plugin_id, approval)
+                )
+                task.add_done_callback(
+                    lambda done: None if done.cancelled() else done.exception()
+                )
+                return await asyncio.shield(task)
+            async with marketplace.cutover_lock:
+                activation = await asyncio.to_thread(
+                    platform.marketplace.begin_activation,
+                    plugin_id,
+                )
+                try:
+                    await platform.reconcile_plugin(plugin_id)
+                    health_evidence = await platform.observe_plugin_health(plugin_id)
+                    observation = await asyncio.to_thread(
+                        platform.marketplace.finish_observation,
                         plugin_id,
+                        healthy=True,
+                        detail=(
+                            f"Host runtime health passed for {len(health_evidence)} "
+                            "entrypoint(s)"
+                        ),
                     )
-                    if not rollback_status["available"]:
+                except Exception as health_error:
+                    rollback_steps: list[dict[str, Any]] = []
+                    candidate_digest = activation["candidate"]["bundleSha256"]
+                    for _attempt in range(8):
+                        current = next(
+                            (
+                                item
+                                for item in await asyncio.to_thread(
+                                    platform.installer.list_plugins
+                                )
+                                if item["pluginId"] == plugin_id
+                            ),
+                            None,
+                        )
+                        if (
+                            current is None
+                            or current["bundleSha256"] != candidate_digest
+                        ):
+                            break
+                        rollback_status = await asyncio.to_thread(
+                            platform.installer.rollback_status,
+                            plugin_id,
+                        )
+                        if not rollback_status["available"]:
+                            raise MarketplaceError(
+                                "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK_FAILED",
+                                "failed marketplace activation could not reach its previous activation",
+                                details={"reason": rollback_status.get("reason")},
+                            ) from health_error
+                        rollback = await asyncio.to_thread(
+                            platform.installer.rollback,
+                            plugin_id,
+                        )
+                        rollback_steps.append(rollback.to_wire())
+                    else:
                         raise MarketplaceError(
                             "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK_FAILED",
-                            "failed marketplace activation could not reach its previous activation",
-                            details={"reason": rollback_status.get("reason")},
+                            "failed marketplace activation exceeded the bounded rollback chain",
                         ) from health_error
-                    rollback = await asyncio.to_thread(
-                        platform.installer.rollback,
+                    await platform.reconcile_plugin(plugin_id)
+                    await asyncio.to_thread(
+                        platform.marketplace.mark_rolled_back,
                         plugin_id,
+                        detail="runtime health observation failed; activation rolled back",
                     )
-                    rollback_steps.append(rollback.to_wire())
-                else:
                     raise MarketplaceError(
-                        "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK_FAILED",
-                        "failed marketplace activation exceeded the bounded rollback chain",
+                        "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK",
+                        "marketplace activation failed runtime health observation and was rolled back",
+                        details={
+                            "rollbackSteps": rollback_steps,
+                            "healthErrorType": type(health_error).__name__,
+                        },
                     ) from health_error
-                await platform.reconcile_plugin(plugin_id)
-                await asyncio.to_thread(
-                    platform.marketplace.mark_rolled_back,
-                    plugin_id,
-                    detail="runtime health observation failed; activation rolled back",
-                )
-                raise MarketplaceError(
-                    "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK",
-                    "marketplace activation failed runtime health observation and was rolled back",
-                    details={
-                        "rollbackSteps": rollback_steps,
-                        "healthErrorType": type(health_error).__name__,
-                    },
-                ) from health_error
-            return {
-                "activation": activation,
-                "observation": observation,
-                "health": health_evidence,
-                "rollback": platform.installer.rollback_status(plugin_id),
-            }
+                return {
+                    "activation": activation,
+                    "observation": observation,
+                    "health": health_evidence,
+                    "rollback": platform.installer.rollback_status(plugin_id),
+                }
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/files/open")
     async def open_user_file(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         parameters = request.query_params.multi_items()
         if len(parameters) != 2 or {key for key, _value in parameters} != {
             "contributionId",
@@ -737,7 +901,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/files/save")
     async def save_user_file(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(request, required={"contributionId", "field"})
         if not all(isinstance(value[key], str) for key in value):
             raise HTTPException(
@@ -757,7 +921,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/files/download")
     async def download_user_file(request: Request) -> Response:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(request, required={"pluginId", "downloadId"})
         if not all(isinstance(value[key], str) for key in value):
             raise HTTPException(status_code=400, detail="file download body is invalid")
@@ -785,7 +949,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install")
     async def install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         if platform.trust_ux_enabled:
             raise HTTPException(
                 status_code=409,
@@ -794,28 +959,26 @@ def create_core_plugin_router() -> APIRouter:
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
-            if await asyncio.to_thread(is_runtime_bundle, upload):
-                result = await asyncio.to_thread(
-                    install_runtime_bundle, upload, expected_sha256,
-                    platform.installer.host_version,
-                )
-                return {"kind": "script-runtime", "installation": result.to_wire()}
             bundle = await asyncio.to_thread(
-                verify_platform_bundle,
+                verify_local_platform_bundle,
                 upload,
                 expected_sha256=expected_sha256,
                 host_version=platform.installer.host_version,
             )
-            await asyncio.to_thread(
-                platform.marketplace.record_local_bundle,
-                bundle,
-            )
-            result = await asyncio.to_thread(
-                platform.installer.install,
-                upload,
-                expected_sha256=expected_sha256,
-                enabled=True,
-            )
+            async with platform.marketplace.cutover_lock:
+                await asyncio.to_thread(
+                    platform.assert_legacy_mutable, bundle.manifest.plugin.id
+                )
+                await asyncio.to_thread(
+                    platform.marketplace.record_local_bundle,
+                    bundle,
+                )
+                result = await asyncio.to_thread(
+                    platform.installer.install,
+                    upload,
+                    expected_sha256=expected_sha256,
+                    enabled=True,
+                )
             await platform.reconcile_plugin(result.plugin_id)
             return {"installation": result.to_wire()}
         except HTTPException:
@@ -828,13 +991,13 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/prepare")
     async def prepare_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
-            runtime_bundle = await asyncio.to_thread(is_runtime_bundle, upload)
             bundle = await asyncio.to_thread(
-                review_runtime_bundle if runtime_bundle else verify_platform_bundle,
+                verify_local_platform_bundle,
                 upload,
                 expected_sha256=expected_sha256,
                 host_version=platform.installer.host_version,
@@ -856,7 +1019,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/review")
     async def review_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={
@@ -889,7 +1053,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/confirm")
     async def confirm_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={"candidateId", "previewSha256", "confirmationToken"},
@@ -899,18 +1064,19 @@ def create_core_plugin_router() -> APIRouter:
                 status_code=400, detail="trust confirmation body is invalid"
             )
         try:
-            return await platform.confirm_local_install(
-                candidate_id=value["candidateId"],
-                preview_sha256=value["previewSha256"],
-                confirmation_token=value["confirmationToken"],
-                user_action_id=request.state.plugin_user_action,
-            )
+            async with platform.marketplace.cutover_lock:
+                return await platform.confirm_local_install(
+                    candidate_id=value["candidateId"],
+                    preview_sha256=value["previewSha256"],
+                    confirmation_token=value["confirmationToken"],
+                    user_action_id=request.state.plugin_user_action,
+                )
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/trust/review")
     async def review_trust_change(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(
             request,
             required={"targetMode", "reason", "acknowledgements"},
@@ -938,7 +1104,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/trust/confirm")
     async def confirm_trust_change(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(
             request,
             required={"changeId", "previewSha256", "confirmationToken"},
@@ -948,13 +1114,14 @@ def create_core_plugin_router() -> APIRouter:
                 status_code=400, detail="trust change confirmation is invalid"
             )
         try:
-            return await platform.confirm_trust_change(
-                plugin_id,
-                change_id=value["changeId"],
-                preview_sha256=value["previewSha256"],
-                confirmation_token=value["confirmationToken"],
-                user_action_id=request.state.plugin_user_action,
-            )
+            async with platform.marketplace.cutover_lock:
+                return await platform.confirm_trust_change(
+                    plugin_id,
+                    change_id=value["changeId"],
+                    preview_sha256=value["previewSha256"],
+                    confirmation_token=value["confirmationToken"],
+                    user_action_id=request.state.plugin_user_action,
+                )
         except Exception as exc:
             _raise_api_error(exc)
 
@@ -1425,67 +1592,83 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/enable")
     async def enable(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
-            result = await asyncio.to_thread(platform.installer.enable, plugin_id)
-            await platform.reconcile_plugin(plugin_id)
-            return {"stateChange": result.to_wire()}
+            async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
+                await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
+                result = await asyncio.to_thread(platform.installer.enable, plugin_id)
+                await platform.reconcile_plugin(plugin_id)
+                return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/disable")
     async def disable(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
-            action = request.state.plugin_user_action
-            await platform.revoke_live_authority(
-                scope_type="plugin",
-                subject=plugin_id,
-                reason="plugin-disable",
-                trace_id=f"management-{action}",
-            )
-            result = await asyncio.to_thread(platform.installer.disable, plugin_id)
-            await platform.reconcile_plugin(plugin_id)
-            return {"stateChange": result.to_wire()}
+            async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
+                await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
+                action = request.state.plugin_user_action
+                await platform.revoke_live_authority(
+                    scope_type="plugin",
+                    subject=plugin_id,
+                    reason="plugin-disable",
+                    trace_id=f"management-{action}",
+                )
+                result = await asyncio.to_thread(platform.installer.disable, plugin_id)
+                await platform.reconcile_plugin(plugin_id)
+                return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/rollback")
     async def rollback(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
-            action = request.state.plugin_user_action
-            await platform.revoke_live_authority(
-                scope_type="plugin",
-                subject=plugin_id,
-                reason="plugin-rollback",
-                trace_id=f"management-{action}",
-            )
-            result = await asyncio.to_thread(platform.installer.rollback, plugin_id)
-            await platform.reconcile_plugin(plugin_id)
-            await asyncio.to_thread(
-                platform.marketplace.mark_rolled_back,
-                plugin_id,
-                detail="user requested rollback",
-            )
-            return {"rollback": result.to_wire()}
+            async with platform.marketplace.cutover_lock:
+                await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
+                action = request.state.plugin_user_action
+                await platform.revoke_live_authority(
+                    scope_type="plugin",
+                    subject=plugin_id,
+                    reason="plugin-rollback",
+                    trace_id=f"management-{action}",
+                )
+                result = await asyncio.to_thread(platform.installer.rollback, plugin_id)
+                await platform.reconcile_plugin(plugin_id)
+                await asyncio.to_thread(
+                    platform.marketplace.mark_rolled_back,
+                    plugin_id,
+                    detail="user requested rollback",
+                )
+                return {"rollback": result.to_wire()}
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/uninstall")
     async def uninstall(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
-            action = request.state.plugin_user_action
-            await platform.revoke_live_authority(
-                scope_type="plugin",
-                subject=plugin_id,
-                reason="plugin-uninstall",
-                trace_id=f"management-{action}",
-            )
-            result = await asyncio.to_thread(platform.installer.uninstall, plugin_id)
-            await platform.reconcile_plugin(plugin_id)
-            return {"stateChange": result.to_wire()}
+            async with platform.marketplace.cutover_lock:
+                await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
+                action = request.state.plugin_user_action
+                await platform.revoke_live_authority(
+                    scope_type="plugin",
+                    subject=plugin_id,
+                    reason="plugin-uninstall",
+                    trace_id=f"management-{action}",
+                )
+                result = await asyncio.to_thread(
+                    platform.installer.uninstall, plugin_id
+                )
+                await platform.reconcile_plugin(plugin_id)
+                return {"stateChange": result.to_wire()}
         except Exception as exc:
             _raise_api_error(exc)
 
@@ -1496,53 +1679,57 @@ def create_core_plugin_router() -> APIRouter:
         decision: str,
         request: Request,
     ) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         if decision not in {"grant", "deny", "revoke"}:
             raise HTTPException(
                 status_code=404, detail="permission decision is unknown"
             )
         try:
-            action = request.state.plugin_user_action
-            if decision == "grant":
-                value = await _body(request, required={"scope"})
-                if value["scope"] is not None and not isinstance(value["scope"], dict):
-                    raise HTTPException(
-                        status_code=400, detail="scope must be an object or null"
-                    )
-                result = await asyncio.to_thread(
-                    platform.installer.grant_permission,
-                    plugin_id,
-                    permission_id,
-                    scope=value["scope"],
-                    source="management-api",
-                    trace_id=f"management-{action}",
-                )
-            else:
-                if await request.body():
-                    raise HTTPException(
-                        status_code=400, detail="decision body must be empty"
-                    )
-                method = (
-                    platform.installer.deny_permission
-                    if decision == "deny"
-                    else platform.installer.revoke_permission
-                )
-                if decision == "revoke":
-                    await platform.revoke_live_authority(
-                        scope_type="grant",
-                        subject=f"{plugin_id}:{permission_id}",
-                        reason="permission-revoke",
+            async with platform.marketplace.cutover_lock:
+                await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
+                action = request.state.plugin_user_action
+                if decision == "grant":
+                    value = await _body(request, required={"scope"})
+                    if value["scope"] is not None and not isinstance(
+                        value["scope"], dict
+                    ):
+                        raise HTTPException(
+                            status_code=400, detail="scope must be an object or null"
+                        )
+                    result = await asyncio.to_thread(
+                        platform.installer.grant_permission,
+                        plugin_id,
+                        permission_id,
+                        scope=value["scope"],
+                        source="management-api",
                         trace_id=f"management-{action}",
                     )
-                result = await asyncio.to_thread(
-                    method,
-                    plugin_id,
-                    permission_id,
-                    source="management-api",
-                    trace_id=f"management-{action}",
-                )
-            await platform.reconcile_plugin(plugin_id)
-            return {"permissionChange": result.to_wire()}
+                else:
+                    if await request.body():
+                        raise HTTPException(
+                            status_code=400, detail="decision body must be empty"
+                        )
+                    method = (
+                        platform.installer.deny_permission
+                        if decision == "deny"
+                        else platform.installer.revoke_permission
+                    )
+                    if decision == "revoke":
+                        await platform.revoke_live_authority(
+                            scope_type="grant",
+                            subject=f"{plugin_id}:{permission_id}",
+                            reason="permission-revoke",
+                            trace_id=f"management-{action}",
+                        )
+                    result = await asyncio.to_thread(
+                        method,
+                        plugin_id,
+                        permission_id,
+                        source="management-api",
+                        trace_id=f"management-{action}",
+                    )
+                await platform.reconcile_plugin(plugin_id)
+                return {"permissionChange": result.to_wire()}
         except HTTPException:
             raise
         except Exception as exc:
@@ -1550,7 +1737,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/commands/{contribution_id:path}/invoke")
     async def invoke_command(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             value = await _body(request, required={"input"}, optional={"locale"})
             if not isinstance(value["input"], dict):
@@ -1573,7 +1760,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/jobs/{contribution_id:path}/run")
     async def run_job(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             if await request.body():
                 raise HTTPException(
@@ -1589,7 +1776,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.get("/manage/settings/{contribution_id:path}")
     async def read_settings(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             return {"settings": await platform.read_settings(contribution_id)}
         except Exception as exc:
@@ -1597,18 +1784,19 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.put("/manage/settings/{contribution_id:path}")
     async def write_settings(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             value = await _body(request, required={"value"})
             if not isinstance(value["value"], dict):
                 raise HTTPException(
                     status_code=400, detail="settings value must be an object"
                 )
-            return {
-                "settings": await platform.write_settings(
-                    contribution_id, value["value"]
-                )
-            }
+            async with platform.marketplace.cutover_lock:
+                return {
+                    "settings": await platform.write_settings(
+                        contribution_id, value["value"]
+                    )
+                }
         except HTTPException:
             raise
         except Exception as exc:

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "releaseStatus": "desktop-source-build-unpublished",
+  "plugins": [
+    {
+      "runtimeId": "candlescope.pine-compat",
+      "package": "candlescope-plugin-pine-compat",
+      "version": "0.4.0",
+      "filename": "candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg",
+      "sha256": "sha256:0b637817ad975f19e484d991614810f541d20612385a401082284c3dda0bd20e",
+      "size": 5042981,
+      "platform": {
+        "system": "Darwin",
+        "machine": "arm64",
+        "implementation": "CPython",
+        "pythonVersion": "3.12"
+      }
+    },
+    {
+      "runtimeId": "candlescope.python-indicator",
+      "package": "candlescope-plugin-python-indicator",
+      "version": "0.1.0",
+      "filename": "candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg",
+      "sha256": "sha256:8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461",
+      "size": 521208,
+      "platform": {
+        "system": "Darwin",
+        "machine": "arm64",
+        "implementation": "CPython",
+        "pythonVersion": "3.12"
+      }
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, Field, InlineAlert, Textarea } from "../../components/ui/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -147,28 +149,69 @@ function Modal({ title, onClose, children, testId }: React.PropsWithChildren<{
   testId: string;
 }>) {
   const element = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement;
-    element.current?.focus();
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, []);
+  // The overlay layer handles Escape, focus (into the dialog and back) and Tab.
   return (
+    <OverlayLayer kind="modal" onClose={onClose} initialFocusRef={element}>
     <div className="plugin-modal-overlay" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section className="plugin-modal" role="dialog" aria-modal="true" aria-label={title} data-testid={testId} ref={element} tabIndex={-1} onKeyDown={(event) => {
-        if (event.key === "Escape") { event.stopPropagation(); onClose(); }
-        if (event.key !== "Tab") return;
-        const controls = Array.from(element.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? []).filter((control) => control.getClientRects().length > 0);
-        const first = controls[0]; const last = controls.at(-1);
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === element.current)) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && (document.activeElement === last || document.activeElement === element.current)) { event.preventDefault(); first?.focus(); }
-      }}>
-        <header><h2>{title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={onClose}><Icon name="close" size={14} /></button></header>
+      <section className="plugin-modal" role="dialog" aria-modal="true" aria-label={title} data-testid={testId} ref={element} tabIndex={-1}>
+        <header><h2>{title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={onClose} data-overlay-close=""><Icon name="close" size={14} /></button></header>
         <div className="plugin-modal-body">{children}</div>
       </section>
     </div>
+    </OverlayLayer>
   );
+}
+
+function UnifiedCommandForm({ command, runtime }: { command: PluginCommandContribution; runtime: PluginPlatformRuntime }) {
+  const [source, setSource] = useState(() => JSON.stringify(command.exampleInput ?? {}, null, 2));
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    setError("");
+    setResult(null);
+    let input: unknown;
+    try {
+      input = JSON.parse(source, (_key, value: unknown) => {
+        if (typeof value === "number" && !Number.isFinite(value)) throw new Error();
+        return value;
+      });
+    } catch {
+      setError(t("native.parametersInvalid"));
+      return;
+    }
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      setError(t("native.parametersInvalid"));
+      return;
+    }
+    setRunning(true);
+    try {
+      const value = await runtime.actions.invokeCommand(command.id, input as Record<string, JsonValue>);
+      setResult(JSON.stringify(value, null, 2));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t("plugin.host.operationFailed"));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return <form className="plugin-unified-command" onSubmit={(event) => { event.preventDefault(); void run(); }}>
+    <Field label={t("native.parameters")}>
+      <Textarea rows={8} value={source} spellCheck={false} disabled={running}
+        onChange={(event) => { setSource(event.target.value); setResult(null); setError(""); }} />
+    </Field>
+    <Button type="submit" size="sm" variant="primary" disabled={running || !runtime.view.managementAvailable}>
+      {running ? t("plugin.host.running") : t("plugin.host.runCommand")}
+    </Button>
+    {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+    {result !== null && <>
+      <small role="status">{t("plugin.notice.commandCompleted")}</small>
+      <pre className="plugin-unified-command-result">{result}</pre>
+    </>}
+  </form>;
 }
 
 function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
@@ -219,7 +262,10 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
         </nav>
         <div className="plugin-command-form">
           {!selected && <p>{t("plugin.host.selectCommand")}</p>}
-          {selected && (
+          {selected?.unifiedTarget && (
+            <UnifiedCommandForm key={`${selected.id}/${selected.unifiedTarget.instanceId}`} command={selected} runtime={runtime} />
+          )}
+          {selected && !selected.unifiedTarget && (
             <>
               {nativeSchema && (
                 <PluginNativeField
@@ -439,8 +485,12 @@ function ViewSurface({ runtime, contribution }: {
   runtime: PluginPlatformRuntime;
   contribution: PluginViewContribution;
 }) {
+  // Side panels are right-hand drawers on the overlay stack; bottom panels stay docked.
+  const layer = (surface: React.ReactElement) => contribution.configuration.slot === "sidePanel"
+    ? <OverlayLayer kind="drawer" side="right" onClose={runtime.actions.closeView}>{surface}</OverlayLayer>
+    : surface;
   if (isSandboxView(contribution)) {
-    return (
+    return layer(
       <aside
         className={`plugin-view-surface plugin-view-${contribution.configuration.slot}`}
         data-plugin-slot={contribution.configuration.slot}
@@ -448,11 +498,11 @@ function ViewSurface({ runtime, contribution }: {
         data-plugin-renderer="sandbox"
         aria-label={contribution.title}
       >
-        <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}><Icon name="close" size={14} /></button></header>
+        <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView} data-overlay-close=""><Icon name="close" size={14} /></button></header>
         <PluginUiErrorBoundary>
           <SandboxPluginFrame runtime={runtime} contribution={contribution} />
         </PluginUiErrorBoundary>
-      </aside>
+      </aside>,
     );
   }
   const candidate = runtime.view.snapshot?.views.find((item) => item.id === contribution.id);
@@ -464,18 +514,18 @@ function ViewSurface({ runtime, contribution }: {
     : undefined;
   const projectionMismatch = candidate !== undefined && projection === undefined;
   const primaryCommand = contribution.configuration.primaryCommand
-    ? runtime.view.registries.commandPalette.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
+    ? runtime.view.registries.commandPalette.find((item) => !item.unifiedTarget && item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
       ?? runtime.view.registries.topToolbar.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
       ?? runtime.view.registries.chartContextMenu.find((item) => item.pluginId === contribution.pluginId && item.localId === contribution.configuration.primaryCommand)
     : null;
-  return (
+  return layer(
     <aside
       className={`plugin-view-surface plugin-view-${contribution.configuration.slot}`}
       data-plugin-slot={contribution.configuration.slot}
       data-plugin-view={contribution.id}
       aria-label={contribution.title}
     >
-      <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}><Icon name="close" size={14} /></button></header>
+      <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView} data-overlay-close=""><Icon name="close" size={14} /></button></header>
       <PluginUiErrorBoundary>
         {projectionMismatch
           ? <p role="alert">{t("plugin.host.viewMetadataMismatch")}</p>
@@ -491,7 +541,7 @@ function ViewSurface({ runtime, contribution }: {
           {primaryCommand.title}
         </button>
       )}
-    </aside>
+    </aside>,
   );
 }
 

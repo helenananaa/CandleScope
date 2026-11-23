@@ -168,3 +168,45 @@ def test_requested_metadata_uses_the_exact_auxiliary_market_and_preserves_explic
     result = requested_data(replace(request, options={"pineRequestContexts": [{**context, "metadata": explicit}]}), requirements,
         SimpleNamespace(query=lambda *a, **k: SimpleNamespace(bars=request.bars, missing_ranges=[])))
     assert result["pineRequestSymbolMetadata"][context["symbol"]] == explicit
+
+
+def test_ordered_chart_requested_data_uses_source_clock_and_revealed_cutoff():
+    # Execution keys 1,2 are output identities, never dates or provider query bounds.
+    bars = tuple(Bar(time=i,open=100,high=100,low=100,close=100,volume=1,is_closed=False) for i in (1,2))
+    request = ExecuteBatchRequest(source='',context=MarketContext('binance','spot','BTCUSDT','1m'),bars=bars,
+        options={'chartInput':{'sourceTimes':[120,120]},'pineRevealedBoundaryMs':179998,'pineExecutionTimeMs':179998})
+    seen=[]
+    def query(*args,**kwargs):
+        seen.append(kwargs)
+        return SimpleNamespace(bars=[replace(bars[0],time=t,is_closed=True) for t in (0,60,120,180)],missing_ranges=[])
+    result=requested_data(request,{'requests':[{'function':'request.security','symbol':{'kind':'literal','value':'BINANCE:ETHUSDT'},
+        'timeframe':{'kind':'literal','value':'1'}}]},SimpleNamespace(query=query))
+    assert seen[0]['end_ms'] == 179998
+    assert [row['time'] for row in result['pineRequestBars']['BINANCE:ETHUSDT:1']] == [0,60000]
+    assert result['pineRequestObservation']['observedAtMs'] == 179998
+
+
+@pytest.mark.anyio
+async def test_extended_pine_host_ranges_use_real_chart_source_times():
+    from app.indicator.pine_host import PineHostInputs
+    from app.indicator.runtime_service import IndicatorRuntimeRequest
+    from candlescope_plugin_sdk import AnalyzeResult
+    seen=[]
+    def query(*args,**kwargs):
+        seen.append(kwargs)
+        return SimpleNamespace(bars=[Bar(time=120,open=1,high=1,low=1,close=1,volume=1)],missing_ranges=[],history_state='ready')
+    async def analyze(*args):
+        return AnalyzeResult(ok=True,executable=True,meta={
+            'hostBindings':{'chartSymbol':'BINANCE:BTCUSDT','chartTimeframe':'1'},
+            'hostRequirements':{'requests':[{'symbol':{'kind':'literal','value':'BINANCE:ETHUSDT'},
+                'timeframe':{'kind':'literal','value':'1'}}]}})
+    request=IndicatorRuntimeRequest(language='pine',source='//@version=6\nindicator("x")\nplot(close)',
+        exchange='binance',market_type='spot',symbol='BTCUSDT',interval='1m',
+        bars=tuple(dict(time=i,open=1,high=1,low=1,close=1,volume=1,is_closed=False) for i in (1,2)),
+        options={'chartInput':{'sourceTimes':[120,120]},'pineRevealedBoundaryMs':179998,
+            'pineHost':{'requestWarmupBars':{'BINANCE:ETHUSDT:1':0}}})
+    prepared,failure=await PineHostInputs(lambda:SimpleNamespace(query=query)).prepare(request,SimpleNamespace(analyze=analyze),'pine')
+    assert failure is None, failure
+    assert seen[0]['start_ms'] == 60000
+    assert seen[0]['end_ms'] == 179998
+    assert not seen[0]['auto_backfill']

@@ -89,6 +89,14 @@ class ContinuousBarHost:
                 raise error("FIDELITY_UNSUPPORTED", "This continuation requires funding OFF")
             self.planner = _new_host_planner(config, execution_reporter=reporter)
             self.planner.bind_kernel(self.kernel)
+            self.chart_clock = None
+            if config.get("signal_chart"):
+                from .strategy.chart_signals import ChartSignalClock
+                self.chart_clock = ChartSignalClock(config["signal_chart"], self.adapter, self.planner,
+                    market=definition["market"], warmup=int(config.get("warmup_bars") or 0),
+                    features=lambda bar: _strategy_observation_features(self.session.provider,bar=bar,trade=None,_names=self.feature_names),
+                    context=lambda event: None if self.planner.config is None else _planning_context(self.kernel,event),
+                    control=self._check_stopping)
         except BaseException:
             self._close_after_failure()
             raise
@@ -172,6 +180,8 @@ class ContinuousBarHost:
 
     def _observe(self, visible, event):
         self._check_stopping()
+        if self.chart_clock is not None:
+            return self.chart_clock.observe(event)
         output = self.adapter.observe(sequence=event.sequence, event_time_ms=event.event_time_ms,
             watermark_ms=event.event_time_ms,
             phase="WARMUP" if event.sequence <= int(self.config.get("warmup_bars") or 0) else "EVALUATION",

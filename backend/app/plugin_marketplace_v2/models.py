@@ -331,6 +331,9 @@ class PublisherRecord:
         }
 
 
+UNIFIED_PACKAGE_FORMAT = "candlescope.unified-bundle/1"
+
+
 @dataclass(frozen=True, slots=True)
 class ArtifactRecord:
     file_name: str
@@ -339,9 +342,10 @@ class ArtifactRecord:
     size: int
     manifest_sha256: str
     sbom_sha256: str
+    package_format: str | None = None
 
     def to_wire(self) -> dict[str, Any]:
-        return {
+        result = {
             "fileName": self.file_name,
             "url": self.url,
             "sha256": self.sha256,
@@ -349,6 +353,9 @@ class ArtifactRecord:
             "manifestSha256": self.manifest_sha256,
             "sbomSha256": self.sbom_sha256,
         }
+        if self.package_format is not None:
+            result["packageFormat"] = self.package_format
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -622,9 +629,18 @@ def _release(
             "size",
             "manifestSha256",
             "sbomSha256",
-        },
+        }
+        | ({"packageFormat"} & raw_artifact.keys()),
         f"{label}.artifact",
     )
+    if (
+        "packageFormat" in raw_artifact
+        and raw_artifact["packageFormat"] != UNIFIED_PACKAGE_FORMAT
+    ):
+        raise MarketplaceError(
+            "PLUGIN_MARKETPLACE_ARTIFACT_INVALID",
+            f"{label}.artifact.packageFormat is unsupported",
+        )
     file_name = _string(
         raw_artifact["fileName"],
         f"{label}.artifact.fileName",
@@ -653,6 +669,7 @@ def _release(
             f"{label}.artifact.manifestSha256",
         ),
         _sha256(raw_artifact["sbomSha256"], f"{label}.artifact.sbomSha256"),
+        raw_artifact.get("packageFormat"),
     )
     published_at, published_datetime = _utc_timestamp(
         item["publishedAt"],

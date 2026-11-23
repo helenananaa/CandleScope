@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
@@ -8,6 +9,7 @@ import type {
   PluginPlatformRuntime,
 } from "./pluginPlatformTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { liveModeLabel } from "./pluginLabels.js";
 
 function HostModal({
   title,
@@ -20,6 +22,7 @@ function HostModal({
   testId: string;
 }>) {
   return (
+    <OverlayLayer kind="modal" onClose={onClose}>
     <div
       className="plugin-modal-overlay live-host-modal-overlay"
       role="presentation"
@@ -36,11 +39,12 @@ function HostModal({
       >
         <header>
           <h2>{title}</h2>
-          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose}><Icon name="close" size={14} /></button>
+          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose} data-overlay-close=""><Icon name="close" size={14} /></button>
         </header>
         <div className="plugin-modal-body">{children}</div>
       </section>
     </div>
+    </OverlayLayer>
   );
 }
 
@@ -235,7 +239,7 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
         <section className={`live-control-summary live-control-${status.mode}`}>
           <div>
             <span>{t("plugin.live.persistentControl")}</span>
-            <strong>{status.mode.toUpperCase()}</strong>
+            <strong>{liveModeLabel(status.mode)}</strong>
           </div>
           <p>
             {t("plugin.live.summary", { epoch: status.policyEpoch, generation: status.generation, count: status.outstandingConfirmationCount })}
@@ -442,7 +446,7 @@ export default function PluginLiveControl({ runtime }: { runtime: PluginPlatform
         data-live-control-mode={status.mode}
         onClick={runtime.actions.openLiveControl}
       >
-        <strong>{t("plugin.live.banner", { mode: status.mode.toUpperCase() })}</strong>
+        <strong>{t("plugin.live.banner", { mode: liveModeLabel(status.mode) })}</strong>
         <span>
           {status.mode === "armed"
             ? status.liveSubmitAvailable

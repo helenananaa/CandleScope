@@ -1,3 +1,15 @@
+export interface ChartSignalDefinition {
+  contract?: "candlescope.chart-signal-input/1";
+  algorithm?: "causal-close-source/1";
+  transform: "heikin-ashi" | "renko" | "point-and-figure" | "kagi" | "line-break";
+  mode?: "traditional" | "atr";
+  box_size?: number;
+  min_tick?: number | null;
+  atr_length?: number;
+  reversal_amount?: number;
+  number_of_lines?: number;
+}
+
 export interface StrategyExecutionOverrides {
   initialBalance: string;
   equityPercent: string;
@@ -29,6 +41,7 @@ export function validPythonBarExecution(value: unknown): value is PythonBarExecu
 }
 
 export interface StrategyRunSettings {
+  signalChart?: ChartSignalDefinition | undefined;
   parameters?: Record<string, unknown>;
   fidelityPreference?: "FAST" | "PRECISE";
   rangeMode: "ALL_AVAILABLE" | "CUSTOM";
