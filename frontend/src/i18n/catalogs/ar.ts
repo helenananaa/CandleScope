@@ -4155,4 +4155,10 @@ export const ar = {
   "browser.download.end": "النهاية (UTC، غير مشمولة)",
   "browser.download.submit": "تنزيل واستيراد",
   "browser.download.symbolLookupUnavailable": "البحث عن الرموز غير متاح. أدخل رمز السوق الكامل.",
+  "strategyCollection.retiredBadge": "متوقف",
+  "strategyCollection.pyneRetired": "تم إيقاف Pyne. يُحتفظ بهذه الاستراتيجية المحفوظة دون تغيير، لكنها لا تعمل أبدًا ولا تُعامل على أنها Pine.",
+  "strategyCollection.removeRetired": "إزالة {name} من هذا الرسم البياني",
+  "chartTester.deleteDraft": "حذف",
+  "chartTester.deleteRetiredDraft": "حذف المسودة المتوقفة {name}",
+  "chartTester.deleteRetiredDraftFailed": "تعذّر حذف المسودة المتوقفة. حاول مرة أخرى.",
 } as const satisfies MessageCatalog;

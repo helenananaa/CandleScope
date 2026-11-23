@@ -39,6 +39,18 @@ export function updateChartWorkspaceCellStrategyAttachment(
   };
 }
 
+/** Removes the retired Pyne strategy a chart kept from a build before PR #105, when the user asks to. */
+export function removeChartWorkspaceCellRetiredStrategyAttachment(
+  document: ChartWorkspaceDocument,
+  cellId: ChartCellId,
+): ChartWorkspaceDocument {
+  const cell = chartWorkspaceCell(document, cellId);
+  if (!cell.retiredStrategyAttachment) return document;
+  const { retiredStrategyAttachment: _removed, ...rest } = cell;
+  void _removed;
+  return { ...document, cells: { ...document.cells, [cellId]: rest } };
+}
+
 export function chartWorkspaceCell(
   document: ChartWorkspaceDocument,
   cellId: ChartCellId,

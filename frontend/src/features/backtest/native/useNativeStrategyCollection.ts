@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import type { StrategySwitcherAction, StrategySwitcherItem } from "../chart-tester/StrategySwitcher.js";
-import { copyNativeStrategy, normalizeNativeStrategies, strategyInstanceScope, type NativeStrategyCollection, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
+import type { RetiredStrategySwitcherItem, StrategySwitcherAction, StrategySwitcherItem } from "../chart-tester/StrategySwitcher.js";
+import { retiredStrategyId, retiredStrategyName } from "../chart-tester/retiredPyneStrategy.js";
+import { copyNativeStrategy, normalizeNativeStrategies, strategyInstanceScope, withoutRetiredStrategy, type NativeStrategyCollection, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 
 export function nativeStrategyName(item: NativeStrategyInstance): string {
   return item.name || t("strategyCollection.default");
@@ -72,7 +73,9 @@ export function useNativeStrategyCollection(
     if (selected && name !== null) updateInstance(selected.id, { name: name.trim().slice(0, 80) });
     setRenaming(false);
   };
-  return { collection, selected, update, updateInstance, setInstanceBusy, isBusy, select, add, remove, rename,
+  /** Removes a retired Pyne entry from this chart's list; only the user does this. */
+  const removeRetired = (id: string) => update((value) => withoutRetiredStrategy(value, id));
+  return { collection, selected, update, updateInstance, setInstanceBusy, isBusy, select, add, remove, rename, removeRetired,
     comparing, setComparing, renaming, setRenaming, storageError };
 }
 
@@ -84,6 +87,15 @@ export function nativeStrategySwitcherItems(strategies: NativeStrategyController
     name: nativeStrategyName(item),
     meta: t("chartTester.language.pine"),
     running: strategies.isBusy(item.id),
+  }));
+}
+
+/** The chart's retired Pyne entries: listed with a Retired label, never selectable or runnable. */
+export function nativeStrategySwitcherRetired(strategies: NativeStrategyController): RetiredStrategySwitcherItem[] {
+  return (strategies.collection.retired ?? []).map((entry) => ({
+    id: retiredStrategyId(entry),
+    name: retiredStrategyName(entry) || t("strategyCollection.default"),
+    onRemove: () => strategies.removeRetired(retiredStrategyId(entry)),
   }));
 }
 

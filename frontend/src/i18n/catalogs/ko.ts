@@ -4718,5 +4718,11 @@ export const ko = {
   "browser.download.end": "종료 시각 (UTC, 미포함)",
   "browser.download.submit": "내려받아 가져오기",
   "browser.download.symbolLookupUnavailable": "종목을 조회할 수 없습니다. 거래소의 전체 종목 코드를 입력하세요.",
+  "strategyCollection.retiredBadge": "지원 종료",
+  "strategyCollection.pyneRetired": "Pyne은 지원이 종료되었습니다. 저장된 이 전략은 변경 없이 보관되지만 실행되지 않으며 Pine으로 취급되지 않습니다.",
+  "strategyCollection.removeRetired": "이 차트에서 {name} 제거",
+  "chartTester.deleteDraft": "삭제",
+  "chartTester.deleteRetiredDraft": "지원 종료된 초안 {name} 삭제",
+  "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
 } as const satisfies MessageCatalog;

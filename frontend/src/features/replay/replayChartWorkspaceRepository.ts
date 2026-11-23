@@ -120,6 +120,7 @@ export function createReplayChartWorkspaceRepository(
     if (!preserveMarketBindings) cell.session = { ...initialSession, interval:inherited ? cell.session.interval : initialSession.interval };
     if (!inherited) cell.indicators = [];
     cell.strategyAttachment = null;
+    delete cell.retiredStrategyAttachment;
     delete cell.nativeStrategies;
     if (!inherited) cell.linkGroupId = null;
   }

@@ -4135,4 +4135,10 @@ export const th = {
   "browser.download.end": "สิ้นสุด (UTC, ไม่รวม)",
   "browser.download.submit": "ดาวน์โหลดและนำเข้า",
   "browser.download.symbolLookupUnavailable": "ค้นหาสัญลักษณ์ไม่ได้ในขณะนี้ ป้อนสัญลักษณ์ตลาดแบบเต็ม",
+  "strategyCollection.retiredBadge": "เลิกใช้แล้ว",
+  "strategyCollection.pyneRetired": "Pyne เลิกใช้แล้ว กลยุทธ์ที่บันทึกไว้นี้จะถูกเก็บไว้โดยไม่เปลี่ยนแปลง แต่จะไม่ถูกเรียกใช้และไม่ถือว่าเป็น Pine",
+  "strategyCollection.removeRetired": "นำ {name} ออกจากกราฟนี้",
+  "chartTester.deleteDraft": "ลบ",
+  "chartTester.deleteRetiredDraft": "ลบฉบับร่างที่เลิกใช้แล้ว {name}",
+  "chartTester.deleteRetiredDraftFailed": "ลบฉบับร่างที่เลิกใช้แล้วไม่ได้ ลองอีกครั้ง",
 } as const satisfies MessageCatalog;

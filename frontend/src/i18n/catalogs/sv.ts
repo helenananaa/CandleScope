@@ -4135,4 +4135,10 @@ export const sv = {
   "browser.download.end": "Slut (UTC, exklusive)",
   "browser.download.submit": "Ladda ned och importera",
   "browser.download.symbolLookupUnavailable": "Symbolsökning är inte tillgänglig. Ange marknadens fullständiga symbol.",
+  "strategyCollection.retiredBadge": "Avvecklad",
+  "strategyCollection.pyneRetired": "Pyne är avvecklat. Den här sparade strategin behålls oförändrad men körs aldrig och behandlas inte som Pine.",
+  "strategyCollection.removeRetired": "Ta bort {name} från det här diagrammet",
+  "chartTester.deleteDraft": "Ta bort",
+  "chartTester.deleteRetiredDraft": "Ta bort det avvecklade utkastet {name}",
+  "chartTester.deleteRetiredDraftFailed": "Det avvecklade utkastet kunde inte tas bort. Försök igen.",
 } as const satisfies MessageCatalog;

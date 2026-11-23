@@ -4773,6 +4773,12 @@ export const zhCN = {
   "browser.download.end": "结束时间（UTC，不含）",
   "browser.download.submit": "下载并导入",
   "browser.download.symbolLookupUnavailable": "暂时无法读取品种目录，可输入交易所的完整商品代码。",
+  "strategyCollection.retiredBadge": "已停用",
+  "strategyCollection.pyneRetired": "Pyne 已停用。此已保存策略会原样保留，但不会运行，也不会被当作 Pine。",
+  "strategyCollection.removeRetired": "从此图表移除 {name}",
+  "chartTester.deleteDraft": "删除",
+  "chartTester.deleteRetiredDraft": "删除已停用的草稿 {name}",
+  "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
 } as const;
 

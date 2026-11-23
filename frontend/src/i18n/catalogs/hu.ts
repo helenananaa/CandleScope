@@ -4135,4 +4135,10 @@ export const hu = {
   "browser.download.end": "Vége (UTC, nem számít bele)",
   "browser.download.submit": "Letöltés és importálás",
   "browser.download.symbolLookupUnavailable": "A szimbólumkeresés nem érhető el. Adja meg a piac teljes szimbólumát.",
+  "strategyCollection.retiredBadge": "Megszűnt",
+  "strategyCollection.pyneRetired": "A Pyne megszűnt. Ez a mentett stratégia változatlanul megmarad, de soha nem fut, és nem kezeljük Pine-ként.",
+  "strategyCollection.removeRetired": "{name} eltávolítása erről a diagramról",
+  "chartTester.deleteDraft": "Törlés",
+  "chartTester.deleteRetiredDraft": "A megszűnt {name} piszkozat törlése",
+  "chartTester.deleteRetiredDraftFailed": "A megszűnt piszkozatot nem sikerült törölni. Próbálja újra.",
 } as const satisfies MessageCatalog;

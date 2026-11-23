@@ -4146,4 +4146,10 @@ export const ru = {
   "browser.download.end": "Конец (UTC, не включая)",
   "browser.download.submit": "Загрузить и импортировать",
   "browser.download.symbolLookupUnavailable": "Поиск инструментов недоступен. Введите полный код инструмента биржи.",
+  "strategyCollection.retiredBadge": "Снято с поддержки",
+  "strategyCollection.pyneRetired": "Pyne больше не поддерживается. Эта сохранённая стратегия хранится без изменений, но никогда не запускается и не считается Pine.",
+  "strategyCollection.removeRetired": "Убрать {name} с этого графика",
+  "chartTester.deleteDraft": "Удалить",
+  "chartTester.deleteRetiredDraft": "Удалить снятый с поддержки черновик {name}",
+  "chartTester.deleteRetiredDraftFailed": "Не удалось удалить снятый с поддержки черновик. Повторите попытку.",
 } as const satisfies MessageCatalog;

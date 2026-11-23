@@ -165,6 +165,11 @@ export interface ChartCellState {
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
   strategyAttachment: ChartStrategyAttachmentRecord | null;
+  /**
+   * A Pyne strategy this chart had attached in a build before PR #105, kept as stored. It is
+   * listed as retired and never runs; `strategyAttachment` is null in its place.
+   */
+  retiredStrategyAttachment?: import("../backtest/chart-tester/retiredPyneStrategy.js").RetiredStrategyRecord;
   nativeStrategies?: NativeStrategyCollection;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE";
 }

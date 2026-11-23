@@ -4135,5 +4135,11 @@ export const id = {
   "browser.download.end": "Selesai (UTC, tidak termasuk)",
   "browser.download.submit": "Unduh dan impor",
   "browser.download.symbolLookupUnavailable": "Pencarian simbol tidak tersedia. Masukkan simbol pasar lengkap.",
+  "strategyCollection.retiredBadge": "Dihentikan",
+  "strategyCollection.pyneRetired": "Pyne sudah dihentikan. Strategi tersimpan ini disimpan tanpa perubahan, tetapi tidak pernah dijalankan dan tidak diperlakukan sebagai Pine.",
+  "strategyCollection.removeRetired": "Hapus {name} dari grafik ini",
+  "chartTester.deleteDraft": "Hapus",
+  "chartTester.deleteRetiredDraft": "Hapus draf yang dihentikan {name}",
+  "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dihapus. Coba lagi.",
 } as const satisfies MessageCatalog;
 

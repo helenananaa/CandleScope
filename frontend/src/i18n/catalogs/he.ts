@@ -4172,5 +4172,11 @@ export const he = {
   "browser.download.end": "סיום (UTC, לא כולל)",
   "browser.download.submit": "הורדה וייבוא",
   "browser.download.symbolLookupUnavailable": "חיפוש סימולים אינו זמין. הזינו את הסימול המלא של השוק.",
+  "strategyCollection.retiredBadge": "הופסק",
+  "strategyCollection.pyneRetired": "Pyne הופסק. האסטרטגיה השמורה הזו נשמרת ללא שינוי, אבל היא לעולם לא רצה ואינה מטופלת כ-Pine.",
+  "strategyCollection.removeRetired": "הסרת {name} מהגרף הזה",
+  "chartTester.deleteDraft": "מחיקה",
+  "chartTester.deleteRetiredDraft": "מחיקת הטיוטה שהופסקה {name}",
+  "chartTester.deleteRetiredDraftFailed": "לא ניתן למחוק את הטיוטה שהופסקה. נסו שוב.",
   ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

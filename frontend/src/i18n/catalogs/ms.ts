@@ -4135,4 +4135,10 @@ export const ms = {
   "browser.download.end": "Tamat (UTC, tidak termasuk)",
   "browser.download.submit": "Muat turun dan import",
   "browser.download.symbolLookupUnavailable": "Carian simbol tidak tersedia. Masukkan simbol pasaran penuh.",
+  "strategyCollection.retiredBadge": "Dihentikan",
+  "strategyCollection.pyneRetired": "Pyne telah dihentikan. Strategi tersimpan ini dikekalkan tanpa perubahan, tetapi tidak akan dijalankan dan tidak dianggap sebagai Pine.",
+  "strategyCollection.removeRetired": "Alih keluar {name} daripada carta ini",
+  "chartTester.deleteDraft": "Padam",
+  "chartTester.deleteRetiredDraft": "Padam draf yang dihentikan {name}",
+  "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dipadam. Cuba lagi.",
 } as const satisfies MessageCatalog;

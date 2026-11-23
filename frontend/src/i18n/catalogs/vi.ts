@@ -4135,5 +4135,11 @@ export const vi = {
   "browser.download.end": "Kết thúc (UTC, không bao gồm)",
   "browser.download.submit": "Tải về và nhập",
   "browser.download.symbolLookupUnavailable": "Không tra cứu được mã. Hãy nhập mã đầy đủ của thị trường.",
+  "strategyCollection.retiredBadge": "Đã ngừng hỗ trợ",
+  "strategyCollection.pyneRetired": "Pyne đã ngừng hỗ trợ. Chiến lược đã lưu này được giữ nguyên nhưng không bao giờ chạy và không được coi là Pine.",
+  "strategyCollection.removeRetired": "Gỡ {name} khỏi biểu đồ này",
+  "chartTester.deleteDraft": "Xóa",
+  "chartTester.deleteRetiredDraft": "Xóa bản nháp đã ngừng hỗ trợ {name}",
+  "chartTester.deleteRetiredDraftFailed": "Không xóa được bản nháp đã ngừng hỗ trợ. Hãy thử lại.",
 } as const satisfies MessageCatalog;
 

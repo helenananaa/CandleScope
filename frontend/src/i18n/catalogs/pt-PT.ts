@@ -4140,4 +4140,10 @@ export const ptPT = {
   "browser.download.end": "Fim (UTC, exclusivo)",
   "browser.download.submit": "Transferir e importar",
   "browser.download.symbolLookupUnavailable": "A pesquisa de símbolos não está disponível. Introduza o símbolo completo do mercado.",
+  "strategyCollection.retiredBadge": "Descontinuado",
+  "strategyCollection.pyneRetired": "O Pyne foi descontinuado. Esta estratégia guardada é mantida sem alterações, mas nunca é executada e não é tratada como Pine.",
+  "strategyCollection.removeRetired": "Remover {name} deste gráfico",
+  "chartTester.deleteDraft": "Eliminar",
+  "chartTester.deleteRetiredDraft": "Eliminar o rascunho descontinuado {name}",
+  "chartTester.deleteRetiredDraftFailed": "Não foi possível eliminar o rascunho descontinuado. Tente novamente.",
 } as const satisfies MessageCatalog;

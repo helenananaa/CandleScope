@@ -4145,4 +4145,10 @@ export const cs = {
   "browser.download.end": "Konec (UTC, bez něj)",
   "browser.download.submit": "Stáhnout a importovat",
   "browser.download.symbolLookupUnavailable": "Vyhledávání symbolů není k dispozici. Zadejte úplný symbol trhu.",
+  "strategyCollection.retiredBadge": "Ukončeno",
+  "strategyCollection.pyneRetired": "Pyne již není podporován. Tato uložená strategie zůstává beze změny, ale nikdy se nespustí a nepovažuje se za Pine.",
+  "strategyCollection.removeRetired": "Odebrat {name} z tohoto grafu",
+  "chartTester.deleteDraft": "Smazat",
+  "chartTester.deleteRetiredDraft": "Smazat ukončený koncept {name}",
+  "chartTester.deleteRetiredDraftFailed": "Ukončený koncept se nepodařilo smazat. Zkuste to znovu.",
 } as const satisfies MessageCatalog;

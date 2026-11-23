@@ -4135,5 +4135,11 @@ export const tr = {
   "browser.download.end": "Bitiş (UTC, hariç)",
   "browser.download.submit": "İndir ve içe aktar",
   "browser.download.symbolLookupUnavailable": "Sembol arama kullanılamıyor. Piyasanın tam sembolünü girin.",
+  "strategyCollection.retiredBadge": "Kullanımdan kaldırıldı",
+  "strategyCollection.pyneRetired": "Pyne kullanımdan kaldırıldı. Kaydedilen bu strateji değiştirilmeden saklanır, ancak hiçbir zaman çalıştırılmaz ve Pine olarak ele alınmaz.",
+  "strategyCollection.removeRetired": "Bu grafikten kaldır: {name}",
+  "chartTester.deleteDraft": "Sil",
+  "chartTester.deleteRetiredDraft": "Kullanımdan kaldırılan {name} taslağını sil",
+  "chartTester.deleteRetiredDraftFailed": "Kullanımdan kaldırılan taslak silinemedi. Yeniden deneyin.",
 } as const satisfies MessageCatalog;
 

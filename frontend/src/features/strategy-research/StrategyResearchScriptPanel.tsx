@@ -15,6 +15,7 @@ import { Button, Field, Select, TabPanel, Tabs } from "../../components/ui/index
 import { t } from "../../i18n/index.js";
 import { StrategyLanguageControls } from "../backtest/chart-tester/StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
+import type { RetiredStrategyDraft } from "../backtest/chart-tester/retiredPyneStrategy.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { choice, empty, nullable, number, object, optional, record, text } from "../app-control/commandSchema.js";
@@ -131,11 +132,14 @@ export function StrategyResearchScriptPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedPaneNonce]);
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
+  // Pyne drafts from builds before PR #105 are listed as retired and cannot be chosen.
+  const [retiredDrafts, setRetiredDrafts] = useState<RetiredStrategyDraft[]>([]);
   useEffect(() => {
     let cancelled = false;
     void draftStore.recent(20).then((records) => {
       if (!cancelled) setRecentDrafts(languageFixed ? records.filter((record) => record.language === "python" || record.id === draftId) : records);
     });
+    void draftStore.retired().then((records) => { if (!cancelled) setRetiredDrafts(records); }, () => undefined);
     return () => { cancelled = true; };
   }, [draftId, draftStore, languageFixed]);
   const templates = languageFixed ? RESEARCH_STRATEGY_TEMPLATES.filter((template) => template.language === "python") : RESEARCH_STRATEGY_TEMPLATES;
@@ -325,7 +329,7 @@ export function StrategyResearchScriptPanel({
 
   const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
-    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates, pane, openEditor }), commands: [
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, retiredDrafts, templates, pane, openEditor }), commands: [
       command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!templates.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
@@ -346,10 +350,14 @@ export function StrategyResearchScriptPanel({
   return (
     <section className="strategy-research-script-panel" data-testid="strategy-research-script-panel">
       <h3 className="strategy-research-script-title">{draft?.displayName ?? t("strategy.scriptSlot")}</h3>
-      {recentDrafts.length > 0 && <Field label={t("chartTester.recentTitle")}>
+      {(recentDrafts.length > 0 || retiredDrafts.length > 0) && <Field label={t("chartTester.recentTitle")}
+        {...(retiredDrafts.length > 0 ? { hint: t("strategyCollection.pyneRetired") } : {})}>
         <Select size="sm" value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
           <option value="">{t("chartTester.templateTitle")}</option>
           {recentDrafts.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}
+          {retiredDrafts.map((record) => <option key={record.id} value={record.id} disabled data-retired="true">
+            {`${record.displayName} · ${t("strategyCollection.retiredBadge")}`}
+          </option>)}
         </Select>
       </Field>}
       {barOnly ? (

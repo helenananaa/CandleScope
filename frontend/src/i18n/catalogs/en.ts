@@ -4542,5 +4542,11 @@ export const en = {
   "browser.download.end": "End (UTC, exclusive)",
   "browser.download.submit": "Download and import",
   "browser.download.symbolLookupUnavailable": "Symbol lookup is unavailable. Enter the full market symbol.",
+  "strategyCollection.retiredBadge": "Retired",
+  "strategyCollection.pyneRetired": "Pyne is retired. This saved strategy is kept unchanged but never runs, and it is not treated as Pine.",
+  "strategyCollection.removeRetired": "Remove {name} from this chart",
+  "chartTester.deleteDraft": "Delete",
+  "chartTester.deleteRetiredDraft": "Delete retired draft {name}",
+  "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

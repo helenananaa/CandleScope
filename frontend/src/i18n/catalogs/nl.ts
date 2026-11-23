@@ -4135,4 +4135,10 @@ export const nl = {
   "browser.download.end": "Einde (UTC, exclusief)",
   "browser.download.submit": "Downloaden en importeren",
   "browser.download.symbolLookupUnavailable": "Symbolen opzoeken is niet beschikbaar. Voer het volledige marktsymbool in.",
+  "strategyCollection.retiredBadge": "Stopgezet",
+  "strategyCollection.pyneRetired": "Pyne wordt niet meer ondersteund. Deze opgeslagen strategie blijft ongewijzigd bewaard, maar wordt nooit uitgevoerd en niet als Pine behandeld.",
+  "strategyCollection.removeRetired": "{name} van deze grafiek verwijderen",
+  "chartTester.deleteDraft": "Verwijderen",
+  "chartTester.deleteRetiredDraft": "Stopgezet concept {name} verwijderen",
+  "chartTester.deleteRetiredDraftFailed": "Het stopgezette concept kon niet worden verwijderd. Probeer het opnieuw.",
 } as const satisfies MessageCatalog;
