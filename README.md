@@ -10,7 +10,7 @@ source code remains on `main`. No build tool, dependencies, or backend is requir
 
 | File | Purpose |
 |---|---|
-| `index.html` | Page content. Chinese is authored in the markup; each translatable element carries its English text in `data-en` (plus `data-en-href` / `data-en-aria` for links and labels). |
+| `index.html` | Page content, organised as the loop the product covers: 01 Analyze, 02 Practice, 03 Test, 04 Review, then platform sections. Chinese is authored in the markup; each translatable element carries its English text in `data-en` (plus `data-en-href` / `data-en-aria` for links and labels), so an element with `data-en` must hold text only — put links in sibling elements. |
 | `style.css` | Dark theme matching the product UI. Colors live as tokens on `:root`. |
 | `assets/site.js` | Language switch, scroll reveals, and the canvas demos: hero workspace, chart lab (custom intervals × 15 chart types + drawings), 16-chart linked grid, Pine, strategy research, multi-symbol replay, journal, alert tree and the MCP chat. |
 | `assets/og.png` | 1200 × 630 social preview image. |
@@ -33,8 +33,14 @@ Run `python -m http.server 4173 --bind 127.0.0.1` from this folder, then open
 http://127.0.0.1:4173/. To preview English, click **EN** in the header.
 
 To refresh `assets/og.png`, capture the top of the Chinese page at 1200 × 630
-(for example with headless Edge or Chrome and `--lang=zh-CN`) once the
-entrance animations have finished.
+once the entrance animations have finished. With the preview server running,
+headless Chrome does it in one command:
+
+```sh
+chrome --headless=new --hide-scrollbars --accept-lang=zh-CN --force-prefers-reduced-motion \
+  --window-size=1200,630 --force-device-scale-factor=1 --virtual-time-budget=8000 \
+  --screenshot=assets/og.png http://127.0.0.1:4173/
+```
 
 ## Deployment
 

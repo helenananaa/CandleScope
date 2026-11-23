@@ -21,12 +21,12 @@
   // Chinese is authored in the markup; English lives next to it in data-en.
   const META = {
     zh: {
-      title: 'CandleScope — 没有上限的本地看盘、回放与策略工作台',
-      desc: 'CandleScope 是开源、本地运行的看盘工作台：100+ 交易所、任意自定义周期、15 种图表、不限数量的指标与警报、64 图联动、K 线回放训练、实时模拟盘与交易日志、Python / Pine 策略回测。',
+      title: 'CandleScope — 看盘、练习、验证、复盘：没有上限的开源本地工作台',
+      desc: 'CandleScope 是开源、本地运行的交易工作台：100+ 交易所、任意自定义周期、15 种图表与 22 种画图工具、不限数量的指标与警报；没有后见之明的挑战模式回放与合约级模拟账户；在图表上用 Python / Pine 回测，每笔交易都能解释；三阶段交易日志。',
     },
     en: {
-      title: 'CandleScope — Charting, replay and strategy research with no caps',
-      desc: 'CandleScope is an open-source workstation that runs on your machine: 100+ exchanges, any custom interval, 15 chart types, unlimited indicators and alerts, 64 linked charts, replay training, live paper trading with a journal, and Python / Pine backtesting.',
+      title: 'CandleScope — Analyze, practice, test and review, with no caps',
+      desc: 'CandleScope is an open-source trading workstation that runs on your machine: 100+ exchanges, any custom interval, 15 chart types and 22 drawing tools, unlimited indicators and alerts; Challenge replay without hindsight on a futures-grade paper account; Python and Pine backtests on the chart with an explanation for every trade; and a three-stage trade journal.',
     },
   };
   const textEls = [...document.querySelectorAll('[data-en]')];
