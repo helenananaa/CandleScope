@@ -8,12 +8,11 @@ product pages stay visually consistent.
 
 | File | Purpose | Recommended capture |
 |---|---|---|
-| `hero-live-workspace.png` | README hero | 1600 × 1000, dark theme, populated four-chart workspace |
-| `live-order-flow.png` | Live analysis | One strong chart with order book, trades, distribution, CVD, and volume delta |
-| `multi-chart-workspace.png` | Workspace feature | Four populated charts with different intervals and visible linking |
-| `replay-training.png` | Replay feature | Active training run with virtual clock, chart, paper orders, positions, and controls |
-| `pyne-indicator.png` | Extensibility feature | Pyne editor beside the indicator rendered on the chart |
-| `backtest-research.png` | Quant research beta | Completed run with equity, drawdown, metrics, trades, provenance, and Study/OOS context |
+| `hero-live-workspace.png` | README hero | 1600 × 1000, dark theme, populated four-chart workspace with visible linking |
+| `live-order-flow.png` | 1 · Analyze | One strong chart with order book, trades, CVD and volume delta |
+| `replay-training.png` | 2 · Practice | Active Challenge or Sandbox session with virtual clock, chart, paper orders, positions and controls |
+| `strategy-tester.png` | 3 · Test | Strategy tester on a chart with trades, equity and an open trade explanation |
+| `trade-journal.png` | 4 · Review | Trade journal with cumulative R, tagged trades and a written review |
 
 ## Capture Checklist
 
@@ -24,8 +23,8 @@ product pages stay visually consistent.
 - Remove loading states, errors, debug labels, test fixtures, and unrelated
   notification badges.
 - Use realistic but non-sensitive market data and local paper-training state.
-- When capturing the backtest surface, keep its visible “local beta” status and
-  provenance/fidelity disclosure in frame; do not imply that it is default-on.
+- When capturing the backtest surface, keep the test assumptions (fees,
+  slippage, fill model) in frame.
 - Do not include browser chrome, desktop wallpaper, terminal windows, or
   personal paths.
 - Preserve readable product text at GitHub's normal README width.
