@@ -24,11 +24,12 @@ import {
   zipFilesToBase64,
 } from "../pythonStudio.js";
 
-const app = readFileSync(new URL("../research/ResearchStrategyPanel.tsx", import.meta.url), "utf8");
+// The research tools are gone (ADR-BACKTEST-015 P5d): the studio lives in the workspace's saved strategies.
+const app = readFileSync(new URL("../../strategy-research/ResearchSavedStrategy.tsx", import.meta.url), "utf8");
 const api = readFileSync(new URL("../backtestApi.ts", import.meta.url), "utf8");
 const studio = readFileSync(new URL("../PythonStudioPanel.tsx", import.meta.url), "utf8");
 const studioModel = readFileSync(new URL("../pythonStudio.ts", import.meta.url), "utf8");
-const study = readFileSync(new URL("../research/ResearchStudyPanel.tsx", import.meta.url), "utf8");
+const study = readFileSync(new URL("../../market-data/manager/strategyDataManager.ts", import.meta.url), "utf8");
 
 describe("python studio mapping and state", () => {
   it("templates generate the three required files without user JSON", () => {
@@ -203,13 +204,13 @@ describe("python studio shipped surface", () => {
   it("wires template, import, smoke, persist and Host-owned result copy", () => {
     for (const token of [
       "<PythonStudioPanel",
-      "restorePythonStudioState",
+      "startSavedRevision",
     ]) {
       assert.match(app, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
     assert.match(studio, /python-host-owns-report/);
     assert.match(studioModel, /composePythonExport/);
-    assert.match(study, /createStudy/);
+    assert.match(study, /createRobustnessExperiment/);
     for (const token of [
       "python-strategy-studio",
       "python-template-create",

@@ -3,7 +3,7 @@ name: CCXT integration
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    paths: ["backend/**", "packages/**", ".github/workflows/ccxt-integration.yml"]
+    paths: ["backend/**", "packages/**", "frontend/tests/fixtures/run-result/**", ".github/workflows/ccxt-integration.yml"]
   push:
     branches: [main]
     paths: ["backend/**", "packages/**", ".github/workflows/ccxt-integration.yml"]

@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
+import { StrategyResearchRunDetails } from "./StrategyResearchRunDetails.js";
+import { RunResultSummary, RunResultTradeList } from "../backtest/runResult/RunResultViews.js";
+import type { ShownRunResult } from "../backtest/runResult/useStrategyRunOverlay.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
 import { Badge, Button, Disclosure, InlineAlert, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import {
@@ -26,7 +30,23 @@ export function StrategyResearchResultPanel({
   onOpenReplay,
   onLocateTrade,
   dataResolution,
+  sharedResult = null,
+  manager = null,
+  onRunCreated,
+  onOpenVersion,
+  requestedTab,
+  onOpenCompare,
 }: {
+  /** A tab the page asks for (`?mode=` names one, ADR-BACKTEST-015 P5c4); a new nonce asks again. */
+  requestedTab?: { tab: "details"; nonce: number } | undefined;
+  /** Where the full comparison of runs opens (the run history). */
+  onOpenCompare?(): void;
+  onRunCreated?: ComponentProps<typeof StrategyResearchRunDetails>["onRunCreated"];
+  onOpenVersion?: ComponentProps<typeof StrategyResearchRunDetails>["onOpenVersion"];
+  /** Loads the run's details (signal trace, export, replay review); without it the details tab is hidden. */
+  manager?: ComponentProps<typeof StrategyResearchRunDetails>["manager"] | null;
+  /** The run-result/1 of this run, loaded for the research overlay; the trades tab reads it (behind a flag). */
+  sharedResult?: ShownRunResult | null;
   result: ChartStrategyResultBundle | null;
   stale: boolean;
   staleReasons: readonly ChartStrategyTesterStaleReason[];
@@ -40,7 +60,15 @@ export function StrategyResearchResultPanel({
   dataResolution?: ChartContextResolution | null;
 }) {
   const locale = useLocale();
-  const [activeTab, setActiveTab] = useState<"overview" | "trades">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "trades" | "details">(() => requestedTab && manager ? requestedTab.tab : "overview");
+  const requestedNonce = requestedTab?.nonce;
+  useEffect(() => {
+    if (requestedTab && manager) setActiveTab(requestedTab.tab);
+    // Only a new request moves the tab; the user's own choice stays otherwise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedNonce]);
+  // The research tools' details are this result's details tab (ADR-BACKTEST-015 P5c4).
+  const openDetails = manager ? () => setActiveTab("details") : onOpenAdvanced;
   const [explanation, setExplanation] = useState<TradeExplanationSelection | null>(null);
   if (error !== null) {
     return <InlineAlert tone="danger">{error}</InlineAlert>;
@@ -95,6 +123,7 @@ export function StrategyResearchResultPanel({
         result={result}
         locale={locale}
         stale={stale}
+        {...(openDetails ? { onOpenAdvanced: openDetails } : {})}
       />
       <div className="strategy-research-result-bar">
         <Tabs
@@ -105,6 +134,7 @@ export function StrategyResearchResultPanel({
           tabs={[
             { value: "overview", label: t("chartTester.tab.overview") },
             { value: "trades", label: t("chartTester.tab.trades") },
+            ...(manager ? [{ value: "details" as const, label: t("researchResult.details") }] : []),
           ]}
         />
         <span className="strategy-research-result-meta">
@@ -118,12 +148,22 @@ export function StrategyResearchResultPanel({
         </span>
       </div>
       <TabPanel tabsId={tabsId} value={activeTab} className="strategy-research-result-body">
-      {activeTab === "overview" ? <ChartStrategyResultOverview
+      {activeTab === "details" && manager ? <StrategyResearchRunDetails key={result.run.run_id} result={result} manager={manager}
+          {...(onRunCreated ? { onRunCreated } : {})} {...(onOpenVersion ? { onOpenVersion } : {})} />
+        : activeTab === "overview" ? <ChartStrategyResultOverview
         result={result}
         stale={stale}
         onOpenTrades={() => setActiveTab("trades")}
-        {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
-      /> : <ChartStrategyTradeList
+        {...(openDetails ? { onOpenAdvanced: openDetails } : {})}
+        {...(manager ? { advancedLabel: t("researchResult.openDetails") } : {})}
+        {...(onOpenCompare ? { onOpenCompare } : {})}
+      /> : CHART_RUN_RESULT_VIEWS_ENABLED && sharedResult?.run.runId === result.run.run_id
+        ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+          <RunResultSummary result={sharedResult.result} locale={locale} />
+          <RunResultTradeList result={sharedResult.result} locale={locale}
+            onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }} onSelectExplanation={setExplanation} />
+        </div>
+        : <ChartStrategyTradeList
         result={result}
         locale={locale}
         onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }}

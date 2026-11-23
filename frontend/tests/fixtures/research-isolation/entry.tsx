@@ -6,7 +6,7 @@ import { CandleScopeStrategyTesterPanel } from "../../../src/features/backtest/c
 import { createChartStrategyTesterState } from "../../../src/features/backtest/chart-tester/chartStrategyTesterState.js";
 import { getChartStrategyDraftStore } from "../../../src/features/backtest/chart-tester/chartStrategyTesterDrafts.js";
 import { StrategyResearchScriptPanel } from "../../../src/features/strategy-research/StrategyResearchScriptPanel.js";
-import { saveResearchHandoff, readResearchHandoff, type ResearchHandoff } from "../../../src/features/strategy-research/strategyResearchHandoff.js";
+import { parseResearchHandoff, saveResearchHandoff, type ResearchHandoff } from "../../../src/features/strategy-research/strategyResearchHandoff.js";
 import type { ChartStrategyAttachmentRecord } from "../../../src/features/chart-workspace/chartWorkspaceTypes.js";
 import "../../../src/styles/tokens.css";
 import "../../../src/features/backtest/chart-tester/chartStrategyTester.css";
@@ -29,7 +29,15 @@ const runState = createChartStrategyTesterState({ session, attachment, draftCont
 const noop = () => undefined;
 const refuseRun = () => { throw new Error("This isolation fixture must never execute a strategy"); };
 const selectedKey = `qa-research-isolation-handoff:${language}`;
-let last: ResearchHandoff | null = readResearchHandoff(localStorage.getItem(selectedKey) ?? "");
+// Hand-offs are backend references (ADR-BACKTEST-015 P3c); this fixture runs without a backend and keeps them in the page.
+const referenceKey = (id: string) => `qa-research-isolation-reference:${id}`;
+const references = {
+  async saveStrategyReference(_kind: "research-handoff", key: string, value: unknown) { localStorage.setItem(referenceKey(key), JSON.stringify(value)); },
+};
+function readFixtureHandoff(id: string): ResearchHandoff | null {
+  try { return parseResearchHandoff(JSON.parse(localStorage.getItem(referenceKey(id)) ?? "null")); } catch { return null; }
+}
+let last: ResearchHandoff | null = readFixtureHandoff(localStorage.getItem(selectedKey) ?? "");
 Object.assign(window, { researchIsolationQA: { registry: appCommandRegistry, labels: { more: t("report.more"), open: t("ux.openWorkspace") },
   inspect: async () => ({ original: (await store.load(originalId)).record, handoff: last,
     experiment: last ? (await store.load(last.draftId)).record : null }) } });
@@ -42,9 +50,9 @@ export function Fixture() {
       runState={runState} resolution={null} sourceDiagnostics={[]} pendingDataDraftRevision={null}
       onPrepareData={refuseRun} onStopObserving={noop} onResumeObserving={noop} onSourceDirty={noop} onClose={noop}
       onOpenWorkspace={async (draft) => {
-        const href = await saveResearchHandoff({ session, workspaceId: "workspace-isolation", cellId: "cell-1", attachment, draft, runId: null }, store);
+        const href = await saveResearchHandoff({ session, workspaceId: "workspace-isolation", cellId: "cell-1", attachment, draft, runId: null }, references, store);
         const id = new URL(href, location.href).searchParams.get("handoff")!;
-        last = readResearchHandoff(id);localStorage.setItem(selectedKey, id);setHandoff(last);setDraftId(last!.draftId);
+        last = readFixtureHandoff(id);localStorage.setItem(selectedKey, id);setHandoff(last);setDraftId(last!.draftId);
       }} /></section><section><h2>Independent research editor</h2>{handoff && <StrategyResearchScriptPanel cellScope="experiment" session={session}
         sourceKind="CURRENT_CHART" draftId={draftId} barOnly runStatus="READY" needsData={false}
         onDraftId={setDraftId} onDraftRevision={noop} onRun={refuseRun} onConfirmNeedsData={refuseRun} onOpenAdvanced={noop}

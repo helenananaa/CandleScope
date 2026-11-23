@@ -16,6 +16,39 @@ export interface PluginChartLayerSnapshot {
   revision: number;
 }
 
+/** What the chart-layer renderer reads: plugin layers, strategy overlays, or both combined. */
+export interface ChartLayerSource {
+  getSnapshot(): PluginChartLayerSnapshot;
+  subscribe(listener: () => void): () => void;
+}
+
+/** Draw several chart-layer sources as one; entries keep their own ids and z-order. */
+export function combineChartLayerSources(
+  values: readonly (ChartLayerSource | null | undefined)[],
+): ChartLayerSource | null {
+  const sources = values.filter((value): value is ChartLayerSource => value != null);
+  if (sources.length <= 1) return sources[0] ?? null;
+  let revision = 0;
+  let key = "";
+  let cached: PluginChartLayerSnapshot = { entries: [], revision };
+  return {
+    getSnapshot() {
+      const snapshots = sources.map((source) => source.getSnapshot());
+      const next = snapshots.map((snapshot) => snapshot.revision).join(":");
+      if (next !== key) {
+        key = next;
+        revision += 1;
+        cached = { entries: snapshots.flatMap((snapshot) => [...snapshot.entries]), revision };
+      }
+      return cached;
+    },
+    subscribe(listener) {
+      const stops = sources.map((source) => source.subscribe(listener));
+      return () => { for (const stop of stops) stop(); };
+    },
+  };
+}
+
 const EMPTY_SNAPSHOT: PluginChartLayerSnapshot = Object.freeze({
   entries: Object.freeze([]),
   revision: 0,

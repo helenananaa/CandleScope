@@ -29,7 +29,7 @@ class ReplayPreparationPayload(BaseModel):
 class PythonBarExecution(BaseModel):
     model_config = ConfigDict(extra="forbid")
     outputMode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"]
-    executionModel: Literal["LEGACY", "V2"]
+    executionModel: Literal["LEGACY", "V2", "PRACTICE"]
     warmupBars: int = Field(ge=0, le=200_000, strict=True)
 
 

@@ -31,7 +31,8 @@ export interface StrategyDraftView {
 export interface StrategyDraftStoreAdapter {
   load(id: string): Promise<unknown | null>;
   list(): Promise<unknown[]>;
-  save(record: StrategyDraftRecord): Promise<void>;
+  /** May return the record as stored (the backend can assign a later revision); the store adopts it. */
+  save(record: StrategyDraftRecord): Promise<unknown>;
   remove(id: string): Promise<void>;
 }
 
@@ -235,9 +236,18 @@ export class StrategyDraftStore {
     };
   }
 
+  /** Never rejects: an unreachable store leaves the current copy, marked with the error. */
   async load(id: string): Promise<StrategyDraftView> {
     if (!DRAFT_ID_PATTERN.test(id)) return this.snapshot(id);
-    const loaded = normalizeRecord(await this.adapter.load(id));
+    let loaded: StrategyDraftRecord | null;
+    try {
+      loaded = normalizeRecord(await this.adapter.load(id));
+    } catch (error) {
+      const record = this.views.get(id)?.record ?? null;
+      this.views.set(id, { record, saveState: "ERROR", error: error instanceof Error ? error.message : "strategy draft load failed" });
+      this.emit(id);
+      return this.snapshot(id);
+    }
     const current = this.views.get(id);
     const keepCurrent = current?.record !== null
       && current?.record !== undefined
@@ -262,7 +272,8 @@ export class StrategyDraftStore {
     const boundedLimit = Number.isSafeInteger(limit) ? Math.min(50, Math.max(1, limit)) : 8;
     await Promise.all([...this.pending.values()].map((pending) => pending.catch(() => undefined)));
     const merged = new Map<string, StrategyDraftRecord>();
-    (await this.adapter.list())
+    // An unreachable store still lists the drafts this window holds.
+    (await this.adapter.list().catch(() => [] as unknown[]))
       .map(normalizeRecord)
       .filter((record): record is StrategyDraftRecord => record !== null)
       .forEach((record) => merged.set(record.id, record));
@@ -300,8 +311,9 @@ export class StrategyDraftStore {
       if (!candidate) throw new TypeError("invalid strategy draft input");
       this.views.set(input.id, { record: candidate, saveState: "SAVING", error: null });
       this.emit(input.id);
+      let saved = candidate;
       try {
-        await this.adapter.save(candidate);
+        saved = normalizeRecord(await this.adapter.save(candidate)) ?? candidate;
       } catch (error) {
         this.views.set(input.id, {
           record: candidate,
@@ -311,9 +323,9 @@ export class StrategyDraftStore {
         this.emit(input.id);
         throw error;
       }
-      this.views.set(input.id, { record: candidate, saveState: "SAVED", error: null });
+      this.views.set(input.id, { record: saved, saveState: "SAVED", error: null });
       this.emit(input.id);
-      return cloneRecord(candidate);
+      return cloneRecord(saved);
     });
     this.pending.set(input.id, operation);
     void operation.finally(() => {

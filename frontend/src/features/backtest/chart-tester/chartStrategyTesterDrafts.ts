@@ -5,19 +5,23 @@ import {
   createLocalStorageStrategyDraftAdapter,
   createMemoryStrategyDraftAdapter,
 } from "./StrategyDraftStore.js";
+import { createBackendStrategyDraftAdapter, createStrategyDraftClient } from "./strategyDraftBackend.js";
 
 let browserStore: StrategyDraftStore | null = null;
 
+/** Drafts live in the backend (ADR-BACKTEST-015 P3a); browser/desktop drafts are imported once and kept. */
 export function getChartStrategyDraftStore(): StrategyDraftStore {
   if (browserStore) return browserStore;
   let adapter = createMemoryStrategyDraftAdapter();
   if (typeof window !== "undefined") {
+    let storage = null;
     try {
-      const storage = getStrategyStorage();
-      if (storage) adapter = createLocalStorageStrategyDraftAdapter(storage);
+      storage = getStrategyStorage();
     } catch {
       // Some embedded/private browser contexts expose localStorage but reject access.
     }
+    adapter = createBackendStrategyDraftAdapter(createStrategyDraftClient(),
+      storage ? { adapter: createLocalStorageStrategyDraftAdapter(storage), storage } : null);
   }
   browserStore = new StrategyDraftStore(adapter);
   return browserStore;

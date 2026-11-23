@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { MarketDataRuntimeContract } from "../market-data/marketDataRuntimeContract.js";
+import type { SyntheticOrigin } from "../market-data/synthetic/syntheticSeries.js";
 import {
   createLiveReferenceSource,
   type LiveReferenceMarketChartSourceRuntime,
@@ -12,6 +13,7 @@ export function useLiveReferenceMarketChartSource(input: {
   session: ChartSession;
   datasetKey: string;
   marketData: MarketDataRuntimeContract;
+  syntheticOrigin?: SyntheticOrigin;
   paused: boolean;
 }): LiveReferenceMarketChartSourceRuntime {
   const { sourceId } = input;

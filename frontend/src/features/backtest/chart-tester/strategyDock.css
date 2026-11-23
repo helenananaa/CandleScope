@@ -21,8 +21,25 @@
 .strategy-dock-bar { display: flex; align-items: stretch; flex: 0 0 40px; gap: 4px; padding: 0 6px 0 8px; min-width: 0; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }
 .strategy-dock[data-collapsed=true] .strategy-dock-bar { border-bottom: 0; }
 .strategy-dock-identity, .strategy-dock-actions, .strategy-dock-window { display: flex; align-items: center; flex-shrink: 0; min-width: 0; }
-.strategy-dock-identity { flex-shrink: 1; max-width: 260px; }
+/* The strategy's name keeps its width (up to the cap; a longer name is shortened, its title holds
+   it); the tabs give way and scroll ("Strat…" next to German tabs at 1024 px). */
+.strategy-dock-identity { max-width: 260px; }
 .strategy-dock-tabs { display: flex; align-items: stretch; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-left: 4px; border-left: 1px solid var(--border-color); margin-left: 4px; }
+/* While more tabs are to the right, the strip's end fades (driven by its own scrolling: a strip
+   that fits has no timeline and no fade). */
+@supports (animation-timeline: scroll()) {
+  .strategy-dock-tabs {
+    animation-name: strategy-dock-tabs-more;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self inline);
+  }
+}
+@keyframes strategy-dock-tabs-more {
+  0%, 96% { mask-image: linear-gradient(to left, transparent, black 28px); /* a mask: only its alpha counts */ }
+  100% { mask-image: none; }
+}
 .strategy-dock-tabs:empty { border-left: 0; }
 .strategy-dock-actions { margin-left: auto; }
 .strategy-dock-window { gap: 2px; padding-left: 6px; margin-left: 2px; border-left: 1px solid var(--border-color); }
@@ -85,6 +102,9 @@
 .strategy-run-status[data-status=completed] { color: var(--strategy-success); }
 .strategy-run-status:is([data-status=failed], [data-status=unsupported]) { color: var(--strategy-error); }
 .strategy-run-status:is([data-status=needsData], [data-status=needs_data], [data-status=stale], [data-status=cancelled]) { color: var(--strategy-warning); }
+/* A result kept current by live bars (FOLLOW): a slow pulse, not the busy one. */
+.strategy-run-status[data-status=live] { color: var(--strategy-success); }
+.strategy-run-status[data-status=live] > i { animation: strategy-dot-pulse 2.4s ease-in-out infinite; }
 
 /* Notices under the bar: kit alerts, one row each. */
 /* Each notice is one row: title, then the detail on the same line. */

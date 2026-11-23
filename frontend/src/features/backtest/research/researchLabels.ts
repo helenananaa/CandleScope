@@ -1,5 +1,4 @@
 import { t, type MessageKey } from "../../../i18n/index.js";
-import { getLocale } from "../../../i18n/locale.js";
 
 /**
  * Display names for the codes research data carries: run, study and review states, and the
@@ -67,18 +66,4 @@ export function chartContextStatusLabel(status: string): string {
     case "UNAVAILABLE": return t("serverError.unavailable");
     default: return status;
   }
-}
-
-/** A time range sent as epoch milliseconds, as UTC dates and times (the zone the range fields edit in). */
-export function researchTimeRangeLabel(startMs: number | null | undefined, endMs: number | null | undefined): string {
-  const format = (value: number | null | undefined) =>
-    typeof value === "number" && Number.isFinite(value) ? new Date(value).toLocaleString(getLocale(), { timeZone: "UTC" }) : "—";
-  return `${format(startMs)} → ${format(endMs)} UTC`;
-}
-
-/** A content fingerprint such as "sha256:a4ee…", without its algorithm and cut to a readable length. */
-export function shortFingerprint(value: string | null | undefined, length = 12): string {
-  if (!value) return "—";
-  const digest = value.includes(":") ? value.slice(value.indexOf(":") + 1) : value;
-  return digest.length > length ? `${digest.slice(0, length)}…` : digest;
 }

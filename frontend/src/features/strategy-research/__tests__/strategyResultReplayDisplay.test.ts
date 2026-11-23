@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { BacktestResultReplayBar, BacktestResultReplayFrame } from "../../backtest/backtestTypes.js";
 import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers, replayLayout, restoreReplayLayout } from "../strategyResultReplayDisplay.js";
 import { StrategyResultReplayChart } from "../StrategyResultReplayChart.js";
+import { buildReplayOverlay, replayChartRows, replayPointAt } from "../strategyResultReplayOverlay.js";
 import { editReplayDrawings, replayDrawingBarIndex, replayDrawingOwner, replayDrawingScope, revealedReplayDrawings, type ReplayDrawing } from "../strategyResultReplayDrawings.js";
 
 test("only the edited setting follows its opt-in link", () => {
@@ -72,11 +73,10 @@ test("markers require an owned chart, a revealed cursor and a matching candle", 
   const render = (showMa: boolean) => renderToStaticMarkup(createElement(StrategyResultReplayChart, {
     slot: "primary", chart, frame, display: { ...DEFAULT_REPLAY_DISPLAY.primary, showMa }, disabled: false, onChange() {},
   }));
-  assert.match(render(true), /data-testid="strategy-replay-ma-line"/);
   assert.match(render(true), /data-testid="strategy-replay-ma"/);
   const hidden = render(false);
-  assert.doesNotMatch(hidden, /data-testid="strategy-replay-ma(?:-line)?"/);
-  assert.match(hidden, /data-testid="strategy-replay-fill-marker"/);
+  assert.doesNotMatch(hidden, /data-testid="strategy-replay-ma"/);
+  assert.match(hidden, /data-testid="strategy-replay-primary-surface"[^>]*data-markers="2"/);
   assert.match(hidden, /data-testid="strategy-replay-last-ohlc"/);
 
   const drawing: ReplayDrawing = {
@@ -86,11 +86,64 @@ test("markers require an owned chart, a revealed cursor and a matching candle", 
     slot: "primary", chart, frame: { ...frame, cursor }, display: { ...DEFAULT_REPLAY_DISPLAY.primary, showDrawings },
     disabled: false, drawingControl: { owner: "run", drawings: [drawing], locked: false, edit: () => true }, onChange() {},
   }));
-  assert.match(renderDrawings(4), /data-testid="strategy-replay-drawing"/);
-  assert.doesNotMatch(renderDrawings(3), /data-testid="strategy-replay-drawing"/);
-  assert.doesNotMatch(renderDrawings(4, false), /data-testid="strategy-replay-drawing"/);
+  assert.match(renderDrawings(4), /data-entries="1"/);
+  assert.match(renderDrawings(3), /data-entries="0"/);
+  assert.match(renderDrawings(4, false), /data-entries="0"/);
   assert.equal(replayDrawingBarIndex(bars, 199), 1);
   assert.equal(replayDrawingBarIndex(bars, 200), -1);
+});
+
+test("a replay draws its revealed fills, notes, average and lines as one strategy overlay (P5d3b)", () => {
+  const start = 1_700_000_000_000;
+  const bars: BacktestResultReplayBar[] = [0, 60_000, 180_000].map(offset => ({
+    open_time_ms: start + offset, close_time_ms: start + offset + 59_999, closed: true,
+    open: "1", high: "2", low: "1", close: "2", volume: "1",
+  }));
+  const fill = { cursor: 1, event_time_ms: start + 30_000, order_id: "entry", side: "BUY", price: "1.2", qty: "1", fee: "0" };
+  const frame = {
+    schema: "candlescope.local-bar-result-replay/1", run_id: "bt_example", snapshot_hash: "snapshot", report_hash: "report",
+    symbol: "BTCUSDT", quote_asset: "USDT", interval: "1m", signal_interval: "1m",
+    cursor: 2, total: 6, time_ms: start + 200_000, source_sequence: 2, bars,
+    fills: [fill, { ...fill, cursor: 2, event_time_ms: start + 90_000, order_id: "exit", side: "SELL", price: "1.8" }],
+    notes: [{ id: "note", revision: 1, cursor: 2, time_ms: start + 70_000, saved_at_ms: 1, body: "A long note about the exit bar" }],
+    fill_count: 2, order_events: [], order_trace_available: false, closed_bar_signals: [],
+    signal_trace_available: false, cash: "1", position: "0", equity: "1",
+  } satisfies BacktestResultReplayFrame;
+  const ma = { period: 2, points: [start, start + 60_000, start + 180_000].map(open_time_ms => ({ open_time_ms, value: 1.5 })) };
+  const drawings: ReplayDrawing[] = [
+    { id: "6c62a01d-c890-43f1-8845-d77bc99cc384", cursor: 1, points: [{ timeMs: start, price: 1.5 }] },
+    { id: "7c62a01d-c890-43f1-8845-d77bc99cc384", cursor: 2,
+      points: [{ timeMs: start, price: 1.1 }, { timeMs: start + 180_000, price: 1.9 }] },
+  ];
+  const second = start / 1_000;
+  assert.deepEqual(replayChartRows(bars)[0], { time: second, open: 1, high: 2, low: 1, close: 2, volume: 1, is_closed: true });
+
+  const overlay = buildReplayOverlay({ frame, bars, ownsMarkers: true, display: DEFAULT_REPLAY_DISPLAY.primary, ma, drawings,
+    firstPoint: { timeMs: start + 60_000, price: 1.7 }, idPrefix: "replay:primary" });
+  assert.deepEqual(overlay.markers.map(marker => [marker.time, marker.shape, marker.text ?? null]), [
+    [second, "arrowUp", "1 @ 1.2"],
+    [second + 60, "arrowDown", "1 @ 1.8"],
+    [second + 60, "square", "#2 A long note about the e…"],
+    [second + 60, "circle", null],
+  ]);
+  assert.equal(overlay.markers.at(-1)?.price, 1.7, "the first point of a line waits where it was clicked");
+  // The average breaks at the gap, and a single point is no line; a level spans the chart, a segment joins two bars.
+  assert.deepEqual(overlay.entries.map(({ item }) => item.type === "polyline" ? [item.type, item.points.map(point => point.time)]
+    : [item.type, item.type === "price-line" ? item.price : null]), [
+    ["polyline", [start, start + 60_000]],
+    ["price-line", 1.5],
+    ["polyline", [start, start + 180_000]],
+  ]);
+
+  const reference = buildReplayOverlay({ frame, bars, ownsMarkers: false, display: DEFAULT_REPLAY_DISPLAY.primary, ma: undefined,
+    drawings: [], idPrefix: "replay:extra1" });
+  assert.deepEqual(reference, { markers: [], entries: [], connectors: [], evidence: new Map() }, "a reference chart has no run markers");
+  const quiet = buildReplayOverlay({ frame, bars, ownsMarkers: true, display: { fills: false, notes: false }, ma: undefined,
+    drawings: [], idPrefix: "replay:primary" });
+  assert.equal(quiet.markers.length, 0);
+
+  assert.deepEqual(replayPointAt(bars, second + 90, 1.6), { timeMs: start + 60_000, price: 1.6 });
+  assert.equal(replayPointAt(bars, second + 120, 1.6), null, "a click between bars places nothing");
 });
 
 test("result drawings round-trip with per-slot and per-dataset ownership", () => {

@@ -28,9 +28,28 @@ def freeze_execution(native, payload, bars, *, allow_bar_callbacks=False):
     else:
         if data["symbol"] != payload["context"]["symbol"].split(":")[-1]:
             raise BacktestError("DATA_SNAPSHOT_MISMATCH", "execution symbol differs from chart")
+        check_execution_market(data, payload)
         events = tuple(MarketEvent(sequence=i+1, event_time_ms=item["time_ms"], role=item["role"], payload=item["payload"]) for i,item in enumerate(data["events"]))
     validate_execution(events, bars, payload["interval"], mode)
     return [{"sequence": e.sequence, "event_time_ms": e.event_time_ms, "role": e.role, "payload": dict(e.payload)} for e in events]
+
+
+# Binance USD-M perpetuals are "futures" on the chart and "usdm" in research chart-book files.
+_MARKET_ALIASES = {"futures": "usdm"}
+
+
+def check_execution_market(data, payload):
+    """A file that names its exchange and market (a research chart-book file) must be for the run's
+    market. Imported data runs as "local": its venue is unknown, so only the symbol is checked."""
+    exchange, market = data.get("exchange"), data.get("market_type")
+    run_exchange = str(payload.get("exchange") or "binance").lower()
+    if run_exchange == "local" or (exchange is None and market is None):
+        return
+    run_market = str(payload.get("market_type") or "usdm").lower()
+    if exchange is not None and exchange.lower() != run_exchange or market is not None and \
+            _MARKET_ALIASES.get(market.lower(), market.lower()) != _MARKET_ALIASES.get(run_market, run_market):
+        raise BacktestError("DATA_SNAPSHOT_MISMATCH",
+                            f"the execution data is for {exchange or run_exchange} {market or run_market}, not this chart's market")
 
 
 def validate_execution(events, bars, interval, mode):

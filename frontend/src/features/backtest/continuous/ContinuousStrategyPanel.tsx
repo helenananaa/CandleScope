@@ -8,7 +8,8 @@ import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides, type StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
 import type { ContinuousObservation } from "../../market-data/manager/continuousStrategyDataManager.js";
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
-import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference, saveContinuousReference, continuousArchiveScope } from "./continuousRunReference.js";
+import { backendContinuousReferences, type ContinuousRunReference } from "./continuousRunReference.js";
+import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import ContinuousBarBoundary from "./ContinuousBarBoundary.js";
@@ -16,9 +17,11 @@ import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
 import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
-import { continuousFillTimeMs, readContinuousAccountRows } from "./continuousAccountRows.js";
-import type { ChartStrategyResultMarkerSource } from "../chart-tester/chartStrategyResultMarkerSource.js";
-import type { BacktestMarkerChart } from "../chart-tester/chartStrategyResultProjection.js";
+import { readContinuousAccountRows } from "./continuousAccountRows.js";
+import {
+  PRACTICE_ACCOUNT_RULES, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
+} from "./continuousAccountRules.js";
+import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
@@ -31,7 +34,8 @@ export interface ContinuousStrategyPanelProps {
   initialFromMs?: number;
   chartActive?: boolean;
   marketWindow?: SeriesWindowView | null;
-  markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
+  /** The forward run the chart should overlay (ADR-BACKTEST-015 P2d), or null. */
+  onOverlayRunChange?(run: StrategyOverlayRun | null): void;
   onLocateTrade?(timeMs: number): void;
   onDetach?(): Promise<void>;
   onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
@@ -54,6 +58,8 @@ function time(value: unknown): string {
 export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelProps) {
   useLocale();
   const manager = useMarketDataWorkspaceResources()?.dataManager.strategy.continuous;
+  const strategyManager = useStrategyDataManager();
+  const references = useMemo(() => strategyManager ? backendContinuousReferences(strategyManager, browserStorage()) : null, [strategyManager]);
   const [caps, setCaps] = useState<ContinuousCapabilities | null>(null);
   const [reference, setReference] = useState<ContinuousRunReference | null>(null);
   const [savedRuns, setSavedRuns] = useState<ContinuousRunReference[]>([]);
@@ -73,28 +79,41 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
   const [fee, setFee] = useState(props.initialExecution?.feeBps ?? "0"), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
   const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
+  // ADR-BACKTEST-015 P6e: new forward runs trade on the practice account model (continuousAccountRules).
+  const executionModel = forwardExecutionModel(props.initialization, reference);
+  const spot = props.session.marketType === "spot";
+  const [leverage, setLeverage] = useState(() => defaultForwardLeverage(props.session.marketType, props.initialExecution));
+  const accountLeverage = forwardAccountLeverage(executionModel, props.session.marketType, leverage);
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
-  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
-    [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
-  const executionModel = props.initialization ? props.initialization.executionModel ?? "V2" : "LEGACY";
+  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null,
+    ...(executionModel === "PRACTICE" ? [executionModel, accountLeverage] : [])]))),
+    [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from, executionModel, accountLeverage]);
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
     && identity.assetClass === "crypto" && identity.seriesVariant === "native" && identity.priceAdjustment === "raw"
     && identity.sessionVariant === "continuous" && identity.volumeSemantics === "base_asset";
   useEffect(() => {
-    try {
-      const saved = readContinuousReference(localStorage, scope); setReference(saved); setStorageFailed(false);
-      setSavedRuns(listContinuousReferences(localStorage, scope));
-      if (saved) {
-        setFrom(saved.settings.from); setBalance(saved.settings.balance); setPercent(saved.settings.percent);
-        setFee(saved.settings.fee); setSlippage(saved.settings.slippage); setOutput(saved.settings.output);
+    if (!references) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await references.read(scope);
+        const listed = await references.list(scope);
+        if (cancelled) return;
+        setReference(saved); setStorageFailed(false); setSavedRuns(listed);
+        if (saved) {
+          setFrom(saved.settings.from); setBalance(saved.settings.balance); setPercent(saved.settings.percent);
+          setFee(saved.settings.fee); setSlippage(saved.settings.slippage); setOutput(saved.settings.output);
+          if (saved.settings.leverage) setLeverage(saved.settings.leverage);
+        }
       }
-    }
-    catch { setStorageFailed(true); setError(t("continuous.storage")); }
-  }, [scope]);
+      catch { if (!cancelled) { setStorageFailed(true); setError(t("continuous.storage")); } }
+    })();
+    return () => { cancelled = true; };
+  }, [references, scope]);
   useEffect(() => {
     if (!manager || !props.active) return;
     const controller = new AbortController();
@@ -113,28 +132,20 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     } catch (failure) { setError(String(failure)); }
   }, [manager, observe, reference?.runId, attempt]);
   const view = state.result?.identity.id === reference?.runId ? state.result : null;
-  const markerSource = props.markerSource;
-  const chart = useMemo<BacktestMarkerChart | null>(() => {
-    if (!props.chartActive || !view || view.stale) return null;
-    const { identity: point } = view;
-    return {
-      run_id: point.id,
-      chart_hash: JSON.stringify(["continuous", point.id, point.generation, point.revision, point.checkpoint_revision, point.data_revision]),
-      interval: props.session.interval,
-      fills: state.rows.fills.filter((fill) => {
-        const time = continuousFillTimeMs(fill);
-        return time !== null && time <= point.event_time_ms && (fill.side === "BUY" || fill.side === "SELL");
-      }),
-    };
-  }, [props.chartActive, props.session.interval, state.rows.fills, view]);
-  useLayoutEffect(() => () => markerSource?.setContinuousResult(undefined), [markerSource]);
-  useLayoutEffect(() => {
-    markerSource?.setContinuousResult(chart);
-  }, [chart, markerSource]);
+  // The chart overlay draws the run's committed account from the run facade; a stale
+  // (repair-required) account is not drawn.
+  const overlayRunId = props.chartActive && view && !view.stale ? view.identity.id : null;
+  const onOverlayRunChange = props.onOverlayRunChange;
+  useEffect(() => {
+    onOverlayRunChange?.(overlayRunId ? { family: "continuous", runId: overlayRunId } : null);
+  }, [onOverlayRunChange, overlayRunId]);
+  useEffect(() => () => onOverlayRunChange?.(null), [onOverlayRunChange]);
 
-  function save(next: ContinuousRunReference) {
+  // The chart's forward-run references live in the backend (ADR-BACKTEST-015 P3c).
+  async function save(next: ContinuousRunReference) {
     try {
-      activateContinuousReference(localStorage, scope, next); setReference(next); setSavedRuns(listContinuousReferences(localStorage, scope));
+      if (!references) throw new Error(t("continuous.storage"));
+      await references.activate(scope, next); setReference(next); setSavedRuns(await references.list(scope));
     }
     catch { setStorageFailed(true); throw new Error(t("continuous.storage")); }
   }
@@ -148,9 +159,10 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       const start = Date.parse(from + ":00Z");
       if (![balance, percent, fee, slippage].every((value) => value.trim() && Number.isFinite(Number(value)))
         || Number(balance) <= 0 || Number(percent) <= 0 || Number(percent) > 100 || Number(fee) < 0 || Number(slippage) < 0
+        || !validForwardLeverage(accountLeverage)
         || (props.mode === "HISTORY_LIVE" && (!Number.isSafeInteger(start) || start < 0 || start >= Date.now()))) throw new Error(t("continuous.invalid"));
       const next: ContinuousRunReference = reference && !reference.runId ? reference : matchingPending ?? { schema: 1, requestKey: "chart/" + crypto.randomUUID(), runId: null, inputRevision, createdAtMs: Date.now(),
-        settings: { from, balance, percent, fee, slippage, output } };
+        settings: { from, balance, percent, fee, slippage, output, ...(executionModel === "PRACTICE" ? { leverage: accountLeverage } : {}) } };
       if (next.inputRevision !== inputRevision) throw new Error(t("continuous.pending"));
       await props.saveDraft?.();
       if (!mounted.current) return;
@@ -158,13 +170,14 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       // selected until the backend acknowledges the replacement.
       if (reference?.runId) {
         try {
-          saveContinuousReference(localStorage, continuousArchiveScope(scope, next.requestKey), next);
-          setSavedRuns(listContinuousReferences(localStorage, scope));
+          if (!references) throw new Error(t("continuous.storage"));
+          await references.archive(scope, next);
+          setSavedRuns(await references.list(scope));
         } catch {
           setStorageFailed(true);
           throw new Error(t("continuous.storage"));
         }
-      } else save(next);
+      } else await save(next);
       const result = await manager.create(next.requestKey, { mode: props.mode,
         series: { exchange: props.session.exchange, market_type: props.session.marketType, symbol: props.session.symbol, interval: props.session.interval,
           identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
@@ -172,11 +185,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
         execution: { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
           initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
-          ...(executionModel === "V2" ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
+          ...forwardModelExecution(executionModel, accountLeverage) },
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
-      save({ ...next, runId: result.creation.run_id }); setCreation(result.creation); setState(empty);
+      await save({ ...next, runId: result.creation.run_id }); setCreation(result.creation); setState(empty);
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -185,7 +198,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     setBusy(true); setError(null);
     try {
       const result = await manager.request(reference.requestKey);
-      setCreation(result.creation); save({ ...reference, runId: result.creation.run_id }); setAttempt((value) => value + 1);
+      setCreation(result.creation); await save({ ...reference, runId: result.creation.run_id }); setAttempt((value) => value + 1);
     } catch (failure) { setError(String(failure)); }
     finally { setBusy(false); }
   }
@@ -211,7 +224,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     && view.identity.event_time_ms >= start + warmupBars * 60_000 ? {
       parameters: props.parameters, fidelityPreference: "FAST", rangeMode: "CUSTOM",
       customRange: { startMs: start, endMs: view.identity.event_time_ms },
-      executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: "1", feeBps: fee, slippageBps: slippage },
+      executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: accountLeverage, feeBps: fee, slippageBps: slippage },
       pythonBarExecution: { outputMode: output, executionModel, warmupBars },
     } : null;
 
@@ -239,11 +252,12 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {savedRuns.length > 0 && <label>{t("continuous.savedRuns")}<select disabled={busy || storageFailed} value={reference?.requestKey ?? ""} onChange={(event) => {
       const selected = savedRuns.find((value) => value.requestKey === event.target.value);
       if (!selected) return;
-      try {
-        save(selected); setCreation(null); setState(empty); setError(null);
+      void save(selected).then(() => {
+        setCreation(null); setState(empty); setError(null);
         setFrom(selected.settings.from); setBalance(selected.settings.balance); setPercent(selected.settings.percent);
         setFee(selected.settings.fee); setSlippage(selected.settings.slippage); setOutput(selected.settings.output);
-      } catch (failure) { setError(String(failure)); }
+        if (selected.settings.leverage) setLeverage(selected.settings.leverage);
+      }, (failure: unknown) => setError(String(failure)));
     }}><option value="" disabled>{t("continuous.savedRuns")}</option>{savedRuns.map((saved) => <option key={saved.requestKey} value={saved.requestKey}>
       {time(saved.createdAtMs)} · {saved.runId?.slice(-8) ?? t("continuous.pendingRun")}
     </option>)}</select></label>}
@@ -251,10 +265,13 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       {props.mode === "HISTORY_LIVE" && <label>{t("continuous.from")}<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} /></label>}
       {([["continuous.balance", balance, setBalance], ["continuous.percent", percent, setPercent], ["continuous.fee", fee, setFee], ["continuous.slippage", slippage, setSlippage]] as const).map(([label, value, change]) =>
         <label key={label}>{t(label)}<input type="number" min="0" step="any" value={value} onChange={(event) => change(event.target.value)} /></label>)}
+      {executionModel === "PRACTICE" && !spot && <label>{t("continuous.leverage")}<input type="number" min="1" max="125" step="1"
+        value={leverage} onChange={(event) => setLeverage(event.target.value)} /></label>}
       <label>{t("continuous.output")}<select aria-label={t("continuous.output")} value={output} onChange={(event) => setOutput(event.target.value as typeof output)}>
         <option value="SIGNAL">{t("continuous.signal")}</option><option value="TARGET_POSITION">{t("continuous.target")}</option><option value="ORDER_INTENT">{t("continuous.order")}</option>
       </select></label>
     </div>
+    {executionModel === "PRACTICE" && <p className="continuous-account-rules" data-account-rules={PRACTICE_ACCOUNT_RULES}>{t("continuous.practiceRules")}</p>}
     {props.onParameterChange && <ContinuousParameterEditor
       manager={manager} source={props.source} parameters={props.parameters}
       enabled={props.active && props.language === "python" && !!caps?.python_editor_authorized}
@@ -297,4 +314,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         if (barTime !== null) props.onLocateTrade?.(barTime * 1000);
       } } : {})} /> : <p>{t("continuous.empty")}</p>}
   </div>;
+}
+
+/** The origin's browser storage, where references lived before ADR-BACKTEST-015 P3c; null when it is unavailable. */
+function browserStorage(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
 }

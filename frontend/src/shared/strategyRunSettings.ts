@@ -19,10 +19,19 @@ export interface StrategyExecutionOverrides {
 }
 
 export type PythonBarOutputMode = "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
+/**
+ * How a Python bar run matches: the worst case per bar (LEGACY), with execution realism (V2), or on
+ * the practice account model it shares with practice accounts (PRACTICE, ADR-BACKTEST-015 P6e).
+ */
+export type PythonBarExecutionModel = "LEGACY" | "V2" | "PRACTICE";
 export interface PythonBarExecution {
   outputMode: PythonBarOutputMode;
-  executionModel: "LEGACY" | "V2";
+  executionModel: PythonBarExecutionModel;
   warmupBars: number;
+}
+
+export function isPythonBarExecutionModel(value: unknown): value is PythonBarExecutionModel {
+  return value === "LEGACY" || value === "V2" || value === "PRACTICE";
 }
 
 export function isPythonBarOutputMode(value: unknown): value is PythonBarOutputMode {
@@ -37,7 +46,7 @@ export function validPythonBarExecution(value: unknown): value is PythonBarExecu
   if (!value || typeof value !== "object") return false;
   const profile = value as PythonBarExecution;
   return isPythonBarOutputMode(profile.outputMode) && validWarmup(profile.warmupBars)
-    && (profile.executionModel === "LEGACY" || profile.executionModel === "V2");
+    && isPythonBarExecutionModel(profile.executionModel);
 }
 
 export interface StrategyRunSettings {
@@ -51,7 +60,7 @@ export interface StrategyRunSettings {
 }
 
 export interface StrategyInitializationSettings {
-  runId: string; versionHash: string; outputMode: PythonBarOutputMode; warmupBars: number; executionModel?: "LEGACY" | "V2";
+  runId: string; versionHash: string; outputMode: PythonBarOutputMode; warmupBars: number; executionModel?: PythonBarExecutionModel;
   preferredRunMode?: "HISTORY_LIVE";
 }
 export function validStrategyInitialization(value: unknown): value is StrategyInitializationSettings {
@@ -60,7 +69,7 @@ export function validStrategyInitialization(value: unknown): value is StrategyIn
   return typeof v.runId === "string" && /^bt_[\w-]+$/.test(v.runId)
     && typeof v.versionHash === "string" && /^sha256:[a-f0-9]{64}$/.test(v.versionHash)
     && isPythonBarOutputMode(v.outputMode) && validWarmup(v.warmupBars)
-    && (v.executionModel === undefined || v.executionModel === "LEGACY" || v.executionModel === "V2")
+    && (v.executionModel === undefined || isPythonBarExecutionModel(v.executionModel))
     && (v.preferredRunMode === undefined || v.preferredRunMode === "HISTORY_LIVE");
 }
 

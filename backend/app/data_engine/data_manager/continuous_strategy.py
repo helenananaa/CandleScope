@@ -206,6 +206,22 @@ class ContinuousStrategyAccess:
             await self._ensure(run_id)
             return await self.work(controller.store.results.read,run_id,**kwargs)
 
+    async def describe(self,run_id):
+        """A forward run's immutable definition, without its account (ADR-BACKTEST-015 P3b)."""
+        async def read():return await self.work(self.controller().store.describe,run_id)
+        return await self._command(read)
+
+    async def committed_result(self,run_id):
+        """The committed account for the shared run-result projection (ADR-BACKTEST-015 P2d)."""
+        async def read():
+            controller=self.controller()
+            try:return await self.work(controller.store.results.committed_kernel_result,run_id)
+            except BacktestError as failure:
+                if failure.code!="CONTINUOUS_RESULTS_UNAVAILABLE":raise
+                await self._ensure(run_id)
+                return await self.work(controller.store.results.committed_kernel_result,run_id)
+        return await self._command(read)
+
     async def status(self,run_id):
         async def read():
             controller=self.controller()
@@ -263,7 +279,7 @@ class ContinuousStrategyAccess:
             with controller.store.lock:
                 controller.store.db.execute("BEGIN")
                 try:
-                    return {"runs":controller.store.list_summaries(),
+                    return {"runs":controller.store.list_catalog(),
                         "repairs":controller.store.epochs.summaries(),
                         "preparations":[{field:row[field] for field in CREATION_FIELDS}
                             for row in controller.store.creations.list_pending()]}

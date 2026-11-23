@@ -181,8 +181,20 @@ else:
 
 if BACKTEST_SETTINGS.enabled:
     from app.api.v1.backtests import router as backtests_router
+    from app.api.v1.strategy_drafts import router as strategy_drafts_router
+    from app.api.v1.strategy_runs import router as strategy_runs_router
+    from app.api.v1.strategy_versions import router as strategy_versions_router
+    from app.api.v1.strategy_references import router as strategy_references_router
+    from app.api.v1.strategy_follows import router as strategy_follows_router
+    from app.api.v1.strategy_experiments import router as strategy_experiments_router
 
     app.include_router(backtests_router, prefix="/api/v1")
+    app.include_router(strategy_runs_router, prefix="/api/v1")
+    app.include_router(strategy_drafts_router, prefix="/api/v1")
+    app.include_router(strategy_versions_router, prefix="/api/v1")
+    app.include_router(strategy_references_router, prefix="/api/v1")
+    app.include_router(strategy_follows_router, prefix="/api/v1")
+    app.include_router(strategy_experiments_router, prefix="/api/v1")
 
 
 # ═══════════════════════════════════════════════════════════════

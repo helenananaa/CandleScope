@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { saveResearchHandoff, readResearchHandoff } from "../strategyResearchHandoff.js";
+import { loadResearchHandoff, saveResearchHandoff, readResearchHandoff } from "../strategyResearchHandoff.js";
 import { StrategyResearchRuntime } from "../StrategyResearchRuntime.js";
 import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../../backtest/chart-tester/StrategyDraftStore.js";
 
@@ -12,12 +12,19 @@ test("handoff keeps the exact chart, draft, parameters and conditions without gr
   } } });
   try {
     const store = new StrategyDraftStore(createMemoryStrategyDraftAdapter());
+    // The hand-off lives in the backend (P3c); browser storage only serves links from before it.
+    const kept = new Map<string, unknown>();
+    const references = {
+      async saveStrategyReference(_kind: "research-handoff", key: string, value: unknown) { kept.set(key, value); },
+      async loadStrategyReference(_kind: "research-handoff", key: string) { return kept.get(key) ?? null; },
+    };
     const draft = await store.save({ id: "draft-12345678", displayName: "SMA", language: "pine", source: "strategy(\"SMA\")", cursor: null });
     const href = await saveResearchHandoff({ draft, session: { exchange: "binance", marketType: "futures", symbol: "ETHUSDT", interval: "15m" }, workspaceId: "workspace-main", cellId: "cell-1", runId: null,
       attachment: { schemaVersion: 1, strategyDraftId: "draft-12345678", strategyRevisionId: null, displayName: "SMA", language: "pine", parameters: { fast: 8 }, rangeMode: "CUSTOM", customRange: { startMs: 1000, endMs: 2000 }, fidelityPreference: "PRECISE", quickPresetId: "CRYPTO_PERP_STANDARD_V1", autoRun: false,
-        executionOverrides: { initialBalance: "3500", equityPercent: "10", leverage: "2", feeBps: "5", slippageBps: "1" } } }, store);
+        executionOverrides: { initialBalance: "3500", equityPercent: "10", leverage: "2", feeBps: "5", slippageBps: "1" } } }, references, store);
     const id = new URL(href, "http://localhost").searchParams.get("handoff")!;
-    const restored = readResearchHandoff(id)!;
+    assert.equal(values.size, 0, "nothing is written to browser storage");
+    const restored = (await loadResearchHandoff(id, references))!;
     assert.equal(restored.source.symbol, "ETHUSDT");
     assert.equal(restored.source.interval, "15m");
     assert.notEqual(restored.draftId, "draft-12345678");
@@ -32,8 +39,12 @@ test("handoff keeps the exact chart, draft, parameters and conditions without gr
     const offline = new StrategyResearchRuntime({ restoreWorkspace: false, runtimeMode: "LOCAL_OFFLINE" });
     offline.dispatch({ type: "source/select", source: restored.source });
     assert.equal(offline.currentChartRunnable(), false);
-    assert.equal(readResearchHandoff("missing-context"), null);
-    assert.equal(readResearchHandoff("../invalid"), null);
+    assert.equal(await loadResearchHandoff("missing-context", references), null);
+    assert.equal(await loadResearchHandoff("../invalid", references), null);
+    // A link written to browser storage before P3c still opens.
+    values.set("candlescope:research-handoff:legacy-handoff-1", JSON.stringify(kept.get(id)));
+    assert.deepEqual(await loadResearchHandoff("legacy-handoff-1", references), restored);
+    assert.deepEqual(readResearchHandoff("legacy-handoff-1"), restored);
   } finally {
     if (previous) Object.defineProperty(globalThis, "window", previous);
     else Reflect.deleteProperty(globalThis, "window");

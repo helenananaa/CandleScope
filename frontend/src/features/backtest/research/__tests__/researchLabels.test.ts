@@ -9,8 +9,6 @@ import {
   chartContextStatusLabel,
   researchFidelityLabel,
   researchStateLabel,
-  researchTimeRangeLabel,
-  shortFingerprint,
 } from "../researchLabels.js";
 
 test("research states and accuracy tiers are named, and unknown codes stay visible", () => {
@@ -28,16 +26,4 @@ test("research states and accuracy tiers are named, and unknown codes stay visib
   assert.equal(researchFidelityLabel("BOOK_SAMPLED"), "Sampled order book");
   assert.equal(chartContextStatusLabel("AMBIGUOUS_MARKET"), "Couldn't tell which market this chart shows.");
   assert.equal(chartContextStatusLabel("NEW_STATUS"), "NEW_STATUS");
-});
-
-test("epoch-millisecond ranges read as UTC dates and fingerprints drop their algorithm", () => {
-  setLocale("en");
-  const range = researchTimeRangeLabel(Date.UTC(2026, 8, 6, 8, 48), Date.UTC(2026, 8, 7, 13, 18, 59, 999));
-  assert.match(range, /2026/);
-  assert.match(range, /UTC$/);
-  assert.doesNotMatch(range, /1788/);
-  assert.equal(researchTimeRangeLabel(null, undefined), "— → — UTC");
-  assert.equal(shortFingerprint("sha256:a4eedb2cf5c14b4570271b356a570c62"), "a4eedb2cf5c1…");
-  assert.equal(shortFingerprint("abc"), "abc");
-  assert.equal(shortFingerprint(undefined), "—");
 });

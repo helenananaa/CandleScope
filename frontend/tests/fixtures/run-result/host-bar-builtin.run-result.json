@@ -1,0 +1,424 @@
+{
+  "authority": "HOST",
+  "clock_policy": "FIXED",
+  "equity": [
+    {
+      "bar_time_ms": 0,
+      "equity": "10000",
+      "time_ms": 59999
+    },
+    {
+      "bar_time_ms": 60000,
+      "equity": "10000",
+      "time_ms": 119999
+    },
+    {
+      "bar_time_ms": 120000,
+      "equity": "10000",
+      "time_ms": 179999
+    },
+    {
+      "bar_time_ms": 180000,
+      "equity": "10000",
+      "time_ms": 239999
+    },
+    {
+      "bar_time_ms": 240000,
+      "equity": "10000",
+      "time_ms": 299999
+    },
+    {
+      "bar_time_ms": 300000,
+      "equity": "10000",
+      "time_ms": 359999
+    },
+    {
+      "bar_time_ms": 360000,
+      "equity": "10000",
+      "time_ms": 419999
+    },
+    {
+      "bar_time_ms": 420000,
+      "equity": "10000",
+      "time_ms": 479999
+    },
+    {
+      "bar_time_ms": 480000,
+      "equity": "10000",
+      "time_ms": 539999
+    },
+    {
+      "bar_time_ms": 540000,
+      "equity": "10000",
+      "time_ms": 599999
+    },
+    {
+      "bar_time_ms": 600000,
+      "equity": "10000",
+      "time_ms": 659999
+    },
+    {
+      "bar_time_ms": 660000,
+      "equity": "9999.96789679",
+      "time_ms": 719999
+    },
+    {
+      "bar_time_ms": 720000,
+      "equity": "10001.45719679",
+      "time_ms": 779999
+    },
+    {
+      "bar_time_ms": 780000,
+      "equity": "9997.95719679",
+      "time_ms": 839999
+    },
+    {
+      "bar_time_ms": 840000,
+      "equity": "9993.95719679",
+      "time_ms": 899999
+    },
+    {
+      "bar_time_ms": 900000,
+      "equity": "9992.91719979",
+      "time_ms": 959999
+    },
+    {
+      "bar_time_ms": 960000,
+      "equity": "9992.91719979",
+      "time_ms": 1019999
+    },
+    {
+      "bar_time_ms": 1020000,
+      "equity": "9992.91719979",
+      "time_ms": 1079999
+    },
+    {
+      "bar_time_ms": 1080000,
+      "equity": "9992.88479655",
+      "time_ms": 1139999
+    },
+    {
+      "bar_time_ms": 1140000,
+      "equity": "9995.37399655",
+      "time_ms": 1199999
+    },
+    {
+      "bar_time_ms": 1200000,
+      "equity": "9991.87399655",
+      "time_ms": 1259999
+    },
+    {
+      "bar_time_ms": 1260000,
+      "equity": "9987.87399655",
+      "time_ms": 1319999
+    },
+    {
+      "bar_time_ms": 1320000,
+      "equity": "9986.83319961",
+      "time_ms": 1379999
+    },
+    {
+      "bar_time_ms": 1380000,
+      "equity": "9986.83319961",
+      "time_ms": 1439999
+    },
+    {
+      "bar_time_ms": 1440000,
+      "equity": "9986.83319961",
+      "time_ms": 1499999
+    },
+    {
+      "bar_time_ms": 1500000,
+      "equity": "9986.83319961",
+      "time_ms": 1559999
+    },
+    {
+      "bar_time_ms": 1560000,
+      "equity": "9986.83319961",
+      "time_ms": 1619999
+    },
+    {
+      "bar_time_ms": 1620000,
+      "equity": "9986.8010964",
+      "time_ms": 1679999
+    },
+    {
+      "bar_time_ms": 1680000,
+      "equity": "9988.2903964",
+      "time_ms": 1739999
+    },
+    {
+      "bar_time_ms": 1740000,
+      "equity": "9984.7903964",
+      "time_ms": 1799999
+    },
+    {
+      "bar_time_ms": 1800000,
+      "equity": "9980.7903964",
+      "time_ms": 1859999
+    },
+    {
+      "bar_time_ms": 1860000,
+      "equity": "9979.7503994",
+      "time_ms": 1919999
+    },
+    {
+      "bar_time_ms": 1920000,
+      "equity": "9979.7503994",
+      "time_ms": 1979999
+    },
+    {
+      "bar_time_ms": 1980000,
+      "equity": "9979.7503994",
+      "time_ms": 2039999
+    },
+    {
+      "bar_time_ms": 2040000,
+      "equity": "9979.71799616",
+      "time_ms": 2099999
+    },
+    {
+      "bar_time_ms": 2100000,
+      "equity": "9982.20719616",
+      "time_ms": 2159999
+    },
+    {
+      "bar_time_ms": 2160000,
+      "equity": "9978.70719616",
+      "time_ms": 2219999
+    },
+    {
+      "bar_time_ms": 2220000,
+      "equity": "9974.70719616",
+      "time_ms": 2279999
+    },
+    {
+      "bar_time_ms": 2280000,
+      "equity": "9973.66639922",
+      "time_ms": 2339999
+    },
+    {
+      "bar_time_ms": 2340000,
+      "equity": "9973.66639922",
+      "time_ms": 2399999
+    },
+    {
+      "bar_time_ms": 2400000,
+      "equity": "9973.66639922",
+      "time_ms": 2459999
+    },
+    {
+      "bar_time_ms": 2460000,
+      "equity": "9973.66639922",
+      "time_ms": 2519999
+    },
+    {
+      "bar_time_ms": 2520000,
+      "equity": "9973.66639922",
+      "time_ms": 2579999
+    },
+    {
+      "bar_time_ms": 2580000,
+      "equity": "9973.63429601",
+      "time_ms": 2639999
+    },
+    {
+      "bar_time_ms": 2640000,
+      "equity": "9975.12359601",
+      "time_ms": 2699999
+    },
+    {
+      "bar_time_ms": 2700000,
+      "equity": "9971.62359601",
+      "time_ms": 2759999
+    },
+    {
+      "bar_time_ms": 2760000,
+      "equity": "9967.62359601",
+      "time_ms": 2819999
+    }
+  ],
+  "fidelity": "BAR_APPROX",
+  "fills": [
+    {
+      "bar_time_ms": 660000,
+      "explanation": null,
+      "fee": "0.03210321",
+      "order_id": "ord-1",
+      "price": "107.0107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": null,
+      "time_ms": 719999
+    },
+    {
+      "bar_time_ms": 900000,
+      "explanation": null,
+      "fee": "0.029997",
+      "order_id": "ord-2",
+      "price": "99.99",
+      "qty": "1",
+      "side": "SELL",
+      "tag": null,
+      "time_ms": 959999
+    },
+    {
+      "bar_time_ms": 1080000,
+      "explanation": null,
+      "fee": "0.03240324",
+      "order_id": "ord-3",
+      "price": "108.0108",
+      "qty": "1",
+      "side": "BUY",
+      "tag": null,
+      "time_ms": 1139999
+    },
+    {
+      "bar_time_ms": 1320000,
+      "explanation": null,
+      "fee": "0.03059694",
+      "order_id": "ord-4",
+      "price": "101.9898",
+      "qty": "1",
+      "side": "SELL",
+      "tag": null,
+      "time_ms": 1379999
+    },
+    {
+      "bar_time_ms": 1620000,
+      "explanation": null,
+      "fee": "0.03210321",
+      "order_id": "ord-5",
+      "price": "107.0107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": null,
+      "time_ms": 1679999
+    },
+    {
+      "bar_time_ms": 1860000,
+      "explanation": null,
+      "fee": "0.029997",
+      "order_id": "ord-6",
+      "price": "99.99",
+      "qty": "1",
+      "side": "SELL",
+      "tag": null,
+      "time_ms": 1919999
+    },
+    {
+      "bar_time_ms": 2040000,
+      "explanation": null,
+      "fee": "0.03240324",
+      "order_id": "ord-7",
+      "price": "108.0108",
+      "qty": "1",
+      "side": "BUY",
+      "tag": null,
+      "time_ms": 2099999
+    },
+    {
+      "bar_time_ms": 2280000,
+      "explanation": null,
+      "fee": "0.03059694",
+      "order_id": "ord-8",
+      "price": "101.9898",
+      "qty": "1",
+      "side": "SELL",
+      "tag": null,
+      "time_ms": 2339999
+    },
+    {
+      "bar_time_ms": 2580000,
+      "explanation": null,
+      "fee": "0.03210321",
+      "order_id": "ord-9",
+      "price": "107.0107",
+      "qty": "1",
+      "side": "BUY",
+      "tag": null,
+      "time_ms": 2639999
+    }
+  ],
+  "interval": "1m",
+  "open_position": {
+    "avg_price": "107.0107",
+    "qty": "1",
+    "side": "LONG"
+  },
+  "pending_orders": [],
+  "plots": [],
+  "rejections": [],
+  "schema": "candlescope.run-result/1",
+  "source": "host-kernel",
+  "summary": {
+    "fill_count": 9,
+    "final_equity": "9967.62359601",
+    "initial_equity": "10000",
+    "net_profit": "-32.37640399",
+    "trade_count": 4,
+    "winning_trades": 0
+  },
+  "trades": [
+    {
+      "entry_bar_time_ms": 660000,
+      "entry_explanation": null,
+      "entry_price": "107.0107",
+      "entry_time_ms": 719999,
+      "exit_bar_time_ms": 900000,
+      "exit_explanation": null,
+      "exit_price": "99.99",
+      "exit_time_ms": 959999,
+      "fees": "0.06210021",
+      "id": "trade-1",
+      "net_pnl": "-7.08280021",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 1080000,
+      "entry_explanation": null,
+      "entry_price": "108.0108",
+      "entry_time_ms": 1139999,
+      "exit_bar_time_ms": 1320000,
+      "exit_explanation": null,
+      "exit_price": "101.9898",
+      "exit_time_ms": 1379999,
+      "fees": "0.06300018",
+      "id": "trade-2",
+      "net_pnl": "-6.08400018",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 1620000,
+      "entry_explanation": null,
+      "entry_price": "107.0107",
+      "entry_time_ms": 1679999,
+      "exit_bar_time_ms": 1860000,
+      "exit_explanation": null,
+      "exit_price": "99.99",
+      "exit_time_ms": 1919999,
+      "fees": "0.06210021",
+      "id": "trade-3",
+      "net_pnl": "-7.08280021",
+      "qty": "1",
+      "side": "LONG"
+    },
+    {
+      "entry_bar_time_ms": 2040000,
+      "entry_explanation": null,
+      "entry_price": "108.0108",
+      "entry_time_ms": 2099999,
+      "exit_bar_time_ms": 2280000,
+      "exit_explanation": null,
+      "exit_price": "101.9898",
+      "exit_time_ms": 2339999,
+      "fees": "0.06300018",
+      "id": "trade-4",
+      "net_pnl": "-6.08400018",
+      "qty": "1",
+      "side": "LONG"
+    }
+  ]
+}

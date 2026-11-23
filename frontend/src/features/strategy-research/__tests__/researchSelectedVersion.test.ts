@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { projectSelectedVersion, readResearchReturn, saveResearchReturn, type ResearchSelectedVersion } from "../researchSelectedVersion.js";
+import { projectSelectedVersion, readResearchReturn, loadResearchReturn, saveResearchReturn, type ResearchSelectedVersion } from "../researchSelectedVersion.js";
 import { createDefaultChartWorkspaceRecord } from "../../chart-workspace/chartWorkspaceLibrary.js";
 import { applyControlWorkspaceCommand } from "../../chart-workspace/chartWorkspaceControl.js";
 import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../../backtest/chart-tester/StrategyDraftStore.js";
@@ -83,17 +83,25 @@ test("draft is independent; atomic application replaces only the chosen chart at
   const restored = normalizeChartWorkspace(JSON.parse(JSON.stringify(applied.document)));
   assert.deepEqual(restored.cells["cell-1"]!.strategyAttachment!.initialization, projected.attachment.initialization);
 });
-test("return link waits for durable pointer storage and contains no source or account snapshot", async () => {
-  const values = new Map<string, string>(); let release!: () => void;
+test("return link waits for the backend reference and contains no source or account snapshot", async () => {
+  const values = new Map<string, unknown>(); let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  const storage = { getItem(key: string) { return values.get(key) ?? null; }, async setItem(key: string, value: string) { await gate; values.set(key, value); } };
+  const references = {
+    async saveStrategyReference(_kind: "research-return", key: string, value: unknown) { await gate; values.set(key, value); },
+    async loadStrategyReference(_kind: "research-return", key: string) { return values.get(key) ?? null; },
+  };
   const reference = { schema: 1 as const, runId: "bt_selected", versionHash: "sha256:" + "2".repeat(64), origin: { workspaceId: "w", cellId: "cell-1" } };
-  let settled = false; const pending = saveResearchReturn(reference, storage).then((href) => { settled = true; return href; });
+  let settled = false; const pending = saveResearchReturn(reference, references).then((href) => { settled = true; return href; });
   await Promise.resolve(); assert.equal(settled, false); assert.equal(values.size, 0);
   release(); const href = await pending, id = new URL(href, "http://local").searchParams.get("research-version")!;
-  assert.deepEqual(readResearchReturn(id, storage), reference);
-  assert.ok([...values.values()][0]!.length < 300);
-  assert.equal(readResearchReturn("invalid", storage), null);
+  assert.deepEqual(await loadResearchReturn(id, references), reference);
+  assert.ok(JSON.stringify([...values.values()][0]).length < 300);
+  assert.equal(await loadResearchReturn("invalid", references), null);
+  values.set("bad-reference-1", { ...reference, runId: "not-a-run" });
+  assert.equal(await loadResearchReturn("bad-reference-1", references), null);
+  // A link saved in app storage before P3c still opens.
+  const legacy = new Map<string, string>([["candlescope:research-return:legacy-link-1", JSON.stringify(reference)]]);
+  assert.deepEqual(readResearchReturn("legacy-link-1", { getItem: (key) => legacy.get(key) ?? null, setItem() {} }), reference);
 });
 
 test("return preserves legacy SIGNAL with its futures preset revision and warmup", () => {
@@ -110,4 +118,22 @@ test("return preserves legacy SIGNAL with its futures preset revision and warmup
     outputMode: "SIGNAL", executionModel: "LEGACY", warmupBars: 20, preferredRunMode: "HISTORY_LIVE" });
   c.participation_rate = "0.1";
   assert.throws(() => projectSelectedVersion(selected), /participation_rate/);
+});
+
+test("a research run on the practice account model continues forward on it, with its leverage (ADR-BACKTEST-015 P6e)", () => {
+  const selected = selectedFixture();
+  const c = selected.configuration;
+  Object.assign(c, { market_type: "futures", account_model: "LINEAR_PERP_ONE_WAY_V1", output_mode: "SIGNAL",
+    quick_preset_id: "CRYPTO_PERP_STANDARD_V1", quick_preset_revision: "1", account_rules: "PRACTICE_V1", leverage: "10" });
+  delete c.execution_model_revision;
+  delete c.participation_rate;
+  delete c.order_end_policy;
+  const projected = projectSelectedVersion(selected);
+  assert.equal(projected.attachment.initialization?.executionModel, "PRACTICE");
+  assert.equal(projected.attachment.executionOverrides?.leverage, "10");
+  // Leverage belongs to the practice model; the worst-case model keeps leverage 1.
+  delete c.account_rules;
+  assert.throws(() => projectSelectedVersion(selected), /leverage/);
+  Object.assign(c, { account_rules: "PRACTICE_V1", execution_model_revision: "EXECUTION_REALISM_V2" });
+  assert.throws(() => projectSelectedVersion(selected), /execution_model_revision/);
 });
