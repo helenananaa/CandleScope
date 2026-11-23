@@ -22,6 +22,7 @@ import {
 import type { DrawingKind, SavedDrawing } from "../drawingTypes.js";
 
 const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
+  path: "path",
   channel: "ch",
   "range-measure": "measure",
   line: "ln",
@@ -110,6 +111,13 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
   let style: DrawingStyle;
 
   switch (item.type) {
+    case "path":
+      geometry = { kind: "path", dataPoints: item.dataPoints };
+      style = { kind: "path",
+        ...(item.color === undefined ? {} : { color: item.color }),
+        ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+        ...(item.arrowEnd === undefined ? {} : { arrowEnd: item.arrowEnd }) };
+      break;
     case "channel":
       geometry = { kind: "channel", dataPoints: item.dataPoints };
       style = {
@@ -287,6 +295,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
 
     switch (canonical.kind) {
+      case "path":
+        copyDefinedFields(candidate, geometry, ["dataPoints"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth", "arrowEnd"]);
+        break;
       case "channel":
         copyDefinedFields(candidate, geometry, ["dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth", "fillOpacity"]);

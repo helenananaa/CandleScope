@@ -69,6 +69,56 @@ def main() -> int:
         # ADR-BACKTEST-015 P4: FOLLOW equals FIXED; chart FOLLOW runs fed by the DataManager.
         "test_follow_session.py", "test_strategy_follows.py", "test_strategy_experiments.py", "test_strategy_run_derive.py", "test_strategy_experiment_robustness.py",
         "test_execution_data_market.py",
+        # Replay: no future data before reveal (launch non-negotiable) and revealed indicator columns.
+        "test_replay_no_lookahead.py", "test_replay_indexed_indicator_closes.py",
+        "test_replay_market_indicator_columns.py", "test_replay_indicator_market_columns.py",
+        "test_replay_indicator_http.py",
+        # Replay fast paths match the scalar / per-event reference; wire contracts and stream resync.
+        # test_replay_hedge_tape_interval.py needs minutes per case: ccxt-integration.yml runs it as its own job.
+        "test_replay_interval_advance.py", "test_replay_tape_interval.py",
+        "test_replay_advance_atomic_finish.py", "test_replay_bar_parity.py", "test_replay_trade_bar_parity.py",
+        "test_replay_contracts.py", "test_replay_stream.py", "test_replay_workspace_drawings.py",
+        # 1s history, replay catalog and local import.
+        "test_second_history_lifecycle.py", "test_sparse_source_continuity.py", "test_replay_catalog.py",
+        "test_local_data_api.py", "test_replay_imported_multimarket.py",
+        # GC, retention and cache protection.
+        "test_bar_cache_protection.py", "test_data_manager_gc.py", "test_gc_execution_safety.py",
+        "test_gc_policy.py", "test_gc_settings_validation.py", "test_storage_retention_gc.py",
+        "test_manual_history_gc_protection.py",
+        # Trade flow, order book, liquidation and kline quality.
+        "test_trade_flow_engine.py", "test_trade_flow_service.py", "test_trade_flow_storage.py",
+        "test_trade_flow_stream.py", "test_trade_flow_runtime.py", "test_trade_flow_data_manager.py",
+        "test_trade_tape_service.py", "test_full_order_book_engine.py", "test_full_order_book_service.py",
+        "test_order_book_engine.py", "test_order_book_service.py", "test_liquidation_engine.py",
+        "test_liquidation_service.py", "test_kline_quality_contract.py",
+        # Raw trade archive retention, OI / funding coverage and exchange capabilities.
+        "test_raw_trade_retention_lock.py", "test_replay_trade_service.py", "test_replay_remote_trade_archive.py",
+        "test_oi_history_lifecycle.py", "test_exchange_history_availability.py", "test_gap_ledger.py",
+        "test_exchange_capability_v2.py",
+        # Alerts on the shared numeric indicator subscription (the delivery soak test stays out).
+        "test_alerts_api.py", "test_alerts_definition_cursor.py", "test_alerts_evaluator.py",
+        "test_alerts_hot_path.py", "test_alerts_indicator_fields.py", "test_alerts_lifecycle_races.py",
+        "test_alerts_notifications.py", "test_alerts_numeric_integration.py", "test_alerts_outbox.py",
+        "test_alerts_runtime.py", "test_numeric_indicator_queries.py", "test_numeric_subscription_shutdown.py",
+        # Indicator value contract, script close snapshots and indicator routes.
+        "test_indicator_seed_consistency.py", "test_script_close_event_snapshot.py",
+        "test_indicator_runtime_routes.py", "test_indicator_history_transport_independence.py",
+        # Synthetic series and chart inputs.
+        "test_synthetic_series.py", "test_synthetic_api.py", "test_synthetic_pinned.py",
+        "test_chart_indicator_input.py", "test_chart_strategy_signals.py",
+        # Strategy results in replay reveal only the revealed prefix (Pine-native replay runs in pine-host-contracts).
+        "test_local_bar_result_replay.py", "test_native_replay_views.py", "test_native_replay_origin.py",
+        # Local imports: bars, user market trades and manual replay imports.
+        "test_local_data_service.py", "test_local_data_jobs.py", "test_user_market_trades.py",
+        "test_replay_imported_market_trades.py", "test_market_dataset_local_bar.py", "test_manual_replay_import.py",
+        # External model interface.
+        "test_external_provider_*.py", "test_external_model_adapters.py",
+        # Simulation and backtest layering, and the backtest core.
+        "test_simulation_architecture.py", "test_backtest_architecture.py", "test_backtest_accounting.py",
+        "test_backtest_determinism.py", "test_backtest_execution.py", "test_simulation_kernel.py",
+        # Practice HEDGE money and migration, multi-chart replay finances, restart and shutdown.
+        "test_trading_practice_hedge.py", "test_trading_state_shutdown.py", "test_replay_multi_interval.py",
+        "test_replay_multi_interval_service.py", "test_replay_recovery.py", "test_replay_shutdown.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

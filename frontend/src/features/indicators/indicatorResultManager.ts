@@ -146,6 +146,8 @@ export class IndicatorResultManager {
       this.rejected += 1; return null;
     }
     const adapter = indicatorRuntimeAdapter(indicator, context);
+    // Retired Pyne scripts never publish results.
+    if (adapter.runtime === "retired") { this.rejected += 1; return null; }
     const entry = write();
     if (!entry) { this.rejected += 1; return null; }
     this.commits += 1;

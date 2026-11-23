@@ -103,6 +103,7 @@ import {
   chartWorkspaceCell,
   chartWorkspaceWindow,
   commitChartWorkspaceDocument,
+  removeChartWorkspaceCellRetiredStrategyAttachment,
   replaceChartWorkspaceWindow,
   updateChartWorkspaceCellStrategyAttachment,
 } from "./chartWorkspaceDocument.js";
@@ -195,6 +196,8 @@ export interface ChartWorkspaceRuntime {
       cellId: ChartCellId,
       attachment: ChartStrategyAttachmentRecord | null,
     ): void;
+    /** Removes a chart's retired Pyne strategy reference (user action only). */
+    removeCellRetiredStrategyAttachment(cellId: ChartCellId): void;
     configureCells(configurations: readonly ChartWorkspaceCellConfiguration[]): void;
     applyControlCommand(command: ControlWorkspaceCommand): void;
     createWindow(): void;
@@ -1005,6 +1008,10 @@ export function useChartWorkspaceRuntime(
     ));
   }, [updateActiveDocument]);
 
+  const removeCellRetiredStrategyAttachment = useCallback((cellId: ChartCellId) => {
+    updateActiveDocument((current) => removeChartWorkspaceCellRetiredStrategyAttachment(current, cellId));
+  }, [updateActiveDocument]);
+
   const configureCells = useCallback((
     configurations: readonly ChartWorkspaceCellConfiguration[],
   ) => {
@@ -1198,6 +1205,7 @@ export function useChartWorkspaceRuntime(
       updateCellPriceScale,
       updateCellIndicators,
       updateCellStrategyAttachment,
+      removeCellRetiredStrategyAttachment,
       updateCellNativeStrategies,
       updateCellStrategyTesterMode,
       configureCells,

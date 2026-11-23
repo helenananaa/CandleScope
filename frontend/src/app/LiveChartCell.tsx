@@ -223,6 +223,8 @@ export interface LiveChartCellProps {
     cellId: ChartCellId,
     attachment: ChartStrategyAttachmentRecord | null,
   ): void;
+  /** Removes the chart's retired Pyne strategy reference when the user asks to. */
+  onRetiredStrategyAttachmentRemove?(cellId: ChartCellId): void;
   onOpenReplayLauncher(): void;
   onActiveEnvironmentChange(cellId: ChartCellId, environment: ActiveChartEnvironment): void;
 }
@@ -268,6 +270,7 @@ function LiveChartCell({
   strategyPanelOpen,
   onStrategyPanelOpenChange,
   onStrategyAttachmentChange,
+  onRetiredStrategyAttachmentRemove,
   onNativeStrategiesChange,
   onStrategyTesterModeChange,
   onOpenReplayLauncher,
@@ -1273,6 +1276,8 @@ function LiveChartCell({
               cellId={cell.id}
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
+              retiredAttachment={cell.retiredStrategyAttachment}
+              {...(onRetiredStrategyAttachmentRemove ? { onRemoveRetiredAttachment: () => onRetiredStrategyAttachmentRemove(cell.id) } : {})}
               nativeStrategies={cell.nativeStrategies}
               appearance={combinedSettings}
               strategyTesterMode={cell.strategyTesterMode}

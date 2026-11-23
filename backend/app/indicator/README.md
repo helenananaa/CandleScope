@@ -210,7 +210,7 @@ Payload fields:
 - `schemaVersion`
 - `id`
 - `kind`: `script` or `custom`
-- `language`: routed language ID; new scripts default to `pine`; retired scripts are unsupported
+- `language`: routed language ID; new scripts default to `pine` and the store always writes it. A record without `language` was written by a build before Pyne's removal (PR #105, 2026-10-26), which left it out for Pyne. Such a record is listed with `language: "pyne"` and `retired: true`, range and stream requests for it fail with `PYNE_RETIRED` before any runtime runs, it cannot be updated in place, and the file is never rewritten to change it.
 - `name`
 - `description`
 - `script`

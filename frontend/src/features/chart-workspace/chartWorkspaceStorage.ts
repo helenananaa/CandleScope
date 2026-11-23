@@ -3,6 +3,7 @@ import { normalizeChartAccountOverlay } from "./chartAccountOverlaySettings.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyCollection.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { isRetiredPyneStrategyLanguage, type RetiredStrategyRecord } from "../backtest/chart-tester/retiredPyneStrategy.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
 import { validExecutionOverrides, validStrategyInitialization } from "../../shared/strategyRunSettings.js";
@@ -12,6 +13,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { resolveKlineSeriesIdentity } from "../market-data/klineSeriesIdentity.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { loadActiveIndicators } from "../indicators/activeIndicatorStore.js";
+import { upgradePersistedIndicator } from "../indicators/retiredScriptIndicator.js";
 import {
   CHART_CELL_IDS,
   CHART_DRAWING_LAYER_SET_IDS,
@@ -155,7 +157,11 @@ function isIndicatorDefinition(value: unknown): value is IndicatorDefinition {
 }
 
 function normalizeIndicators(value: unknown): IndicatorDefinition[] {
-  return Array.isArray(value) ? value.filter(isIndicatorDefinition) : [];
+  // Pre-#105 Pyne scripts were stored without `language`; they load as
+  // retired Pyne and stay in the workspace, never as Pine.
+  return Array.isArray(value)
+    ? value.filter(isIndicatorDefinition).map(upgradePersistedIndicator)
+    : [];
 }
 
 function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
@@ -256,6 +262,21 @@ function cloneJsonValue(value: unknown, depth = 0): unknown | undefined {
     result[key] = cloned;
   }
   return result;
+}
+
+/**
+ * A strategy attachment saved for Pyne by a build before PR #105. It is kept exactly as stored
+ * (or, if it is too large to copy, its name and draft reference) so the chart lists it as retired.
+ */
+function retiredAttachment(value: unknown): RetiredStrategyRecord | null {
+  if (!isRecord(value) || !isRetiredPyneStrategyLanguage(value.language)) return null;
+  const stored = cloneJsonValue(value);
+  if (isRecord(stored)) return stored;
+  return {
+    language: value.language,
+    ...(typeof value.displayName === "string" ? { displayName: value.displayName.slice(0, 120) } : {}),
+    ...(typeof value.strategyDraftId === "string" ? { strategyDraftId: value.strategyDraftId.slice(0, 160) } : {}),
+  };
 }
 
 export function normalizeChartStrategyAttachment(value: unknown): ChartStrategyAttachmentRecord | null {
@@ -461,6 +482,10 @@ function normalizeCellState(
     diagnostics.push({ code: "invalid-cell-link-group", path: `cells.${id}.linkGroupId` });
   }
   const quickReplay = normalizeChartQuickReplay(source.quickReplay);
+  // A Pyne attachment is not valid as an attachment; it stays on the chart as a retired reference.
+  const retiredFromAttachment = migrateFromV7 ? null : retiredAttachment(source.strategyAttachment);
+  const retiredStrategyAttachment = retiredFromAttachment
+    ?? (migrateFromV7 ? null : retiredAttachment(source.retiredStrategyAttachment));
   return {
     id,
     ...(quickReplay ? { quickReplay } : {}),
@@ -474,13 +499,14 @@ function normalizeCellState(
     indicators: normalizeIndicators(source.indicators),
     ...(source.strategyTesterMode === "NATIVE" || source.strategyTesterMode === "CANDLESCOPE" ? { strategyTesterMode: source.strategyTesterMode } : {}),
     ...(source.nativeStrategies ? { nativeStrategies: normalizeNativeStrategies(source.nativeStrategies) } : {}),
-    strategyAttachment: migrateFromV7
+    strategyAttachment: migrateFromV7 || retiredFromAttachment
       ? null
       : normalizeAttachment(
         source.strategyAttachment,
         `cells.${id}.strategyAttachment`,
         diagnostics,
       ),
+    ...(retiredStrategyAttachment ? { retiredStrategyAttachment } : {}),
   };
 }
 

@@ -25,7 +25,13 @@ from app.indicator.data_manager_bridge import (
     indicator_dirty_range_for_interval,
     is_zero_bar_backfill_completion,
 )
-from app.indicator.custom_store import CustomIndicatorStore
+from app.indicator.custom_store import (
+    PYNE_RETIRED_CODE,
+    PYNE_RETIRED_MESSAGE,
+    RETIRED_PYNE_LANGUAGE,
+    CustomIndicatorStore,
+    stored_record_language,
+)
 from app.indicator.resume import plan_indicator_resume
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.serialization import build_ws_error_payload
@@ -85,6 +91,27 @@ async def handle_script_indicator_subscribe(
     seed_query_cache: dict[tuple[str, str, str, str, int], dict[str, Any]] | None = None,
 ) -> None:
     script_runtime_service = runtime_service or _unbound_indicator_runtime_service
+
+    async def reject_retired(message: str = PYNE_RETIRED_MESSAGE) -> None:
+        await send_json(
+            build_ws_error_payload(
+                PYNE_RETIRED_CODE,
+                message,
+                client_id=client_id,
+                hint="Pyne 已退役，不会运行，也不会被当作 Pine。原始脚本保持不变。",
+            )
+        )
+
+    if custom_id and script.strip():
+        try:
+            inline_record = _stream_custom_store.get(custom_id)
+        except ValueError:
+            inline_record = None  # the inline script does not depend on the store
+        if inline_record is not None and stored_record_language(inline_record) == RETIRED_PYNE_LANGUAGE:
+            await reject_retired(
+                f"Custom indicator '{custom_id}' is a retired Pyne script and cannot be executed."
+            )
+            return
     if custom_id and not script.strip():
         try:
             record = _stream_custom_store.get(custom_id)
@@ -108,6 +135,13 @@ async def handle_script_indicator_subscribe(
                 )
             )
             return
+        record_language = stored_record_language(record)
+        if record_language == RETIRED_PYNE_LANGUAGE:
+            # A legacy record never runs, whatever language the request names.
+            await reject_retired(
+                f"Custom indicator '{custom_id}' is a retired Pyne script and cannot be executed."
+            )
+            return
         script = str(record.get("script") or "")
         name = name or str(record.get("name") or custom_id)
         if not params:
@@ -117,7 +151,7 @@ async def handle_script_indicator_subscribe(
         if security_mode is None:
             security_mode = record.get("securityMode")
         if language is None:
-            language = str(record.get("language") or "pine")
+            language = record_language
     security_mode = effective_script_security_mode(
         security_mode, trusted=trusted_origin
     )
@@ -143,6 +177,9 @@ async def handle_script_indicator_subscribe(
                 client_id=client_id,
             )
         )
+        return
+    if language == RETIRED_PYNE_LANGUAGE:
+        await reject_retired()
         return
     if not _validate_ws_interval(interval):
         await send_json(

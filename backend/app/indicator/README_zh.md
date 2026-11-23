@@ -210,7 +210,7 @@ payload 字段：
 - `schemaVersion`
 - `id`
 - `kind`：`script` 或 `custom`
-- `language`：routed language ID；新脚本默认 `pine`；不支持已移除语言的旧脚本
+- `language`：routed language ID；新脚本默认 `pine`，且存储总会写入该字段。没有 `language` 的记录来自移除 Pyne（PR #105，2026-10-26）之前的版本，那些版本对 Pyne 省略了该字段。这类记录列出时为 `language: "pyne"`、`retired: true`；对它的 range 和 stream 请求会在任何 runtime 运行之前以 `PYNE_RETIRED` 失败；不能原地更新；也不会为改动它而重写文件。
 - `name`
 - `description`
 - `script`

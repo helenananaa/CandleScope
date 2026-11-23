@@ -32,6 +32,10 @@ export type CanonicalBounds =
 
 export type CanonicalDrawingGeometry =
   | Readonly<{
+      kind: "path";
+      dataPoints: readonly DrawingDataPoint[];
+    }>
+  | Readonly<{
       kind: "channel";
       dataPoints: readonly DrawingDataPoint[];
     }>
@@ -94,6 +98,12 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
       color?: string;
       lineWidth?: number;
       arrowEnd?: boolean;
+    }>
+  | Readonly<{
+      kind: "path";
+      arrowEnd?: boolean;
+      color?: string;
+      lineWidth?: number;
     }>
   | Readonly<{
       kind: "channel";
@@ -259,6 +269,7 @@ function matchingKind(
 ): boolean {
   if (geometry.kind !== kind || style.kind !== kind) return false;
   const geometryKeys: Record<DrawingKind, readonly string[]> = {
+    path: ["dataPoints", "kind"],
     channel: ["dataPoints", "kind"],
     "range-measure": ["dataPoints", "measureType", "kind"],
     "angle-measure": ["dataPoints", "kind"],
@@ -272,6 +283,7 @@ function matchingKind(
     text: ["dataPoint", "kind"],
   };
   const styleKeys: Record<DrawingKind, readonly string[]> = {
+    path: ["arrowEnd", "color", "kind", "lineWidth"],
     channel: ["color", "fillOpacity", "kind", "lineWidth"],
     "range-measure": ["color", "kind", "lineWidth"],
     "angle-measure": ["color", "kind", "lineWidth"],

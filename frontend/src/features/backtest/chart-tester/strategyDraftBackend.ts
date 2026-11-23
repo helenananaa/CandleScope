@@ -185,5 +185,14 @@ export function createBackendStrategyDraftAdapter(client: StrategyDraftClient, l
       await client.remove(id);
       confirmed.delete(id);
     },
+    // Retired Pyne drafts exist only in the legacy storage. The backend rejects the language and
+    // the import skips them, so they are read from and deleted there, whether or not the import ran.
+    async listRetired() {
+      return legacy?.adapter.listRetired ? legacy.adapter.listRetired() : [];
+    },
+    async removeRetired(id) {
+      if (!legacy?.adapter.removeRetired) throw new Error("retired strategy drafts are not stored here");
+      await legacy.adapter.removeRetired(id);
+    },
   };
 }

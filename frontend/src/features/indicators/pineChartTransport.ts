@@ -14,7 +14,7 @@ export const PINE_CHART_TRANSPORT = resolvePineChartTransport(
 type ScriptSubscription = Pick<IndicatorSubscribeMessage, "kind" | "language">;
 
 export function isPineScriptSubscription(message: ScriptSubscription): boolean {
-  return message.kind === "script" && (message.language || "pine").trim().toLowerCase() === "pine";
+  return message.kind === "script" && (message.language ?? "").trim().toLowerCase() === "pine";
 }
 
 export function usesChartCalculation(message: ScriptSubscription): boolean {

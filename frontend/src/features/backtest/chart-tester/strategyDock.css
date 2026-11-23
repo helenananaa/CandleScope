@@ -74,6 +74,11 @@
 .strategy-switcher-menu button > span strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .strategy-switcher-menu button > span small { color: var(--text-secondary); font-size: 11px; }
 .strategy-switcher-menu button[aria-checked=true] { color: var(--text-accent); }
+.strategy-switcher-retired { display: flex; align-items: center; gap: 8px; padding-left: 23px; }
+.strategy-switcher-retired > span { display: flex; flex: 1; flex-direction: column; min-width: 0; color: var(--text-secondary); }
+.strategy-switcher-retired > span strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.strategy-switcher-retired > span small { color: var(--text-warning); font-size: 11px; }
+.strategy-switcher-note { max-width: 320px; margin: 2px 8px 4px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
 .strategy-status-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--text-secondary) 55%, transparent); }
 .strategy-status-dot[data-running=true] { background: var(--accent-blue); animation: strategy-dot-pulse 1.2s ease-in-out infinite; }
 @keyframes strategy-dot-pulse { 50% { opacity: .35; } }

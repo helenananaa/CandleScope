@@ -3,6 +3,7 @@ import type {
   ArrowToolId,
   BasicLineToolId,
   ChannelToolId,
+  PathToolId,
   RangeMeasureToolId,
   FreehandToolId,
   PassiveCursorToolId,
@@ -20,6 +21,7 @@ export interface ToolbarVariant<TId extends string = string> {
 
 export type LineToolbarToolId = BasicLineToolId
   | ArrowToolId
+  | PathToolId
   | ChannelToolId
   | RangeMeasureToolId
   | "line-horizontal"
@@ -397,6 +399,8 @@ const LINE_VARIANTS: ToolbarVariant<LineToolbarToolId>[] = [
   { id: "line-segment", label: "Segment", icon: SegmentIcon },
   { id: "line-ray", label: "Ray", icon: RayIcon },
   { id: "line-infinite", label: "Infinite line", icon: InfiniteLineIcon },
+  { id: "path-line", label: "Polyline", description: "Click to add vertices, double-click or press Enter to finish", icon: <svg viewBox="0 0 24 24"><path d="m3 18 6-12 5 9 7-11" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg> },
+  { id: "path-arrow", label: "Arrow path", description: "Click to add vertices, double-click or press Enter to finish", icon: <svg viewBox="0 0 24 24"><path d="m3 18 6-12 5 9 7-11m-6 2 6-2-1 6" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg> },
   { id: "line-arrow", label: "Arrow", icon: ArrowIcon },
   { id: "line-horizontal", label: "Horizontal line", icon: HorizontalLineIcon },
   { id: "line-vertical", label: "Vertical line", icon: VerticalLineIcon },

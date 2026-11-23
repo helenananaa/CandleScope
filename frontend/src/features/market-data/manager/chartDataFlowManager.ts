@@ -7,6 +7,7 @@ import type { IndicatorDataManager } from "../../indicators/indicatorDataManager
 import type { IndicatorCacheContext, IndicatorDefinition, IndicatorRange } from "../../indicators/indicatorTypes.js";
 import { buildIndicatorComputeParams, buildIndicatorOhlcv, buildIndicatorOhlcvSignature } from "../../indicators/indicatorComputeRuntime.js";
 import { resolveLocalIndicatorExecution } from "../../indicators/indicatorComputeJobRuntime.js";
+import { isRetiredScriptIndicator } from "../../indicators/retiredScriptIndicator.js";
 import { buildHostedSubscriptionMessage } from "../../indicators/indicatorWsRuntime.js";
 import { normalizeParsedIndicatorPayload } from "../../indicators/indicatorPayloadRuntime.js";
 import { buildIndicatorCacheContext, getCachedIndicatorResult } from "../../indicators/indicatorResultCacheStore.js";
@@ -18,7 +19,7 @@ export interface IndicatorWarmPlan { indicators: IndicatorDefinition[]; candleUp
 /** Output ticks must not replace a chart's declaration of computation intent. */
 export function indicatorWarmPlanKey(plan: IndicatorWarmPlan): string {
   return indicatorRequestKey({ ...plan, indicators: plan.indicators.filter(indicator => indicator.visible !== false
-    && !indicator.error && String(indicator.language || "").trim().toLowerCase() !== "pyne"
+    && !indicator.error && !isRetiredScriptIndicator(indicator)
     && resolveLocalIndicatorExecution(indicator).kind !== "invalid").slice(0, 8).map(indicator => ({
       id: indicator.id, name: indicator.name, engineName: indicator.engineName, kind: indicator.kind,
       is_builtin: indicator.is_builtin, script: indicator.script, language: indicator.language,

@@ -27,9 +27,9 @@ export function parseCoordinateDraft(draft: readonly CoordinateDraft[], original
 export function drawingCoordinates(saved: SavedDrawing): readonly DrawingCoordinate[] | null {
   let points: readonly DrawingDataPoint[];
   if (saved.type === "axis-line") points = saved.dataPoint ? [saved.dataPoint] : [];
-  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure" || saved.type === "channel") points = saved.dataPoints ?? [];
+  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure" || saved.type === "channel" || saved.type === "path") points = saved.dataPoints ?? [];
   else return null;
-  if (!points.length || points.length > 3 || points.some((point) =>
+  if (!points.length || (saved.type !== "path" && points.length > 3) || points.some((point) =>
     typeof point.time !== "number" || !Number.isFinite(point.time) || !Number.isFinite(point.price)
     || point.logical !== undefined || point.sourceOrdinal !== undefined
     || point.sourceProjection !== undefined || point.sourceProjectionConfig !== undefined
@@ -85,8 +85,8 @@ export function drawingPropertiesCandidate(
     }
   }
   if (saved.type === "channel" && typeof patch.fillOpacity === "number") candidate.fillOpacity = patch.fillOpacity;
-  if (saved.type === "line" && typeof patch.arrowEnd === "boolean"
-    && (saved.lineType ?? "line-segment") === "line-segment") {
+  if (typeof patch.arrowEnd === "boolean" && (saved.type === "path"
+    || (saved.type === "line" && (saved.lineType ?? "line-segment") === "line-segment"))) {
     if (patch.arrowEnd) candidate.arrowEnd = true;
     else delete candidate.arrowEnd;
   }
@@ -100,7 +100,7 @@ export function drawingPropertiesCandidate(
       || coordinates.some((point) => !Number.isFinite(point.price) || !formatCoordinateTime(point.time))) return null;
     if (candidate.type === "axis-line" && candidate.dataPoint && coordinates[0]) {
       candidate.dataPoint = { ...candidate.dataPoint, ...coordinates[0] };
-    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure" || candidate.type === "channel") {
+    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure" || candidate.type === "channel" || candidate.type === "path") {
       candidate.dataPoints = (candidate.dataPoints ?? []).map((point, index) => ({ ...point, ...coordinates[index] }));
     } else return null;
   }

@@ -75,6 +75,8 @@ import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
   formatReplayTimeAxisLabel,
+  replayDateNavigationEnabled,
+  replayPublicTimePolicy,
   replayTimeAxisMaxCharacterLength,
 } from "./replayPublicTimeModel.js";
 import { returnToTrainingHub } from "./trainingHubNavigation.js";
@@ -334,12 +336,16 @@ export default function ReplayTrainingPageShell({
     }
     return values;
   })();
-  const publicTimePolicy = integrityRuntime.integrity?.effective_time_disclosure_policy
-    ?? (config?.blind_mode === false ? "NONE" : "HIDE_ALL");
+  const publicTimePolicy = replayPublicTimePolicy(
+    integrityRuntime.integrity?.effective_time_disclosure_policy,
+    config?.blind_mode,
+  );
   const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
   const dateNavigation = useChartTimeNavigation({
     active: cell?.active ?? true,
-    enabled: active && review === null && publicTimePolicy === "NONE" && !viewer.loading,
+    enabled: replayDateNavigationEnabled({
+      active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
+    }),
     cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
     sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
       viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),

@@ -18,6 +18,7 @@ export const DRAWING_DISPLAY_KIND_CODES: Readonly<Record<DrawingKind, number>> =
   "angle-measure": 3,
   "range-measure": 10,
   channel: 11,
+  path: 12,
   text: 4,
   fibonacci: 5,
   position: 6,
@@ -35,6 +36,7 @@ export type DrawingDisplayUnboundedAxis = "horizontal" | "vertical" | "both" | n
  * geometry or infer an opcode from point counts.
  */
 export type DrawingDisplayRenderSpec =
+  | Readonly<{ op: "path"; strokeColor: string; lineWidthCssPx: number; selected: boolean; arrowEnd: boolean }>
   | Readonly<{
       op: "channel";
       strokeColor: string;
@@ -602,6 +604,7 @@ function validRenderSpec(
       && (!spec.arrowEnd || spec.lineType === "line-segment")
       && entity.points.length >= 8;
   }
+  if (spec.op === "path") return entity.kind === "path" && entity.points.length >= 4 && typeof spec.arrowEnd === "boolean";
   if (spec.op === "channel") {
     return entity.kind === "channel"
       && (spec.fillPaintColor === null || typeof spec.fillPaintColor === "string")

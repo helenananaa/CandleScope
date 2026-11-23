@@ -15,6 +15,7 @@ import type {
   BasicLineToolId,
   BrushShape,
   ChannelToolId,
+  PathToolId,
   DrawingDataPoint,
   FibonacciLevel,
   FibonacciToolId,
@@ -27,6 +28,7 @@ import type {
   SavedAngleDrawing,
   SavedAxisLineDrawing,
   SavedChannelDrawing,
+  SavedPathDrawing,
   SavedDrawing,
   SavedFibonacciDrawing,
   SavedFreehandDrawing,
@@ -47,12 +49,14 @@ export type TwoPointCreationTool =
   | RangeMeasureToolId
   | BasicLineToolId
   | ArrowToolId
+  | PathToolId
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
   | ShapeToolId;
 
 export type SavedTwoPointDrawing =
+  | SavedPathDrawing
   | SavedChannelDrawing
   | SavedRangeMeasureDrawing
   | SavedLineDrawing
@@ -155,6 +159,10 @@ export function createTwoPointSavedDrawing({
   tool,
 }: TwoPointSavedDrawingOptions): CreatedSavedDrawing<SavedTwoPointDrawing> | null {
   if (!Array.isArray(dataPoints)) return null;
+  if (tool === "path-line" || tool === "path-arrow") {
+    return finalizedCreatedDrawing("path", { type: "path", dataPoints: dataPoints.map((point: DrawingDataPoint) => ({ ...point })), color, lineWidth,
+      arrowEnd: tool === "path-arrow" });
+  }
   const isChannel = tool === "channel-parallel";
   if (dataPoints.length !== 2 && !(isChannel && dataPoints.length === 3)) return null;
   const points = (dataPoints as readonly DrawingDataPoint[])
