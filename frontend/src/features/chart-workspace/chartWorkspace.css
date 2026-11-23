@@ -505,7 +505,7 @@
   position: relative;
   flex-shrink: 0;
 }
-/* Box, color and type come from .ui-control */
+/* A kit ControlButton; box, colour and type are the kit's. */
 .workspace-layout-trigger {
   position: relative;
   gap: var(--space-1);
@@ -568,58 +568,30 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
 }
-.workspace-layout-grid button {
-  display: flex;
+/* Kit row options stacked as thumbnail over chart count. */
+.workspace-layout-grid .ui-option {
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   gap: 3px;
   height: 44px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
+  padding: 0;
 }
-.workspace-layout-grid button span {
+.workspace-layout-grid .ui-option span {
   color: var(--text-muted);
   font: 500 var(--font-size-2xs)/1 var(--font-mono);
 }
-.workspace-layout-grid button:hover:not(:disabled),
-.workspace-layout-grid button:focus-visible {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-.workspace-layout-grid button.active {
-  border-color: var(--accent-blue);
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+.workspace-layout-grid .ui-option[aria-pressed='true'] {
   color: var(--text-accent);
 }
-.workspace-layout-grid button.active span {
+.workspace-layout-grid .ui-option[aria-pressed='true'] span {
   color: var(--text-accent);
-}
-.workspace-layout-grid button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
 }
 .workspace-layout-manage {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  width: 100%;
   margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-1) 0;
-  border: 0;
-  border-top: 1px solid var(--border-subtle);
-  background: transparent;
-  color: var(--text-secondary);
-  font: 500 var(--font-size-sm) var(--font-sans);
-  cursor: pointer;
-}
-.workspace-layout-manage:hover,
-.workspace-layout-manage:focus-visible {
-  color: var(--text-primary);
 }
 /* ── 图表工作区侧栏 ──────────────────────────────────────── */
 .workspace-panel-overlay {
@@ -730,59 +702,9 @@
 .workspace-panel-save-state[data-save-state="error"] > span {
   background: var(--candle-down);
 }
-.workspace-panel-close {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 16%, transparent);
-  border-radius: var(--radius-control);
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface-0) 34%, transparent);
-  cursor: pointer;
-}
-[data-theme="light"] .workspace-panel-close {
-  background: color-mix(in srgb, var(--surface-0) 75%, transparent);
-}
-.workspace-panel-close:hover,
-.workspace-panel-close:focus-visible {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-  background: var(--surface-hover);
-  outline: none;
-}
+/* Kit tabs under the header. */
 .workspace-panel-tabs {
-  display: grid;
-  grid-template-columns: 0.9fr 1.2fr 0.8fr;
-  gap: 4px;
   margin: 10px 12px 0;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 16%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-0) 22%, transparent);
-}
-[data-theme="light"] .workspace-panel-tabs {
-  background: color-mix(in srgb, var(--surface-0) 62%, transparent);
-}
-.workspace-panel-tabs button {
-  height: 30px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: var(--text-muted);
-  background: transparent;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.workspace-panel-tabs button:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
-}
-.workspace-panel-tabs button.active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 18%, transparent);
 }
 .workspace-panel-content {
   min-height: 0;
@@ -847,29 +769,13 @@
 [data-theme="light"] .workspace-panel-workspace-list {
   background: color-mix(in srgb, var(--surface-2) 74%, transparent);
 }
-.workspace-panel-workspace-list > button {
-  display: flex;
+/* Kit row options: a check (or the group's mark), then name over detail. */
+.workspace-panel-workspace-list > .ui-option {
   min-height: 42px;
-  align-items: center;
   gap: 7px;
   padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
 }
-.workspace-panel-workspace-list > button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.workspace-panel-workspace-list > button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border-subtle));
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-}
-.workspace-panel-workspace-list > button > span:last-child {
+.workspace-panel-workspace-list > .ui-option > span:last-child {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -906,11 +812,6 @@
 .workspace-panel-window-actions {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.workspace-panel :is(
-  .workspace-panel-current-actions,
-  .workspace-panel-window-actions,
-  .workspace-panel-rename-form
-) button,
 .workspace-panel-rename-form input,
 .workspace-panel-field select,
 .workspace-panel-field input:not([type="color"]) {
@@ -923,42 +824,10 @@
   background: color-mix(in srgb, var(--surface-0) 28%, transparent);
   font-size: var(--font-size-xs);
 }
-[data-theme="light"] .workspace-panel :is(
-  .workspace-panel-current-actions,
-  .workspace-panel-window-actions,
-  .workspace-panel-rename-form
-) button,
 [data-theme="light"] .workspace-panel-rename-form input,
 [data-theme="light"] .workspace-panel-field select,
 [data-theme="light"] .workspace-panel-field input:not([type="color"]) {
   background: color-mix(in srgb, var(--surface-0) 82%, transparent);
-}
-.workspace-panel :is(
-  .workspace-panel-current-actions,
-  .workspace-panel-window-actions,
-  .workspace-panel-rename-form
-) button {
-  cursor: pointer;
-}
-.workspace-panel :is(
-  .workspace-panel-current-actions,
-  .workspace-panel-window-actions,
-  .workspace-panel-rename-form
-) button:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.workspace-panel button.danger {
-  color: var(--text-down);
-}
-.workspace-panel button.danger.confirm {
-  border-color: color-mix(in srgb, var(--candle-down) 62%, var(--border-subtle));
-  background: color-mix(in srgb, var(--candle-down) 12%, transparent);
-}
-.workspace-panel button:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
 }
 .workspace-panel-rename-form {
   margin-top: 8px;
@@ -989,35 +858,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
-.workspace-panel-template-grid > button {
-  display: flex;
-  min-width: 0;
+/* Kit option cards: a glyph, then the template's name over its description. */
+.workspace-panel-template-grid > .ui-option {
   min-height: 51px;
-  align-items: center;
   gap: 9px;
   padding: 7px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--surface-0) 28%, transparent);
-  text-align: left;
-  cursor: pointer;
 }
-[data-theme="light"] .workspace-panel-template-grid > button {
-  background: color-mix(in srgb, var(--surface-0) 72%, transparent);
-}
-.workspace-panel-template-grid > button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-blue) 52%, var(--border-subtle));
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 9%, var(--surface-0));
-}
-.workspace-panel-template-grid > button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 70%, var(--border-subtle));
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  box-shadow: inset 2px 0 var(--accent-blue);
-}
-.workspace-panel-template-grid > button > span:last-child {
+.workspace-panel-template-grid > .ui-option > span:last-child {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -1046,7 +893,7 @@
   background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
   font: var(--font-size-sm) var(--font-mono);
 }
-.workspace-panel-template-grid-compact > button {
+.workspace-panel-template-grid-compact > .ui-option {
   min-height: 47px;
 }
 .workspace-panel-persistence {
@@ -1068,38 +915,23 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
-.workspace-panel-action-grid button {
+/* Kit option cards: the action's glyph beside its name and shortcut. */
+.workspace-panel-action-grid > .ui-option {
   display: grid;
   min-height: 50px;
   grid-template-columns: 24px 1fr;
   grid-template-rows: auto auto;
-  align-items: center;
   gap: 1px 6px;
   padding: 7px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--surface-0) 28%, transparent);
   font-size: var(--font-size-xs);
-  text-align: left;
-  cursor: pointer;
 }
-[data-theme="light"] .workspace-panel-action-grid button {
-  background: color-mix(in srgb, var(--surface-0) 72%, transparent);
-}
-.workspace-panel-action-grid button:hover:not(:disabled),
-.workspace-panel-action-grid button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-subtle));
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-0));
-}
-.workspace-panel-action-grid button > span {
+.workspace-panel-action-grid > .ui-option > span {
   grid-row: 1 / 3;
   color: var(--text-accent);
   font-size: var(--font-size-lg);
   text-align: center;
 }
-.workspace-panel-action-grid button > small {
+.workspace-panel-action-grid > .ui-option > small {
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
@@ -1194,73 +1026,19 @@
   font-size: var(--font-size-xs);
   cursor: pointer;
 }
-[data-theme="light"] .workspace-panel-delete-link-group {
-  background: color-mix(in srgb, var(--surface-0) 82%, transparent);
-}
-.workspace-panel-segmented {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-0) 22%, transparent);
-}
-.workspace-panel-segmented:has(button:nth-child(4)) {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-[data-theme="light"] .workspace-panel-segmented {
-  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
-}
-.workspace-panel-segmented button {
-  min-height: 30px;
-  padding: 0 5px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  color: var(--text-muted);
-  background: transparent;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.workspace-panel-segmented button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.workspace-panel-segmented button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 28%, transparent);
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-}
 .workspace-panel-link-settings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
-.workspace-panel-link-settings button {
+/* Kit option cards: the setting over its description, "synced" while on. */
+.workspace-panel-link-settings > .ui-option {
   display: grid;
   min-height: 51px;
   gap: 3px;
   padding: 7px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--surface-0) 28%, transparent);
-  text-align: left;
-  cursor: pointer;
 }
-[data-theme="light"] .workspace-panel-link-settings button {
-  background: color-mix(in srgb, var(--surface-0) 72%, transparent);
-}
-.workspace-panel-link-settings button:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-}
-.workspace-panel-link-settings button.active {
-  border-color: color-mix(in srgb, var(--accent-blue) 38%, transparent);
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-}
-.workspace-panel-link-settings button.active::after {
+.workspace-panel-link-settings > .ui-option[aria-pressed='true']::after {
   content: var(--i18n-synced, "已同步");
   justify-self: end;
   grid-column: 2;
@@ -1268,13 +1046,13 @@
   color: var(--text-accent);
   font-size: var(--font-size-2xs);
 }
-.workspace-panel-link-settings button > span {
+.workspace-panel-link-settings > .ui-option > span {
   grid-column: 1;
   grid-row: 1;
   font-size: var(--font-size-xs);
   font-weight: 700;
 }
-.workspace-panel-link-settings button > small {
+.workspace-panel-link-settings > .ui-option > small {
   grid-column: 1 / 3;
   color: var(--text-muted);
   font-size: var(--font-size-xs);

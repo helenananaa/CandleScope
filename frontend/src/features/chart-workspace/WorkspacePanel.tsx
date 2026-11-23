@@ -1,8 +1,11 @@
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, IconButton, OptionButton, SegmentedControl, Tabs } from "../../components/ui/index.js";
+import { tabId, tabPanelId } from "../../components/ui/helpers.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { Icon } from "../../components/icons/Icon.js";
 import {
   useEffect,
+  useId,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -131,18 +134,16 @@ function LinkPolicyEditor({
       <div className="workspace-panel-link-settings">
         {LINK_SETTING_OPTIONS.filter((option) => includeDrawings || option.key !== "drawings")
           .map((option) => (
-          <button
+          <OptionButton
             key={option.key}
-            type="button"
-            className={policy[option.key] ? "active" : ""}
-            aria-pressed={policy[option.key]}
+            selected={policy[option.key] === true}
             title={t(option.descriptionKey)}
             disabled={disabled}
             onClick={() => onChange({ [option.key]: !policy[option.key] })}
           >
             <span>{t(option.labelKey)}</span>
             <small>{t(option.descriptionKey)}</small>
-          </button>
+          </OptionButton>
           ))}
       </div>
       <div className="workspace-panel-section-heading">
@@ -153,11 +154,9 @@ function LinkPolicyEditor({
       </div>
       <div className="workspace-panel-link-settings">
         {INDICATOR_LINK_OPTIONS.map((option) => (
-          <button
+          <OptionButton
             key={option.key}
-            type="button"
-            className={policy.indicators[option.key] ? "active" : ""}
-            aria-pressed={policy.indicators[option.key]}
+            selected={policy.indicators[option.key]}
             title={t(option.descriptionKey)}
             disabled={disabled}
             onClick={() => onChange({
@@ -166,7 +165,7 @@ function LinkPolicyEditor({
           >
             <span>{t(option.labelKey)}</span>
             <small>{t(option.descriptionKey)}</small>
-          </button>
+          </OptionButton>
         ))}
       </div>
     </section>
@@ -235,6 +234,7 @@ export default function WorkspacePanel({
 }: WorkspacePanelProps) {
   useLocale();
   const [tab, setTab] = useState<WorkspacePanelTab>("workspaces");
+  const tabsId = useId();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(runtime.view.activeWorkspaceName);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -357,34 +357,20 @@ export default function WorkspacePanel({
               <span aria-hidden="true" />
               {stateLabel}
             </span>
-            <button
-              type="button"
-              className="workspace-panel-close"
-              data-overlay-close=""
-              onClick={onClose}
-              aria-label={t("workspace.close")}
-            >
-              <Icon name="close" size={14} />
-            </button>
+            <IconButton variant="secondary" label={t("workspace.close")} icon={<Icon name="close" size={14} />} data-overlay-close="" onClick={onClose} />
           </div>
         </header>
 
-        <nav className="workspace-panel-tabs" aria-label={t("workspace.tabs")} role="tablist">
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              className={tab === item.id ? "active" : ""}
-              aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
-            >
-              {t(item.labelKey)}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          id={tabsId}
+          className="workspace-panel-tabs"
+          label={t("workspace.tabs")}
+          value={tab}
+          onChange={setTab}
+          tabs={TABS.map((item) => ({ value: item.id, label: t(item.labelKey) }))}
+        />
 
-        <div className="workspace-panel-content">
+        <div className="workspace-panel-content" role="tabpanel" id={tabPanelId(tabsId, tab)} aria-labelledby={tabId(tabsId, tab)}>
           {tab === "workspaces" && (
             <div className="workspace-panel-section-stack" data-workspace-panel-tab="workspaces">
               <section className="workspace-panel-section">
@@ -397,12 +383,11 @@ export default function WorkspacePanel({
 
                 <div className="workspace-panel-workspace-list" role="listbox" aria-label={t("workspace.saved")}>
                   {view.workspaces.map((workspace) => (
-                    <button
+                    <OptionButton
                       key={workspace.id}
-                      type="button"
-                      className={workspace.id === view.activeWorkspaceId ? "active" : ""}
+                      variant="row"
                       role="option"
-                      aria-selected={workspace.id === view.activeWorkspaceId}
+                      selected={workspace.id === view.activeWorkspaceId}
                       disabled={!view.ready}
                       onClick={() => {
                         setEditingName(false);
@@ -417,7 +402,7 @@ export default function WorkspacePanel({
                         <strong>{workspace.name}</strong>
                         <small>{chartWorkspaceLayoutLabel(workspace.layout)}</small>
                       </span>
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
 
@@ -432,22 +417,22 @@ export default function WorkspacePanel({
                         maxLength={48}
                         onChange={(event) => setNameDraft(event.currentTarget.value)}
                       />
-                      <button type="submit" disabled={!nameDraft.trim()}>{t("workspace.ok")}</button>
-                      <button
-                        type="button"
+                      <Button size="sm" variant="primary" type="submit" disabled={!nameDraft.trim()}>{t("workspace.ok")}</Button>
+                      <Button
+                        size="sm"
                         onClick={() => {
                           setEditingName(false);
                           setNameDraft(view.activeWorkspaceName);
                         }}
                       >
                         {t("workspace.cancel")}
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 ) : (
                   <div className="workspace-panel-current-actions" aria-label={t("workspace.currentActions")}>
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
                       onClick={() => {
                         setNameDraft(view.activeWorkspaceName);
                         setEditingName(true);
@@ -455,19 +440,20 @@ export default function WorkspacePanel({
                       }}
                     >
                       {t("workspace.rename")}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={() => {
                         setConfirmDelete(false);
                         actions.duplicateWorkspace(view.activeWorkspaceId);
                       }}
                     >
                       {t("workspace.duplicate")}
-                    </button>
-                    <button
-                      type="button"
-                      className={confirmDelete ? "danger confirm" : "danger"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      aria-pressed={confirmDelete}
                       disabled={view.workspaces.length <= 1}
                       title={view.workspaces.length <= 1 ? t("workspace.keepOne") : t("workspace.deleteCurrent")}
                       onClick={() => {
@@ -480,7 +466,7 @@ export default function WorkspacePanel({
                       }}
                     >
                       {confirmDelete ? t("workspace.confirmDelete") : t("workspace.delete")}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </section>
@@ -496,9 +482,8 @@ export default function WorkspacePanel({
                   {TEMPLATE_OPTIONS.filter((template) => (
                     chartWorkspaceTemplateCellCount(template.id) <= view.maxCellsPerWindow
                   )).map((template) => (
-                    <button
+                    <OptionButton
                       key={template.id}
-                      type="button"
                       disabled={!view.ready}
                       onClick={() => {
                         setEditingName(false);
@@ -511,7 +496,7 @@ export default function WorkspacePanel({
                         <strong>{t(template.labelKey)}</strong>
                         <small>{t(template.descriptionKey)}</small>
                       </span>
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
               </section>
@@ -537,12 +522,10 @@ export default function WorkspacePanel({
                   {TEMPLATE_OPTIONS.filter((template) => (
                     chartWorkspaceTemplateCellCount(template.id) <= view.maxCellsPerWindow
                   )).map((template) => (
-                    <button
+                    <OptionButton
                       key={template.id}
-                      type="button"
-                      className={view.layout === template.id ? "active" : ""}
                       disabled={!view.ready || view.layoutLocked}
-                      aria-pressed={view.layout === template.id}
+                      selected={view.layout === template.id}
                       onClick={() => actions.setLayout(template.id)}
                     >
                       <span className="workspace-panel-template-glyph" aria-hidden="true">{template.glyph}</span>
@@ -550,7 +533,7 @@ export default function WorkspacePanel({
                         <strong>{t(template.labelKey)}</strong>
                         <small>{t(template.descriptionKey)}</small>
                       </span>
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
               </section>
@@ -563,42 +546,37 @@ export default function WorkspacePanel({
                   </div>
                 </div>
                 <div className="workspace-panel-action-grid">
-                  <button
-                    type="button"
+                  <OptionButton
                     disabled={!view.ready || view.layoutLocked || !view.canUndoLayout}
                     onClick={actions.undoLayout}
                   >
                     <span aria-hidden="true">↶</span>
                     {t("workspace.undo")}
                     <small>{`${shortcutModifier()} + Z`}</small>
-                  </button>
-                  <button
-                    type="button"
+                  </OptionButton>
+                  <OptionButton
                     disabled={!view.ready || view.layoutLocked || !view.canRedoLayout}
                     onClick={actions.redoLayout}
                   >
                     <span aria-hidden="true">↷</span>
                     {t("workspace.redo")}
                     <small>{`${shortcutModifier()} + Shift + Z`}</small>
-                  </button>
-                  <button
-                    type="button"
+                  </OptionButton>
+                  <OptionButton
                     disabled={!view.ready || view.layoutLocked}
                     onClick={actions.resetLayout}
                   >
                     <span aria-hidden="true">⟲</span>
                     {t("workspace.keepCurrent")}
-                  </button>
-                  <button
-                    type="button"
-                    className={view.layoutLocked ? "active" : ""}
+                  </OptionButton>
+                  <OptionButton
                     disabled={!view.ready}
-                    aria-pressed={view.layoutLocked}
+                    selected={view.layoutLocked}
                     onClick={() => actions.setLayoutLocked(!view.layoutLocked)}
                   >
                     <span aria-hidden="true" className="workspace-panel-lock-icon"><Icon name={view.layoutLocked ? "lock" : "unlock"} size={14} /></span>
                     {view.layoutLocked ? t("workspace.unlock") : t("workspace.lock")}
-                  </button>
+                  </OptionButton>
                 </div>
               </section>
 
@@ -612,22 +590,13 @@ export default function WorkspacePanel({
                 </div>
                 {nativeWindowsEnabled ? (
                   <div className="workspace-panel-window-actions">
-                    <button
-                      type="button"
-                      disabled={!view.ready || windowCount >= 4}
-                      onClick={actions.createWindow}
-                    >
+                    <Button size="sm" disabled={!view.ready || windowCount >= 4} onClick={actions.createWindow}>
                       {t("workspace.newNativeWindow")}
-                    </button>
+                    </Button>
                     {view.window.id !== "main-window" && (
-                      <button
-                        type="button"
-                        className="danger"
-                        disabled={!view.ready}
-                        onClick={() => actions.closeWindow(view.window.id)}
-                      >
+                      <Button size="sm" variant="danger" disabled={!view.ready} onClick={() => actions.closeWindow(view.window.id)}>
                         {t("workspace.closeWindow")}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ) : (
@@ -676,10 +645,10 @@ export default function WorkspacePanel({
                       .filter((cell) => mountedLinkCellIds.has(cell.id)
                         && cell.linkGroupId === group.id).length;
                     return (
-                      <button
+                      <OptionButton
                         key={group.id}
-                        type="button"
-                        className={effectiveSelectedGroupId === group.id ? "active" : ""}
+                        variant="row"
+                        selected={effectiveSelectedGroupId === group.id}
                         disabled={!view.ready}
                         style={{ paddingLeft: `${8 + depth * 18}px` }}
                         onClick={() => setSelectedGroupId(group.id)}
@@ -695,25 +664,17 @@ export default function WorkspacePanel({
                           <strong>{chartLinkGroupDisplayName(group)}</strong>
                           <small>{group.parentId ? t("workspace.childGroup") : t("workspace.rootGroup")}{t("workspace.groupCharts", { count: cellCount })}</small>
                         </span>
-                      </button>
+                      </OptionButton>
                     );
                   })}
                 </div>
                 <div className="workspace-panel-window-actions">
-                  <button
-                    type="button"
-                    disabled={!view.ready}
-                    onClick={() => actions.createLinkGroup(null)}
-                  >
+                  <Button size="sm" disabled={!view.ready} onClick={() => actions.createLinkGroup(null)}>
                     {t("workspace.addRoot")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!view.ready || !selectedGroup}
-                    onClick={() => actions.createLinkGroup(selectedGroup?.id ?? null)}
-                  >
+                  </Button>
+                  <Button size="sm" disabled={!view.ready || !selectedGroup} onClick={() => actions.createLinkGroup(selectedGroup?.id ?? null)}>
                     {t("workspace.addChild")}
-                  </button>
+                  </Button>
                 </div>
                 <label className="workspace-panel-field">
                   <span>{t("workspace.joinGroup")}</span>
@@ -786,9 +747,10 @@ export default function WorkspacePanel({
                         </select>
                       </label>
                     </div>
-                    <button
-                      type="button"
-                      className="danger workspace-panel-delete-link-group"
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      className="workspace-panel-delete-link-group"
                       disabled={!view.ready || orderedLinkGroups.length <= 1}
                       onClick={() => {
                         actions.deleteLinkGroup(selectedGroup.id);
@@ -796,7 +758,7 @@ export default function WorkspacePanel({
                       }}
                     >
                       {t("workspace.deleteGroup")}
-                    </button>
+                    </Button>
                   </section>
 
                   <LinkPolicyEditor
@@ -834,23 +796,17 @@ export default function WorkspacePanel({
                           <p>{t("workspace.sharedLayersHint")}</p>
                         </div>
                       </div>
-                      <div className="workspace-panel-segmented" role="group" aria-label={t("workspace.layerSet")}>
-                        {CHART_DRAWING_LAYER_SET_IDS.map((layerSet) => (
-                          <button
-                            key={layerSet}
-                            type="button"
-                            className={view.activeCell.drawingLayerSet === layerSet ? "active" : ""}
-                            aria-pressed={view.activeCell.drawingLayerSet === layerSet}
-                            disabled={!view.ready}
-                            onClick={() => actions.setCellDrawingLayerSet(
-                              view.activeCellId,
-                              layerSet as ChartDrawingLayerSetId,
-                            )}
-                          >
-                            {t("workspace.layer", { id: layerSet })}
-                          </button>
-                        ))}
-                      </div>
+                      <SegmentedControl
+                        fullWidth
+                        label={t("workspace.layerSet")}
+                        value={view.activeCell.drawingLayerSet as ChartDrawingLayerSetId}
+                        onChange={(layerSet) => actions.setCellDrawingLayerSet(view.activeCellId, layerSet)}
+                        options={CHART_DRAWING_LAYER_SET_IDS.map((layerSet) => ({
+                          value: layerSet as ChartDrawingLayerSetId,
+                          label: t("workspace.layer", { id: layerSet }),
+                          disabled: !view.ready,
+                        }))}
+                      />
                     </section>
                   )}
                 </>

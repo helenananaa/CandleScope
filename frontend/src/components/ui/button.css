@@ -225,8 +225,10 @@
   border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
 }
 
+/* Fades as well, like a disabled icon button: muted text alone reads as enabled in the dark theme. */
 .ui-option:disabled {
   color: var(--text-muted);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

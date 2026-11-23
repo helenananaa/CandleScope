@@ -756,6 +756,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Raw `<button>` 208 → 171, families 19 → 18. Left here for 8c5's exceptions: the page navigation's replay entry (2).
 - Next: 8c3b, the workspace panel and layout picker.
 
+**Phase 8c3b is done (branch `design/phase-8c3b-workspace`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C3B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C3B.md).
+
+- The chart workspace panel (tabs, saved workspaces, templates, layout actions, link policies, the link-group tree, all its actions, the shared drawing layers) and the layout picker are on kit `Tabs`, `OptionButton` (cards and rows), `Button`, `IconButton`, `ControlButton` and `SegmentedControl`; their own button CSS is gone.
+- Disabled option buttons fade, like disabled icon buttons, so they read as off.
+- Raw `<button>` 171 → 145; the panel and picker have none left.
+- Next: 8c4, the plugin surfaces.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
