@@ -167,7 +167,6 @@ class BacktestService:
         self.enforce_registered_revisions = enforce_registered_revisions
         # Test-only seam. Production construction never supplies an injector.
         self._fault_injector = fault_injector
-        self._audit_ordinals: dict[str, int] = {}
         self.external = ExternalProviderControl(settings, repository)
 
     @classmethod
@@ -4961,16 +4960,13 @@ class BacktestService:
         return account_model, execution_config, signal_identity
 
     def _audit(self, run_id: str, action: str, details: Mapping[str, object]) -> None:
-        ordinal = self.repository.next_audit_ordinal(run_id)
-        self._audit_ordinals[run_id] = ordinal
         payload = canonical_json(details)
-        self.repository.append_audit(
+        self.repository.append_next_audit(
             run_id,
-            ordinal,
             action,
             "host",
             payload,
-            "sha256:" + sha256_hex(f"{run_id}:{ordinal}:{action}:{payload}"),
+            lambda ordinal: "sha256:" + sha256_hex(f"{run_id}:{ordinal}:{action}:{payload}"),
         )
 
     def _resolve_warmup(

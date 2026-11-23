@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -341,6 +342,39 @@ def test_running_cancel_stops_execution_without_writing_report(tmp_path: Path) -
     assert service.get_run(str(created["run_id"]))["state"] == "CANCELLED"
     assert service.repository.get_report(str(created["run_id"])) is None
     service.shutdown()
+
+
+def test_audit_ordinals_stay_unique_across_connections(tmp_path: Path) -> None:
+    # The API service and each worker slot write audit entries through their
+    # own connection; a slot that has just claimed a run audits it at once.
+    api = BacktestService.start(_settings(tmp_path), now_ms=10)
+    slot = BacktestService.start(_settings(tmp_path), now_ms=10)
+    run_id = str(api.create_run(_payload(), idempotency_key="audit-race", now_ms=11)["run_id"])
+    barrier = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def write(service: BacktestService, action: str) -> None:
+        barrier.wait()
+        try:
+            for _ in range(40):
+                service._audit(run_id, action, {})
+        except BaseException as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=write, args=(service, action))
+               for service, action in ((api, "api"), (slot, "slot"))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    rows = api.repository.connection.execute(
+        "SELECT ordinal, action FROM backtest_audit WHERE run_id = ? ORDER BY ordinal", (run_id,),
+    ).fetchall()
+    slot.shutdown()
+    api.shutdown()
+    assert errors == []
+    assert [int(row["ordinal"]) for row in rows] == list(range(1, 82))
+    assert [row["action"] for row in rows].count("slot") == 40
 
 
 def test_audit_ordinals_survive_process_restart(tmp_path: Path) -> None:

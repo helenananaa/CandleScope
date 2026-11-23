@@ -23,7 +23,10 @@ EXTERNAL = {"execution_mode": "CANDLESCOPE", "execution_fidelity": "BAR_APPROX",
 
 
 def _host_pine_result(tmp_path):
-    service = BacktestService.start(_settings(tmp_path), now_ms=1, enforce_registered_revisions=True)
+    # Its own database: the native_runtime fixture's worker would otherwise
+    # claim this queued run and fail it as a dataset run.
+    (tmp_path / "host-pine").mkdir()
+    service = BacktestService.start(_settings(tmp_path / "host-pine"), now_ms=1, enforce_registered_revisions=True)
     provider = PineEngineProvider()
     try:
         revision = service.create_strategy_revision(
