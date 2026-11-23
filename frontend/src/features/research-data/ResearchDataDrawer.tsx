@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Drawer } from "../../components/ui/index.js";
+import { Drawer, OptionButton } from "../../components/ui/index.js";
 
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel, isCapabilityAvailable } from "./researchDataSourceModel.js";
@@ -96,18 +96,17 @@ function ResearchDataDrawerBody({
               ? t("research.source.liveOffline")
               : null;
           return (
-            <button
+            <OptionButton
               key={kind}
-              type="button"
               className="research-source-card"
               disabled={!runnable}
-              aria-pressed={selectedKind === undefined ? undefined : selectedKind === kind}
+              selected={selectedKind === undefined ? undefined : selectedKind === kind}
               onClick={() => onSelectKind(kind)}
               data-testid={`research-source-card-${kind}`}
             >
               <strong>{ordinarySourceLabel(kind)}</strong>
               {reason ? <small>{reason}</small> : null}
-            </button>
+            </OptionButton>
           );
         })}
       </div>}

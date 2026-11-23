@@ -1,4 +1,4 @@
-import { Button, Dialog, Disclosure, InlineAlert, buttonClassName } from "../../../components/ui/index.js";
+import { Button, Dialog, Disclosure, InlineAlert, OptionButton, buttonClassName } from "../../../components/ui/index.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import { researchStateLabel } from "../research/researchLabels.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
@@ -412,9 +412,9 @@ export function ChartStrategyTradeList({
               const tradeId = trade.trade_id ?? `trade-${absoluteIndex + 1}`;
               const entryTime = Number(trade.entry_time_ms);
               return (
-                <button
+                <OptionButton
                   key={`${tradeId}:${absoluteIndex}`}
-                  type="button"
+                  variant="row"
                   role="row"
                   aria-rowindex={absoluteIndex + 1}
                   aria-selected={selectedTradeId === tradeId}
@@ -446,7 +446,7 @@ export function ChartStrategyTradeList({
                   <span title={trade.exit_price ?? "—"}>{formatChartStrategyNumber(trade.exit_price, "price")}</span>
                   <span title={trade.net_pnl ?? "—"} className={signedClass(trade.net_pnl ?? "")}>{formatChartStrategyNumber(trade.net_pnl)}</span>
                   <span title={trade.fees ?? "—"}>{formatChartStrategyNumber(trade.fees)}</span>
-                </button>
+                </OptionButton>
               );
             })}
           </div>

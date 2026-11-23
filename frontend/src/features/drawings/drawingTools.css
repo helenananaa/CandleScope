@@ -234,7 +234,7 @@
   align-items: flex-start;
   padding: 7px 8px;
 }
-.chart-type-flyout .tool-flyout-icon {
+.chart-type-flyout .tool-flyout-item .ui-menu-icon {
   margin-top: 1px;
   color: var(--text-accent);
 }
@@ -249,42 +249,32 @@
     transform: translateX(0);
   }
 }
+/* Kit menu rows: the variant's icon, its name over a description, and a check on the one in use. */
 .tool-flyout-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
+  min-height: 0;
   padding: 6px 8px;
-  background: transparent;
-  border: none;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
   white-space: nowrap;
   transition: all 0.12s ease;
 }
 .tool-flyout-item:hover {
   color: var(--text-primary);
-  background: var(--surface-hover);
 }
 .tool-flyout-item.selected {
   color: var(--text-accent);
   background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
 }
-.tool-flyout-icon {
-  display: flex;
+.tool-flyout-item .ui-menu-icon {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  color: inherit;
 }
-.tool-flyout-label {
-  flex: 1;
+.tool-flyout-item .ui-menu-label {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  min-width: 0;
 }
 .tool-flyout-label-main {
   line-height: 1.25;
@@ -298,10 +288,10 @@
 .tool-flyout-item.selected .tool-flyout-description {
   color: color-mix(in srgb, var(--accent-blue) 85%, transparent);
 }
-.tool-flyout-check {
-  font-size: var(--font-size-md);
-  color: var(--text-accent);
+.tool-flyout-item .ui-menu-hint {
   margin-left: 4px;
+  color: var(--text-accent);
+  font: var(--font-size-md)/1 var(--font-sans);
 }
 /* ── 斐波那契设置面板 ───────────────────────────────────── */
 .fib-levels-panel {

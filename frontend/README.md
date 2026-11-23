@@ -114,11 +114,13 @@ and tests colocated with source files.
 `npm run check:styles` (part of `npm run check`) reports the design-refactor
 metrics and fails when one that has reached zero comes back: class names with no
 CSS rule, `!important` outside `prefers-reduced-motion`, native dialogs, the
-legacy `--bg-*` colour names, selectors with unbalanced brackets and static inline
+legacy `--bg-*` colour names, selectors with unbalanced brackets, static inline
 styles (`style={{}}` with only literal values; values computed at render time stay
-inline). Raw buttons and `*-btn` class families are still falling; each has a
-ratchet in `scripts/check-style-metrics.mjs` that fails the check if the count
-rises. Lower a ratchet when its count falls. A
+inline) and raw `<button>`s outside `src/components/ui`. Use a kit primitive
+(`Button`, `IconButton`, `ControlButton`, `OptionButton`, `MenuItemButton`) instead
+of a raw button; the few that must stay raw are listed, with their reasons, in
+`RAW_BUTTON_EXCEPTIONS` in `scripts/check-style-metrics.mjs`. `*-btn` class
+families have a ratchet there that fails the check if the count rises. A
 rule that must win everywhere goes in `src/styles/overrides.css` (the `overrides`
 cascade layer) instead of using `!important`. See
 [FRONTEND_DESIGN_REFACTOR_PLAN.md](FRONTEND_DESIGN_REFACTOR_PLAN.md) §7.

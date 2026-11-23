@@ -111,13 +111,9 @@
   flex: 0 0 auto;
 }
 
-.training-hub-page :is(button, a, input, select):where(:not(.ui-btn, .ui-icon-btn, .ui-input, .ui-segment, .ui-check-input)):focus-visible {
+.training-hub-page :is(a, input, select):where(:not(.ui-btn, .ui-input, .ui-check-input)):focus-visible {
   outline: 2px solid var(--hub-accent);
   outline-offset: 2px;
-}
-.training-hub-page button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment)):disabled {
-  opacity: .45;
-  cursor: not-allowed;
 }
 
 /* A label/value summary (the create dialog's side, data preparation). */

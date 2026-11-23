@@ -796,6 +796,21 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Raw `<button>` 57 → 42; replay has none left. `workspace-toolbar-trigger` and the replay cell header's `> button` rules are gone.
 - Next: 8c5c, strategy, backtest and data, the documented exceptions and the zero target.
 
+**Phase 8c5c is done (branch `design/phase-8c5c-strategy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5C.md).
+
+- Strategy, backtest and data are on the kit:
+  - **Strategy dock:** the switcher has a ghost `Button` trigger and `MenuItemButton` rows. The result summaries are ghost `Button`s. The chart tester's start rows and both trade lists are `row` `OptionButton`s.
+  - **Native panel:** the engine choice is two radio card `OptionButton`s, and the history rows are `row` `OptionButton`s.
+  - **Continuous runs and data preparation:** small `Button`s; the two result links use `buttonClassName`.
+  - **Research:** the strategy templates, the data source cards and the local datasets are card `OptionButton`s; a local analysis event is a row.
+- **The drawing variant menu** is `MenuItemButton` rows. 8c2 had set it aside as an exception; it now looks the same on the kit.
+- **Generic `button` rules removed:** the strategy research shell's, the cell layout popover's, the training hub's and the strategy dock's had also restyled kit controls inside those areas.
+- **§7's raw-button target is met.** Raw `<button>` outside `components/ui` is 0, apart from 4 documented exceptions in `RAW_BUTTON_EXCEPTIONS`:
+  - the page navigation's training entry (2), which must look like the links beside it;
+  - the colour swatches (2).
+  `--strict` fails on any other raw button and on a stale exception. The `*-btn` families stay at their ratchet of 13; every one is now a class on a kit primitive.
+- This completes Phase 8c (8c1–8c5c) and, with it, Phase 8.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

@@ -1,6 +1,6 @@
 import { BrowserDesktopLink, desktopReleaseUrl } from "../../../app/BrowserDesktopLink.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
-import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
+import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, OptionButton, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -846,12 +846,12 @@ export function CandleScopeStrategyTesterPanel({
       <StrategyDockSlot name="actions">
         <div className="strategy-dock-run">
           {result && (
-            <button type="button" className="strategy-summary" data-stale={stale} onClick={() => setActiveTab("overview")}
+            <Button variant="ghost" className="strategy-summary" data-stale={stale} onClick={() => setActiveTab("overview")}
               title={stale ? t("chartTester.result.stale") : t("chartTester.tab.overview")}>
               <span><small>{t("chartTester.result.netPnl")}</small><b className={Number(netPnl) < 0 ? "negative" : Number(netPnl) > 0 ? "positive" : undefined}>{formatChartStrategyNumber(result.report.metrics.realized_net_pnl)}</b></span>
               <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{chartStrategyMaxDrawdown(result.report)}</b></span>
               <span><small>{t("chartTester.result.winRate")}</small><b>{chartStrategyWinRate(result.report.metrics.win_rate, locale)}</b></span>
-            </button>
+            </Button>
           )}
           {result && followStatus && (
             <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
@@ -939,10 +939,10 @@ export function CandleScopeStrategyTesterPanel({
                 <h3>{t("chartTester.start.template")}</h3>
                 <div className="chart-strategy-start-list">
                   {CHART_STRATEGY_TEMPLATES.map((template) => (
-                    <button key={template.id} type="button" className="chart-strategy-start-row" onClick={() => void createDraft(template.displayName, template.source, false, template.language)}>
+                    <OptionButton key={template.id} variant="row" className="chart-strategy-start-row" onClick={() => void createDraft(template.displayName, template.source, false, template.language)}>
                       <strong>{t(template.nameKey)}</strong>
                       <span>{t(template.descriptionKey)}</span>
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
               </section>
@@ -953,14 +953,14 @@ export function CandleScopeStrategyTesterPanel({
                 ) : (
                   <div className="chart-strategy-start-list">
                     {recentDrafts.map((record) => (
-                      <button key={record.id} type="button" className="chart-strategy-start-row" onClick={() => attachRecord(record, false)}>
+                      <OptionButton key={record.id} variant="row" className="chart-strategy-start-row" onClick={() => attachRecord(record, false)}>
                         <strong>{record.displayName}</strong>
                         <span>
                           {strategyLanguageLabel(record.language)}
                           {" · "}
                           <time dateTime={new Date(record.updatedAt).toISOString()}>{new Date(record.updatedAt).toLocaleString(locale)}</time>
                         </span>
-                      </button>
+                      </OptionButton>
                     ))}
                   </div>
                 )}

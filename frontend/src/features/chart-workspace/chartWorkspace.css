@@ -405,23 +405,6 @@
 .workspace-cell-swap-actions > div {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-/* Kit controls (the appearance section) style themselves. */
-.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)) {
-  min-height: 27px;
-  padding: 0 7px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  background: var(--surface-0);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)):hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-subtle));
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)):disabled,
 .workspace-cell-layout-popover fieldset:disabled {
   opacity: 0.45;
   cursor: not-allowed;

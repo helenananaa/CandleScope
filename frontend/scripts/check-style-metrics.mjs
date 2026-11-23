@@ -46,12 +46,31 @@ export const HOOK_CLASSES = new Set([
   "replay-end-dialog", // the soak script reads the end-session dialog
 ]);
 
-// Metrics that have reached zero: any occurrence fails --strict.
-export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "legacyColorTokens", "malformedSelectors", "staticInlineStyles"];
+// Raw <button>s that stay on purpose (§7's documented exceptions), by file under src/, with how
+// many each may keep. Every other button outside components/ui is a kit primitive. Keep each one
+// justified; a file that keeps fewer than listed fails --strict until the entry is lowered.
+export const RAW_BUTTON_EXCEPTIONS = {
+  // The training entry is one of the page navigation's links. It is a button only where training
+  // opens in place or is unavailable, and must look exactly like the links beside it.
+  "app/WorkspaceNavigation.tsx": 2,
+  // Colour swatches: each button is its colour (a background from data), with no label or box.
+  "features/drawings/DrawingStyleInputs.tsx": 2,
+};
+
+// Metrics that have reached zero: any occurrence fails --strict. rawButtons counts raw <button>s
+// beyond the documented exceptions.
+export const ZERO_TARGETS = ["unstyledClasses", "important", "nativeDialogs", "legacyColorTokens", "malformedSelectors", "staticInlineStyles", "rawButtons"];
 
 // Metrics still on their way to the §7 targets (Phase 8c): --strict fails when one rises above
 // its ratchet. Lower a ratchet when its count falls; never raise it.
-export const RATCHETS = { rawButtons: 42, buttonClassFamilies: 13 };
+export const RATCHETS = { buttonClassFamilies: 13 };
+
+/** A component's path under src/, with forward slashes (the keys of RAW_BUTTON_EXCEPTIONS). */
+function srcRelative(file) {
+  const normalized = file.split(path.sep).join("/");
+  const at = normalized.lastIndexOf("/src/");
+  return at === -1 ? normalized.replace(/^src\//, "") : normalized.slice(at + "/src/".length);
+}
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -169,6 +188,8 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
   }
   const unstyled = [];
   let rawButtons = 0;
+  const rawButtonFiles = [];
+  const exceptionUse = Object.fromEntries(Object.keys(RAW_BUTTON_EXCEPTIONS).map((file) => [file, 0]));
   let buttonPrimitive = 0;
   let inlineStyles = 0;
   let staticInlineStyles = 0;
@@ -178,7 +199,16 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     const missing = [...classNamesInTsx(source)]
       .filter((name) => !defined.has(name) && !HOOK_CLASSES.has(name) && !/^(is|has)-/.test(name));
     if (missing.length) unstyled.push({ file, classes: missing.sort() });
-    if (!file.includes(`${path.sep}components${path.sep}ui${path.sep}`)) rawButtons += (source.match(/<button\b/g) ?? []).length;
+    if (!file.includes(`${path.sep}components${path.sep}ui${path.sep}`)) {
+      const count = (source.match(/<button\b/g) ?? []).length;
+      const relative = srcRelative(file);
+      const allowed = RAW_BUTTON_EXCEPTIONS[relative] ?? 0;
+      if (relative in exceptionUse) exceptionUse[relative] = Math.min(count, allowed);
+      if (count > allowed) {
+        rawButtons += count - allowed;
+        rawButtonFiles.push({ file, count: count - allowed });
+      }
+    }
     buttonPrimitive += (source.match(/<Button\b/g) ?? []).length;
     for (const match of source.matchAll(/style=\{\{/g)) {
       inlineStyles++;
@@ -194,6 +224,10 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     unstyledClasses: unstyled.reduce((sum, entry) => sum + entry.classes.length, 0),
     unstyled: unstyled.sort((a, b) => b.classes.length - a.classes.length),
     rawButtons,
+    rawButtonFiles,
+    rawButtonExceptions: Object.values(exceptionUse).reduce((sum, count) => sum + count, 0),
+    // Exceptions that list more raw buttons than their file keeps: lower or remove them.
+    staleRawButtonExceptions: Object.entries(exceptionUse).filter(([file, used]) => used < RAW_BUTTON_EXCEPTIONS[file]).map(([file]) => file),
     buttonPrimitive,
     buttonClassFamilies: buttonFamilies.size,
     inlineStyles,
@@ -209,6 +243,7 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
 /** What --strict rejects: metrics off their zero target or above their ratchet. */
 export function strictFailures(metrics) {
   const failures = ZERO_TARGETS.filter((name) => metrics[name] > 0).map((name) => `${name} is ${metrics[name]}, target 0`);
+  for (const file of metrics.staleRawButtonExceptions ?? []) failures.push(`RAW_BUTTON_EXCEPTIONS lists more raw buttons than ${file} keeps; lower its entry`);
   for (const [name, ceiling] of Object.entries(RATCHETS)) {
     if (metrics[name] > ceiling) failures.push(`${name} is ${metrics[name]}, above its ratchet of ${ceiling}`);
   }
@@ -218,7 +253,7 @@ export function strictFailures(metrics) {
 function report(metrics) {
   const rows = [
     ["Class names with no CSS rule", metrics.unstyledClasses, "0"],
-    ["Raw <button> outside components/ui", metrics.rawButtons, `≤ 20 (ratchet ${RATCHETS.rawButtons})`],
+    ["Raw <button> outside components/ui", metrics.rawButtons, `0 (${metrics.rawButtonExceptions} documented exceptions)`],
     ["<Button> primitive uses", metrics.buttonPrimitive, "grows"],
     ["*-btn / *-button class families", metrics.buttonClassFamilies, `primitives (ratchet ${RATCHETS.buttonClassFamilies})`],
     ["Inline style={{}} (dynamic)", metrics.inlineStyles - metrics.staticInlineStyles, "allowed"],
@@ -233,6 +268,7 @@ function report(metrics) {
   const lower = Object.entries(RATCHETS).filter(([name, ceiling]) => metrics[name] < ceiling);
   if (lower.length) console.log(`\nBelow the ratchet; lower RATCHETS in scripts/check-style-metrics.mjs: ${lower.map(([name]) => `${name} → ${metrics[name]}`).join(", ")}`);
   for (const location of metrics.malformed) console.log(`  malformed selector: ${path.relative(SRC, location)}`);
+  for (const entry of metrics.rawButtonFiles) console.log(`  raw <button> (use a kit primitive): ${path.relative(SRC, entry.file)} ×${entry.count}`);
   if (metrics.unstyled.length) {
     console.log("\nFiles with the most unstyled class names:");
     for (const entry of metrics.unstyled.slice(0, 12)) {
@@ -244,7 +280,7 @@ function report(metrics) {
 export function main(argv = process.argv.slice(2)) {
   const metrics = collectMetrics(walk(SRC));
   if (argv.includes("--json")) {
-    console.log(JSON.stringify({ ...metrics, malformed: metrics.malformed.map((location) => path.relative(SRC, location)), unstyled: metrics.unstyled.map((e) => ({ ...e, file: path.relative(SRC, e.file) })) }, null, 2));
+    console.log(JSON.stringify({ ...metrics, malformed: metrics.malformed.map((location) => path.relative(SRC, location)), rawButtonFiles: metrics.rawButtonFiles.map((e) => ({ ...e, file: path.relative(SRC, e.file) })), unstyled: metrics.unstyled.map((e) => ({ ...e, file: path.relative(SRC, e.file) })) }, null, 2));
   } else {
     report(metrics);
   }

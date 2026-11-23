@@ -53,13 +53,14 @@
 .strategy-dock-content .chart-strategy-tester-panel,
 .strategy-dock-content .native-strategy-panel { flex: 1 1 0; height: auto; min-height: 0; max-height: none; box-shadow: none; border-top: 0; width: 100%; box-sizing: border-box; }
 .strategy-dock .chart-strategy-resize-handle { display: none; }
-/* The dock's own raw controls; kit controls draw their own focus ring. */
-.strategy-dock :is(button, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* The dock's own native selects and summaries; kit controls draw their own focus ring. */
+.strategy-dock :is(select, summary):where(:not(.ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 /* Strategy switcher */
 .strategy-switcher { position: relative; display: flex; align-items: center; min-width: 0; }
-.strategy-switcher-trigger { display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; font: inherit; cursor: pointer; }
-.strategy-switcher-trigger:hover, .strategy-switcher-trigger[aria-expanded=true] { background: var(--surface-hover); }
+/* A ghost kit button that reads as the dock's title: the strategy's name in the dock's type. */
+.strategy-switcher-trigger { gap: 7px; max-width: 100%; height: 30px; padding: 0 8px; color: var(--text-primary); font: inherit; }
+.strategy-switcher-trigger[aria-expanded=true] { background: var(--surface-hover); }
 .strategy-switcher-trigger strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .strategy-switcher-trigger small { flex-shrink: 0; padding: 1px 5px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); color: var(--text-secondary); font: 500 var(--font-size-xs)/1.4 var(--font-mono); }
 .strategy-switcher-trigger svg { flex-shrink: 0; color: var(--text-secondary); }
@@ -67,13 +68,13 @@
 .strategy-switcher-menu { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; width: max-content; min-width: 240px; max-width: 360px; max-height: 60vh; overflow: auto; padding: 4px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-1); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32); }
 .strategy-switcher-heading { margin: 4px 8px 4px; color: var(--text-secondary); font-size: 11px; }
 .strategy-switcher-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border-subtle); }
-.strategy-switcher-menu button { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.strategy-switcher-menu button:hover:not(:disabled), .strategy-switcher-menu button:focus-visible { background: var(--surface-hover); }
-.strategy-switcher-menu button:disabled { opacity: .45; cursor: default; }
-.strategy-switcher-menu button > span { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.strategy-switcher-menu button > span strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.strategy-switcher-menu button > span small { color: var(--text-secondary); font-size: 11px; }
-.strategy-switcher-menu button[aria-checked=true] { color: var(--text-accent); }
+/* Kit menu rows: a strategy's name over its details, the chosen one in the accent. */
+.strategy-switcher-menu .ui-menu-item { padding: 7px 8px; }
+.strategy-switcher-menu .ui-menu-label { display: flex; flex-direction: column; }
+.strategy-switcher-menu .ui-menu-label strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.strategy-switcher-menu .ui-menu-label small { color: var(--text-secondary); font-size: 11px; }
+.strategy-switcher-menu .ui-menu-item[aria-checked=true] { color: var(--text-accent); }
+.strategy-switcher-menu .ui-menu-hint { display: inline-flex; color: inherit; }
 .strategy-status-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--text-secondary) 55%, transparent); }
 .strategy-status-dot[data-running=true] { background: var(--accent-blue); animation: strategy-dot-pulse 1.2s ease-in-out infinite; }
 @keyframes strategy-dot-pulse { 50% { opacity: .35; } }
@@ -85,8 +86,8 @@
 
 /* Result, status and Run */
 .strategy-dock-run { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.strategy-summary { display: flex; align-items: center; gap: 14px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; font: inherit; cursor: pointer; }
-.strategy-summary:hover { background: var(--surface-hover); }
+/* A ghost kit button holding the result's headline figures; it opens the overview. */
+.strategy-summary { gap: 14px; height: 30px; padding: 0 10px; color: var(--text-primary); font: inherit; }
 .strategy-summary > span { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
 .strategy-summary small { color: var(--text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
 .strategy-summary b { font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -75,9 +75,9 @@ export interface OptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
    * (role="option" / role="tab"); as aria-checked when it is a radio (role="radio", in a
    * radiogroup). A row that opens the item it names (the current one in a master list) passes
    * `aria-current` instead, which shows as chosen too. A choice that cannot be made yet but stays
-   * focusable passes `aria-disabled`, which fades it like `disabled`.
+   * focusable passes `aria-disabled`, which fades it like `disabled`. Undefined reports no state.
    */
-  selected?: boolean;
+  selected?: boolean | undefined;
   ref?: Ref<HTMLButtonElement>;
 }
 

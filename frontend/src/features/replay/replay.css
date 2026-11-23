@@ -9,8 +9,7 @@
 .replay-top-bar .logo,
 .replay-top-bar .price-info,
 .replay-top-bar .advanced-market-summary,
-.replay-top-bar > a,
-.replay-top-bar > button { flex: 0 0 auto; }
+.replay-top-bar > a { flex: 0 0 auto; }
 .replay-mode-badge {
   display: inline-flex;
   flex-shrink: 0;
