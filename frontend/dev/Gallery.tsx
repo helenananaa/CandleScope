@@ -1,8 +1,8 @@
 // Gallery of the UI primitives; rendered by dev/ui-gallery.tsx.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  Badge, Button, Checkbox, DateTimeInput, Dialog, Disclosure, Drawer, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, Menu,
-  Popover, Section, SegmentedControl, Select, Stat, Switch, TabPanel, Tabs, Textarea, Tooltip, confirmAction, notify,
+  Badge, Button, Checkbox, ControlButton, DateTimeInput, Dialog, Disclosure, Drawer, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, Menu,
+  OptionButton, Popover, Section, SegmentedControl, Select, Stat, Switch, TabPanel, Tabs, Textarea, Tooltip, confirmAction, notify,
 } from "../src/components/ui/index.js";
 
 const PlusIcon = () => (
@@ -62,8 +62,17 @@ export default function Gallery() {
           <IconButton label="Close" icon={<CloseIcon />} variant="secondary" />
           <IconButton label="Pin" icon={<PlusIcon />} pressed />
           <IconButton label="Small" icon={<CloseIcon />} size="sm" />
-          <button type="button" className="ui-control">Toolbar control</button>
-          <button type="button" className="ui-control is-active">Active control</button>
+          <IconButton label="Delete" icon={<CloseIcon />} variant="danger" />
+          <IconButton label="With variants" icon={<PlusIcon />} indicator={<svg width="6" height="6" viewBox="0 0 6 6"><polygon points="6,0 6,6 0,6" fill="currentColor" /></svg>} />
+          <ControlButton>Toolbar control</ControlButton>
+          <ControlButton active>Active control</ControlButton>
+          <ControlButton size="sm" icon={<PlusIcon />}>Small</ControlButton>
+        </Row>
+        <Row label="option">
+          <OptionButton selected><span><strong>2 × 2</strong><br /><small>Four charts, one main</small></span></OptionButton>
+          <OptionButton><span><strong>1 + 3</strong><br /><small>Main chart with three confirmations</small></span></OptionButton>
+          <OptionButton variant="row" selected>Selected row</OptionButton>
+          <OptionButton variant="row" disabled>Disabled row</OptionButton>
         </Row>
       </Section>
 
@@ -172,7 +181,10 @@ function Overlays() {
           { id: "copy", label: "Copy chart", hint: "⌘C", onSelect: () => setResult("Copied") },
           { id: "split", label: "Split right", onSelect: () => setResult("Split") },
           { id: "lock", label: "Lock layout", disabled: true, onSelect: () => undefined },
-          { id: "close", label: "Close chart", tone: "danger", onSelect: () => setResult("Closed") },
+          { id: "auto", label: "Auto scale", checked: true, separatorBefore: true, onSelect: () => setResult("Auto scale") },
+          { id: "log", label: "Logarithmic", checked: false, radio: true, separatorBefore: true, onSelect: () => setResult("Log") },
+          { id: "linear", label: "Linear", checked: true, radio: true, onSelect: () => setResult("Linear") },
+          { id: "close", label: "Close chart", tone: "danger", separatorBefore: true, onSelect: () => setResult("Closed") },
         ]} />
     </Section>
   );

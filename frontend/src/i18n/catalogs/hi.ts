@@ -2773,6 +2773,7 @@ export const hi = {
   "css.expand": "फैलाएँ",
   "css.collapse": "समेटें",
   "scale.auto": "ऑटो स्केल",
+  "scale.menu": "मूल्य स्केल",
   "scale.invert": "स्केल उलटाएँ",
   "scale.regular": "नियमित",
   "scale.log": "लघुगणकीय",

@@ -1,5 +1,6 @@
-/* The plugin center, inside Settings → 插件与扩展. Kit controls (tabs, inputs, selects, badges) style
- * themselves; the element rules below skip them without changing their own specificity. */
+/* The plugin center, inside Settings → 插件与扩展. Its buttons are the kit's; kit controls (tabs,
+ * inputs, selects, badges) style themselves; the element rules below skip them without changing
+ * their own specificity. */
 .plugin-center { --pc-secondary: color-mix(in srgb, var(--text-primary) 76%, var(--surface-1)); color: var(--text-primary); font-size: 14px; line-height: 1.5; min-width: 0; display: grid; gap: 16px; outline: none; }
 .pc-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border-subtle); }
 .pc-toolbar .ui-tabs { border-bottom: 0; }
@@ -10,14 +11,10 @@
 .plugin-center h4 { font-size: 14px; font-weight: 600; }
 .plugin-center p, .plugin-center small { color: var(--pc-secondary); }
 .plugin-center small { font-size: 12px; }
-.plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)), .plugin-center input:where(:not(.ui-input, .ui-check-input, .ui-file-drop-input)), .plugin-center select:where(:not(.ui-input)), .plugin-center textarea:where(:not(.ui-input)) { font: inherit; }
-.plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)) { min-height: 34px; padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); background: var(--surface-1); cursor: pointer; }
-.plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)):hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent-blue); }
-.plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)):disabled { cursor: not-allowed; opacity: .5; }
-.plugin-center :is(button,input,select,textarea,summary):where(:not(.ui-btn, .ui-tab, .ui-icon-btn, .ui-segment, .ui-input, .ui-check-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.plugin-center input:where(:not(.ui-input, .ui-check-input, .ui-file-drop-input)), .plugin-center select:where(:not(.ui-input)), .plugin-center textarea:where(:not(.ui-input)) { font: inherit; }
+.plugin-center :is(input,select,textarea,summary):where(:not(.ui-input, .ui-check-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .plugin-center input:not([type=checkbox]):where(:not(.ui-input, .ui-file-drop-input)), .plugin-center select:where(:not(.ui-input)), .plugin-center textarea:where(:not(.ui-input)) { min-height: 36px; max-width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); color: var(--text-primary); }
 .plugin-center input::placeholder { color: var(--pc-secondary); }
-.plugin-center .pc-danger { color: var(--text-on-accent); background: var(--color-danger); }
 .pc-tools { display: flex; gap: 12px; }
 .pc-tools .ui-input:not(.ui-select) { flex: 1; }
 .pc-tools .ui-select { flex: 0 1 180px; }
@@ -26,10 +23,9 @@
 .pc-library { display: grid; grid-template-columns: minmax(230px, 28%) minmax(0, 1fr); min-height: 300px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: clip; }
 .pc-library-empty { display: block; min-height: 0; }
 .pc-list { background: var(--surface-0); padding: 8px; border-inline-end: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px; max-height: 480px; overflow: auto; }
-.plugin-center .pc-list button { display: grid; gap: 4px; padding: 12px; text-align: start; background: transparent; border-color: transparent; border-radius: var(--radius-md); }
-.plugin-center .pc-list button[aria-current=true] { background: color-mix(in srgb, var(--accent-blue) 12%, var(--surface-1)); border-color: color-mix(in srgb, var(--accent-blue) 45%, var(--border-subtle)); }
+.pc-list .ui-option { display: grid; gap: 4px; padding: 12px; border-radius: var(--radius-md); font: inherit; }
 .pc-list-title { font-weight: 700; overflow-wrap: anywhere; }
-.pc-list button > span:not(.pc-list-title) { font-size: 12px; color: var(--pc-secondary); }
+.pc-list .ui-option > span:not(.pc-list-title) { font-size: 12px; color: var(--pc-secondary); }
 .pc-detail { padding: 24px; min-width: 0; }
 .pc-detail-header { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .pc-detail-header > div:nth-child(2) { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
@@ -37,9 +33,7 @@
 .pc-monogram { width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); font-size: 22px; font-weight: 700; background: var(--surface-0); }
 .pc-detail-actions { margin-block: 20px 16px; }
 .plugin-center .plugin-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.pc-detail-tabs { display: flex; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 20px; }
-.plugin-center .pc-detail-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 8px 0; color: var(--pc-secondary); }
-.plugin-center .pc-detail-tabs button[aria-current=page] { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
+.pc-detail-tabs { margin-bottom: 20px; }
 .pc-detail-body { display: grid; gap: 12px; }
 .pc-contributions { display: grid; gap: 8px; }
 .pc-contributions article { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
@@ -51,19 +45,12 @@
 .pc-engines { margin-top: 24px; }
 .pc-engines > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .pc-engines header p { font-size: 13px; margin-top: 4px; }
-.pc-engine-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.pc-engine-grid article { padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); }
-.pc-engine-grid article > div { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
-.pc-engine-grid p { margin-block: 6px 10px; font-size: 12px; }
 .pc-confirm { padding: 16px; border: 1px solid var(--color-danger); border-radius: var(--radius-md); display: grid; gap: 10px; margin-bottom: 16px; }
-.pc-install-flow { max-width: 760px; margin: 24px auto; display: grid; gap: 20px; }
-.pc-install-flow > header p { margin-top: 8px; }
-.pc-install-flow > button { justify-self: start; }
 .plugin-center .plugin-settings-card { margin-top: 16px; background: var(--surface-0); border: 1px solid var(--border-subtle); padding: 20px; border-radius: var(--radius-md); gap: 14px; }
 .plugin-center .plugin-settings-card p, .plugin-center .plugin-empty-state p { color: var(--pc-secondary); }
 .plugin-center .plugin-empty-state { background: transparent; padding: 18px 0; }
-.plugin-center :is(.plugin-runtime-list article,.plugin-marketplace-list article,.plugin-trust-installed-summary,.plugin-trust-risk-grid > div,.plugin-trust-runtime,.plugin-trust-diffs > div,.plugin-permissions article,.plugin-marketplace-roots article) { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-subtle); }
-.plugin-center :is(.plugin-trust-reason textarea,.plugin-trust-acknowledgements,.plugin-trust-candidate) { background: var(--surface-1); color: var(--text-primary); }
+.plugin-center :is(.plugin-marketplace-list article,.plugin-trust-installed-summary,.plugin-trust-risk-grid > div,.plugin-trust-runtime,.plugin-trust-diffs > div,.plugin-permissions article,.plugin-marketplace-roots article) { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-subtle); }
+.plugin-center :is(.plugin-trust-reason textarea,.plugin-trust-acknowledgements) { background: var(--surface-1); color: var(--text-primary); }
 .plugin-center :is(pre,code,dd) { overflow-wrap: anywhere; white-space: pre-wrap; max-width: 100%; }
 .plugin-center pre { background: var(--surface-0); color: var(--pc-secondary); padding: 12px; font-size: 12px; }
 .plugin-center .plugin-technical-details { color: var(--pc-secondary); font-size: 12px; }
@@ -76,8 +63,7 @@
   .pc-library .pc-detail { display: none; }
   .pc-show-detail .pc-detail { display: block; }
   .pc-show-detail .pc-list { display: none; }
-  .plugin-center .pc-back { display: block; margin-bottom: 16px; }
-  .pc-engine-grid { grid-template-columns: minmax(0, 1fr); }
+  .plugin-center .pc-back { display: inline-flex; margin-bottom: 16px; }
   .pc-detail { padding: 16px; }
   .plugin-center .plugin-trust-risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -87,12 +73,6 @@
   .plugin-center h2 { font-size: 19px; }
 }
 
-.pc-install-steps { display: flex; flex-wrap: wrap; gap: 24px; padding-inline-start: 24px; color: var(--pc-secondary); }
-.pc-install-steps [aria-current=step] { color: var(--text-primary); font-weight: 700; }
-.plugin-center .plugin-trust-review { min-width: 0; border: 0; padding: 0; }
-
-.plugin-center :is(.plugin-trust-review,.plugin-trust-mode-control) { background: var(--surface-1); }
+.plugin-center .plugin-trust-mode-control { background: var(--surface-1); }
 .plugin-center .plugin-trust-warning { color: var(--text-primary); }
-.plugin-center .plugin-trust-source code { color: var(--pc-secondary); }
-.plugin-center .plugin-trust-confirmations .is-danger { color: var(--text-primary); }
 .pc-advanced article { overflow-wrap: anywhere; }

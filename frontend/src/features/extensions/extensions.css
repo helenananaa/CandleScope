@@ -6,22 +6,18 @@
 .extension-manager-head > div { display: grid; gap: 4px; min-width: 0; }
 .extension-manager-head h3 { margin: 0; font: 600 var(--font-size-base)/1.4 var(--font-sans); }
 .extension-manager-head p { max-width: 72ch; margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
-.extension-manager-body { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: 0; border: 0; }
 .extension-toolbar { display: grid; gap: var(--space-3); }
 .extension-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.extension-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
 .extension-review, .extension-item { display: grid; gap: var(--space-3); padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); overflow-wrap: anywhere; }
 .extension-review { border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle)); }
-.extension-review > p, .extension-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.extension-review > p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .extension-item > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.extension-facts, .extension-realms { display: grid; gap: 6px; margin: 0; }
-.extension-facts > div, .extension-realms > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 12px; font-size: var(--font-size-sm); }
-.extension-facts dt, .extension-realms dt { color: var(--text-muted); }
-.extension-facts dd, .extension-realms dd { margin: 0; color: var(--text-primary); }
-.extension-realms .extension-failure { grid-column: 2; }
+.extension-realms { display: grid; gap: 6px; margin: 0; }
+.extension-realms > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 12px; font-size: var(--font-size-sm); }
+.extension-realms dt { color: var(--text-muted); }
+.extension-realms dd { margin: 0; color: var(--text-primary); }
 /* Messages written by an extension or the host stay as written, set apart as technical detail. */
 .extension-detail { color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.extension-uninstall { color: var(--text-danger); }
 
 .extension-rail-slot { display: flex; flex: 0 0 auto; min-height: 0; }
 .extension-bottom-slot { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }

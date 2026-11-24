@@ -1,9 +1,5 @@
 @layer features {
-.plugin-trust-install-card {
-  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--border-subtle));
-}
 
-.plugin-trust-review,
 .plugin-trust-installed-summary,
 .plugin-trust-mode-control {
   display: grid;
@@ -15,14 +11,12 @@
   background: color-mix(in srgb, var(--surface-1) 94%, var(--color-warning) 6%);
 }
 
-.plugin-trust-source,
 .plugin-trust-runtime,
 .plugin-trust-diffs > div {
   display: grid;
   gap: 4px;
 }
 
-.plugin-trust-source code,
 .plugin-trust-runtime code {
   overflow-wrap: anywhere;
   color: var(--text-accent);
@@ -96,16 +90,6 @@
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
-}
-
-.plugin-trust-confirmations .is-danger {
-  border-color: var(--color-danger);
-  color: var(--text-danger);
-}
-
-.plugin-state-pill.is-warn {
-  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
-  color: var(--text-warning);
 }
 
 @media (max-width: 720px) {

@@ -244,6 +244,10 @@
   color: var(--text-danger);
 }
 
+.ui-menu-item[data-tone='danger'] .ui-menu-icon {
+  color: inherit;
+}
+
 .ui-menu-item:disabled {
   color: var(--text-muted);
   cursor: not-allowed;
@@ -252,6 +256,22 @@
 .ui-menu-icon {
   display: inline-flex;
   color: var(--text-secondary);
+}
+
+/* A checkable menu keeps a mark column; the check takes the accent */
+.ui-menu-list:has([aria-checked]) .ui-menu-icon {
+  justify-content: center;
+  width: 14px;
+}
+
+.ui-menu-item[aria-checked='true'] .ui-menu-icon {
+  color: var(--text-accent);
+}
+
+.ui-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-subtle);
 }
 
 .ui-menu-label {

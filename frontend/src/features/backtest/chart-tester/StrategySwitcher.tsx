@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { Icon } from "../../../components/icons/Icon.js";
-import { Input, moveMenuFocus, useAnchoredPopup } from "../../../components/ui/index.js";
+import { Button, Input, MenuItemButton, moveMenuFocus, useAnchoredPopup } from "../../../components/ui/index.js";
 
 export interface StrategySwitcherItem {
   id: string;
@@ -37,10 +37,10 @@ export function RetiredStrategySwitcherSection({ items, onRemove }: {
     <p className="strategy-switcher-heading">{t("strategyCollection.retiredBadge")}</p>
     {items.map((item) => <div key={item.id} className="strategy-switcher-retired" data-retired="true">
       <span><strong>{item.name}</strong><small>{t("strategyCollection.retiredBadge")}</small></span>
-      {item.onRemove && <button type="button" role="menuitem" aria-label={t("strategyCollection.removeRetired", { name: item.name })}
+      {item.onRemove && <MenuItemButton role="menuitem" aria-label={t("strategyCollection.removeRetired", { name: item.name })}
         onClick={() => onRemove(item)}>
-        <span>{t("strategyCollection.remove")}</span>
-      </button>}
+        {t("strategyCollection.remove")}
+      </MenuItemButton>}
     </div>)}
     <p className="strategy-switcher-note">{t("strategyCollection.pyneRetired")}</p>
   </>;
@@ -88,31 +88,31 @@ export function StrategySwitcher({ items, retired = [], activeId, actions, onSel
     </div>;
   }
   return <div className="strategy-switcher" ref={root}>
-    <button ref={trigger} type="button" className="strategy-switcher-trigger" aria-haspopup="menu" aria-expanded={open}
+    <Button ref={trigger} variant="ghost" className="strategy-switcher-trigger" aria-haspopup="menu" aria-expanded={open}
       aria-label={t("strategyCollection.select")} title={current?.name} onClick={() => setOpen(!open)}>
       <i className="strategy-status-dot" data-running={current?.running === true} aria-hidden="true" />
       <strong>{current?.name ?? t("strategyCollection.default")}</strong>
       {current?.meta && <small>{current.meta}</small>}
       <Icon name="chevron-down" size={12} />
-    </button>
+    </Button>
     {open && <div ref={menu} className="strategy-switcher-menu" role="menu" aria-label={t("strategyCollection.list")}
       onKeyDown={(event) => {
         if (event.key === "Tab") { event.preventDefault(); setOpen(false); return; }
         moveMenuFocus(event, menu.current);
       }}>
       <p className="strategy-switcher-heading">{t("strategyCollection.list")}</p>
-      {items.map((item) => <button key={item.id} ref={item.id === activeId ? chosen : undefined} type="button" role="menuitemradio" aria-checked={item.id === activeId}
+      {items.map((item) => <MenuItemButton key={item.id} ref={item.id === activeId ? chosen : undefined} role="menuitemradio" aria-checked={item.id === activeId}
+        icon={<i className="strategy-status-dot" data-running={item.running === true} />}
+        hint={item.id === activeId ? <Icon name="check" size={13} /> : undefined}
         onClick={() => choose(() => onSelect(item.id))}>
-        <i className="strategy-status-dot" data-running={item.running === true} aria-hidden="true" />
-        <span><strong>{item.name}</strong>{item.meta && <small>{item.meta}</small>}</span>
-        {item.id === activeId && <Icon name="check" size={13} />}
-      </button>)}
+        <strong>{item.name}</strong>{item.meta && <small>{item.meta}</small>}
+      </MenuItemButton>)}
       <RetiredStrategySwitcherSection items={retired} onRemove={(item) => choose(() => item.onRemove?.())} />
       {actions.length > 0 && <hr />}
-      {actions.map((action) => <button key={action.id} type="button" role="menuitem" disabled={action.disabled} title={action.title}
+      {actions.map((action) => <MenuItemButton key={action.id} role="menuitem" disabled={action.disabled} title={action.title}
         onClick={() => choose(action.onSelect)}>
-        <span>{action.label}</span>
-      </button>)}
+        {action.label}
+      </MenuItemButton>)}
     </div>}
   </div>;
 }

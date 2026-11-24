@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { moveMenuFocus, useAnchoredPopup } from "../ui/index.js";
+import { MenuItemButton, moveMenuFocus, useAnchoredPopup } from "../ui/index.js";
 import type { RefObject } from "react";
 import type { ToolbarVariant } from "./drawingToolbarDefinitions.js";
 import { drawingVariantDescription, drawingVariantLabel } from "./drawingToolbarI18n.js";
@@ -58,8 +58,7 @@ export default function ToolFlyout<TId extends string>({
         const label = drawingVariantLabel(variant);
         const description = drawingVariantDescription(variant);
         return (
-          <button
-            type="button"
+          <MenuItemButton
             key={variant.id}
             ref={currentId === variant.id && !disabled ? selectedRef : undefined}
             role="menuitemradio"
@@ -68,21 +67,19 @@ export default function ToolFlyout<TId extends string>({
             data-tool-variant={variant.id}
             aria-disabled={disabled}
             disabled={disabled}
+            icon={variant.icon}
+            hint={currentId === variant.id ? "\u2713" : undefined}
             onClick={() => {
               if (disabled) return;
               onSelect(variant.id);
               onClose();
             }}
           >
-            <span className="tool-flyout-icon">{variant.icon}</span>
-            <span className="tool-flyout-label">
-              <span className="tool-flyout-label-main">{label}</span>
-              {description && (
-                <span className="tool-flyout-description">{description}</span>
-              )}
-            </span>
-            {currentId === variant.id && <span className="tool-flyout-check" aria-hidden="true">&#10003;</span>}
-          </button>
+            <span className="tool-flyout-label-main">{label}</span>
+            {description && (
+              <span className="tool-flyout-description">{description}</span>
+            )}
+          </MenuItemButton>
         );
       })}
     </div>

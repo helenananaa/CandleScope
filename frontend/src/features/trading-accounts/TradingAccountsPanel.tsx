@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { Icon } from "../../components/icons/Icon.js";
-import { Badge, Button, EmptyState, IconButton, InlineAlert, Select, TabPanel, Tabs } from "../../components/ui/index.js";
+import { Badge, Button, EmptyState, IconButton, InlineAlert, OptionButton, Select, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import ContinuousRunAccount from "../backtest/continuous/ContinuousRunAccount.js";
@@ -284,7 +284,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                 {closedTrades.length === 0 && <p className="trading-empty-line">{t("trading.history.empty")}</p>}
                 {closedTrades.map((trade) => (
                   <article key={trade.id} className="trading-row" data-clickable="true">
-                    <button type="button" className="trading-row-button" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>
+                    <OptionButton variant="row" className="trading-row-open" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>
                       <div className="trading-row-main">
                         <strong>{trade.symbol}</strong>
                         <DirectionBadge direction={trade.direction}>
@@ -298,7 +298,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                         {formatDateTime(trade.openedAtMs)}
                         {trade.needsReview && <Badge tone="warning">{t("trading.needsReview")}</Badge>}
                       </div>
-                    </button>
+                    </OptionButton>
                     <div className="trading-row-actions">
                       <Button size="sm" variant="ghost" onClick={() => openReplay(trade)}>{t("trading.replay.short")}</Button>
                     </div>
@@ -321,9 +321,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   const levels = plan ? planLevelParts(plan) : [];
                   return (
                     <article key={entry.id} className="trading-row" data-clickable="true">
-                      <button
-                        type="button"
-                        className="trading-row-button"
+                      <OptionButton
+                        variant="row"
+                        className="trading-row-open"
                         onClick={() => setJournal(entry.tradeId && entry.kind === "quick"
                           ? { kind: "trade", tradeId: entry.tradeId }
                           : { kind: "entry", entryId: entry.id })}
@@ -352,7 +352,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                         <div className="trading-row-sub">
                           {entry.kind === "quick" ? entry.body : (entry.fields.entryBasis ?? entry.fields.strategyTag ?? "")}
                         </div>
-                      </button>
+                      </OptionButton>
                     </article>
                   );
                 })}

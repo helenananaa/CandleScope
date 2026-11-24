@@ -32,23 +32,8 @@
 /* Settings */
 .native-dock-settings { padding-top: var(--space-1); }
 .strategy-engine-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
-.strategy-engine-option {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  background: var(--surface-0);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.strategy-engine-option:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
-.strategy-engine-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.strategy-engine-option:disabled { opacity: .6; cursor: not-allowed; }
-.strategy-engine-option[aria-checked=true] { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0)); }
+/* Kit option cards in a radio group: the engine's name over its description. */
+.strategy-engine-option { flex-direction: column; align-items: flex-start; gap: 4px; padding: var(--space-3); }
 .strategy-engine-option strong { font: 600 var(--font-size-md)/1.4 var(--font-sans); }
 .strategy-engine-option[aria-checked=true] strong::before { content: "● "; color: var(--accent-blue); }
 .strategy-engine-option span { color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-sans); }
@@ -65,11 +50,11 @@
 .native-history { padding-top: 10px; }
 .native-history-head { padding-bottom: var(--space-2); }
 .native-history-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border-subtle); }
-.native-history-list button { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; width: 100%; padding: var(--space-2) 6px; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); background: transparent; font: inherit; text-align: start; cursor: pointer; }
-.native-history-list button:hover:not(:disabled) { background: var(--surface-2); }
-.native-history-list button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-.native-history-list button:disabled { cursor: not-allowed; opacity: .6; }
-.native-history-list button[aria-current=true] { box-shadow: inset 2px 0 0 var(--accent-blue); }
+/* Kit option rows laid out as the list's columns; the run shown is marked at its edge. */
+.native-history-row { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto; gap: var(--space-4); padding: var(--space-2) 6px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; font: inherit; }
+.native-history-row:hover:not(:disabled) { background: var(--surface-2); }
+.native-history-row:focus-visible { outline-offset: -2px; }
+.native-history-row[aria-current=true] { box-shadow: inset 2px 0 0 var(--accent-blue); }
 .native-history-list time { font: var(--font-size-sm)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
 .native-history-list span:not(.ui-badge) { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
 

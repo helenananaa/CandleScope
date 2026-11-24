@@ -2773,6 +2773,7 @@ export const vi = {
   "css.expand": "Mở rộng",
   "css.collapse": "Thu gọn",
   "scale.auto": "Tự động tỷ lệ",
+  "scale.menu": "Thang giá",
   "scale.invert": "Đảo tỷ lệ",
   "scale.regular": "Thường",
   "scale.log": "Logarit",

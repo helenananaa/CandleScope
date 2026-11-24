@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, IconButton, OptionButton } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
@@ -39,7 +40,7 @@ function HostModal({
       >
         <header>
           <h2>{title}</h2>
-          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose} data-overlay-close=""><Icon name="close" size={14} /></button>
+          <IconButton size="sm" label={t("plugin.host.close")} icon={<Icon name="close" size={14} />} onClick={onClose} data-overlay-close="" />
         </header>
         <div className="plugin-modal-body">{children}</div>
       </section>
@@ -107,10 +108,8 @@ function ExactIntentDialog({
         />
       </label>
       <div className="plugin-action-row">
-        <button type="button" onClick={onClose} disabled={busy}>{t("plugin.host.cancel")}</button>
-        <button
-          type="button"
-          className="live-danger-action"
+        <Button onClick={onClose} disabled={busy}>{t("plugin.host.cancel")}</Button>
+        <Button variant="danger"
           data-issue-live-confirmation
           disabled={typed !== phrase || busy}
           onClick={() => {
@@ -125,7 +124,7 @@ function ExactIntentDialog({
           }}
         >
           {busy ? t("plugin.live.issuing") : t("plugin.live.issueReceipt")}
-        </button>
+        </Button>
       </div>
     </HostModal>
   );
@@ -160,10 +159,8 @@ function TypedActionDialog({
         />
       </label>
       <div className="plugin-action-row">
-        <button type="button" disabled={busy} onClick={onClose}>{t("plugin.host.cancel")}</button>
-        <button
-          type="button"
-          className="live-danger-action"
+        <Button disabled={busy} onClick={onClose}>{t("plugin.host.cancel")}</Button>
+        <Button variant="danger"
           disabled={typed !== phrase || busy}
           onClick={() => {
             setBusy(true);
@@ -171,7 +168,7 @@ function TypedActionDialog({
           }}
         >
           {busy ? t("plugin.live.applying") : title}
-        </button>
+        </Button>
       </div>
     </HostModal>
   );
@@ -252,32 +249,28 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
         </section>
         {!management && <p role="alert">{t("plugin.live.readonly")}</p>}
         <div className="plugin-action-row live-control-primary-actions">
-          <button
-            type="button"
+          <Button
             disabled={!management || !status.available || status.mode === "armed"}
             onClick={() => setPending({ kind: "arm" })}
           >
             {t("plugin.live.arm")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             disabled={!management || status.mode !== "armed"}
             onClick={() => setPending({ kind: "disarm" })}
           >
             {t("plugin.live.disarm")}
-          </button>
-          <button
-            type="button"
-            className="live-danger-action"
+          </Button>
+          <Button variant="danger"
             disabled={!management || !status.available}
             onClick={() => setPending({ kind: "kill" })}
             data-live-global-kill
           >
             {t("plugin.live.globalKill")}
-          </button>
-          <button type="button" disabled={!management || !status.available} onClick={() => void runtime.actions.downloadLiveAudit()}>
+          </Button>
+          <Button disabled={!management || !status.available} onClick={() => void runtime.actions.downloadLiveAudit()}>
             {t("plugin.live.downloadAudit")}
-          </button>
+          </Button>
         </div>
 
         <section className="live-control-section">
@@ -293,8 +286,7 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
             {t("plugin.live.shadowRef")}
             <input value={shadowRef} onChange={(event) => setShadowRef(event.target.value)} autoComplete="off" spellCheck={false} />
           </label>
-          <button
-            type="button"
+          <Button
             disabled={!canPreview}
             data-preview-live-confirmation
             onClick={() => {
@@ -304,7 +296,7 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
             }}
           >
             {t("plugin.live.loadPreview")}
-          </button>
+          </Button>
           {receipt && (
             <div className="live-receipt-summary" data-live-receipt-issued>
               <strong>{t("plugin.live.receiptIssued")}</strong>
@@ -312,19 +304,17 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
               {receipt.schemaVersion === "candlescope.live-confirmation/2" && receipt.action && (
                 <>
                   <span>{t("plugin.live.boundAction", { action: receipt.action.toUpperCase() })}</span>
-                  <button
-                    type="button"
-                    className="live-danger-action"
+                  <Button variant="danger"
                     data-execute-live-action
                     onClick={() => setExecutePending(true)}
                   >
                     {receipt.action === "submit" ? t("plugin.live.submitDemo") : t("plugin.live.cancelDemo")}
-                  </button>
+                  </Button>
                 </>
               )}
-              <button type="button" onClick={() => void runtime.actions.revokeLiveConfirmation(receipt.receiptRef, "host-native-receipt-revoke").then(() => setReceipt(null)).catch(() => undefined)}>
+              <Button onClick={() => void runtime.actions.revokeLiveConfirmation(receipt.receiptRef, "host-native-receipt-revoke").then(() => setReceipt(null)).catch(() => undefined)}>
                 {t("plugin.live.revokeReceipt")}
-              </button>
+              </Button>
             </div>
           )}
           {execution && (
@@ -335,8 +325,7 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
                 {execution.terminal ? ` · ${t("plugin.live.terminal")}` : ""}
               </span>
               {execution.reconciliationRequired && (
-                <button
-                  type="button"
+                <Button
                   data-reconcile-live-execution
                   onClick={() => {
                     void runtime.actions.reconcileLiveExecution(accountRef, shadowRef)
@@ -348,7 +337,7 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
                   }}
                 >
                   {t("plugin.live.reconcile")}
-                </button>
+                </Button>
               )}
               {!execution.reconciliationRequired && !execution.terminal && (
                 <span>{t("plugin.live.freshPreview")}</span>
@@ -378,14 +367,12 @@ function LiveControlPanel({ runtime }: { runtime: PluginPlatformRuntime }) {
               <input value={reason} onChange={(event) => setReason(event.target.value)} autoComplete="off" />
             </label>
           </div>
-          <button
-            type="button"
-            className="live-danger-action"
+          <Button variant="danger"
             disabled={!management || !status.available || !subject.trim() || !reason.trim()}
             onClick={() => setPending({ kind: "revoke", scopeType, subject: subject.trim(), reason: reason.trim() })}
           >
             {t("plugin.live.revokeEpoch")}
-          </button>
+          </Button>
         </section>
       </HostModal>
       {preview && (
@@ -439,8 +426,8 @@ export default function PluginLiveControl({ runtime }: { runtime: PluginPlatform
   if (status.mode === "disabled") return null;
   return (
     <>
-      <button
-        type="button"
+      <OptionButton
+        variant="row"
         className={`live-control-banner live-control-${status.mode}`}
         data-live-control-banner
         data-live-control-mode={status.mode}
@@ -458,7 +445,7 @@ export default function PluginLiveControl({ runtime }: { runtime: PluginPlatform
                 ? t("plugin.live.bannerUnavailable")
                 : t("plugin.live.bannerDisarmed")}
         </span>
-      </button>
+      </OptionButton>
       {runtime.view.liveControlOpen && <LiveControlPanel runtime={runtime} />}
     </>
   );

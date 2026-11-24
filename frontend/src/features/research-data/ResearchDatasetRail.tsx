@@ -2,7 +2,7 @@ import { HistoryDownloadForm } from "./HistoryDownloadForm.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { useId, useState, type ReactNode } from "react";
 
-import { Disclosure, EmptyState, TabPanel, Tabs } from "../../components/ui/index.js";
+import { Disclosure, EmptyState, OptionButton, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalImportJob } from "./researchDataApi.js";
 import { formatResearchRows } from "./researchDataFormat.js";
@@ -63,8 +63,7 @@ export function ResearchDatasetRail({
             <ul className="research-dataset-list">
               {datasets.map((dataset) => (
                 <li key={dataset.dataset_id}>
-                  <button
-                    type="button"
+                  <OptionButton
                     className="research-dataset-row"
                     data-active={dataset.dataset_id === selectedId ? "true" : undefined}
                     aria-current={dataset.dataset_id === selectedId ? "true" : undefined}
@@ -79,7 +78,7 @@ export function ResearchDatasetRail({
                       <b>{formatResearchRows(dataset.rows)}</b>
                       <small>{t("local.gaps", { count: dataset.excluded_range_count })}</small>
                     </span>
-                  </button>
+                  </OptionButton>
                 </li>
               ))}
             </ul>

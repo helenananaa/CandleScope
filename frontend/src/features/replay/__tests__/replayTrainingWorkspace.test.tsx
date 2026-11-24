@@ -701,7 +701,8 @@ test("replay rail shows one full-height view chosen from the activity bar", () =
   assert.match(marketRail, /layoutMode="single-view"/);
   assert.match(marketRail, /onToggleView=\{onActivateView\}/);
   assert.match(marketRail, /actions\.activateView\(/);
-  assert.match(marketRail, /style=\{\{ height: "100%" \}\}/);
+  assert.match(marketRail, /className="replay-market-dock replay-market-dock-fill"/);
+  assert.match(styles, /\.replay-market-dock-fill \{ height: 100%; \}/);
   assert.doesNotMatch(marketRail, /style=\{\{ height \}\}/);
   assert.doesNotMatch(marketRail, /viewHeights=/);
   assert.match(marketRail, /openViewIds=\{preferences\.openViewIds\}/);

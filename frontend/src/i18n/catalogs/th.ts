@@ -2773,6 +2773,7 @@ export const th = {
   "css.expand": "ขยาย",
   "css.collapse": "ยุบ",
   "scale.auto": "สเกลอัตโนมัติ",
+  "scale.menu": "สเกลราคา",
   "scale.invert": "กลับสเกล",
   "scale.regular": "ปกติ",
   "scale.log": "ลอการิทึม",

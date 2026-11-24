@@ -25,7 +25,6 @@ export const MARKET_DOCK_MIN_HEIGHT = 220;
 export const MARKET_DOCK_MAX_HEIGHT = 640;
 export const MARKET_DOCK_COLLAPSED_HEIGHT = 36;
 export const MARKET_RAIL_MIN_SIDEBAR_HEIGHT = 180;
-export const MARKET_RAIL_SPLITTER_HEIGHT = 5;
 
 /** Built-in live rail view ids. Plugins may register additional ids. */
 export const LIVE_RAIL_VIEW_IDS = {

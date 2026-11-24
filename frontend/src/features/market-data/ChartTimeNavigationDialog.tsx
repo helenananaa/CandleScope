@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -63,8 +64,8 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, i
         onChange={(event) => setValue(event.target.value)} autoFocus />
       <p>{hint ?? t("chartTime.hint")}</p>
       <p role="status" aria-live="polite" aria-busy={busy}>{message}</p>
-      <footer><button type="button" className="ui-control" onClick={onClose}>{t("chartTime.close")}</button>
-        <button type="submit" className="ui-control">{t("chartTime.go")}</button></footer>
+      <footer><Button variant="ghost" onClick={onClose}>{t("chartTime.close")}</Button>
+        <Button type="submit" variant="primary">{t("chartTime.go")}</Button></footer>
     </form>
   </dialog>;
 }

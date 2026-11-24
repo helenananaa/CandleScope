@@ -2780,6 +2780,7 @@ export const es = {
   "css.expand": "Expandir",
   "css.collapse": "Contraer",
   "scale.auto": "Escala automática",
+  "scale.menu": "Escala de precios",
   "scale.invert": "Invertir escala",
   "scale.regular": "Regular",
   "scale.log": "Logarítmica",

@@ -2774,6 +2774,7 @@ export const fr = {
   "css.expand": "Développer",
   "css.collapse": "Réduire",
   "scale.auto": "Échelle auto",
+  "scale.menu": "Échelle de prix",
   "scale.invert": "Inverser l’échelle",
   "scale.regular": "Régulière",
   "scale.log": "Logarithmique",

@@ -67,27 +67,19 @@
 .market-rail-accordion-section + .market-rail-accordion-section {
   border-top: 1px solid var(--border-subtle);
 }
+/* A collapsed view's header: a kit row option laid out as chevron, title, summary, badge. */
 .market-rail-accordion-trigger {
   display: grid;
   grid-template-columns: 20px auto minmax(0, 1fr) auto;
-  align-items: center;
-  width: 100%;
   min-height: 36px;
   padding: 0 8px 0 6px;
   gap: 6px;
-  border: 0;
-  background: color-mix(in srgb, var(--surface-1) 94%, var(--text-primary) 6%);
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
+  border-radius: 0;
 }
-.market-rail-accordion-trigger:hover,
-.market-rail-accordion-trigger:focus-visible {
-  background: var(--surface-hover);
-  outline: none;
-}
-.market-rail-accordion-trigger:focus-visible {
-  box-shadow: inset 3px 0 var(--focus-ring);
+/* The rail clips outside its edge, so the ring is drawn inside. */
+.market-rail-accordion-trigger:focus-visible,
+.market-activity-item:focus-visible {
+  outline-offset: -2px;
 }
 .market-rail-accordion-chevron {
   display: inline-flex;
@@ -211,22 +203,16 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .market-activity-bar::-webkit-scrollbar {
   display: none;
 }
+/* Activity bar: kit row options stacked as icon over label, quiet until hovered or open. */
 .market-activity-item {
   position: relative;
-  display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   width: 56px;
   min-height: 46px;
   padding: 5px 2px 4px;
   gap: 3px;
-  border: 0;
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease;
 }
 .right-market-rail[data-runtime-source="replay"] .market-activity-item {
   /* Replay recovery can replace this rail while a background tab has frozen
@@ -234,15 +220,11 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
      its complete order-ticket subtree until that timeline advances. */
   transition: none;
 }
-.market-activity-item:hover,
-.market-activity-item:focus-visible {
+.market-activity-item:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--surface-hover);
-  outline: none;
 }
 .market-activity-item.active {
   color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 }
 .market-activity-item.active::before {
   content: "";
@@ -332,7 +314,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 .market-rail-view-resizer {
   flex-basis: 7px;
-  height: 7px !important;
+  height: 7px;
   border-top-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
   border-bottom-color: color-mix(in srgb, var(--border-subtle) 75%, transparent);
 }
@@ -398,38 +380,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-}
-
-.market-dock-tabs {
-  display: inline-flex;
-  min-width: 0;
-  padding: 2px;
-  gap: 1px;
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-}
-.market-dock-tabs button {
-  height: 24px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.market-dock-tabs button:hover,
-.market-dock-tabs button:focus-visible {
-  color: var(--text-primary);
-  outline: none;
-}
-.market-dock-tabs button.active {
-  background: var(--surface-1);
-  color: var(--text-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Replay desktop trading workstation ───────────────────── */

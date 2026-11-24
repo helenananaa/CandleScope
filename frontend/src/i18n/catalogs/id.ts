@@ -2773,6 +2773,7 @@ export const id = {
   "css.expand": "Perluas",
   "css.collapse": "Ciutkan",
   "scale.auto": "Skala otomatis",
+  "scale.menu": "Skala harga",
   "scale.invert": "Balikkan skala",
   "scale.regular": "Reguler",
   "scale.log": "Logaritmik",

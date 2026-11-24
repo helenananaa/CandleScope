@@ -2773,6 +2773,7 @@ export const ptPT = {
   "css.expand": "Expandir",
   "css.collapse": "Reduzir",
   "scale.auto": "Escala automática",
+  "scale.menu": "Escala de preços",
   "scale.invert": "Inverter escala",
   "scale.regular": "Normal",
   "scale.log": "Logarítmica",

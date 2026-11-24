@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
+import { IconButton } from "../ui/index.js";
 import { openToolMenuFromKeyboard } from "./toolMenuKeys.js";
 
 type DrawingButtonEvents = Pick<
@@ -17,14 +18,9 @@ export interface DrawingToolButtonProps extends DrawingButtonEvents {
   title: string;
 }
 
+/** Marks a tool that has variants (right-click, → or the menu key opens them). */
 const CornerTriangle = (
-  <svg
-    className="tool-variant-indicator"
-    width="6"
-    height="6"
-    viewBox="0 0 6 6"
-    style={{ position: "absolute", right: 2, bottom: 2 }}
-  >
+  <svg width="6" height="6" viewBox="0 0 6 6">
     <polygon points="6,0 6,6 0,6" fill="currentColor" opacity="0.55" />
   </svg>
 );
@@ -44,21 +40,19 @@ export default function DrawingToolButton({
 }: DrawingToolButtonProps) {
   return (
     <div className="drawing-tool-wrapper" ref={anchorRef}>
-      <button
-        type="button"
-        className={`drawing-tool-btn ${active ? "active" : ""}`.trim()}
+      <IconButton
+        className="drawing-tool-btn"
+        label={title}
+        icon={icon}
+        pressed={active}
+        indicator={showVariantIndicator ? CornerTriangle : undefined}
         data-drawing-tool={dataDrawingTool}
         disabled={disabled}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
         onKeyDown={onContextMenu ? openToolMenuFromKeyboard : undefined}
-        title={title}
-        aria-label={title}
-      >
-        {icon}
-        {showVariantIndicator && CornerTriangle}
-      </button>
+      />
       {!disabled && children}
     </div>
   );

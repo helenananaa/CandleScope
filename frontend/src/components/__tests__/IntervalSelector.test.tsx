@@ -71,9 +71,9 @@ function render(overrides: Partial<IntervalSelectorProps> = {}): string {
 
 test("closed interval picker keeps the compact toolbar without the management table", () => {
   const html = render({ defaultOpen: false });
-  assert.match(html, /class="interval-more-btn ui-control"/);
+  assert.match(html, /class="ui-control interval-more-btn"/);
   assert.match(html, /id="interval-1m"/);
-  assert.match(html, /class="interval-btn active custom-interval-btn/);
+  assert.match(html, /class="ui-btn ui-btn-ghost ui-btn-sm interval-btn active custom-interval-btn[^"]*" id="interval-45m" aria-pressed="true"/);
   assert.doesNotMatch(html, /class="interval-panel"/);
   assert.doesNotMatch(html, /class="interval-panel-row"/);
 });
@@ -104,12 +104,12 @@ test("compact variant shows only pinned native and custom intervals", () => {
 
 test("compact variant keeps an unpinned active interval visible", () => {
   const html = render({ defaultOpen: false, variant: "compact", interval: "90m" });
-  assert.match(html, /class="interval-btn active custom-interval-btn" id="interval-90m"|id="interval-90m"[^>]*class="interval-btn active/);
+  assert.match(html, /class="ui-btn ui-btn-ghost ui-btn-sm interval-btn active custom-interval-btn" id="interval-90m" aria-pressed="true"/);
 });
 
 test("compact picker opens on the full list with a pin toggle on every chip", () => {
   const html = render({ variant: "compact", interval: "5m" });
-  assert.match(html, /data-interval-tab="all"[^>]*class="interval-panel-tab active"|class="interval-panel-tab active"[^>]*data-interval-tab="all"/);
+  assert.match(html, /role="tab"[^>]*aria-selected="true"[^>]*class="ui-tab" data-value="all"/);
   assert.match(html, /aria-label="1m 取消置顶"/);
   assert.match(html, /aria-label="90m 置顶到工具栏"/);
 });

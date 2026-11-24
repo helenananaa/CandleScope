@@ -40,13 +40,13 @@
 .local-analysis-event-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .local-analysis-event-list > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 8px 6px 8px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); }
 .local-analysis-event-list > li[data-editing='true'] { border-color: var(--accent-blue); }
-.local-analysis-event-main { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: inherit; text-align: left; cursor: pointer; }
+/* A kit option row that is the marker's content: no box of its own inside the list item. */
+.local-analysis-event-main { align-items: flex-start; gap: 10px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: inherit; font: inherit; }
 .local-analysis-event-main > i { flex: 0 0 auto; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent); }
 .local-analysis-event-main > span { display: grid; gap: 2px; min-width: 0; }
 .local-analysis-event-main strong { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); overflow-wrap: anywhere; }
 .local-analysis-event-main small { color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
 .local-analysis-event-main em { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font: normal var(--font-size-xs)/1.5 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-.local-analysis-event-main:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .local-analysis-event-actions { display: flex; gap: 0; margin-top: -2px; }
 .local-analysis-event-actions .ui-btn { padding-inline: 8px; }
 .local-analysis-delete { color: var(--text-danger); }

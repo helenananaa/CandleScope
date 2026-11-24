@@ -714,6 +714,103 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `check:styles` counts the old names and fails on any (the first guardrail that fails today rather than with `--strict`).
 - Next: 8b.
 
+**Phase 8b is done (branch `design/phase-8b-cleanup`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8B.md).
+
+- Dead CSS is gone: 211 rules and 34 selectors that need a class no component applies (103 class names, from surfaces since rebuilt or removed), and two replay hub rules a Phase 5f2 edit had left with unbalanced brackets, which browsers had been dropping. Stylesheets: 16,948 → 15,777 lines.
+- Unstyled class names 5 → 0: three second names for elements already found by `data-testid` are dropped, and the practice account's rules get the strategy tester's note style.
+- `!important` 31 → 6, all in the reduced-motion block. Rules that must hold in every container (CJK letter-spacing, the focus ring, `.sr-only`, the live control button's tone, the drawing position readout, an invalid drawing coordinate) live in `styles/overrides.css`, the first file in the `overrides` layer; the rest win by specificity. Two inline styles that the old `!important` beat are removed. A computed-style comparison of 23 states in both themes, with hover and focus forced and fixtures for the elements that need the local service, finds no difference apart from the practice rules note; in CJK languages the script editor keeps its own letter spacing.
+- `npm run check` runs `check:styles --strict`: the zero targets (unstyled class names, `!important` outside reduced motion, native dialogs, legacy colour names, and selectors with unbalanced brackets) fail it, and raw buttons (266), static inline styles (94) and `*-btn` families (25) have ratchets that fail it if they rise.
+- Next: 8c after launch (the ratchets' targets: raw `<button>` ≤ 20, no static inline styles, `*-btn` families onto the kit).
+
+**Phase 8c lands in five parts** (split decided 2026-11-23, when it started; the user started it before launch, so its PRs stay stacked until they are merged). Raw buttons move surface by surface, each with its `*-btn` families, so every PR can be checked against one area.
+
+| Part | Scope |
+|---|---|
+| 8c1 | Static inline styles (literal values only) into classes; dynamic geometry and data colours stay inline. The metric counts static ones as a zero target and leaves browser-test harnesses out |
+| 8c2 | Drawing surfaces' buttons onto the kit: the drawing toolbar, the selected drawing's style bar, the text format bar, Fibonacci levels, the object list, history and position settings, with the `drawing-*` and `fib-*` families and `chart-type-tool-btn` |
+| 8c3 | Kit primitives for composite buttons (`ControlButton`, `OptionButton`, checkable `Menu` items and a point anchor) and the chart chrome on them: the interval selector, pane controls, the price scale menu, the chart cell header and its menu, the market rail |
+| 8c3b | The workspace panel and layout picker (option cards and rows) on `OptionButton` |
+| 8c4 | Plugin surfaces: live control, management, detail, platform surfaces and toolbar, native fields |
+| 8c5 | The rest (watchlist `wl-*`, symbol search `sym-modal-*`, replay, strategy and backtest, data preparation, alerts, `retry-btn`), the documented raw-button exceptions, and raw `<button>` as a zero target outside them |
+| 8c5a | The market page, settings and accounts: watchlist, symbol search and its source picker, header actions, the chart load error and `retry-btn` (with replay's state panel, which shares it), the time navigation dialog, settings, the data workbench, trading accounts; a kit `MenuItemButton` for menus a feature lays out itself |
+| 8c5b | Replay: the training page shell, chart workspace, watchlist, right rail, integrity review |
+| 8c5c | Strategy, backtest, data preparation, research data and local analysis; the documented raw-button exceptions; raw `<button>` as a zero target outside them |
+
+**Phase 8c1 is done (branch `design/phase-8c-kit`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C1.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C1.md).
+
+- Static inline styles 22 (and the literal half of one mixed object) → 0, as classes in the owning stylesheets; 68 dynamic ones stay (runtime geometry, data colours). The crash screen's retry button is the kit primary `Button`.
+- `check:styles` counts static inline styles as a zero target and stops counting browser-test harnesses as components; the raw `<button>` ratchet is 263.
+- A pair comparison (each changed element added to its real container in its old and new form, plain and with hover and focus forced, both themes) finds no styling difference.
+- Next: 8c2, the drawing surfaces' buttons.
+
+**Phase 8c2 is done (branch `design/phase-8c2-drawing`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C2.md).
+
+- The drawing toolbar, the Fibonacci and position panels, the selected drawing's style bar and text bar with their properties, style templates, the object list and the history bar are on kit `Button`, `IconButton`, `SegmentedControl` and `Tabs`; their own button CSS is gone and layout stays. Tools report `aria-pressed`; the chart type button reports `aria-expanded`.
+- The kit's `IconButton` gains a `danger` variant and a corner `indicator` (the tools' "has variants" mark).
+- Raw `<button>` 263 → 208, `*-btn` families 25 → 19. Three raw buttons stay in the drawing surfaces for 8c5's exceptions: the variant menu's radio items and the two colour swatch grids.
+- Next: 8c3, chart chrome.
+
+**Composite buttons get kit primitives (user decision, 2026-11-23).** About 48 of the remaining raw buttons are composites (option cards, list rows, activity items, accordion rows, context menus with checks). Rather than listing them as exceptions, the kit grows primitives for them, so §7's target of ≤ 20 raw buttons can be met; 8c3 was split so the workspace panel (8c3b) follows on the new primitives.
+
+**Phase 8c3 is done (branch `design/phase-8c3-chrome`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C3.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C3.md).
+
+- Kit: `ControlButton` (the toolbar pill), `OptionButton` (`card` or `row`, box and states owned by the kit, content laid out by the feature), `Menu` with checkbox and radio items, separators and an `anchorPoint` (also on `Popover`); disabled icon buttons fade so they read as off.
+- The interval selector (bar, picker, panel tabs, chips, composer), pane controls, the price scale context menu (now the kit menu, with its keyboard and focus handling), "return to latest", the chart cell header and its menu, and the market rail's activity items and collapsed rows are on the kit. New message `scale.menu` in 30 languages.
+- Raw `<button>` 208 → 171, families 19 → 18. Left here for 8c5's exceptions: the page navigation's replay entry (2).
+- Next: 8c3b, the workspace panel and layout picker.
+
+**Phase 8c3b is done (branch `design/phase-8c3b-workspace`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C3B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C3B.md).
+
+- The chart workspace panel (tabs, saved workspaces, templates, layout actions, link policies, the link-group tree, all its actions, the shared drawing layers) and the layout picker are on kit `Tabs`, `OptionButton` (cards and rows), `Button`, `IconButton`, `ControlButton` and `SegmentedControl`; their own button CSS is gone.
+- Disabled option buttons fade, like disabled icon buttons, so they read as off.
+- Raw `<button>` 171 → 145; the panel and picker have none left.
+- Next: 8c4, the plugin surfaces.
+
+**Phase 8c4 is done (branch `design/phase-8c4-plugins`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C4.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C4.md).
+
+- The plugin surfaces are on the kit: the toolbar (`ControlButton`, the live control button keeping its tone), the command palette (`row` `OptionButton`s), settings, view and dialog close buttons (`IconButton`), the notice and the live control banner (`row` `OptionButton`s keeping their strip look), the plugin center's list (`row` `OptionButton`s marked `aria-current`) and detail (kit `Tabs` with the page as their panel, ghost back button), and every action in the live control window, management sections, native fields and sandbox frame (`Button`; destructive ones `danger`, a surface's main action `primary`). The plugin stylesheets' own button rules are gone.
+- Kit: an `OptionButton` marked `aria-current` shows as chosen, as one marked pressed or selected does.
+- Raw `<button>` 145 → 92; the plugin surfaces have none left.
+- Next: 8c5, the rest, the documented exceptions and raw `<button>` as a zero target outside them.
+
+**8c5 lands in three parts** (split 2026-11-24, when it started: 92 raw buttons in 38 files across every area). 8c5a and 8c5b move areas onto the kit; 8c5c finishes the last area and makes the target strict.
+
+**Phase 8c5a is done (branch `design/phase-8c5a-market`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5A.md).
+
+- Kit: `MenuItemButton`, the menu row (`.ui-menu-item`) as a primitive, which the kit `Menu` renders too, for menus a feature lays out itself (a header, groups, a search field); a danger row's icon takes its colour. `OptionButton` reports `aria-checked` in a radio group, and one marked `aria-disabled` fades like a disabled one.
+- The watchlist (sort headers, header and row icons, the row control, the collapsed rail's lists, the row and list menus), symbol search (trigger, source picker, coverage sources, add-to-watchlist menu), header actions, the chart load error and replay state panel's recovery actions, the time navigation dialog, the settings rail and its theme, proxy and storage cards and exchange rows, the data workbench's instrument rows, and trading accounts' rows and account kinds are on the kit.
+- The time navigation dialog is centred again (the reset had taken away a native dialog's automatic margin).
+- Raw `<button>` 92 → 57, `*-btn` families 18 → 13 (`retry-btn`, `trading-row-button`, `wl-add-list-btn` and `interval-create-btn` are gone; `wl-collapse-btn` is a declared hook).
+- Next: 8c5b, replay.
+
+**Phase 8c5b is done (branch `design/phase-8c5b-replay`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5B.md).
+
+- Replay is on the kit:
+  - **Training page shell:** the header's run identity (a ghost `Button` that reads as a label), the history error's retry (primary, under the message as in the chart load error), the review rail's and the status bar's retries, and the history notice's dismiss (`IconButton`).
+  - **Chart workspace:** the cell header's drawings and maximise toggles are `IconButton`s, as in a live cell; the maximise toggle now says maximise or restore. The workspace trigger is a `ControlButton`, and a cell without a market offers its markets as small `Button`s.
+  - **Elsewhere:** the order ticket's buy and sell (`Button`s in the trade colours), the watchlist's rows, search results and collapse (`row` `OptionButton`s and an `IconButton`), and the review timeline's events (`MenuItemButton`, same markup as before).
+- **Fixed while there:**
+  - A cell header's drawings toggle sat mid-header, so it now sits with the cell's other controls.
+  - The review rail had cut off all but two of its items, the retry included, so it now stacks them down the rail.
+  - The note screenshot viewer is centred again (`margin: auto` on the native dialog).
+- Raw `<button>` 57 → 42; replay has none left. `workspace-toolbar-trigger` and the replay cell header's `> button` rules are gone.
+- Next: 8c5c, strategy, backtest and data, the documented exceptions and the zero target.
+
+**Phase 8c5c is done (branch `design/phase-8c5c-strategy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8C5C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8C5C.md).
+
+- Strategy, backtest and data are on the kit:
+  - **Strategy dock:** the switcher has a ghost `Button` trigger and `MenuItemButton` rows. The result summaries are ghost `Button`s. The chart tester's start rows and both trade lists are `row` `OptionButton`s.
+  - **Native panel:** the engine choice is two radio card `OptionButton`s, and the history rows are `row` `OptionButton`s.
+  - **Continuous runs and data preparation:** small `Button`s; the two result links use `buttonClassName`.
+  - **Research:** the strategy templates, the data source cards and the local datasets are card `OptionButton`s; a local analysis event is a row.
+- **The drawing variant menu** is `MenuItemButton` rows. 8c2 had set it aside as an exception; it now looks the same on the kit.
+- **Generic `button` rules removed:** the strategy research shell's, the cell layout popover's, the training hub's and the strategy dock's had also restyled kit controls inside those areas.
+- **§7's raw-button target is met.** Raw `<button>` outside `components/ui` is 0, apart from 4 documented exceptions in `RAW_BUTTON_EXCEPTIONS`:
+  - the page navigation's training entry (2), which must look like the links beside it;
+  - the colour swatches (2).
+  `--strict` fails on any other raw button and on a stale exception. The `*-btn` families stay at their ratchet of 13; every one is now a class on a kit primitive.
+- This completes Phase 8c (8c1–8c5c) and, with it, Phase 8.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

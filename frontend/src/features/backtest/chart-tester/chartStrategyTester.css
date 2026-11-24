@@ -285,19 +285,16 @@
 }
 .chart-strategy-trade-viewport { flex: 1; min-height: 0; overflow: auto; border-bottom: 1px solid var(--border-subtle); }
 .chart-strategy-trade-spacer { position: relative; min-width: 700px; }
+/* Kit option rows (role="row") laid out as the table's grid, in its type and rules. */
 .chart-strategy-trade-row {
-  width: 100%;
   padding: 0 10px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  border-radius: 0;
   color: var(--text-secondary);
-  background: transparent;
   font: var(--font-size-xs)/1 var(--font-mono);
-  text-align: left;
-  cursor: pointer;
 }
-.chart-strategy-trade-row:hover,
-.chart-strategy-trade-row:focus-visible { background: var(--surface-hover); outline: 0; }
+.chart-strategy-trade-row:focus-visible { background: var(--surface-hover); outline-offset: -2px; }
 .chart-strategy-trade-row.selected { background: color-mix(in srgb, var(--accent-blue) 12%, transparent); box-shadow: inset 2px 0 var(--accent-blue); }
 .chart-strategy-trade-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-trade-row span.positive { color: var(--strategy-success); }
@@ -315,7 +312,6 @@
 .chart-strategy-result-metric > strong { font: 650 20px/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
 .chart-strategy-result-metric > small { font-size: 11px; color: var(--text-secondary); }
 .chart-strategy-equity-card span, .chart-strategy-latest-trade span { font-size: 11px; }
-.chart-strategy-tester-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: -2px; }
 
 @media (max-width: 1180px) {
   .chart-strategy-autosave { display: none; }
@@ -339,8 +335,10 @@
 .chart-strategy-start-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; }
 .chart-strategy-start-columns h3 { margin: 0 0 8px; color: var(--text-secondary); font: 600 11px/1.4 var(--font-sans); }
 .chart-strategy-start-list { display: flex; flex-direction: column; border-top: 1px solid var(--border-subtle); }
-.chart-strategy-start-row { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 9px 8px; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.chart-strategy-start-row:hover, .chart-strategy-start-row:focus-visible { background: var(--surface-hover); outline: 0; box-shadow: inset 2px 0 0 var(--focus-ring); }
+/* Kit option rows laid out as a ruled list: a name over its description. */
+.chart-strategy-start-row { flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 8px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; font: inherit; }
+.chart-strategy-start-row:is(:hover, :focus-visible) { box-shadow: inset 2px 0 0 var(--focus-ring); }
+.chart-strategy-start-row:focus-visible { outline-offset: -2px; }
 .chart-strategy-start-list strong { font-weight: 600; }
 .chart-strategy-start-list span { overflow: hidden; color: var(--text-secondary); font-size: 11px; line-height: 1.5; text-overflow: ellipsis; }
 .chart-strategy-start-retired-list { display: flex; flex-direction: column; margin-top: 12px; border-top: 1px solid var(--border-subtle); }

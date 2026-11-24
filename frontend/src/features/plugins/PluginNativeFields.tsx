@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { t, type LocaleId } from "../../i18n/index.js";
 import type { JsonValue, PluginJsonSchema } from "./pluginPlatformTypes.js";
 import { defaultForPluginSchema } from "./pluginSchemaDefaults.js";
@@ -55,22 +56,20 @@ export function PluginNativeField({
                 locale={locale}
                 onChange={(next) => onChange(current.map((entry, entryIndex) => entryIndex === index ? next : entry))}
               />
-              <button
-                type="button"
+              <Button size="sm"
                 disabled={current.length <= (schema.minItems ?? 0)}
                 onClick={() => onChange(current.filter((_, entryIndex) => entryIndex !== index))}
               >
                 {t("plugin.host.removeItem", {}, locale)}
-              </button>
+              </Button>
             </div>
           ))}
-          <button
-            type="button"
+          <Button size="sm"
             disabled={current.length >= (schema.maxItems ?? 256)}
             onClick={() => onChange([...current, defaultForPluginSchema(schema.items!)])}
           >
             {t("plugin.host.addItem", {}, locale)}
-          </button>
+          </Button>
         </div>
       </div>
     );

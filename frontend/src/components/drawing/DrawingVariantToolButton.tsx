@@ -1,4 +1,5 @@
 import ToolFlyout from "./ToolFlyout.js";
+import { IconButton } from "../ui/index.js";
 import { openToolMenuFromKeyboard } from "./toolMenuKeys.js";
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
 import type { ToolbarVariant } from "./drawingToolbarDefinitions.js";
@@ -29,14 +30,9 @@ export interface DrawingVariantToolButtonProps<TId extends string = string> exte
   wrapperClassName?: string;
 }
 
+/** Marks a tool that has variants. */
 const CornerTriangle = (
-  <svg
-    className="tool-variant-indicator"
-    width="6"
-    height="6"
-    viewBox="0 0 6 6"
-    style={{ position: "absolute", right: 2, bottom: 2 }}
-  >
+  <svg width="6" height="6" viewBox="0 0 6 6">
     <polygon points="6,0 6,6 0,6" fill="currentColor" opacity="0.55" />
   </svg>
 );
@@ -66,9 +62,15 @@ export default function DrawingVariantToolButton<TId extends string>({
 }: DrawingVariantToolButtonProps<TId>) {
   return (
     <div className={`drawing-tool-wrapper ${wrapperClassName}`.trim()} ref={anchorRef}>
-      <button
-        type="button"
-        className={`drawing-tool-btn ${buttonClassName} ${active ? "active" : ""}`.trim()}
+      <IconButton
+        className={`drawing-tool-btn ${buttonClassName}`.trim()}
+        label={title}
+        icon={icon}
+        indicator={CornerTriangle}
+        // A tool shows whether it is the one in use; the chart type opens its menu on click
+        // (aria-haspopup) and reports aria-expanded instead.
+        {...(onContextMenu ? { pressed: active } : {})}
+        variant={onContextMenu ? "ghost" : "secondary"}
         data-chart-type={dataChartType}
         data-drawing-tool={dataDrawingTool}
         disabled={disabled}
@@ -80,12 +82,7 @@ export default function DrawingVariantToolButton<TId extends string>({
         // a button without that (the chart type) opens its menu on click.
         aria-haspopup={onContextMenu ? undefined : "menu"}
         aria-expanded={flyoutOpen === flyoutKey}
-        title={title}
-        aria-label={title}
-      >
-        {icon}
-        {CornerTriangle}
-      </button>
+      />
       {!disabled && flyoutOpen === flyoutKey && (
         <ToolFlyout
           variants={variants}

@@ -2773,6 +2773,7 @@ export const ar = {
   "css.expand": "توسيع",
   "css.collapse": "طي",
   "scale.auto": "مقياس تلقائي",
+  "scale.menu": "مقياس السعر",
   "scale.invert": "عكس المقياس",
   "scale.regular": "عادي",
   "scale.log": "لوغاريتمي",

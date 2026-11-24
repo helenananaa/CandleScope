@@ -7,8 +7,6 @@
   .top-bar .chart-strategy-entry-button { display: none; }
 }
 
-.sym-modal-footer-left { flex: 1; min-width: 0; }
-
 .interval-anchor-controls label { display: flex; gap: 6px; align-items: center; }
 
 .interval-anchor-controls p { margin: 0; color: var(--text-secondary); max-width: 420px; }

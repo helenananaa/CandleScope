@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -283,15 +284,15 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {reference && reference.inputRevision !== inputRevision && <p role="status">{t("continuous.edited")}</p>}
     {reference && !reference.runId && <p role="status">{t("continuous.pending")}</p>}
     <div className="continuous-actions">
-      <button type="button" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</button>
-      {props.onDetach && <button type="button" disabled={busy || !props.language} onClick={() => { void detach(); }}>{t("continuous.detach")}</button>}
-      {reference && <button type="button" disabled={busy} onClick={() => { void recover(); }}>{t(reference.runId ? "continuous.observe" : "continuous.recover")}</button>}
-      {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <button type="button" key={action} disabled={busy || !caps?.execution_enabled}
-        onClick={() => { void control(action); }}>{t(`continuous.${action}`)}</button>)}
+      <Button size="sm" variant="primary" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</Button>
+      {props.onDetach && <Button size="sm" disabled={busy || !props.language} onClick={() => { void detach(); }}>{t("continuous.detach")}</Button>}
+      {reference && <Button size="sm" disabled={busy} onClick={() => { void recover(); }}>{t(reference.runId ? "continuous.observe" : "continuous.recover")}</Button>}
+      {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <Button size="sm" key={action} disabled={busy || !caps?.execution_enabled}
+        onClick={() => { void control(action); }}>{t(`continuous.${action}`)}</Button>)}
     </div>
     {props.onOpenWorkspace && <div className="continuous-actions">
-      <button type="button" disabled={busy || !qualified || !validStrategyRunSettings(researchSettings)}
-        onClick={() => { void openResearch(); }}>{t("ux.openWorkspace")}</button>
+      <Button size="sm" disabled={busy || !qualified || !validStrategyRunSettings(researchSettings)}
+        onClick={() => { void openResearch(); }}>{t("ux.openWorkspace")}</Button>
       <small>{t("continuous.researchHint")}</small>
     </div>}
     {error && <p role="alert">{error}</p>}

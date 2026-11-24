@@ -1,4 +1,4 @@
-import { IconButton } from "../../components/ui/Button.js";
+import { IconButton, OptionButton } from "../../components/ui/Button.js";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import { useCallback, useId, useRef, useState } from 'react';
@@ -123,10 +123,10 @@ export default function SettingsModal({
                             <div className="st-sidebar-title" id="settings-dialog-title">{t("settings.title")}</div>
                             <div className="st-sidebar-nav">
                                 {visibleCategories.map(cat => (
-                                    <button
+                                    <OptionButton
+                                        variant="row"
                                         key={cat.key}
-                                        type="button"
-                                        className={`st-nav-item ${resolvedActiveCategory === cat.key ? 'active' : ''}`}
+                                        className="st-nav-item"
                                         aria-current={resolvedActiveCategory === cat.key ? 'page' : undefined}
                                         disabled={pluginBusy && cat.key !== resolvedActiveCategory}
                                         onClick={() => setActiveCategory(cat.key)}
@@ -138,7 +138,7 @@ export default function SettingsModal({
                                                 <span className="ui-visually-hidden">{t("settings.unsaved.badge")}</span>
                                             </span>
                                         )}
-                                    </button>
+                                    </OptionButton>
                                 ))}
                             </div>
                         </nav>

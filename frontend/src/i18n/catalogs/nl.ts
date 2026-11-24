@@ -2773,6 +2773,7 @@ export const nl = {
   "css.expand": "Uitvouwen",
   "css.collapse": "Inklappen",
   "scale.auto": "Automatische schaal",
+  "scale.menu": "Prijsschaal",
   "scale.invert": "Schaal omkeren",
   "scale.regular": "Normaal",
   "scale.log": "Logaritmisch",

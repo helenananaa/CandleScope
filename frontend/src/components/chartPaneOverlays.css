@@ -25,13 +25,6 @@
   border-color: color-mix(in srgb, var(--color-warning) 36%, transparent);
 }
 
-.price-scale-menu-check {
-  width: 16px;
-  text-align: center;
-  font-size: var(--font-size-md);
-  flex-shrink: 0;
-}
-
 .chart-pane-scroll-viewport > .multi-pane-chart {
   flex: 1 0 0px;
   height: 0;

@@ -112,7 +112,7 @@ export function ResearchSavedStrategy({ manager, dataset, interval, settings, ru
   }, [bundleRevisionId, python, restoring, scope]);
   const outputMode = revision && revision.output_modes.includes(outputModes[kind] ?? "") ? outputModes[kind]! : revision?.output_modes[0] ?? "";
   const ready = !!revision && !!parameters && !!source && (!python || (gate?.revisionId === revision.revision_id && gate.canCreateRun));
-  return <section className="research-external-provider strategy-research-saved" data-testid="strategy-research-saved-strategy">
+  return <section className="research-external-provider" data-testid="strategy-research-saved-strategy">
     <p className="research-panel-copy">{t("researchSaved.help")}</p>
     <Field label={t("researchSaved.kind")}>
       <Select size="sm" value={kind} disabled={busy} onChange={(event) => { setKind(event.target.value === "builtin" ? "builtin" : "bundle"); setError(null); }}>
