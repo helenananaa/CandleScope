@@ -201,18 +201,21 @@ test("numeric carrier is reused across continuous bars until its reserve runs lo
     currentData,
     displayRows: [{ time: 100 }, { time: 160 }, { time: 220 }],
     reservePoints: 2,
+    sourceIntervalSeconds: 60,
     sourceTimeHorizon: 220,
   }), true);
   assert.equal(canReuseFutureTimeAxisData({
     currentData,
     displayRows: [{ time: 100 }, { time: 220 }],
     reservePoints: 2,
+    sourceIntervalSeconds: 60,
     sourceTimeHorizon: 220,
   }), false);
   assert.equal(canReuseFutureTimeAxisData({
     currentData,
     displayRows: [{ time: 100 }, { time: 160 }, { time: 220 }, { time: 280 }],
     reservePoints: 2,
+    sourceIntervalSeconds: 60,
     sourceTimeHorizon: 280,
   }), false);
   assert.equal(canReuseFutureTimeAxisData({
@@ -220,8 +223,41 @@ test("numeric carrier is reused across continuous bars until its reserve runs lo
     currentData,
     displayRows: [{ time: 100 }, { time: 160 }, { time: 220 }],
     reservePoints: 2,
+    sourceIntervalSeconds: 60,
     sourceTimeHorizon: 220,
   }), false);
+});
+
+test("a carrier planned from the live tail is rebuilt when a historical window moves the horizon back", () => {
+  const live = 1_795_515_720;
+  const plan = planFutureTimeAxis({ displayRows: [{ time: live - 60 }, { time: live }],
+    sourceInterval: "1m", sourceIntervalSeconds: 60, sourceTimeHorizon: live });
+  const currentData = mustBeDefined(plan.data);
+  // Date seek: the main series now ends three months earlier. Every old carrier
+  // point is still "after" that horizon and the reserve is full, but the axis
+  // would show the months between as one step and end the view at the live time.
+  const historicalTail = 1_787_242_200;
+  const displayRows = [{ time: historicalTail - 60 }, { time: historicalTail }];
+  assert.equal(countFutureTimeAxisPointsAfter(currentData, historicalTail), currentData.length);
+  assert.equal(canReuseFutureTimeAxisData({ currentData, displayRows,
+    sourceInterval: "1m", sourceIntervalSeconds: 60, sourceTimeHorizon: historicalTail }), false);
+  const rebuilt = mustBeDefined(planFutureTimeAxis({ currentKey: plan.key, displayRows,
+    sourceInterval: "1m", sourceIntervalSeconds: 60, sourceTimeHorizon: historicalTail }).data);
+  assert.equal(rebuilt[0]?.time, historicalTail + 60);
+  // Without interval evidence contiguity cannot be proven, so it is rebuilt.
+  assert.equal(canReuseFutureTimeAxisData({ currentData, displayRows: [{ time: live }],
+    sourceTimeHorizon: live }), false);
+  assert.equal(canReuseFutureTimeAxisData({ currentData, displayRows: [{ time: live }],
+    sourceInterval: "1m", sourceIntervalSeconds: 60, sourceTimeHorizon: live }), true);
+});
+
+test("calendar-month carriers stay reusable when the next month becomes a bar", () => {
+  const january = Date.UTC(2026, 0, 1) / 1000, february = Date.UTC(2026, 1, 1) / 1000;
+  const currentData = mustBeDefined(planFutureTimeAxis({ displayRows: [{ time: january }],
+    sourceInterval: "1M", sourceTimeHorizon: january }).data);
+  assert.equal(currentData[0]?.time, february);
+  assert.equal(canReuseFutureTimeAxisData({ currentData, displayRows: [{ time: january }, { time: february }],
+    sourceInterval: "1M", sourceTimeHorizon: february }), true);
 });
 
 test("one-second bars reuse the carrier for a bounded batch of live updates", () => {
@@ -235,6 +271,7 @@ test("one-second bars reuse the carrier for a bounded batch of live updates", ()
     assert.equal(canReuseFutureTimeAxisData({
       currentData,
       displayRows,
+      sourceIntervalSeconds: 1,
       sourceTimeHorizon: horizon,
     }), true);
   }
@@ -243,6 +280,7 @@ test("one-second bars reuse the carrier for a bounded batch of live updates", ()
   assert.equal(canReuseFutureTimeAxisData({
     currentData,
     displayRows,
+    sourceIntervalSeconds: 1,
     sourceTimeHorizon: 33,
   }), false);
 });

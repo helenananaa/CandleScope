@@ -1217,6 +1217,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       axisMode,
       currentData: futureTimeAxisDataRef.current,
       displayRows,
+      sourceInterval: intervalRef.current,
+      sourceIntervalSeconds: parseIntervalSeconds(intervalRef.current),
       sourceTimeHorizon: drawingSourceTimeHorizonRef.current,
     })) {
       return {

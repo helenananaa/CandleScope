@@ -4,10 +4,37 @@ import type { MarketSeries } from "./marketDataTypes.js";
 import { hasVerifiedCoverage, isKlineResultRepairPending } from "./quality/klineQualityPolicy.js";
 import { locateChartTime, type ChartTimeSeekPlan, type ChartTimeSeekResult } from "./chartTimeNavigation.js";
 
-/** Fetch through the existing manager, with one bounded request and at most one
- * cache-proof fallback. No result may replace a view after its owner changes. */
+/** A cold window settles in the backend's backfill, not in one request: a far
+ * 1m window took about 3 s and a window that starts before the listing about
+ * 30 s (its pre-listing rows must be proven absent). The dialog stays busy and
+ * keeps the current view meanwhile; a newer jump or "back to live" supersedes. */
+export const CHART_TIME_SEEK_BUDGET_MS = 60_000;
+/** The range endpoint's maximum `wait_ms`; it answers as soon as rows settle. */
+export const CHART_TIME_SEEK_REPAIR_WAIT_MS = 5_000;
+/** An endpoint that starts no repair answers at once; never spin on it. */
+export const CHART_TIME_SEEK_RETRY_FLOOR_MS = 500;
+
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) { resolve(); return; }
+    const done = () => { clearTimeout(timer); signal.removeEventListener("abort", done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** The backend is still repairing or proving this window and asked to be read again. */
+function awaitingRepair(result: KlineFetchResult): boolean {
+  return !result.stale && result.active !== false && result.retryable !== false
+    && isKlineResultRepairPending(result);
+}
+
+/** Fetch through the existing manager, one bounded window per request. Re-read
+ * only while the backend reports a retryable repair, up to the budget. No result
+ * may replace a view after its owner changes. */
 export async function seekChartTimeWindow({
   plan, series, feed, signal, hasCachedRange, ownsRequest, commit,
+  budgetMs = CHART_TIME_SEEK_BUDGET_MS, now = Date.now, delay = abortableDelay,
 }: {
   plan: ChartTimeSeekPlan;
   series: MarketSeries;
@@ -16,6 +43,9 @@ export async function seekChartTimeWindow({
   hasCachedRange: boolean;
   ownsRequest(): boolean;
   commit(result: KlineFetchResult): void;
+  budgetMs?: number;
+  now?: () => number;
+  delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 }): Promise<ChartTimeSeekResult> {
   const failure = (status: "superseded" | "empty" | "unavailable"): ChartTimeSeekResult => (
     { status, requestedTimeMs: plan.requestedTimeMs }
@@ -25,17 +55,28 @@ export async function seekChartTimeWindow({
   const options = { start: plan.start, end: plan.end, source: "date-seek",
     signal, commit: "none" as const, maxPages: 1 };
   try {
-    let result = await feed.getRange(series, {
-      ...options, repair: hasCachedRange ? "none" : "wait", waitMs: hasCachedRange ? 0 : 1_500,
-      strict: !hasCachedRange, cacheMode: hasCachedRange ? "prefer-cache" : "network-only",
-    });
-    if (!current()) return failure("superseded");
-    if (hasCachedRange && (isKlineResultRepairPending(result) || !hasVerifiedCoverage(result, "range"))) {
+    let result: KlineFetchResult | null = null;
+    if (hasCachedRange) {
       result = await feed.getRange(series, {
-        ...options, repair: "wait", waitMs: 1_500, strict: true, cacheMode: "network-only",
+        ...options, repair: "none", waitMs: 0, strict: false, cacheMode: "prefer-cache",
       });
+      if (!current()) return failure("superseded");
+      // A cache proof is rechecked against storage once; it never waits alone.
+      if (isKlineResultRepairPending(result) || !hasVerifiedCoverage(result, "range")) result = null;
     }
-    if (!current()) return failure("superseded");
+    const deadline = now() + Math.max(0, budgetMs);
+    while (result === null || awaitingRepair(result)) {
+      const started = now();
+      result = await feed.getRange(series, {
+        ...options, repair: "wait", strict: true, cacheMode: "network-only",
+        waitMs: Math.max(0, Math.min(CHART_TIME_SEEK_REPAIR_WAIT_MS, Math.floor(deadline - started))),
+      });
+      if (!current()) return failure("superseded");
+      if (!awaitingRepair(result) || now() >= deadline) break;
+      const pause = Math.min(CHART_TIME_SEEK_RETRY_FLOOR_MS - (now() - started), deadline - now());
+      if (pause > 0) await delay(pause, signal);
+      if (!current()) return failure("superseded");
+    }
     if (result.stale || result.active === false || isKlineResultRepairPending(result)
       || !hasVerifiedCoverage(result, "range")) return failure("unavailable");
     const rows = result.data ?? [];

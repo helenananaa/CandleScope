@@ -61,3 +61,94 @@ test("failed, incomplete, empty and out-of-bounds windows retain the existing vi
     assert.equal(result.status, candidate?.data?.length === 0 ? "empty" : "unavailable");
   }
 });
+
+// Responses observed from the RC backend for a cold window: the strict read
+// answers `pending` until the backfill (or the pre-listing proof) settles.
+const pending = (missing: number, times: number[] = []): FeedResult => ({ ...response(times), rows: [], data: [],
+  complete: false, retryable: true, verified_contiguous: false, history_state: "pending",
+  missing_ranges: [{ start_ms: 60_000, end_ms: 60_000 + (missing - 1) * 60_000, reason: "query_empty", missing_bars: missing }] });
+const clock = () => {
+  let time = 0;
+  return { now: () => time, delay: async (ms: number) => { time += ms; },
+    advance: (ms: number) => { time += ms; } };
+};
+
+test("a cold far window keeps waiting for the backend repair and then locates the target", async () => {
+  const fake = clock();
+  const calls: Parameters<SeriesDataFeed["getRange"]>[1][] = [];
+  const commits: FeedResult[] = [];
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { getRange: async (_series, options) => {
+      calls.push(options); fake.advance(1_500);
+      return calls.length < 3 ? pending(3) : response();
+    } }, commit: (value) => commits.push(value as FeedResult),
+  });
+  assert.deepEqual(result, { status: "located", requestedTimeMs: 120_000, actualTimeMs: 120_000, exact: true });
+  assert.equal(calls.length, 3);
+  assert.equal(commits.length, 1);
+  for (const call of calls) {
+    assert.equal(call?.repair, "wait"); assert.equal(call?.strict, true); assert.equal(call?.cacheMode, "network-only");
+    assert.ok((call?.waitMs ?? 0) > 0 && (call?.waitMs ?? 0) <= 5_000);
+    assert.equal(call?.start, 60); assert.equal(call?.end, 180); assert.equal(call?.maxPages, 1);
+  }
+});
+
+test("a window that starts before the listing locates the first listed bar once the backend proves the gap", async () => {
+  const fake = clock();
+  let calls = 0;
+  const listed = { ...response([180]), excluded_ranges: [{ start_ms: 60_000, end_ms: 179_999, disposition: "terminal", reason: "source_exhausted" }] };
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { getRange: async () => { calls += 1; fake.advance(1_500); return calls < 20 ? pending(2, [180]) : listed; } },
+    commit: () => {},
+  });
+  assert.deepEqual(result, { status: "located", requestedTimeMs: 120_000, actualTimeMs: 180_000, exact: false });
+  assert.equal(calls, 20);
+});
+
+test("an exhausted window before the listing reports empty, not unavailable", async () => {
+  const fake = clock();
+  let calls = 0;
+  const exhausted: FeedResult = { ...response([]), history_state: "exhausted", terminal_reason: "source_exhausted" };
+  let committed = false;
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { getRange: async () => { calls += 1; fake.advance(1_500); return calls < 3 ? pending(3) : exhausted; } },
+    commit: () => { committed = true; },
+  });
+  assert.equal(result.status, "empty");
+  assert.equal(committed, false);
+});
+
+test("a repair that never settles gives up at the budget, and an endpoint that answers at once is not spun on", async () => {
+  const fake = clock();
+  let calls = 0;
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay, budgetMs: 10_000,
+    feed: { getRange: async () => { calls += 1; return pending(3); } }, commit: () => assert.fail("must not commit"),
+  });
+  assert.equal(result.status, "unavailable");
+  // Instant answers are paced by the retry floor: 10 s / 0.5 s, plus the read at the deadline.
+  assert.ok(calls >= 20 && calls <= 21, String(calls));
+  assert.equal(fake.now(), 10_000);
+});
+
+test("a terminal refusal is reported at once instead of being retried", async () => {
+  let calls = 0;
+  const result = await seekChartTimeWindow({ ...input(),
+    feed: { getRange: async () => { calls += 1; return { ...pending(3), retryable: false }; } }, commit: () => {},
+  });
+  assert.equal(result.status, "unavailable");
+  assert.equal(calls, 1);
+});
+
+test("a newer jump supersedes a seek that is waiting for the backend", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const waiting = seekChartTimeWindow({ ...input(), signal: controller.signal,
+    feed: { getRange: async () => { calls += 1; return pending(3); } }, commit: () => assert.fail("must not commit"),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  controller.abort();
+  assert.equal((await waiting).status, "superseded");
+  const settledCalls = calls;
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(calls, settledCalls);
+});

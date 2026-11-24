@@ -81,20 +81,25 @@ export function countFutureTimeAxisPointsAfter(
 
 /**
  * Numeric carrier points can stay registered as their timestamps become real
- * bars. Rebuild only after a gap would leave a fake logical point behind or
- * the remaining future reserve is running low.
+ * bars. Rebuild only after a gap would leave a fake logical point behind, the
+ * remaining future reserve is running low, or the carrier no longer starts at
+ * the horizon's next interval step.
  */
 export function canReuseFutureTimeAxisData({
   axisMode = "time",
   currentData = [],
   displayRows = [],
   reservePoints = FUTURE_TIME_AXIS_RESERVE_POINTS,
+  sourceInterval,
+  sourceIntervalSeconds,
   sourceTimeHorizon,
 }: {
   axisMode?: string;
   currentData?: ChartSeriesInputRow[];
   displayRows?: ChartSeriesInputRow[];
   reservePoints?: unknown;
+  sourceInterval?: unknown;
+  sourceIntervalSeconds?: unknown;
   sourceTimeHorizon?: unknown;
 } = {}): boolean {
   if (axisMode !== "time"
@@ -108,6 +113,17 @@ export function canReuseFutureTimeAxisData({
 
   const remaining = countFutureTimeAxisPointsAfter(currentData, sourceTimeHorizon);
   if (remaining < Math.max(1, Math.floor(Number(reservePoints)) || 0)) return false;
+  // A historical window can replace the live tail and move the horizon back.
+  // The old carrier then starts months after the new last bar, and the time
+  // scale would read that gap as one point: the visible time range would end
+  // at the old live time. Reuse only a carrier contiguous with the horizon.
+  const nextTime = futureTimeFromIntervalDistance(createFutureIntervalBasis({
+    horizon: sourceTimeHorizon,
+    sourceInterval,
+    sourceIntervalSeconds,
+  }), 1);
+  if (nextTime === null
+    || Number(currentData[currentData.length - remaining]?.time) !== nextTime) return false;
   for (const point of currentData) {
     const time = Number(point?.time);
     if (!Number.isFinite(time)) return false;
