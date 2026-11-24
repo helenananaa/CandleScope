@@ -7,10 +7,10 @@ name: Browser version
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml"]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml", "!**/*.md"]
   push:
     branches: [main]
-    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml"]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-web.yml", "!**/*.md"]
 
 permissions:
   contents: read

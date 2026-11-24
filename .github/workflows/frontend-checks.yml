@@ -3,10 +3,10 @@ name: Frontend checks
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml"]
+    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml", "!**/*.md"]
   push:
     branches: [main]
-    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml"]
+    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml", "!**/*.md"]
 
 permissions:
   contents: read
