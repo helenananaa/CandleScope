@@ -35,11 +35,9 @@
   <b>100+</b> 交易所 · <b>任意</b>周期 · <b>15</b> 种图表 · <b>22</b> 种画图工具 · 最多 <b>64</b> 图联动 · <b>30</b> 种界面语言
 </p>
 
-<!-- Hero 图片：docs/assets/readme/hero-live-workspace.png
 <p align="center">
-  <img src="docs/assets/readme/hero-live-workspace.png" width="100%" alt="CandleScope 工作区：四张联动的 BTCUSDT 图表、盘口与逐笔成交" />
+  <img src="docs/assets/readme/hero-live-workspace.png" width="100%" alt="CandleScope 工作区：四张联动的 BTCUSDT 永续图表（15 分钟到日线）共享十字光标，旁边是实时自选列表" />
 </p>
--->
 
 ## 为什么选 CandleScope
 
@@ -63,9 +61,7 @@
 
 ### 1 · 看
 
-<!-- 产品图片：docs/assets/readme/live-order-flow.png
-<img src="docs/assets/readme/live-order-flow.png" width="100%" alt="BTCUSDT 图表旁的盘口、逐笔成交与成交量差" />
--->
+<img src="docs/assets/readme/live-order-flow.png" width="100%" alt="1 分钟 BTCUSDT 图表，带 CVD 与成交量差，旁边是实时盘口与逐笔成交" />
 
 - **任意周期，十五种图表。** 输入 `7m`、`45m` 或 `3h`，图表立刻重建。蜡烛图、平均
   K 线、美国线、折线、面积图、基准线、砖型图、新价线、卡吉图、点数图……
@@ -85,9 +81,7 @@
 
 ### 2 · 练
 
-<!-- 产品图片：docs/assets/readme/replay-training.png
-<img src="docs/assets/readme/replay-training.png" width="100%" alt="回放训练：虚拟时钟、模拟委托与持仓" />
--->
+<img src="docs/assets/readme/replay-training.png" width="100%" alt="BTCUSDT 回放训练：未来 K 线隐藏，带虚拟时钟、播放控制、模拟下单与持仓" />
 
 - **K 线回放训练。** 所有商品按同一个时钟推进，在同一个模拟账户里交易。可以加仓、
   减仓、反手，同时持有多个商品；随时存档、继续，或把进度条往回拖，从任意一根 K 线分叉。
@@ -99,9 +93,7 @@
 
 ### 3 · 验
 
-<!-- 产品图片：docs/assets/readme/strategy-tester.png
-<img src="docs/assets/readme/strategy-tester.png" width="100%" alt="图表上的策略测试器：交易、权益与交易解释" />
--->
+<img src="docs/assets/readme/strategy-tester.png" width="100%" alt="策略测试器在 XRPUSDT 1 小时图上运行 EMA 9/21 Pine 策略：图上标出交易，权益曲线对比买入持有" />
 
 - **图表上的策略测试器。** 在正在看的图表旁用 Python 或 Pine 写策略，点开任意一笔
   交易就能看到它为什么成交。
@@ -116,9 +108,7 @@
 
 ### 4 · 复盘
 
-<!-- 产品图片：docs/assets/readme/trade-journal.png
-<img src="docs/assets/readme/trade-journal.png" width="100%" alt="交易日志：累计 R 曲线、带标签的交易与复盘笔记" />
--->
+<img src="docs/assets/readme/trade-journal.png" width="100%" alt="快速回放一笔 ETHUSDT 模拟空单及其锁定计划，旁边是交易复盘：净 R、以 R 计的 MFE/MAE、是否按计划执行与书面复盘" />
 
 - **三阶段交易日志。** 开仓前写计划，持仓中记笔记，平仓后写复盘。
 - **看得见的进步。** 成交自动归并成一笔笔交易；按标签统计胜率、盈亏比、R 期望值
