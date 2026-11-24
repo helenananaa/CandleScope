@@ -17,11 +17,14 @@ async def _binance_snapshot_time(exchange, req: TransportRequest, *, futures: bo
     A deferred page keeps its admission turn, but each successful physical
     request consumes that turn. Repeating a time preflight on every retry can
     therefore starve the K-line request when other chunks protect their turns.
-    An older server observation is sufficient for bounded, already closed
-    history; it must never be extrapolated to confirm a newer/forming bucket.
+    An older server observation is sufficient for bounded, already settled
+    history; it must never be extrapolated to confirm a newer/forming or
+    still-settling bucket (``rest_candle_settled``), or a retry would keep
+    reading that bucket as pending until some other request refreshed it.
     The cache has at most two entries and dies with the pooled exchange client.
     """
     from app.data_engine.interval_policy import parse_interval_spec
+    from .fork_kline import rest_candle_settled
 
     market = "futures" if futures else "spot"
     observations = getattr(exchange, "_candlescope_snapshot_times", None)
@@ -32,7 +35,7 @@ async def _binance_snapshot_time(exchange, req: TransportRequest, *, futures: bo
     spec = parse_interval_spec(req.descriptor.interval or "")
     if type(req.end_ms) is int and req.end_ms >= 0 and spec is not None:
         last_close = spec.next_ms(spec.floor_ms(req.end_ms)) - 1
-        if type(observed) is int and observed > last_close:
+        if type(observed) is int and rest_candle_settled(last_close, observed):
             return observed
     observed = await exchange.fetch_time(
         {"type": "swap", "subType": "linear"} if futures else {"type": "spot"}
@@ -73,7 +76,7 @@ async def _fetch_binance_raw(
             descriptor.stream_type == StreamType.KLINE
             and config.ccxt_fork_kline_enabled
         ):
-            from .fork_kline import require_fork, prepare_source_messages
+            from .fork_kline import require_fork, prepare_source_messages, rest_payload_pending
             from app.core.executors import run_storage
             from app.data_engine.storage import kline_sources
 
@@ -109,8 +112,13 @@ async def _fetch_binance_raw(
                     messages, descriptor, watermark=watermark,
                     history_projection=req.history_projection,
                 )
+                # A pending candle that lost to a newer observation (such as
+                # the WS x=true close of a still-settling bar) is not a read
+                # conflict: it can't become final through this page, and its
+                # unselected receipt keeps it out of every consumer.
                 if all(
                     message.payload["_source_receipt"]["status"] == "selected"
+                    or rest_payload_pending(message.payload)
                     for message in messages
                 ):
                     return messages
