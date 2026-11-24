@@ -6,6 +6,7 @@ import type {
   ChartWorkspaceId,
 } from "../features/chart-workspace/chartWorkspaceTypes.js";
 import type { KlineBar } from "../features/market-data/marketDataTypes.js";
+import type { BackendStatusBridge } from "./backendConnection.js";
 
 export interface DesktopBootstrap {
   mode: "web" | "native";
@@ -55,7 +56,7 @@ export interface DesktopTopologyResult {
   message?: string;
 }
 
-interface NativeDesktopBridge extends Partial<AiControlBridge> {
+interface NativeDesktopBridge extends Partial<AiControlBridge>, BackendStatusBridge {
   strategyStorage?: { getItem(key: string): string | null; setItem(key: string, value: string): Promise<void> };
   readonly controlScopes?: readonly string[];
   onControlRequest?(listener: (request: import("../features/app-control/controlModel.js").ControlRequest) => void): () => void;

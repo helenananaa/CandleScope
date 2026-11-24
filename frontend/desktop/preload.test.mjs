@@ -61,3 +61,27 @@ test("app appearance is reported on its own channel", () => {
   bridge.setAppearance({ background: "#ffffff" });
   assert.deepEqual(sent, [["candlescope:desktop:appearance", { background: "#ffffff" }]]);
 });
+
+test("backend state starts from the host endpoint and follows host events", async () => {
+  const invoked = [];
+  const listeners = new Map();
+  const initial = { phase: "running", generation: 1, attempt: 0, maxAttempts: 3, retryAt: null, error: null, exit: null };
+  const bridge = load([], { port: 29126, backendStatus: initial }, {
+    invoke: async (...args) => { invoked.push(args); return { ...initial, phase: "failed" }; },
+    on: (channel, handler) => listeners.set(channel, handler),
+    removeListener: (channel, handler) => { if (listeners.get(channel) === handler) listeners.delete(channel); },
+  });
+  assert.deepEqual(bridge.backendStatus, initial);
+  assert.equal(load([], { port: 29126 }).backendStatus, null);
+
+  const seen = [];
+  const unsubscribe = bridge.onBackendStatus((status) => seen.push(status));
+  listeners.get("candlescope:desktop:backend-status")({}, { phase: "restarting", attempt: 1 });
+  assert.deepEqual(seen, [{ phase: "restarting", attempt: 1 }]);
+  unsubscribe();
+  assert.equal(listeners.has("candlescope:desktop:backend-status"), false);
+
+  assert.equal((await bridge.getBackendStatus()).phase, "failed");
+  await bridge.restartBackend();
+  assert.deepEqual(invoked, [["candlescope:desktop:backend-status:get"], ["candlescope:desktop:backend-restart"]]);
+});

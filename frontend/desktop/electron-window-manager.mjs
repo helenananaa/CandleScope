@@ -114,6 +114,14 @@ export class ElectronWindowManager {
     }
   }
 
+  /** Like sendAll, but also reaches application pages (backtest, strategy, replay). */
+  sendAllPages(channel, payload) {
+    this.sendAll(channel, payload);
+    for (const window of this.appWindows.values()) {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    }
+  }
+
   lifecycle(windowId, state) {
     const window = this.windows.get(windowId);
     if (!window || window.isDestroyed()) return;

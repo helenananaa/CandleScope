@@ -16,6 +16,7 @@ import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
 import { DESKTOP_IPC, validateAppearancePayload, validateTopologyPayload } from "./ipc-contract.mjs";
 import { createEvidenceSession } from "./evidence-harness-loader.mjs";
 import { SidecarSupervisor } from "./sidecar-supervisor.mjs";
+import { backendStatusPayload, relayBackendStatus, UNSUPERVISED_BACKEND_STATUS } from "./backend-status.mjs";
 import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
@@ -72,6 +73,10 @@ const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
 const registeredWorkspaceContents = new WeakSet();
+
+function currentBackendStatus() {
+  return supervisor ? backendStatusPayload(supervisor.status()) : UNSUPERVISED_BACKEND_STATUS;
+}
 
 function windowIdForSender(sender) {
   return manager?.windowIdForContents(sender) ?? null;
@@ -206,6 +211,8 @@ async function boot() {
     controlEnabled: true,
     controlScopes: workflowScopes,
   });
+  // Pages keep their endpoint across a backend restart; they only need its state.
+  if (supervisor) relayBackendStatus(supervisor, (status) => manager.sendAllPages(DESKTOP_IPC.backendStatus, status));
 
   workflowControl = new WorkflowControlHost({ manager, channels: DESKTOP_IPC,
     directory: path.join(app.getPath("userData"), "control"), executable: process.execPath,
@@ -264,7 +271,14 @@ async function boot() {
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
     event.returnValue = {
       port: backendPort, windowId: windowIdForSender(event.sender), controlScopes: workflowScopes, pineChartTransport,
+      backendStatus: currentBackendStatus(),
     };
+  });
+  trustedIpc.handle(DESKTOP_IPC.backendStatusGet, () => currentBackendStatus());
+  trustedIpc.handle(DESKTOP_IPC.backendRestart, async () => {
+    // The outcome reaches every page as a status event; a failure stays in that state.
+    await supervisor?.restart().catch(() => {});
+    return currentBackendStatus();
   });
 
   if (supervisor) {
@@ -483,6 +497,7 @@ if (!gotSingleInstanceLock) {
       ].join("\n\n"),
     );
     await localMcp.close();
+    supervisor?.beginQuit();
     await supervisor?.stop();
     await assetServer?.close();
     app.exit(1);
@@ -490,6 +505,8 @@ if (!gotSingleInstanceLock) {
 }
 
 app.on("before-quit", () => {
+  // A backend that exits while the app quits is not restarted.
+  supervisor?.beginQuit();
   manager?.approveQuit();
 });
 
@@ -497,6 +514,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
+  supervisor?.beginQuit();
   shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => unifiedPlugins?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
     shutdownComplete = true;
     app.quit();
