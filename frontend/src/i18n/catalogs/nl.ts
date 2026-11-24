@@ -3671,6 +3671,7 @@ export const nl = {
   "chartTester.issue.serverDetail": "Strategiecompilatie mislukt. Herstel het gelokaliseerde probleem en voer opnieuw uit.",
   "chartTester.prepareDataRun": "Gegevens voorbereiden en uitvoeren",
   "chartTester.run.resolving": "Controleren…",
+  "chartTester.run.waitingForChart": "Grafiekgegevens worden nog geladen…",
   "chartTester.run.queued": "In de wachtrij",
   "chartTester.run.running": "Bezig",
   "chartTester.stopObserving": "Wachten stoppen",

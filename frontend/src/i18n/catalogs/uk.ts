@@ -3671,6 +3671,7 @@ export const uk = {
   "chartTester.issue.serverDetail": "Компіляція стратегії не вдалася. Виправте знайдену проблему й запустіть знову.",
   "chartTester.prepareDataRun": "Підготувати дані й запустити",
   "chartTester.run.resolving": "Перевірка…",
+  "chartTester.run.waitingForChart": "Дані графіка ще завантажуються…",
   "chartTester.run.queued": "У черзі",
   "chartTester.run.running": "Виконується",
   "chartTester.stopObserving": "Припинити очікування",

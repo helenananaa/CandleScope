@@ -3671,6 +3671,7 @@ export const it = {
   "chartTester.issue.serverDetail": "Compilazione della strategia non riuscita. Correggi il problema individuato e riesegui.",
   "chartTester.prepareDataRun": "Prepara i dati ed esegui",
   "chartTester.run.resolving": "Verifica…",
+  "chartTester.run.waitingForChart": "I dati del grafico sono ancora in caricamento…",
   "chartTester.run.queued": "In coda",
   "chartTester.run.running": "In esecuzione",
   "chartTester.stopObserving": "Interrompi l'attesa",

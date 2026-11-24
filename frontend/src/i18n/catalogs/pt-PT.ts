@@ -3671,6 +3671,7 @@ export const ptPT = {
   "chartTester.issue.serverDetail": "A compilação da estratégia falhou. Corrija o problema localizado e execute novamente.",
   "chartTester.prepareDataRun": "Preparar dados e executar",
   "chartTester.run.resolving": "A verificar…",
+  "chartTester.run.waitingForChart": "Os dados do gráfico ainda estão a carregar…",
   "chartTester.run.queued": "Em fila",
   "chartTester.run.running": "A executar",
   "chartTester.stopObserving": "Parar de esperar",

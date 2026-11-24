@@ -3671,6 +3671,7 @@ export const th = {
   "chartTester.issue.serverDetail": "คอมไพล์กลยุทธ์ไม่สำเร็จ แก้ปัญหาที่ระบุแล้วรันอีกครั้ง",
   "chartTester.prepareDataRun": "เตรียมข้อมูลแล้วรัน",
   "chartTester.run.resolving": "กำลังตรวจ…",
+  "chartTester.run.waitingForChart": "ข้อมูลกราฟยังโหลดอยู่…",
   "chartTester.run.queued": "อยู่ในคิว",
   "chartTester.run.running": "กำลังรัน",
   "chartTester.stopObserving": "หยุดรอ",

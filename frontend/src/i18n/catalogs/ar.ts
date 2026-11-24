@@ -3671,6 +3671,7 @@ export const ar = {
   "chartTester.issue.serverDetail": "فشل تجميع الاستراتيجية. أصلح المشكلة المحددة وشغِّل مجدداً.",
   "chartTester.prepareDataRun": "تجهيز البيانات والتشغيل",
   "chartTester.run.resolving": "جارٍ الفحص…",
+  "chartTester.run.waitingForChart": "ما زالت بيانات الرسم قيد التحميل…",
   "chartTester.run.queued": "في القائمة",
   "chartTester.run.running": "يعمل",
   "chartTester.stopObserving": "إيقاف الانتظار",

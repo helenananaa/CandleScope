@@ -4036,6 +4036,7 @@ export const en = {
   "chartTester.issue.serverDetail": "Strategy compilation failed. Fix the located issue and run again.",
   "chartTester.prepareDataRun": "Prepare data and run",
   "chartTester.run.resolving": "Checking…",
+  "chartTester.run.waitingForChart": "Chart data is still loading…",
   "chartTester.run.queued": "Queued",
   "chartTester.run.running": "Running",
   "chartTester.stopObserving": "Stop waiting",

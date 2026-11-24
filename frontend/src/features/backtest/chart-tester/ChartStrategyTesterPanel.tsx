@@ -213,6 +213,8 @@ export interface ChartStrategyTesterPanelProps {
   resolution: ChartContextResolution | null;
   sourceDiagnostics: Array<Record<string, unknown>>;
   pendingDataDraftRevision: number | null;
+  /** A run waits for the chart to finish loading this session's first window (RC 34). */
+  waitingForChartData?: boolean;
   result?: ChartStrategyResultBundle | null;
   resultLoading?: boolean;
   resultError?: string | null;
@@ -353,6 +355,7 @@ export function CandleScopeStrategyTesterPanel({
   resolution,
   sourceDiagnostics,
   pendingDataDraftRevision,
+  waitingForChartData = false,
   result = null,
   resultLoading = false,
   resultError = null,
@@ -748,7 +751,7 @@ export function CandleScopeStrategyTesterPanel({
   const pendingDataMatchesSource = runState.status === "NEEDS_DATA"
     && pendingDataDraftRevision === strategyDraftContentRevision(source);
   useControlCommands(() => ({ id: `host-chart-strategy:${cellScope}`, title: "Chart host strategy draft and run", context: () => ({ session, attachment, draftId: activeDraft?.id, source, runState, active }),
-    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })), retiredDrafts }), commands: [
+    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, waitingForChartData, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })), retiredDrafts }), commands: [
       command("view", "Select host editor/tab and focus preference.", object({ tab: optional(choice(["script", "overview", "trades", "settings"])), focused: optional(bool), height: optional(number(0, 4096)) }), (input) => { if (input.tab) setActiveTab(input.tab); if (input.focused !== undefined) setFocusMode(input.focused); if (input.height !== undefined) setHeight(clampPanelHeight(input.height)); }),
       command("createDraft", "Create a persisted host strategy draft using the UI draft store.", object({ name: text(128), source: text(48000, 0) }), ({ name, source }) => createDraft(name, source, false), { available: () => !runBusy && active }),
       command("template", "Create a draft from a known host template.", object({ templateId: text(128) }), ({ templateId }) => { const item = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId); if (!item) throw new Error("TEMPLATE_UNAVAILABLE"); return createDraft(item.displayName, item.source, false); }, { available: () => !runBusy && active }),
@@ -766,7 +769,9 @@ export function CandleScopeStrategyTesterPanel({
       command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
-  const runLabel = pendingDataMatchesSource
+  const runLabel = waitingForChartData
+    ? t("chartTester.run.waitingForChart")
+    : pendingDataMatchesSource
     ? t("chartTester.prepareDataRun")
     : runState.status === "RESOLVING"
       ? t("chartTester.run.resolving")
@@ -890,11 +895,12 @@ export function CandleScopeStrategyTesterPanel({
             <Button size="sm" variant="ghost" onClick={retrySave}>{t("chartTester.retrySave")}</Button>
           )}
           {currentAttachment && showStatus && (
-            <span role="status" className="strategy-run-status" data-status={runState.status.toLowerCase()} data-testid="chart-strategy-run-status">
-              <i aria-hidden="true" />{t(runStatusKey(runState.status))}
+            <span role="status" className="strategy-run-status" data-status={runState.status.toLowerCase()} data-testid="chart-strategy-run-status"
+              data-waiting-for-chart={waitingForChartData ? "true" : undefined}>
+              <i aria-hidden="true" />{waitingForChartData ? t("chartTester.run.waitingForChart") : t(runStatusKey(runState.status))}
             </span>
           )}
-          {runBusy && runState.activeRunId && (
+          {runBusy && (runState.activeRunId || waitingForChartData) && (
             <Button size="sm" variant="ghost" data-testid="chart-strategy-stop-observing" onClick={onStopObserving}>
               {t("chartTester.stopObserving")}
             </Button>

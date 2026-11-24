@@ -3671,6 +3671,7 @@ export const vi = {
   "chartTester.issue.serverDetail": "Biên dịch chiến lược thất bại. Hãy sửa vấn đề đã định vị rồi chạy lại.",
   "chartTester.prepareDataRun": "Chuẩn bị dữ liệu và chạy",
   "chartTester.run.resolving": "Đang kiểm tra…",
+  "chartTester.run.waitingForChart": "Dữ liệu biểu đồ vẫn đang tải…",
   "chartTester.run.queued": "Trong hàng đợi",
   "chartTester.run.running": "Đang chạy",
   "chartTester.stopObserving": "Dừng chờ",

@@ -3671,6 +3671,7 @@ export const hu = {
   "chartTester.issue.serverDetail": "A stratégiafordítás nem sikerült. Javítsa a megtalált problémát, majd futtassa újra.",
   "chartTester.prepareDataRun": "Adat előkészítése és futtatás",
   "chartTester.run.resolving": "Ellenőrzés…",
+  "chartTester.run.waitingForChart": "A grafikon adatai még töltődnek…",
   "chartTester.run.queued": "Sorban",
   "chartTester.run.running": "Fut",
   "chartTester.stopObserving": "Várakozás leállítása",

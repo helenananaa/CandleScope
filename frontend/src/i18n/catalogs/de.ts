@@ -3671,6 +3671,7 @@ export const de = {
   "chartTester.issue.serverDetail": "Strategiekompilierung fehlgeschlagen. Beheben Sie das lokalisierte Problem und führen Sie erneut aus.",
   "chartTester.prepareDataRun": "Daten vorbereiten und ausführen",
   "chartTester.run.resolving": "Prüfung…",
+  "chartTester.run.waitingForChart": "Chartdaten werden noch geladen…",
   "chartTester.run.queued": "In Warteschlange",
   "chartTester.run.running": "Läuft",
   "chartTester.stopObserving": "Warten beenden",

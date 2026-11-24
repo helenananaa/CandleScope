@@ -3671,6 +3671,7 @@ export const cs = {
   "chartTester.issue.serverDetail": "Kompilace strategie selhala. Opravte nalezený problém a spusťte znovu.",
   "chartTester.prepareDataRun": "Připravit data a spustit",
   "chartTester.run.resolving": "Kontrola…",
+  "chartTester.run.waitingForChart": "Data grafu se ještě načítají…",
   "chartTester.run.queued": "Ve frontě",
   "chartTester.run.running": "Běží",
   "chartTester.stopObserving": "Přestat čekat",

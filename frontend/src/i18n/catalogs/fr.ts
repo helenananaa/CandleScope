@@ -3672,6 +3672,7 @@ export const fr = {
   "chartTester.issue.serverDetail": "La compilation de la stratégie a échoué. Corrigez le problème localisé et relancez.",
   "chartTester.prepareDataRun": "Préparer les données et lancer le Run",
   "chartTester.run.resolving": "Vérification…",
+  "chartTester.run.waitingForChart": "Les données du graphique sont encore en chargement…",
   "chartTester.run.queued": "En file",
   "chartTester.run.running": "En cours",
   "chartTester.stopObserving": "Arrêter d’attendre",

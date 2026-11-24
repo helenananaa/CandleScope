@@ -5,6 +5,7 @@ import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRec
 import type { BacktestResultReplayFrame, BacktestRunRecord } from "../../backtestTypes.js";
 import { StrategyRunStreamError } from "../../backtestRunStream.js";
 import { PreparationApiError } from "../../../data-preparation/api.js";
+import { ChartStrategyChartDataGate } from "../chartStrategyChartData.js";
 import {
   buildChartStrategyRunBody,
   chartStrategyDataErrorCode,
@@ -441,6 +442,55 @@ test("automatic preparation carries frozen strategy intent and observes the serv
   const outcome = await runChartStrategyBacktest({ api, request });
   assert.equal(outcome.kind, "TERMINAL");
   assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare", "get"]);
+});
+
+test("Run pressed while the switched chart is loading waits for its first window, then runs (RC 34)", async () => {
+  // RC5 recheck: ETHUSDT 5m two seconds after the switch (barCount 0, loading) failed in 272 ms with
+  // "No local history exists": the backend had no stored series to take the run's range from.
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (context) => {
+    calls.push("prepare");
+    assert.equal(context.range_mode, "ALL_AVAILABLE");
+    return { ...resolution(), prepared_run: completed() };
+  };
+  const gate = new ChartStrategyChartDataGate(false);
+  const waits: boolean[] = [];
+  const switched = { ...request, session: { ...request.session, symbol: "ETHUSDT", interval: "5m" } };
+  let waiting!: () => void;
+  const started = new Promise<void>((resolve) => { waiting = resolve; });
+  const pending = runChartStrategyBacktest({ api, request: switched, waitForChartData: async (signal) => {
+    waits.push(gate.ready);
+    waiting();
+    await gate.wait(signal);
+  } });
+  // A run that skipped the wait settles first and fails the call check below instead of hanging.
+  await Promise.race([started, pending.then(() => undefined, () => undefined)]);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  // The strategy compiles meanwhile, but nothing resolves or prepares a range the chart has not stored.
+  assert.deepEqual(calls, ["revision:PINE_ENGINE"]);
+  assert.deepEqual(waits, [false]);
+  gate.set(true);
+  const outcome = await pending;
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare"]);
+});
+
+test("a run waiting for the chart stops without reaching the backend when it is stopped or switched (RC 34)", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  const gate = new ChartStrategyChartDataGate(false);
+  const controller = new AbortController();
+  let waiting!: () => void;
+  const started = new Promise<void>((resolve) => { waiting = resolve; });
+  const pending = runChartStrategyBacktest({ api, request, signal: controller.signal,
+    waitForChartData: (signal) => { waiting(); return gate.wait(signal); } });
+  await Promise.race([started, pending.then(() => undefined, () => undefined)]);
+  controller.abort(new DOMException("switched", "AbortError"));
+  await assert.rejects(pending, { name: "AbortError" });
+  gate.set(true);
+  await Promise.resolve();
+  assert.deepEqual(calls, ["revision:PINE_ENGINE"]);
 });
 
 test("validate/create drift fails before create", async () => {
