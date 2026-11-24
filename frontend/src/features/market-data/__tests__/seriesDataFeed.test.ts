@@ -4358,3 +4358,48 @@ for (const endpoint of ["history", "before", "range", "latest"] as const) {
     assert.equal(feed.isCurrent(SERIES, epoch), true);
   });
 }
+
+test("a pending before-page reads back only its own page when one storage change fills a large hole", async () => {
+  // RC 0be80267f: after date seeks to Aug 20 and then Oct 1, the backend filled
+  // the hole between them (~43k 1m rows). The Oct-1 window had a left page
+  // pending, so the whole Aug 19..Oct 1 change was read into it 5000 bars at a
+  // time; the prepend trim then dropped the Oct-1 bars that were in view.
+  const series = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
+  const version = { protocol: 1, epoch: "server-a", generation: 1, sequence: 9, barrier: 9, observed_at_ms: 1, stable: true,
+    series: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", interval: "1m", provider_id: "binance", venue: "binance",
+      asset_class: "crypto", series_variant: "native", price_adjustment: "raw", session_variant: "continuous", volume_semantics: "base_asset" } };
+  const windowStart = 1_790_819_400, windowEnd = windowStart + 500 * 60, pageStart = windowStart - 500 * 60;
+  const holeStart = 1_787_182_200;
+  const requested: Array<{ start: number; end: number }> = [];
+  const feed = new SeriesDataFeed({
+    api: {
+      fetchKlinesBefore: async () => ({ data: [], history_state: "pending", complete: false, retryable: true,
+        verified_contiguous: false, missing_ranges: [{ start_ms: holeStart * 1_000, end_ms: (windowStart - 60) * 1_000 }] }),
+      fetchKlinesRange: async (_symbol, _interval, start, end) => {
+        requested.push({ start: Number(start), end: Number(end) });
+        return { ...resolvedQuality, data: [], stream_version: version, storage_revision: 50, missing_ranges: [],
+          verified_contiguous: true, history_state: "ready", complete: true, retryable: false };
+      },
+    },
+    getActiveSeries: () => series,
+    commitMergedChartData: () => {},
+  });
+  await feed.requestBeforePage(series, { before: epochSeconds(windowStart), bars: 500, pendingCooldownMs: 0 });
+  assert.ok(feed.getPendingBeforePage(series), "the left page is pending");
+  const windowRows = Array.from({ length: 501 }, (_, index) => ({
+    time: epochSeconds(windowStart + index * 60), open: 1, high: 1, low: 1, close: 1, volume: 1, is_closed: true }));
+  assert.equal(feed.handleBackfillCompleted({
+    type: "backfill_completed", symbol: series.symbol, interval: series.interval, exchange: series.exchange,
+    market_type: series.marketType, stream_version: version,
+    detail: { reason: "storage_history_changed", storage_revision: 50,
+      range_start_ms: holeStart * 1_000, range_end_ms: windowEnd * 1_000 },
+  }, { activeSeries: series, getCacheRows: () => windowRows, cooldownMs: 0 }), true);
+  for (let i = 0; i < 100 && (feed.backfillReloadInFlight.size || !requested.length); i += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(requested.length > 0, "the page itself is read back");
+  for (const range of requested) {
+    assert.ok(range.start >= pageStart && range.end <= windowEnd,
+      `read outside the window and its page: ${JSON.stringify(range)}`);
+  }
+});

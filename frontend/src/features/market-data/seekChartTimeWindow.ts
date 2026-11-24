@@ -23,15 +23,17 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** The backend is still repairing or proving this window and asked to be read again. */
-function awaitingRepair(result: KlineFetchResult): boolean {
-  return !result.stale && result.active !== false && result.retryable !== false
-    && isKlineResultRepairPending(result);
+/** Read the window again: the backend is still repairing or proving it, or a
+ * stream gap fenced this read in flight (stale) while the seek still owns it. */
+function readAgain(result: KlineFetchResult): boolean {
+  if (result.active === false) return false;
+  return result.stale === true
+    || (result.retryable !== false && isKlineResultRepairPending(result));
 }
 
 /** Fetch through the existing manager, one bounded window per request. Re-read
- * only while the backend reports a retryable repair, up to the budget. No result
- * may replace a view after its owner changes. */
+ * only while the backend reports a retryable repair or a stream gap fenced the
+ * read, up to the budget. No result may replace a view after its owner changes. */
 export async function seekChartTimeWindow({
   plan, series, feed, signal, hasCachedRange, ownsRequest, commit,
   budgetMs = CHART_TIME_SEEK_BUDGET_MS, now = Date.now, delay = abortableDelay,
@@ -65,14 +67,14 @@ export async function seekChartTimeWindow({
       if (isKlineResultRepairPending(result) || !hasVerifiedCoverage(result, "range")) result = null;
     }
     const deadline = now() + Math.max(0, budgetMs);
-    while (result === null || awaitingRepair(result)) {
+    while (result === null || readAgain(result)) {
       const started = now();
       result = await feed.getRange(series, {
         ...options, repair: "wait", strict: true, cacheMode: "network-only",
         waitMs: Math.max(0, Math.min(CHART_TIME_SEEK_REPAIR_WAIT_MS, Math.floor(deadline - started))),
       });
       if (!current()) return failure("superseded");
-      if (!awaitingRepair(result) || now() >= deadline) break;
+      if (!readAgain(result) || now() >= deadline) break;
       const pause = Math.min(CHART_TIME_SEEK_RETRY_FLOOR_MS - (now() - started), deadline - now());
       if (pause > 0) await delay(pause, signal);
       if (!current()) return failure("superseded");

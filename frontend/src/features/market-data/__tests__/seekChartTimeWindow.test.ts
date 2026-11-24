@@ -152,3 +152,22 @@ test("a newer jump supersedes a seek that is waiting for the backend", async () 
   await new Promise((resolve) => setTimeout(resolve, 600));
   assert.equal(calls, settledCalls);
 });
+
+test("a read fenced by a stream gap is read again while the seek still owns the window", async () => {
+  const fake = clock();
+  let calls = 0;
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { getRange: async () => { calls += 1; fake.advance(1_500); return calls === 1 ? { ...response(), stale: true } : response(); } },
+    commit: () => {},
+  });
+  assert.equal(result.status, "located");
+  assert.equal(calls, 2);
+  // A disabled data plane is stale and inactive: not a transient fence.
+  let disabledCalls = 0;
+  const disabled = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { getRange: async () => { disabledCalls += 1; return { ...pending(3), stale: true, active: false, retryable: false }; } },
+    commit: () => assert.fail("must not commit"),
+  });
+  assert.equal(disabled.status, "unavailable");
+  assert.equal(disabledCalls, 1);
+});
