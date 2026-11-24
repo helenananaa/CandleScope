@@ -899,6 +899,9 @@ export function useMarketDataRuntime({
           source: "right-window-restore",
           ...(result.quality ? { quality: result.quality } : {}),
         });
+        // As for a date seek: reads planned against the replaced historical
+        // window must not land in the live one.
+        seriesDataFeed.beginEpoch(series);
         const latest = result.data.at(-1);
         if (latest) updateLastPrice(latest, interval);
         setHasMoreLeft(result.has_more !== false);

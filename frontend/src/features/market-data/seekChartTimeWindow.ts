@@ -40,7 +40,7 @@ export async function seekChartTimeWindow({
 }: {
   plan: ChartTimeSeekPlan;
   series: MarketSeries;
-  feed: Pick<SeriesDataFeed, "getRange">;
+  feed: Pick<SeriesDataFeed, "getRange" | "beginEpoch">;
   signal: AbortSignal;
   hasCachedRange: boolean;
   ownsRequest(): boolean;
@@ -86,6 +86,11 @@ export async function seekChartTimeWindow({
     const location = locateChartTime(rows, plan);
     if (!location) return failure("unavailable");
     commit(result);
+    // Reads planned against the replaced window must not land in this one. A
+    // backfill readback queued while the seek was in flight carries the seek's
+    // epoch, and older rows are always admitted to the right-truncated window:
+    // it brought the previous far window back beside this one.
+    feed.beginEpoch(series);
     return location;
   } catch {
     return failure(current() ? "unavailable" : "superseded");
