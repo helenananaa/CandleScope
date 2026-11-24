@@ -51,7 +51,7 @@ import {
   createChartStrategyDraftId,
   strategyDraftContentRevision,
 } from "./chartStrategyTesterDrafts.js";
-import { chartStrategyQuickPresetIdForMarket } from "./chartStrategyRunRequest.js";
+import { chartStrategyDataErrorCode, chartStrategyQuickPresetIdForMarket } from "./chartStrategyRunRequest.js";
 import {
   CHART_STRATEGY_TEMPLATES,
   diagnoseChartStrategyDraft,
@@ -804,7 +804,7 @@ export function CandleScopeStrategyTesterPanel({
     if (code.includes("PROVIDER") || code.includes("SMOKE")) {
       return { message: t("chartTester.error.strategy"), action: t("chartTester.error.action.strategy") };
     }
-    if (code.includes("DATA") || code.includes("SNAPSHOT") || code.includes("CONTEXT")) {
+    if (chartStrategyDataErrorCode(code)) {
       return { message: t("chartTester.error.data"), action: t("chartTester.error.action.retry") };
     }
     if (code.includes("BUDGET") || code === "RUN_CAPACITY_EXCEEDED") {

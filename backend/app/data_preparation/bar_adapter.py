@@ -16,6 +16,7 @@ from app.data_engine.kline_quality import source_is_trusted_final
 from app.data_engine.storage.klines_repo import query_klines
 
 from .models import (
+    STRATEGY_BAR_INPUT_LIMIT,
     PreparationError,
     PreparationRequest,
     Requirement,
@@ -126,8 +127,8 @@ class BarPreparationAdapter:
             if requirement.end_ms > self.now_ms() // 60_000 * 60_000:
                 raise PreparationError("FUTURE_INPUT", "Only closed historical bars may be prepared")
             estimate += (requirement.end_ms - requirement.start_ms) // 60_000 * 1024
-        if request.consumer == "STRATEGY" and estimate // 1024 > 200_000:
-            raise PreparationError("STRATEGY_INPUT_LIMIT", "Strategy BAR input exceeds 200000 rows")
+        if request.consumer == "STRATEGY" and estimate // 1024 > STRATEGY_BAR_INPUT_LIMIT:
+            raise PreparationError("STRATEGY_INPUT_LIMIT", f"Strategy BAR input exceeds {STRATEGY_BAR_INPUT_LIMIT} rows")
         if estimate > request.max_bytes:
             raise PreparationError("STORAGE_BUDGET", "Requested range exceeds the estimated input budget")
 
@@ -618,8 +619,8 @@ class BarPreparationAdapter:
                                          "interval": interval, "source_revision": manifest.catalog_epoch})
             else:
                 count = sum(c["receipt"]["rows"] for c in fragments)
-                if count > 200_000:
-                    raise PreparationError("STRATEGY_INPUT_LIMIT", "Strategy BAR input exceeds 200000 rows")
+                if count > STRATEGY_BAR_INPUT_LIMIT:
+                    raise PreparationError("STRATEGY_INPUT_LIMIT", f"Strategy BAR input exceeds {STRATEGY_BAR_INPUT_LIMIT} rows")
                 rows_by_time = {row["open_time"]: row for c in fragments for row in self.read(c)}
                 rows = [{**rows_by_time[key], "open_time_ms": key,
                          "close_time_ms": rows_by_time[key]["close_time"], "is_closed": True}

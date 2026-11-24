@@ -6,6 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# Strategy preparation acquires one-minute BAR rows; one strategy input holds at most this many.
+STRATEGY_BAR_INPUT_LIMIT = 200_000
+
 
 def canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
