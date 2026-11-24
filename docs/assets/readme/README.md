@@ -12,7 +12,7 @@ product pages stay visually consistent.
 | `live-order-flow.png` | 1 · Analyze | One strong chart with order book, trades, CVD and volume delta |
 | `replay-training.png` | 2 · Practice | Active Challenge or Sandbox session with virtual clock, chart, paper orders, positions and controls |
 | `strategy-tester.png` | 3 · Test | Strategy tester on a chart with trades, equity and an open trade explanation |
-| `trade-journal.png` | 4 · Review | Trade journal with cumulative R, tagged trades and a written review |
+| `trade-journal.png` | 4 · Review | Trade review with the locked plan, R result and a written review, beside a quick replay of that trade |
 
 ## Capture Checklist
 

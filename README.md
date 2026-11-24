@@ -35,11 +35,9 @@
   <b>100+</b> exchanges · <b>any</b> interval · <b>15</b> chart types · <b>22</b> drawing tools · up to <b>64</b> linked charts · <b>30</b> languages
 </p>
 
-<!-- Hero image: docs/assets/readme/hero-live-workspace.png
 <p align="center">
-  <img src="docs/assets/readme/hero-live-workspace.png" width="100%" alt="A CandleScope workspace with four linked BTCUSDT charts, an order book and a trade tape" />
+  <img src="docs/assets/readme/hero-live-workspace.png" width="100%" alt="A CandleScope workspace with four linked BTCUSDT perpetual charts from 15m to 1D sharing one crosshair, beside a live watchlist" />
 </p>
--->
 
 ## Why CandleScope
 
@@ -65,9 +63,7 @@
 
 ### 1 · Analyze
 
-<!-- Product image: docs/assets/readme/live-order-flow.png
-<img src="docs/assets/readme/live-order-flow.png" width="100%" alt="A BTCUSDT chart beside its order book, trade tape and volume delta" />
--->
+<img src="docs/assets/readme/live-order-flow.png" width="100%" alt="A 1-minute BTCUSDT chart with CVD and volume delta beside its live order book and trade tape" />
 
 - **Any interval, fifteen chart types.** Type `7m`, `45m` or `3h` and the chart
   rebuilds. Candles, Heikin-Ashi, bars, line, area, baseline, Renko, line break,
@@ -92,9 +88,7 @@
 
 ### 2 · Practice
 
-<!-- Product image: docs/assets/readme/replay-training.png
-<img src="docs/assets/readme/replay-training.png" width="100%" alt="A replay session with a virtual clock, paper orders and open positions" />
--->
+<img src="docs/assets/readme/replay-training.png" width="100%" alt="A replay training session on BTCUSDT with hidden future bars, a virtual clock, playback controls, a paper order ticket and an open position" />
 
 - **Replay training.** Every symbol advances on one clock and trades against one
   paper account. Scale in, scale out, reverse, hold several markets at once. Save,
@@ -111,9 +105,7 @@
 
 ### 3 · Test
 
-<!-- Product image: docs/assets/readme/strategy-tester.png
-<img src="docs/assets/readme/strategy-tester.png" width="100%" alt="The strategy tester on a chart, with trades, equity and a trade explanation" />
--->
+<img src="docs/assets/readme/strategy-tester.png" width="100%" alt="The strategy tester running an EMA 9/21 Pine strategy on XRPUSDT 1h, with its trades on the chart and the equity curve against buy and hold" />
 
 - **Strategy tester on the chart.** Write a strategy in Python or Pine next to
   the chart you are looking at, and open any trade to see why it was taken.
@@ -131,9 +123,7 @@
 
 ### 4 · Review
 
-<!-- Product image: docs/assets/readme/trade-journal.png
-<img src="docs/assets/readme/trade-journal.png" width="100%" alt="The trade journal with a cumulative R curve, tagged trades and a written review" />
--->
+<img src="docs/assets/readme/trade-journal.png" width="100%" alt="A quick replay of a practice ETHUSDT short with its locked plan, beside the trade review: net R, MFE and MAE in R, plan adherence and a written review" />
 
 - **A three-stage journal.** Write the plan before entry, notes while the
   position is open, and the review after it closes.
