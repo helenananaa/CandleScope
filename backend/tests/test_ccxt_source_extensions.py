@@ -461,6 +461,7 @@ def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeyp
     from types import SimpleNamespace
     import app.exchanges
     from scripts.enrich_ccxt_sources import run
+    from app.exchanges.ccxt_ext.fork_kline import BINANCE_REST_SETTLE_MS
     from tests.test_ccxt_fork_kline import MARKET, fork_exchange
 
     desc = StreamDescriptor(
@@ -473,8 +474,9 @@ def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeyp
         raw = [stamp, "100", "103", "99", "102", "10", stamp + 59999,
                "1010", 4, "6", "606", "0"]
         payload = ex.parse_candlescope_kline(raw, MARKET, "1m")
-        payload["_source_rest_server_time_ms"] = stamps[-1] + 60000
-        return RawMessage(payload, DataSource.HTTP, StreamType.KLINE, stamps[-1] + 60000)
+        settled = stamps[-1] + 60000 + BINANCE_REST_SETTLE_MS
+        payload["_source_rest_server_time_ms"] = settled
+        return RawMessage(payload, DataSource.HTTP, StreamType.KLINE, settled)
 
     for stamp in stamps:
         original = dict(normalize_fork_kline(message(stamp), desc).data, close=100)

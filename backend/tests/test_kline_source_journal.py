@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import closing
 import json
 import subprocess
 import sys
@@ -10,7 +11,7 @@ import pytest
 
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType
 from app.data_engine.storage import klines_repo, kline_sources
-from app.exchanges.ccxt_ext.fork_kline import normalize_fork_kline
+from app.exchanges.ccxt_ext.fork_kline import BINANCE_REST_SETTLE_MS, normalize_fork_kline
 from tests.test_ccxt_fork_kline import DESCRIPTOR, FRAME, MARKET, ROW, fork_exchange
 
 
@@ -143,22 +144,27 @@ def rc35_record(value, watermark=None):
     return kline_sources.record(value, RC35, rest_watermark=watermark)
 
 
+RC35_SETTLED = RC35_CLOSE + BINANCE_REST_SETTLE_MS + 1
+
+
 @pytest.mark.parametrize("ws_closed", [True, False])
-def test_lagging_rest_snapshot_cannot_replace_a_newer_ws_candle(database, ws_closed):
+@pytest.mark.parametrize("server_time", [RC35_CLOSE + 2_242, RC35_CLOSE + 20_000])
+def test_lagging_rest_snapshot_cannot_replace_a_newer_ws_candle(database, ws_closed, server_time):
     # A forming WS update just before the close is newer than the lagging REST too.
     event_time = RC35_CLOSE + 97 if ws_closed else RC35_CLOSE - 300
     ws = rc35_record(rc35_ws(RC35_WS_CLOSE, closed=ws_closed, event_time=event_time))
     assert ws["status"] == "selected"
-    # Requested after the WS observation was recorded, as in RC 35.
+    # Requested after the WS observation was recorded, as in RC 35: still
+    # settling (pending), or past the settle margin but behind the WS close.
     watermark = kline_sources.rest_watermark()
-    lagging = rc35_rest(RC35_REST_LAGGING, server_time=RC35_CLOSE + 2_242)
-    assert lagging.data["is_closed"] is True
+    lagging = rc35_rest(RC35_REST_LAGGING, server_time=server_time)
+    assert lagging.data["is_closed"] is (server_time >= RC35_SETTLED)
     assert rc35_record(lagging, watermark)["status"] == "stale"
     head = kline_sources.latest(RC35, RC35_OPEN)
     assert (head["revision"], head["source"], head["envelope"]["trades"]) == (1, "websocket", 1987)
-    # Once REST has caught up it confirms the WS close without a revision (and
+    # Once REST has settled it confirms the WS close without a revision (and
     # only closes a forming head).
-    caught_up = rc35_record(rc35_rest(RC35_WS_CLOSE, server_time=RC35_CLOSE + 5_000),
+    caught_up = rc35_record(rc35_rest(RC35_WS_CLOSE, server_time=RC35_SETTLED),
                             kline_sources.rest_watermark())
     assert caught_up["status"] == "selected"
     assert caught_up["ref"]["revision"] == (1 if ws_closed else 2)
@@ -167,7 +173,7 @@ def test_lagging_rest_snapshot_cannot_replace_a_newer_ws_candle(database, ws_clo
 def test_rest_ahead_of_ws_or_after_close_lag_still_revises_the_candle(database):
     rc35_record(rc35_ws(RC35_WS_CLOSE))
     ahead = rc35_row("59631.10", "60.800", "3624740.00000", 1990, "31.483", "1876886.74380")
-    revised = rc35_record(rc35_rest(ahead, server_time=RC35_CLOSE + 2_242),
+    revised = rc35_record(rc35_rest(ahead, server_time=RC35_SETTLED),
                           kline_sources.rest_watermark())
     assert revised["status"] == "selected" and revised["ref"]["revision"] == 2
     # Past the REST cache lag a lower snapshot is an exchange correction again.
@@ -175,6 +181,46 @@ def test_rest_ahead_of_ws_or_after_close_lag_still_revises_the_candle(database):
     corrected = rc35_record(late, kline_sources.rest_watermark())
     assert corrected["status"] == "selected" and corrected["ref"]["revision"] == 3
     assert kline_sources.latest(RC35, RC35_OPEN)["envelope"]["trades"] == 1960
+
+
+# RC 35 recheck (9d23e5f0a): BTCUSDT USD-M 1m 13:44 UTC with no WS close (the
+# stream was reconnecting). REST with the exchange clock 3.4 s past the close
+# served 2203 of the final 2264 trades; a later REST read had the final candle.
+RC35B_OPEN = 1795527840000
+RC35B_CLOSE = RC35B_OPEN + 59_999
+
+
+def rc35b_row(close, volume, quote, trades, taker_base, taker_quote):
+    return [RC35B_OPEN, "60140.80", "60143.20", "60113.20", close, volume, RC35B_CLOSE,
+            quote, trades, taker_base, taker_quote, "0"]
+
+
+RC35B_LAGGING = rc35b_row("60141.80", "41.236", "2479434.27700", 2203, "21.023", "1264063.16110")
+RC35B_FINAL = rc35b_row("60136.40", "45.885", "2759032.72410", 2264, "21.024", "1264123.29810")
+
+
+def test_rest_only_close_is_pending_until_settled_and_never_revised(database):
+    lagging = rc35_rest(RC35B_LAGGING, server_time=RC35B_CLOSE + 3_407)
+    assert lagging.data["is_closed"] is False
+    assert lagging.data["close_evidence"] == "rest_server_time_pending"
+    assert rc35_record(lagging, kline_sources.rest_watermark())["status"] == "selected"
+    head = kline_sources.latest(RC35, RC35B_OPEN)
+    # A pending head is never projected as a closed canonical candle.
+    assert (head["is_closed"], head["envelope"]["trades"]) == (0, 2203)
+    with closing(klines_repo._connect()) as conn, conn:
+        assert kline_sources.filter_projection_rows(
+            conn, [{name: lagging.data[name] for name in kline_sources._VALUES}],
+            exchange="binance", market_type="futures", symbol="BTCUSDT", interval="1m",
+            native_identity=True) == []
+    # The first settled read closes the candle with the final values...
+    final = rc35_rest(RC35B_FINAL, server_time=RC35B_CLOSE + BINANCE_REST_SETTLE_MS + 1)
+    closed = rc35_record(final, kline_sources.rest_watermark())
+    assert final.data["is_closed"] is True and closed["status"] == "selected"
+    head = kline_sources.latest(RC35, RC35B_OPEN)
+    assert (head["is_closed"], head["envelope"]["trades"]) == (1, 2264)
+    # ...and a later read of the same candle does not revise it.
+    again = rc35_rest(RC35B_FINAL, server_time=RC35B_CLOSE + 70_000)
+    assert rc35_record(again, kline_sources.rest_watermark())["ref"] == closed["ref"]
 
 
 def test_pending_delivery_ack_is_revision_scoped(database):

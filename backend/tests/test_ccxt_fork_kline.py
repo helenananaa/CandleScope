@@ -21,6 +21,7 @@ from app.data_engine.ingestion.models import (
 )
 from app.exchanges.ccxt_ext.binance_usdm import CandleScopeBinanceUSDM
 from app.exchanges.ccxt_ext.primary import create_binance_ccxt_plugin
+from app.exchanges.ccxt_ext.fork_kline import BINANCE_REST_SETTLE_MS
 from app.exchanges.ccxt_ext.profiles.binance_usdm import BinanceUsdmCcxtProfile
 
 MARKET = dict(
@@ -53,6 +54,8 @@ ROW = [
 DESCRIPTOR = StreamDescriptor(
     "BTCUSDT", StreamType.KLINE, interval="1M", market_type="futures"
 )
+# The first exchange clock at which REST may report ROW as a final candle.
+SETTLED = ROW[6] + BINANCE_REST_SETTLE_MS + 1
 FRAME = dict(
     e="kline",
     E=1772323200001,
@@ -201,12 +204,21 @@ def test_ws_forming_candle_is_not_promoted_by_local_clock():
 
 
 def test_rest_finality_uses_pre_request_exchange_clock_when_present():
+    from app.exchanges.ccxt_ext.fork_kline import BINANCE_REST_SETTLE_MS, rest_payload_pending
+
     payload = fork_exchange().parse_candlescope_kline(ROW, MARKET, "1M")
     payload["_source_rest_server_time_ms"] = ROW[6]
     assert not parse(payload, received=ROW[6] + 86400000).data["is_closed"]
-    payload["_source_rest_server_time_ms"] = ROW[6] + 1
+    # RC 35: just past the close the REST cache can still serve the pre-close
+    # snapshot, so the candle stays pending until it has settled.
+    for observed in (ROW[6] + 1, ROW[6] + 3_407, ROW[6] + BINANCE_REST_SETTLE_MS):
+        payload["_source_rest_server_time_ms"] = observed
+        event = parse(payload, received=ROW[6] + 86400000)
+        assert event.data["is_closed"] is False and rest_payload_pending(payload)
+        assert event.data["close_evidence"] == "rest_server_time_pending"
+    payload["_source_rest_server_time_ms"] = ROW[6] + BINANCE_REST_SETTLE_MS + 1
     event = parse(payload, received=ROW[6] - 86400000)
-    assert event.data["is_closed"]
+    assert event.data["is_closed"] and not rest_payload_pending(payload)
     assert event.data["close_evidence"] == "rest_server_time_elapsed"
 
 
@@ -254,7 +266,7 @@ def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch, tm
 
     exchange.fapiPublicGetKlines = fetch
     async def server_time(params):
-        return ROW[6] + 1
+        return SETTLED
     exchange.fetch_time = server_time
 
     class Pool:
@@ -366,7 +378,7 @@ def test_competing_deferred_pages_reuse_proven_clock_without_losing_their_turn(m
         clocks.append(params)
         if len(clocks) == 1:
             admission.protect(second, quota.bucket_key)
-        return ROW[6] + 1
+        return SETTLED
     async def fetch(params):
         await physical('/fapi/v1/klines')
         pages.append(params)
@@ -415,11 +427,11 @@ def test_snapshot_clock_proof_respects_market_and_complete_calendar_bucket():
     calls = []
     async def clock(params):
         calls.append(params)
-        return ROW[6] + 1
+        return SETTLED
     exchange = SimpleNamespace(fetch_time=clock)
     req = TransportRequest(DESCRIPTOR, end_ms=ROW[6])
     async def run():
-        assert await _binance_snapshot_time(exchange, req, futures=True) == ROW[6] + 1
+        assert await _binance_snapshot_time(exchange, req, futures=True) == SETTLED
         # Both the month's last millisecond and an earlier timestamp in the
         # same month are bounded by the same proven calendar close.
         await _binance_snapshot_time(exchange, replace(req, end_ms=ROW[0]), futures=True)
@@ -436,5 +448,10 @@ def test_snapshot_clock_proof_respects_market_and_complete_calendar_bucket():
         exchange._candlescope_snapshot_times['futures'] = ROW[6]
         await _binance_snapshot_time(exchange, req, futures=True)
         assert len(calls) == 8
+        # A clock past the close but inside the REST settle margin proves the
+        # bucket closed, not final: reusing it would keep the candle pending.
+        exchange._candlescope_snapshot_times['futures'] = SETTLED - 1
+        await _binance_snapshot_time(exchange, req, futures=True)
+        assert len(calls) == 9
         assert set(exchange._candlescope_snapshot_times) == {'spot', 'futures'}
     asyncio.run(run())
