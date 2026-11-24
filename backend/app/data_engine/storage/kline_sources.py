@@ -135,17 +135,62 @@ def _head(conn, key, opened):
     ).fetchone()
 
 
+_CUMULATIVE_DECIMALS = (
+    "volume",
+    "quoteVolume",
+    "takerBuyBaseVolume",
+    "takerBuyQuoteVolume",
+)
+# Binance REST closes a candle by exchange clock alone (``rest_close_time``),
+# but its kline cache can still serve the pre-close snapshot for a few seconds
+# after that (RC 35: 3 of 5 just-closed BTCUSDT 1m bars, 2-4 s after close).
+# Within this window a REST snapshot that is behind the selected observation
+# is older than it; after it, a difference is an exchange revision again.
+REST_CLOSE_LAG_MS = 60_000
+
+
+def _behind(old: dict, new: dict) -> bool:
+    """Cumulative candle counters never decrease within one exchange record."""
+    for name in _CUMULATIVE_DECIMALS:
+        if (
+            new.get(name) is not None
+            and old.get(name) is not None
+            and Decimal(new[name]) < Decimal(old[name])
+        ):
+            return True
+    return (
+        new.get("trades") is not None
+        and old.get("trades") is not None
+        and new["trades"] < old["trades"]
+    )
+
+
+def _rest_snapshot_is_older(previous, event, value_hash) -> bool:
+    if previous["value_hash"] == value_hash:
+        return False
+    snapshot = event.data["source_candle"]
+    server_time = snapshot.get("_source_rest_server_time_ms")
+    close_time = snapshot.get("closeTime")
+    if type(server_time) is not int or type(close_time) is not int:
+        return False
+    if server_time - close_time > REST_CLOSE_LAG_MS:
+        return False
+    return _behind(json.loads(previous["envelope_json"]), snapshot)
+
+
 def _decision(previous, event, value_hash, watermark):
     if previous is None:
         return "selected"
     if previous["is_closed"] and not event.data["is_closed"]:
         return "stale"
     if event.source != DataSource.WEBSOCKET:
-        return (
-            "selected"
-            if watermark is not None and previous["observation_id"] <= watermark
-            else "stale"
-        )
+        if watermark is None or previous["observation_id"] > watermark:
+            return "stale"
+        # Requested after the selected observation is not the same as newer
+        # than it: a lagging REST cache must not replace a WS x=true close.
+        if _rest_snapshot_is_older(previous, event, value_hash):
+            return "stale"
+        return "selected"
     source_time = (
         previous["ws_event_time"]
         if event.data["source_candle"].get("eventTime") is not None
@@ -165,27 +210,10 @@ def _decision(previous, event, value_hash, watermark):
         and previous["value_hash"] != value_hash
     ):
         return "reconcile"
-    if not event.data["is_closed"]:
-        old = json.loads(previous["envelope_json"])
-        new = event.data["source_candle"]
-        for name in (
-            "volume",
-            "quoteVolume",
-            "takerBuyBaseVolume",
-            "takerBuyQuoteVolume",
-        ):
-            if (
-                new.get(name) is not None
-                and old.get(name) is not None
-                and Decimal(new[name]) < Decimal(old[name])
-            ):
-                return "stale"
-        if (
-            new.get("trades") is not None
-            and old.get("trades") is not None
-            and new["trades"] < old["trades"]
-        ):
-            return "stale"
+    if not event.data["is_closed"] and _behind(
+        json.loads(previous["envelope_json"]), event.data["source_candle"]
+    ):
+        return "stale"
     return "selected"
 
 
