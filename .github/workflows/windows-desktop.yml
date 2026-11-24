@@ -1,0 +1,167 @@
+name: Windows desktop
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/windows-desktop.yml"]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - ".github/workflows/windows-desktop.yml"
+      - "frontend/desktop/**"
+      - "frontend/package*.json"
+      - "frontend/vite.config.js"
+      - "frontend/public/brand/candlescope-app-icon-1024.png"
+      - "frontend/scripts/*desktop*"
+      - "frontend/scripts/prepare-control-adapter.mjs"
+      - "frontend/scripts/prepare-mihomo.py"
+      - "frontend/scripts/vite-loopback-alias.mjs"
+      - "backend/app/core/version.py"
+      - "backend/native/**"
+      - "backend/requirements*.txt"
+      - "backend/ccxt-fork.lock.json"
+      - "backend/scripts/install_ccxt_fork.py"
+      - "packages/candlescope-control/**"
+  workflow_dispatch:
+  # The desktop release workflow builds its Windows installer with this same job.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A release run calls this workflow; its own name keeps it from cancelling a PR or main run.
+  group: ${{ github.workflow }}-windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: package (x64)
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    env:
+      EXPECTED_ARCH: x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the PR head itself so checks and artifact receipts name the same commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+      - name: Verify native architecture
+        run: node -e 'if (process.platform !== "win32" || process.arch !== process.env.EXPECTED_ARCH) throw Error("Wrong native runner architecture")'
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+      - name: Install and verify locked Electron distribution
+        timeout-minutes: 8
+        run: |
+          # Electron's npm installer verifies the ZIP against checksums shipped in the locked package.
+          attempt=1
+          until node node_modules/electron/install.js; do
+            if (( attempt == 3 )); then exit 1; fi
+            sleep "$((5 * attempt))"
+            attempt=$((attempt + 1))
+          done
+          version=$(node -p 'require("./package-lock.json").packages["node_modules/electron"].version')
+          ELECTRON_RUN_AS_NODE=1 "$(node -p 'require("electron")')" -e '
+            if (process.arch !== process.env.EXPECTED_ARCH || process.versions.electron !== process.argv[1]) {
+              throw new Error("Installed Electron does not match the locked version and runner architecture");
+            }
+          ' "$version"
+      - name: Check desktop host on Windows
+        run: npm run test:desktop
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and verify immutable fork wheel
+        run: python ../backend/scripts/install_ccxt_fork.py --build-only
+      - name: Package Windows app and installer
+        run: |
+          wheels=(../backend/.cache/ccxt-fork/*/ccxt-*.whl)
+          test "${#wheels[@]}" -eq 1
+          CANDLESCOPE_CCXT_WHEEL="${wheels[0]}" npm run desktop:package:win -- --x64
+      - name: Check sidecar and retired runtimes with bundled Python
+        working-directory: backend
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
+          export CANDLESCOPE_MIHOMO="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/mihomo/mihomo.exe"
+          test -f "$CANDLESCOPE_MIHOMO"
+          ../frontend/.desktop-runtime/runtime/python/python.exe -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_desktop_sidecar.py \
+            tests/test_pyne_removal.py \
+            --junitxml=../output/windows-bundled-regression.xml
+      - name: Install silently into a relocated folder
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $installer = Resolve-Path "desktop-dist/CandleScope-$version-windows-x64-setup.exe"
+          $target = Join-Path $env:RUNNER_TEMP "CandleScope Relocated"
+          # A profile from an earlier install must survive the uninstall at the end.
+          $data = Join-Path $env:APPDATA "CandleScope Replay\data"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data "keep-after-uninstall.txt") "user data"
+          # NSIS reads /D= to the end of the command line, so it is last and unquoted.
+          $process = Start-Process -FilePath $installer -ArgumentList "/S", "/currentuser", "/D=$target" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          if (-not (Test-Path (Join-Path $target "CandleScope.exe"))) { throw "CandleScope.exe was not installed in $target" }
+          if (-not (Test-Path (Join-Path $target "resources\python-runtime\python\python.exe"))) { throw "Bundled Python is missing" }
+      - name: Install isolated smoke test tooling
+        run: npm install --prefix "$RUNNER_TEMP/desktop-smoke" --ignore-scripts --no-package-lock playwright-core@1.56.1
+      - name: Launch installed app and restart with bundled backend
+        timeout-minutes: 10
+        run: >-
+          node scripts/desktop-package-smoke.mjs
+          --executable "$RUNNER_TEMP/CandleScope Relocated/CandleScope.exe"
+          --playwright-module "$RUNNER_TEMP/desktop-smoke/node_modules/playwright-core"
+          --out ../output/windows-package-smoke
+      - name: Uninstall silently and keep user data
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "CandleScope Relocated"
+          # _?= runs the uninstaller in place so -Wait covers the whole uninstall.
+          $process = Start-Process -FilePath (Join-Path $target "Uninstall CandleScope.exe") -ArgumentList "/S", "/currentuser", "_?=$target" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Uninstaller exited with $($process.ExitCode)" }
+          if (Test-Path (Join-Path $target "CandleScope.exe")) { throw "The uninstaller left CandleScope.exe behind" }
+          if (-not (Test-Path (Join-Path $env:APPDATA "CandleScope Replay\data\keep-after-uninstall.txt"))) { throw "The uninstaller removed user data" }
+      - name: Record checksums and source identity
+        run: |
+          node scripts/record-desktop-artifacts.mjs
+          cat desktop-dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo 'Unsigned installer: no code signing certificate. Only the Desktop release workflow publishes a draft GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload verified installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: CandleScope-windows-x64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            frontend/desktop-dist/*-setup.exe
+            frontend/desktop-dist/SHA256SUMS
+            frontend/desktop-dist/build-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-evidence-x64-${{ github.run_attempt }}
+          path: |
+            output/windows-package-smoke/**
+            output/windows-bundled-regression.xml
+            frontend/desktop-dist/builder-debug.yml
+          if-no-files-found: ignore
+          retention-days: 14

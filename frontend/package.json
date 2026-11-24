@@ -68,8 +68,17 @@
     "win": {
       "icon": "public/brand/candlescope-app-icon-1024.png",
       "target": [
-        "dir"
-      ]
+        "nsis"
+      ],
+      "artifactName": "${productName}-${version}-windows-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "CandleScope",
+      "artifactName": "${productName}-${version}-windows-${arch}-setup.${ext}"
     },
     "beforePack": "scripts/check-desktop-runtime.cjs",
     "afterPack": "scripts/compile-desktop-python.cjs",
@@ -162,6 +171,7 @@
     "test:drawing": "node scripts/run-frontend-tests.mjs \"src/features/drawings/**/*.test.{ts,tsx}\"",
     "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs",
     "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never",
+    "desktop:package:win": "node scripts/package-desktop.mjs --distributable --win nsis --publish never",
     "check:styles": "node scripts/check-style-metrics.mjs --strict",
     "check:css-layers": "node scripts/check-css-layers.mjs",
     "css:cascade": "node scripts/css-cascade-check.mjs",
