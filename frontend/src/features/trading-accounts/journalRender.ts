@@ -94,7 +94,7 @@ export function autoFieldText(
     case "excursion":
       if (!excursion?.available) return "—";
       return t("trading.auto.excursionValue", {
-        mfe: formatPrice(excursion.mfePrice), mae: formatPrice(excursion.maePrice),
+        mfe: formatAmount(excursion.mfePrice), mae: formatAmount(excursion.maePrice),
         mfePct: excursion.mfePct ?? "—", maePct: excursion.maePct ?? "—", interval: excursion.interval,
       }) + (excursion.mfeR ? ` · ${excursion.mfeR}R / ${excursion.maeR}R` : "");
     case "costs":
