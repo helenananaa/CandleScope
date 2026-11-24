@@ -181,13 +181,21 @@ def test_cancellation_waits_for_physical_sqlite_work_before_releasing_page_admis
     asyncio.run(check())
 
 
-@pytest.mark.parametrize('mutation', ['delete','amend'])
+@pytest.mark.parametrize('mutation', ['delete','amend-written','amend-ahead'])
 def test_external_change_between_pages_does_not_grant_old_request_more_write_permission(mixed_query,monkeypatch,mutation):
+    """Each page-sized task holds a range view of its own window.
+
+    A deletion anywhere in the series withdraws every window. An amendment
+    withdraws only the window it lands in: an already-written bar keeps the
+    amendment while later, unchanged windows still commit; a bar landing in a
+    later window rejects that window's page and keeps the other writer's bar.
+    """
     from app.core.executors import run_storage
     from app.data_engine.storage.revisions import acquisition_scope
     engine, transport = native_engine(mixed_query)
     original = engine._storage.upsert_bars
     once = True
+    amended = 100 * 60_000 if mutation == 'amend-ahead' else 0
     async def mutate(*args,**kwargs):
         nonlocal once
         result = await original(*args,**kwargs)
@@ -198,20 +206,30 @@ def test_external_change_between_pages_does_not_grant_old_request_more_write_per
                     if mutation == 'delete':
                         mixed_query.storage.delete_bars('BTCUSDT','1m',0,0,market_type='futures')
                     else:
-                        rows = mixed_query.storage.query_bars('BTCUSDT','1m',0,0,market_type='futures')
-                        rows[0]['volume'] = 91
-                        mixed_query.storage.upsert_bars('BTCUSDT','1m',rows,
+                        row = dict(mixed_query.storage.query_bars('BTCUSDT','1m',0,0,market_type='futures')[0])
+                        row.update(open_time=amended, close_time=amended + 59_999, volume=91)
+                        mixed_query.storage.upsert_bars('BTCUSDT','1m',[row],
                             source='data_manager_amended',market_type='futures')
             await run_storage(external)
         return result
     monkeypatch.setattr(engine._storage,'upsert_bars',mutate)
     async def check():
         report = await repair(engine)
-        assert report.status == BackfillStatus.PARTIAL and report.reconcile_result.write_errors
         rows = mixed_query.storage.query_bars('BTCUSDT','1m',0,129*60_000,market_type='futures')
-        assert len(rows) == (31 if mutation == 'delete' else 32)
-        if mutation == 'delete': assert all(row['open_time'] != 0 for row in rows)
-        else: assert next(row for row in rows if row['open_time'] == 0)['volume'] == 91
+        if mutation == 'amend-written':
+            assert report.status == BackfillStatus.COMPLETED, report.errors
+            assert len(rows) == 130
+        else:
+            assert report.status == BackfillStatus.PARTIAL and report.reconcile_result.write_errors
+        if mutation == 'delete':
+            assert len(rows) == 31 and all(row['open_time'] != 0 for row in rows)
+        else:
+            assert next(row for row in rows if row['open_time'] == amended)['volume'] == 91
+        if mutation == 'amend-ahead':
+            # Only the page whose window changed is lost (96..127 but the amended bar).
+            assert len(rows) == 130 - 31
+            assert not [row for row in rows if 96 * 60_000 <= row['open_time'] <= 127 * 60_000
+                        and row['open_time'] != amended]
         assert mixed_query.memory_budget.snapshot()['reserved_bytes'] == 0
     asyncio.run(check())
 

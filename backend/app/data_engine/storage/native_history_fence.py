@@ -3,7 +3,8 @@
 This is an optimistic range read, not a relaxation for derived calculations.
 The existing native 1s sources, trusted Binance spot gap repairs and
 source-receipted OKX spot native repairs qualify. So do the exact windows a
-routed Binance USD-M history run writes: its daily archive objects and the
+Binance USD-M history run writes: a plain REST task's own window, or for a
+routed task its archive objects (daily, or monthly for deep requests) and the
 REST edges around them.
 There is no new durable mutation log: canonical rows and the existing durable
 deletion watermark remain the authority, including writers in other processes.
@@ -16,9 +17,11 @@ from .revisions import IDENTITY_COLUMNS, series_values, series_change, StaleAcqu
 
 MAX_WINDOWS = 32
 MAX_SLOTS = 8192
-# One routed run imports whole daily archive objects for its parent demand.
+# A routed run imports whole archive objects for its parent demand. A monthly
+# object holds up to 31 days of 1m candles, more than one REST window may span.
+MAX_ARCHIVE_SLOTS = 31 * 1_440
 MAX_PLANNED_WINDOWS = 64
-MAX_PLANNED_SLOTS = 4 * MAX_SLOTS
+MAX_PLANNED_SLOTS = 2 * MAX_ARCHIVE_SLOTS
 FIELDS = ("open_time", "close_time", "open", "high", "low", "close", "volume",
           "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source")
 
@@ -35,8 +38,11 @@ def _window_slots(task):
     return _native_grid_slots(task, metadata)
 
 
-def _native_grid_slots(task, metadata):
-    """Slots of a default-identity native window that starts on its grid."""
+def _native_grid_slots(task, metadata, limit=MAX_SLOTS):
+    """Slots of a default-identity native window that starts on its grid.
+
+    Counting stops past ``limit``: a larger result only means "too large".
+    """
     from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
     from app.data_engine.series_identity import identity_from_metadata
 
@@ -53,20 +59,20 @@ def _native_grid_slots(task, metadata):
     cursor, count = route.spec.floor_ms(task.start_ms), 0
     if cursor != task.start_ms:
         return None
-    while cursor <= task.end_ms and count <= MAX_SLOTS:
+    while cursor <= task.end_ms and count <= limit:
         count += 1
         cursor = route.spec.next_ms(cursor)
     return count
 
 
-def fingerprint(conn, key, start, end):
+def fingerprint(conn, key, start, end, budget=MAX_SLOTS):
     digest = hashlib.sha256()
     rows = conn.execute("SELECT " + ",".join(FIELDS) + " FROM klines WHERE " +
                         " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS) +
                         " AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?",
-                        (*key, start, end, MAX_SLOTS + 1))
+                        (*key, start, end, budget + 1))
     for index, row in enumerate(rows):
-        if index >= MAX_SLOTS:
+        if index >= budget:
             raise StaleAcquisition("native history view exceeds bounded row budget")
         digest.update(repr(tuple(row)).encode("utf-8"))
         digest.update(b"\n")
@@ -81,6 +87,11 @@ class NativeHistoryView:
     digest: bytes
     # Granted to one official archive object import, not to REST rows.
     archive: bool = False
+    # Rows the window may hold; an archive object may exceed one REST window.
+    budget: int = MAX_SLOTS
+
+    def fingerprint(self, conn):
+        return fingerprint(conn, self.key, self.start, self.end, self.budget)
 
     def accepts_history_receipts(self, conn, rows):
         # OKX's qualified fork journals exact native closed inputs. Only those
@@ -100,7 +111,7 @@ class NativeHistoryView:
         # Own writes never grant permission over an intervening deletion.
         if row is not None and int(row["delete_revision"]) > max(floor, scope.accepted.get(self.key, 0)):
             raise StaleAcquisition("native history was deleted after request permission")
-        if fingerprint(conn, self.key, self.start, self.end) != self.digest:
+        if self.fingerprint(conn) != self.digest:
             raise StaleAcquisition("native history window changed during acquisition")
 
 
@@ -134,14 +145,16 @@ def capture_native_history_views(store, scope, tasks):
 
 
 def capture_planned_write_views(store, scope, windows):
-    """Views for the windows a routed Binance USD-M history run will write.
+    """Views for the windows a Binance USD-M history run will write.
 
-    Archive routing replaces a page-bounded task with whole daily archive
-    objects and REST edges, so the task's own window does not describe what is
-    written. The fetcher reports those windows once routing is known and before
-    any of their data is used. Each keeps the proof of every native view:
-    unchanged content and no deletion since capture. Other markets, custom
-    identities, derived intervals and oversized windows stay strict.
+    A plain REST task writes its own window. Archive routing replaces a
+    page-bounded task with whole archive objects and REST edges, so a routed
+    task's own window does not describe what is written. The fetcher reports
+    the windows once routing is known and before any of their data is used.
+    Each keeps the proof of every native view: unchanged content and no
+    deletion since capture. Live writes to other intervals, or to this series
+    outside the window, do not withdraw it. Other markets, custom identities,
+    derived intervals and oversized windows stay strict.
     """
     if store is None or scope is None:
         return
@@ -152,8 +165,9 @@ def capture_planned_write_views(store, scope, windows):
         if (window.exchange != "binance" or window.market_type != "futures"
                 or not isinstance(start, int) or not isinstance(end, int) or start > end):
             continue
-        count = _native_grid_slots(window, getattr(window, "metadata", {}))
-        if count is None or count > MAX_SLOTS:
+        limit = MAX_ARCHIVE_SLOTS if window.archive else MAX_SLOTS
+        count = _native_grid_slots(window, getattr(window, "metadata", {}), limit)
+        if count is None or count > limit:
             continue
         item = (series_values(window.symbol, window.interval, window.exchange, window.market_type),
                 start, end, bool(window.archive))
@@ -166,8 +180,11 @@ def capture_planned_write_views(store, scope, windows):
         return
     with scope.lock, closing(store.connect()) as conn, conn:
         conn.execute("BEGIN")
-        views = [NativeHistoryView(key, start, end, fingerprint(conn, key, start, end), archive)
-                 for key, start, end, archive in selected]
+        views = []
+        for key, start, end, archive in selected:
+            budget = MAX_ARCHIVE_SLOTS if archive else MAX_SLOTS
+            views.append(NativeHistoryView(key, start, end, fingerprint(conn, key, start, end, budget),
+                                           archive, budget))
         # Do not renew a persisted/manual request's deletion permission here.
         for view in views:
             view.check(conn, scope)

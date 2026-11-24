@@ -566,7 +566,7 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         # revisions that happened while REST was in flight.
         if before is not None:
             accepted = {key: rev for key, rev in accepted.items() if before.get(key) != rev}
-        digest = fingerprint(conn, values, view.start, view.end) if view else None
+        digest = view.fingerprint(conn) if view else None
         target_digests = [(target, fingerprint(conn, target.key, target.start, target.end))
                           for target in targets]
         if commit:

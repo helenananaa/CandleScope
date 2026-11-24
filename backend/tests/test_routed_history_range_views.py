@@ -2,7 +2,8 @@
 
 A cold chart keeps writing to the same symbol while a routed run downloads its
 archive days and REST edges. The run may keep what it fetched when its own
-windows are unchanged and undeleted, and only then.
+windows are unchanged and undeleted, and only then. Plain REST tasks and
+monthly archive objects are covered in test_futures_history_live_writes.py.
 """
 from __future__ import annotations
 
@@ -204,11 +205,13 @@ def test_fetcher_reports_owned_archive_days_and_rest_edges():
     refs = (ref(0), ref(1))
     plan = ArchiveRoutePlan({routed.task_key: refs}, {}, {"day-0": routed.task_key, "day-1": "a sibling task"})
     reported = [(item.start_ms, item.end_ms, item.archive) for item in planned_write_windows([routed, plain], plan)]
-    # Both edges are REST; only the object this task imports is an archive window.
+    # Both edges are REST; only the object this task imports is an archive
+    # window. A task that is not routed writes its own window over REST.
     assert reported == [
         (EDGE[0], EDGE[1], False),
         (DAY0 + 2 * DAY, DAY0 + 2 * DAY + 30 * MINUTE, False),
         (DAY0, DAY0 + DAY - 1, True),
+        (plain.start_ms, plain.end_ms, False),
     ]
     assert all((item.exchange, item.market_type, item.symbol, item.interval) == ("binance", "futures", "BTCUSDT", "1m")
                for item in planned_write_windows([routed], plan))
