@@ -66,27 +66,42 @@ class ContinuousInputs:
         self.datasets=LocalDatasetService(self.root/"datasets")
 
     def _own_directory(self):
+        from app.core.profile_relocation import check_marker
         reject_path_links(self.root)
         marker=self.root/"owner.json"
         reject_path_links(marker)
-        expected={"schema":"candlescope.continuous-private-inputs/1","database":str(self.store.path.resolve())}
+        fields={"schema":"candlescope.continuous-private-inputs/1"}
+        database=self.store.path.resolve()
         if self.root.exists():
             if not marker.is_file():
                 if any(self.root.iterdir()):raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Refuse to adopt unmarked existing input data")
             else:
                 try:actual=json.loads(marker.read_text())
                 except (OSError,ValueError) as error:raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Private input ownership receipt is unavailable") from error
-                if actual!=expected:raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Private inputs belong to another profile")
+                # The receipt names the database by its own id: a moved,
+                # copied or restored data folder keeps its private inputs.
+                check=check_marker(actual,fields,database=database,database_id=self.store.identity(),
+                    directory=self.root.resolve())
+                if not check.owned:
+                    raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP",
+                        f"Private inputs in {self.root} belong to another profile ({actual.get('database') if isinstance(actual,dict) else 'unknown'})")
+                recorded=actual.get("database_id")
+                identity=self.store.identity(create=recorded or True)
+                if check.relocated or recorded!=identity:
+                    self._write_marker({**fields,"database":str(database),"database_id":identity})
                 return
         self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         # A crash before replace leaves the private root empty, so ownership
         # can be established on restart without adopting an unmarked tree.
+        self._write_marker({**fields,"database":str(database),"database_id":self.store.identity(create=True)})
+
+    def _write_marker(self,payload):
         fd,name=tempfile.mkstemp(prefix=".continuous-input-owner-",dir=self.root.parent)
         temporary=Path(name)
         try:
             with os.fdopen(fd,"w",encoding="utf-8") as output:
-                json.dump(expected,output,sort_keys=True);output.flush();os.fsync(output.fileno())
-            temporary.replace(marker)
+                json.dump(payload,output,sort_keys=True);output.flush();os.fsync(output.fileno())
+            temporary.replace(self.root/"owner.json")
         finally:temporary.unlink(missing_ok=True)
 
     def _size(self,path):

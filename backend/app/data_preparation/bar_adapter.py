@@ -319,20 +319,26 @@ class BarPreparationAdapter:
         finally:
             lease.release()
 
+    def _write_owner(self, marker, binding):
+        staging = self.root / ("." + uuid.uuid4().hex + ".tmp")
+        try:
+            with staging.open("x", encoding="utf-8") as stream:
+                json.dump(binding, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(staging, marker)
+        finally:
+            staging.unlink(missing_ok=True)
+
     def _reconcile_cache_locked(self, repository):
-        owner = str(repository.path.resolve())
+        from app.core.profile_relocation import check_owner, relocation_prefixes
+        database = repository.path.resolve()
+        owner = str(database)
         marker = self.root / ".preparation-owner"
         if not marker.exists():
+            identity = repository.database_identity(create=True)
             existing_names = [path.name for path in self.root.iterdir()]
-            staging = self.root / ("." + uuid.uuid4().hex + ".tmp")
-            try:
-                with staging.open("x", encoding="utf-8") as stream:
-                    json.dump({"database": owner, "legacy_files": existing_names}, stream)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(staging, marker)
-            finally:
-                staging.unlink(missing_ok=True)
+            self._write_owner(marker, {"database": owner, "database_id": identity, "legacy_files": existing_names})
             # An older/unclassified directory may have another database's
             # files. Establish ownership without deleting anything on adoption.
             self._register_legacy_cache(repository, existing_names)
@@ -342,12 +348,30 @@ class BarPreparationAdapter:
                 binding = json.loads(marker.read_text(encoding="utf-8"))
             except (ValueError, OSError) as exc:
                 raise PreparationError("CACHE_OWNER_UNKNOWN", "Cache directory ownership could not be verified") from exc
-            if not isinstance(binding, dict) or binding.get("database") != owner:
-                raise PreparationError("CACHE_OWNER_MISMATCH", "Cache directory belongs to another preparation database")
+            if not isinstance(binding, dict):
+                raise PreparationError("CACHE_OWNER_UNKNOWN", "Cache directory ownership could not be verified")
             legacy_files = binding.get("legacy_files")
             if not isinstance(legacy_files, list) or not all(isinstance(name, str) for name in legacy_files):
                 raise PreparationError("CACHE_OWNER_UNKNOWN", "Cache directory ownership could not be verified")
             legacy_files = set(legacy_files)
+            # The marker names the database by its own id. A data folder that
+            # was moved, copied or restored elsewhere keeps owning its cache.
+            recorded_id = binding.get("database_id")
+            check = check_owner(binding.get("database"), recorded_id, database=database,
+                                database_id=repository.database_identity(), directory=self.root.resolve())
+            if not check.owned:
+                raise PreparationError(
+                    "CACHE_OWNER_MISMATCH",
+                    f"Prepared inputs in {self.root} belong to another preparation database "
+                    f"({binding.get('database')}), not {owner}. Nothing in it was changed.")
+            identity = repository.database_identity(create=recorded_id or True)
+            if check.relocated:
+                prefixes = relocation_prefixes(check.previous, database)
+                if prefixes is not None:
+                    repository.relocate_paths(*prefixes)
+            if check.relocated or recorded_id != identity:
+                self._write_owner(marker, {"database": owner, "database_id": identity,
+                                           "legacy_files": sorted(legacy_files)})
         self._register_legacy_cache(repository, legacy_files)
         retained = {receipt.get("sha256") for receipt in repository.retained_cache_receipts()}
         removed = 0

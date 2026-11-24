@@ -177,6 +177,23 @@ class ContinuousStrategyStore:
             self.closed = True
             raise
 
+    def identity(self, *, create=None):
+        """This database's own id; ``create`` (an id or True) assigns one when it has none.
+
+        Private input and repair folders name this id rather than the file's
+        absolute path, so a moved or restored data folder still owns them. The
+        table sits outside the versioned schema, like ``run_catalog``.
+        """
+        from app.core.profile_relocation import new_identity, valid_identity
+        with self._transaction():
+            self.db.execute("CREATE TABLE IF NOT EXISTS store_identity ("
+                            "singleton INTEGER PRIMARY KEY CHECK(singleton=1), store_id TEXT NOT NULL)")
+            if create:
+                preferred = create if valid_identity(create) else new_identity()
+                self.db.execute("INSERT OR IGNORE INTO store_identity VALUES (1,?)", (preferred,))
+            row = self.db.execute("SELECT store_id FROM store_identity WHERE singleton=1").fetchone()
+        return None if row is None else str(row[0])
+
     @contextmanager
     def _transaction(self):
         with self.lock:
