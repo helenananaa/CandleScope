@@ -268,8 +268,8 @@ class HistoricalFetcher:
                 backpressure and receive FetchReceipt instead of payloads.
                 Archive/unqualified/overridden routes retain FetchResult.
             on_full_task: Admit a fallback task before its payload is fetched.
-            on_write_windows: Receive the windows archive-routed tasks will
-                write, after routing and before any of their data is used.
+            on_write_windows: Receive the windows the tasks will write, after
+                routing and before any of their data is used.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -1394,7 +1394,11 @@ class HistoricalFetcher:
 
 @dataclass(frozen=True, slots=True)
 class PlannedWriteWindow:
-    """One window a routed task will write: an owned archive object or a REST edge."""
+    """One window a task will write.
+
+    A plain task writes its own window over REST; a routed task writes the
+    archive objects it owns and the REST edges around them.
+    """
 
     exchange: str
     market_type: str
@@ -1424,16 +1428,24 @@ def planned_write_windows(
     tasks: list[BackfillTask],
     route_plan: ArchiveRoutePlan,
 ) -> list[PlannedWriteWindow]:
-    """The windows archive-routed tasks will write, known before their data arrives."""
+    """The windows the tasks will write, known before their data arrives.
+
+    A plain REST task writes its own window. Archive routing replaces a routed
+    task's window with the archive objects it owns and the REST edges around
+    them. The storage fence decides which of these windows qualify.
+    """
     windows: list[PlannedWriteWindow] = []
     for task in tasks:
         refs = route_plan.refs_for(task)
         interval_spec = parse_interval_spec(task.interval)
-        if not refs or interval_spec is None:
+        if interval_spec is None:
             continue
-        _, uncovered = _routed_coverage(task, refs, interval_spec)
-        spans = [(start, end, False) for start, end in uncovered]
-        spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
+        if not refs:
+            spans = [(task.start_ms, task.end_ms, False)]
+        else:
+            _, uncovered = _routed_coverage(task, refs, interval_spec)
+            spans = [(start, end, False) for start, end in uncovered]
+            spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
         windows.extend(
             PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
                                int(start), int(end), archive, task.metadata)

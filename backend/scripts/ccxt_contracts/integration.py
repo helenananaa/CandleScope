@@ -28,6 +28,7 @@ def main() -> int:
         "test_interval_resolution.py", "test_interval_admission_contract.py",
         "test_oi_local_history.py",
         "test_okx_history_range_fence.py", "test_native_history_range_fence.py",
+        "test_routed_history_range_views.py", "test_futures_history_live_writes.py",
         "test_derived_history_range_fence.py", "test_second_empty_coverage_fences.py",
         "test_data_engine_phase1_boundaries.py",
         "test_kline_series_identity.py", "test_kline_source_journal.py", "test_kline_batch*.py",
