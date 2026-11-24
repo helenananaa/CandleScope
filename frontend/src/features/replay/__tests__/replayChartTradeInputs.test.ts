@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { seriesPricePrecision } from "../../../chart-adapter/mainSeriesPriceFormat.js";
+import { getLocale, setLocale } from "../../../i18n/index.js";
 import { normalizeChartAccountOverlay } from "../../chart-workspace/chartAccountOverlaySettings.js";
-import { replayChartTradeInputs } from "../replayChartTradeInputs.js";
+import { replayChartTradeInputs, replayFillMarkerText } from "../replayChartTradeInputs.js";
 import type { ReplayFill, ReplayOrder } from "../replayTypes.js";
 import type { ReplayTrainingPortfolioV1 } from "../replayV2Types.js";
 
@@ -45,4 +47,26 @@ test("chart display options and track authority gate independent overlay inputs"
   assert.deepEqual(replayChartTradeInputs(store, null, track, portfolio, undefined), empty);
   assert.deepEqual(replayChartTradeInputs(store, 2000, { ...track, adapter_session_id: "adapter-eth" }, portfolio, undefined), empty);
   assert.deepEqual(replayChartTradeInputs({ ...store, hasAuthoritativeSnapshot: false }, 2000, track, portfolio, undefined), empty);
+});
+
+test("fill marker labels round slipped fill prices to the chart's precision", () => {
+  const previous = getLocale();
+  setLocale("en");
+  try {
+    const labels = { buy: "Buy", sell: "Sell" };
+    // BTCUSDT bars carry one decimal; the chart's price scale still shows two.
+    const precision = seriesPricePrecision([{ time: 1, open: 61780.1, high: 61790.5, low: 61770, close: 61781.4 }]);
+    assert.equal(precision, 2);
+    assert.equal(
+      replayFillMarkerText({ side: "BUY", quantity: "0.1", price: "61781.37752" }, labels, precision),
+      "Buy 0.1 @ 61,781.38",
+    );
+    assert.equal(
+      replayFillMarkerText({ side: "SELL", quantity: "0.9530000000000001", price: "1698.270156" }, labels, precision),
+      "Sell 0.953 @ 1,698.27",
+    );
+    assert.equal(replayFillMarkerText({ side: "BUY", quantity: "0.1", price: "61781.37752" }, labels, 1), "Buy 0.1 @ 61,781.4");
+  } finally {
+    setLocale(previous);
+  }
 });
