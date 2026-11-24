@@ -864,6 +864,7 @@ export const tr = {
   "indicator.name.macd": "Moving Average Convergence Divergence (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Hacim (VOL)",
+  "indicator.description.vol": "Mum yönüne göre renklendirilen hacim çubukları",
   "indicator.hide": "Gizle",
   "indicator.show": "Göster",
   "indicator.viewReference": "Referans uygulamayı görüntüle",

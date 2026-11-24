@@ -1393,6 +1393,7 @@ export const zhCN = {
   "indicator.name.macd": "指数平滑异同移动平均线 (MACD)",
   "indicator.name.atr": "平均真实波幅 (ATR)",
   "indicator.name.vol": "成交量 (VOL)",
+  "indicator.description.vol": "成交量柱状图，颜色跟随 K 线涨跌",
   "indicator.hide": "隐藏",
   "indicator.show": "显示",
   "indicator.viewReference": "查看参考实现",

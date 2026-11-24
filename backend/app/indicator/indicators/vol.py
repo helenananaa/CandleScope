@@ -67,8 +67,8 @@ class VOLIndicator(Indicator):
     def get_meta(self) -> IndicatorMeta:
         return IndicatorMeta(
             name="VOL",
-            category="成交量",
-            description="成交量柱状图",
+            category="Volume",
+            description="Volume",
             pane=PaneType.VOLUME,
             overlay=False,
             precision=2,
@@ -90,14 +90,14 @@ class VOLIndicator(Indicator):
     def get_spec(cls) -> IndicatorSpec:
         return IndicatorSpec(
             name="VOL",
-            display_name="成交量",
-            description="成交量柱状图，颜色跟随K线设置",
-            category="成交量",
+            display_name="Volume",
+            description="Volume bars colored by candle direction",
+            category="Volume",
             input_specs=["volume", "close"],
             output_specs=["vol"],
             param_schema=[
-                IndicatorParam(key="up_color", label="上涨颜色", type="color", default="#22c55e"),
-                IndicatorParam(key="down_color", label="下跌颜色", type="color", default="#ef4444"),
+                IndicatorParam(key="up_color", label="Up Color", type="color", default="#22c55e"),
+                IndicatorParam(key="down_color", label="Down Color", type="color", default="#ef4444"),
             ],
             default_params={"up_color": "#22c55e", "down_color": "#ef4444"},
         )

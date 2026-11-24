@@ -864,6 +864,7 @@ export const fr = {
   "indicator.name.macd": "Convergence et divergence des moyennes mobiles (MACD)",
   "indicator.name.atr": "Amplitude réelle moyenne (ATR)",
   "indicator.name.vol": "Volume (VOL)",
+  "indicator.description.vol": "Barres de volume colorées selon le sens de la bougie",
   "indicator.hide": "Masquer",
   "indicator.show": "Afficher",
   "indicator.viewReference": "Voir l’implémentation de référence",

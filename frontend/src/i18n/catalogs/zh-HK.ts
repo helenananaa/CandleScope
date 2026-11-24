@@ -869,6 +869,7 @@ export const zhHK = {
   "indicator.name.macd": "指數平滑異同移動平均線 (MACD)",
   "indicator.name.atr": "平均真實波幅 (ATR)",
   "indicator.name.vol": "成交量 (VOL)",
+  "indicator.description.vol": "成交量柱狀圖，顏色跟隨 K 線漲跌",
   "indicator.hide": "隱藏",
   "indicator.show": "顯示",
   "indicator.viewReference": "查看參考實現",

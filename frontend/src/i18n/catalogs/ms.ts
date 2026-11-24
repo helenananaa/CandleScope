@@ -865,6 +865,7 @@ export const ms = {
   "indicator.name.macd": "Penumpuan/Pencapahan Purata Bergerak (MACD)",
   "indicator.name.atr": "Julat Benar Purata (ATR)",
   "indicator.name.vol": "Volum (VOL)",
+  "indicator.description.vol": "Bar volum berwarna mengikut arah lilin",
   "indicator.hide": "Sembunyi",
   "indicator.show": "Tunjuk",
   "indicator.viewReference": "Lihat pelaksanaan rujukan",

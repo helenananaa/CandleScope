@@ -2,6 +2,7 @@ import { t } from "../../i18n/index.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 import type { IndicatorSubPane } from "../indicators/indicatorPaneProjection.js";
 import { getBuiltinIndicatorName } from "../indicators/indicatorPayloadRuntime.js";
+import { indicatorDisplayName } from "../indicators/indicatorDisplayName.js";
 import type { ReplayIndicatorPreparation } from "./replayCanonicalIndicators.js";
 
 // These are the built-in output contracts. Script placement belongs to its
@@ -30,7 +31,7 @@ export function replayIndicatorPresentation(view: IndicatorRuntime["view"], prep
     }
     const target = BUILTIN_PANES[getBuiltinIndicatorName(indicator)];
     if (!owned.length && !indicator.lines?.length && target) {
-      panes.push({ id: `${target}-${indicator.id}`, label: indicator.name || indicator.id, lines: [],
+      panes.push({ id: `${target}-${indicator.id}`, label: indicatorDisplayName(indicator), lines: [],
         owner: { kind: "indicator", id: indicator.id }, statusText: indicator.error || computing });
     }
   }

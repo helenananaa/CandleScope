@@ -864,6 +864,7 @@ export const vi = {
   "indicator.name.macd": "Trung bình động hội tụ phân kỳ (MACD)",
   "indicator.name.atr": "Biên độ dao động thực trung bình (ATR)",
   "indicator.name.vol": "Khối lượng (VOL)",
+  "indicator.description.vol": "Cột khối lượng được tô màu theo chiều của nến",
   "indicator.hide": "Ẩn",
   "indicator.show": "Hiện",
   "indicator.viewReference": "Xem triển khai tham chiếu",

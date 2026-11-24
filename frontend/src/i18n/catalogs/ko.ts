@@ -1382,6 +1382,7 @@ export const ko = {
   "indicator.name.macd": "이동평균 수렴·확산 (MACD)",
   "indicator.name.atr": "평균 진폭 (ATR)",
   "indicator.name.vol": "거래량 (VOL)",
+  "indicator.description.vol": "캔들 방향에 따라 색이 정해지는 거래량 막대",
   "indicator.hide": "숨기기",
   "indicator.show": "표시",
   "indicator.viewReference": "참고 구현 보기",

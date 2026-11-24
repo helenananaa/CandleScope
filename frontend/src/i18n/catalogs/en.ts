@@ -1178,6 +1178,7 @@ export const en = {
   "indicator.name.macd": "Moving Average Convergence Divergence (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Volume (VOL)",
+  "indicator.description.vol": "Volume bars colored by candle direction",
   "indicator.hide": "Hide",
   "indicator.show": "Show",
   "indicator.viewReference": "View reference implementation",

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Button, EmptyState, IconButton, SegmentedControl, Select } from "../../components/ui/index.js";
-import { getDateTimeLocale, t } from "../../i18n/index.js";
+import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { isTradeFlowQuiet, latestTradeTime } from "./tradeFlowFreshness.js";
+import { formatLastTradeTime, formatTapeTime } from "./tradeFlowTime.js";
 import { buildTradeFlowProfile } from "./tradeFlowProfile.js";
 import { TradeFlowHistory } from "./TradeFlowHistory.js";
 import {
@@ -38,6 +39,8 @@ export interface TradeFlowDockProps {
   mode: "tape" | "profile";
   /** Closes this rail view (activity-bar style). */
   onRequestClose?(): void;
+  /** The chart's timezone setting ("Local" or an IANA zone), so trade times match the time axis. */
+  timezone?: string | undefined;
 }
 
 function trimZeros(value: string): string {
@@ -65,18 +68,7 @@ function formatNotional(value: number): string {
   return `${sign}$${trimZeros(absolute.toFixed(0))}`;
 }
 
-function formatTime(value: number): string {
-  const date = new Date(value);
-  const base = date.toLocaleTimeString(getDateTimeLocale(), {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  return `${base}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-}
-
-function TradeFlowStatus({ store }: { store: TradeFlowExternalStore }) {
+function TradeFlowStatus({ store, timezone }: { store: TradeFlowExternalStore; timezone: string | undefined }) {
   useLocale();
   const status = useSyncExternalStore(
     store.subscribe,
@@ -96,7 +88,7 @@ function TradeFlowStatus({ store }: { store: TradeFlowExternalStore }) {
   }, [status]);
   const quiet = isTradeFlowQuiet(status, lastTradeTime, now);
   const label = quiet ? t("trade.status.quiet") : tradeStatusLabel(status);
-  const detail = lastTradeTime === null ? label : `${label} · ${t("trade.lastTime")} ${new Date(lastTradeTime).toLocaleString(getDateTimeLocale(), { hour12: false })}`;
+  const detail = lastTradeTime === null ? label : `${label} · ${t("trade.lastTime")} ${formatLastTradeTime(lastTradeTime, timezone)}`;
   return (
     <span className={`tf-status tf-status-${quiet ? "quiet" : status}`} title={detail} aria-label={detail}>
       <span className="tf-status-dot" aria-hidden="true" />
@@ -108,9 +100,11 @@ function TradeFlowStatus({ store }: { store: TradeFlowExternalStore }) {
 const TapeRow = React.memo(function TapeRow({
   trade,
   largeThreshold,
+  timezone,
 }: {
   trade: AggregateTrade;
   largeThreshold: number;
+  timezone: string | undefined;
 }) {
   useLocale();
   const large = largeThreshold > 0 && trade.quoteQuantity >= largeThreshold;
@@ -122,11 +116,12 @@ const TapeRow = React.memo(function TapeRow({
       <span>{formatPrice(trade.price)}</span>
       <span>{formatQuantity(trade.quantity)}</span>
       <span>{formatNotional(trade.quoteQuantity)}</span>
-      <time dateTime={new Date(trade.tradeTimeMs).toISOString()}>{formatTime(trade.tradeTimeMs)}</time>
+      <time dateTime={new Date(trade.tradeTimeMs).toISOString()}>{formatTapeTime(trade.tradeTimeMs, timezone)}</time>
     </div>
   );
 }, (previous, next) => (
   previous.trade === next.trade && previous.largeThreshold === next.largeThreshold
+  && previous.timezone === next.timezone
 ));
 
 function TradeFlowSummary({ snapshot }: {
@@ -166,7 +161,7 @@ function TradeFlowEmpty({
   );
 }
 
-function TradeFlowTape({ runtime }: { runtime: TradeFlowRuntime }) {
+function TradeFlowTape({ runtime, timezone }: { runtime: TradeFlowRuntime; timezone: string | undefined }) {
   const snapshot = useSyncExternalStore(
     runtime.view.store.subscribe,
     runtime.view.store.getSnapshot,
@@ -195,7 +190,7 @@ function TradeFlowTape({ runtime }: { runtime: TradeFlowRuntime }) {
       {rows.length > 0 ? (
         <div className="tf-tape-list" role="log" aria-live="off">
           {rows.map((trade) => (
-            <TapeRow key={trade.aggTradeId} trade={trade} largeThreshold={largeTradeNotional} />
+            <TapeRow key={trade.aggTradeId} trade={trade} largeThreshold={largeTradeNotional} timezone={timezone} />
           ))}
         </div>
       ) : (
@@ -295,6 +290,7 @@ function TradeFlowDock({
   height,
   mode,
   onRequestClose,
+  timezone,
 }: TradeFlowDockProps) {
   useLocale();
   const preferences = runtime.view.preferences;
@@ -319,7 +315,7 @@ function TradeFlowDock({
         <span className="ob-title">{mode === "profile" ? t("trade.profile") : t("trade.tape")}</span>
         {/* As in the order book: the status stays, the data mode gives way in a narrow rail. */}
         <span className="ob-meta">
-          <TradeFlowStatus store={runtime.view.store} />
+          <TradeFlowStatus store={runtime.view.store} timezone={timezone} />
           <span
             className="ob-delivery-mode"
             title={runtime.view.deliveryMode === "polling_observational"
@@ -369,7 +365,7 @@ function TradeFlowDock({
           </div>
           {mode === "profile"
             ? <TradeFlowProfileBody runtime={runtime} />
-            : <TradeFlowTape runtime={runtime} />}
+            : <TradeFlowTape runtime={runtime} timezone={timezone} />}
         </>
       )}
     </section>

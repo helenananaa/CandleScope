@@ -864,6 +864,7 @@ export const ru = {
   "indicator.name.macd": "Схождение и расхождение скользящих средних (MACD)",
   "indicator.name.atr": "Средний истинный диапазон (ATR)",
   "indicator.name.vol": "Объём (VOL)",
+  "indicator.description.vol": "Столбцы объёма, окрашенные по направлению свечи",
   "indicator.hide": "Скрыть",
   "indicator.show": "Показать",
   "indicator.viewReference": "Посмотреть эталонную реализацию",

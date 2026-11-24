@@ -1179,6 +1179,7 @@ export const ja = {
   "indicator.name.macd": "移動平均収束拡散法 (MACD)",
   "indicator.name.atr": "平均真の値幅 (ATR)",
   "indicator.name.vol": "出来高 (VOL)",
+  "indicator.description.vol": "ローソク足の上昇・下落で色分けした出来高バー",
   "indicator.hide": "非表示",
   "indicator.show": "表示",
   "indicator.viewReference": "参考実装を表示",

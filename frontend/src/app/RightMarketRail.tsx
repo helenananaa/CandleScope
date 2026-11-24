@@ -59,6 +59,8 @@ export interface RightMarketRailProps {
   renderExtraView?: (viewId: string, height: number) => React.ReactNode;
   /** Chart context for the trading accounts view; omitted where unsupported. */
   trading?: TradingRailBinding;
+  /** The chart's timezone setting, so rail times match the chart's time axis. */
+  timezone?: string | undefined;
 }
 
 function builtInViews(locale: LocaleId): MarketRailViewDescriptor[] {
@@ -145,6 +147,7 @@ function RightMarketRail({
   onViewHeightChange,
   renderExtraView,
   trading,
+  timezone,
 }: RightMarketRailProps) {
   const locale = useLocale();
   const contributed = useSyncExternalStore(
@@ -199,6 +202,7 @@ function RightMarketRail({
           runtime={tradeFlow}
           height={height}
           mode="tape"
+          timezone={timezone}
           onRequestClose={() => closeView(LIVE_RAIL_VIEW_IDS.tape)}
         />
       );
@@ -209,6 +213,7 @@ function RightMarketRail({
           runtime={tradeFlow}
           height={height}
           mode="profile"
+          timezone={timezone}
           onRequestClose={() => closeView(LIVE_RAIL_VIEW_IDS.profile)}
         />
       );
@@ -225,7 +230,7 @@ function RightMarketRail({
       );
     }
     return renderExtraView?.(viewId, height) ?? null;
-  }, [closeView, locale, orderBook, renderExtraView, tradeFlow, trading, watchlist]);
+  }, [closeView, locale, orderBook, renderExtraView, timezone, tradeFlow, trading, watchlist]);
 
   return (
     <MarketRightRailFrame

@@ -57,8 +57,9 @@ export function ensureRealtimeIndicatorLines(
   if (values.vol === undefined && values.volume === undefined) return lines;
   return [{
     id: "vol",
-    name: indicator.name || "VOL",
-    title: indicator.name || "VOL",
+    // Same title as the computed VOL output; the pane label carries the localised name.
+    name: "VOL",
+    title: "VOL",
     outputName: "vol",
     color: configuredVolumeUpColor(indicator, candleUpColor),
     type: "histogram",

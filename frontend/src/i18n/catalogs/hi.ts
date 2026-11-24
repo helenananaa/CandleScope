@@ -865,6 +865,7 @@ export const hi = {
   "indicator.name.macd": "मूविंग एवरेज कन्वर्जेंस डाइवर्जेंस (MACD)",
   "indicator.name.atr": "एवरेज ट्रू रेंज (ATR)",
   "indicator.name.vol": "वॉल्यूम (VOL)",
+  "indicator.description.vol": "कैंडल की दिशा के अनुसार रंगे वॉल्यूम बार",
   "indicator.hide": "छिपाएँ",
   "indicator.show": "दिखाएँ",
   "indicator.viewReference": "संदर्भ कार्यान्वयन देखें",

@@ -865,6 +865,7 @@ export const uk = {
   "indicator.name.macd": "Збіжність і розбіжність ковзних середніх (MACD)",
   "indicator.name.atr": "Середній істинний діапазон (ATR)",
   "indicator.name.vol": "Обсяг (VOL)",
+  "indicator.description.vol": "Стовпці обсягу, забарвлені за напрямком свічки",
   "indicator.hide": "Сховати",
   "indicator.show": "Показати",
   "indicator.viewReference": "Переглянути еталонну реалізацію",

@@ -865,6 +865,7 @@ export const ro = {
   "indicator.name.macd": "Convergență-divergență a mediilor mobile (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Volum (VOL)",
+  "indicator.description.vol": "Bare de volum colorate după direcția lumânării",
   "indicator.hide": "Ascunde",
   "indicator.show": "Arată",
   "indicator.viewReference": "Vezi implementarea de referință",
