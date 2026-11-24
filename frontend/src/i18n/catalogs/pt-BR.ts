@@ -3338,6 +3338,8 @@ export const ptBR = {
   "css.collapse": "Recolher",
 
   "scale.auto": "Escala automática",
+
+  "scale.menu": "Escala de preço",
   "scale.invert": "Inverter escala",
   "scale.regular": "Linear",
   "scale.log": "Logarítmica",

@@ -2777,6 +2777,7 @@ export const zhHant = {
   "css.expand": "展開",
   "css.collapse": "收起",
   "scale.auto": "自動縮放",
+  "scale.menu": "價格座標軸",
   "scale.invert": "反轉座標軸",
   "scale.regular": "常規",
   "scale.log": "對數",

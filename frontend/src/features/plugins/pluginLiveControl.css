@@ -13,6 +13,7 @@
   min-height: 28px;
   border: 0;
   border-top: 1px solid color-mix(in srgb, var(--live-banner-tone) 70%, transparent);
+  border-radius: 0;
   padding: 4px 12px;
   background: color-mix(in srgb, var(--live-banner-tone) 14%, var(--surface-1));
   color: var(--text-primary);
@@ -52,22 +53,14 @@
     color-mix(in srgb, var(--color-danger) 16%, var(--surface-1)) 10px 20px
   );
 }
-.live-control-toolbar {
-  border-color: color-mix(in srgb, var(--color-warning) 72%, transparent) !important;
-  color: #fbbf24 !important;
-}
-.live-control-toolbar.live-control-armed,
-.live-control-toolbar.live-control-killed,
-.live-control-toolbar.live-control-unavailable {
-  border-color: color-mix(in srgb, var(--color-danger) 80%, transparent) !important;
-  color: #f87171 !important;
-}
+/* The toolbar button's warning or danger tone is in styles/overrides.css: it wins over the
+ * button styles of whichever toolbar or header holds it. */
 .live-host-modal-overlay { z-index: calc(var(--z-toast) + 800); }
 .live-host-modal { width: min(880px, 94vw); }
 .live-control-summary,
 .live-control-section {
   margin-bottom: 16px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 14px;
   background: color-mix(in srgb, var(--surface-0) 24%, transparent);
@@ -101,10 +94,10 @@
 .live-control-field select {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 8px 10px;
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-primary);
   font: inherit;
 }
@@ -161,17 +154,15 @@
   flex-direction: column;
   align-items: stretch;
   padding: 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   box-shadow: 0 6px 20px #0003;
 }
 
 @media (max-width: 900px) {
-  .plugin-command-layout,
-  .plugin-manager-layout { grid-template-columns: 1fr; }
-  .plugin-command-layout nav,
-  .plugin-manager-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-color); padding: 0 0 10px; }
+  .plugin-command-layout { grid-template-columns: 1fr; }
+  .plugin-command-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 0 0 10px; }
   .plugin-toolbar { max-width: 32vw; }
   .live-revoke-grid { grid-template-columns: 1fr; }
   .live-intent-facts { grid-template-columns: 1fr; }

@@ -4,7 +4,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import type { FibonacciLevel } from "../../features/drawings/drawingTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { useAnchoredPopup } from "../ui/index.js";
+import { IconButton, SegmentedControl, useAnchoredPopup } from "../ui/index.js";
+import { Icon } from "../icons/Icon.js";
 
 export interface FibLevelsPanelProps {
   levels?: FibonacciLevel[] | null;
@@ -106,25 +107,18 @@ export default function FibLevelsPanel({
     <div className="fib-levels-panel" ref={panelRef} role="dialog" aria-label={t("drawing.settings.fibonacciLevels")}>
       <div className="fib-levels-header">
         <span>{t("drawing.settings.fibonacciLevels")}</span>
-        <button type="button" className="fib-levels-close" data-overlay-close onClick={onClose} aria-label={t("common.close")}>x</button>
+        <IconButton size="sm" label={t("common.close")} icon={<Icon name="close" size={14} />} data-overlay-close onClick={onClose} />
       </div>
 
       <div className="fib-invert-row">
-        <label className="fib-invert-label">
-          <span>{t("drawing.settings.firstClickDefines")}</span>
-          <button
-            className={`fib-invert-btn ${!inverted ? "active" : ""}`}
-            onClick={() => onInvertedChange(false)}
-          >
-            0
-          </button>
-          <button
-            className={`fib-invert-btn ${inverted ? "active" : ""}`}
-            onClick={() => onInvertedChange(true)}
-          >
-            1
-          </button>
-        </label>
+        <span className="fib-invert-label" aria-hidden="true">{t("drawing.settings.firstClickDefines")}</span>
+        <SegmentedControl
+          size="sm"
+          label={t("drawing.settings.firstClickDefines")}
+          value={inverted ? "1" : "0"}
+          options={[{ value: "0", label: "0" }, { value: "1", label: "1" }]}
+          onChange={(value) => onInvertedChange(value === "1")}
+        />
       </div>
 
       <div className="fib-levels-divider" />
@@ -148,9 +142,14 @@ export default function FibLevelsPanel({
               {level.level}
             </span>
             {!isDefault(level) && (
-              <button className="fib-level-remove" onClick={() => removeLevel(index)} title={t("drawing.settings.removeLevel")}>
-                x
-              </button>
+              <IconButton
+                size="sm"
+                variant="danger"
+                className="fib-level-remove"
+                label={t("drawing.settings.removeLevel")}
+                icon={<Icon name="close" size={12} />}
+                onClick={() => removeLevel(index)}
+              />
             )}
           </div>
         ))}
@@ -165,7 +164,7 @@ export default function FibLevelsPanel({
           onChange={(event) => setNewLevelInput(event.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <button className="fib-add-level-btn" onClick={addCustomLevel}>+</button>
+        <IconButton size="sm" variant="secondary" label={t("drawing.settings.addLevelPlaceholder")} icon={<Icon name="plus" size={14} />} onClick={addCustomLevel} />
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ import type {
   ChartWorkspaceSplitDirection,
 } from "./chartWorkspaceTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
-import { useAnchoredPopup } from "../../components/ui/index.js";
+import { Button, IconButton, useAnchoredPopup } from "../../components/ui/index.js";
 
 export interface WorkspaceCellLayoutMenuProps {
   cellId: ChartCellId;
@@ -92,25 +92,24 @@ export default function WorkspaceCellLayoutMenu({
       onDoubleClick={(event) => event.stopPropagation()}
     >
       {customized && (
-        <button
-          type="button"
+        <IconButton
+          size="sm"
           className="chart-appearance-marker"
-          aria-label={t("chartAppearance.marker")}
-          title={t("chartAppearance.marker")}
+          label={t("chartAppearance.marker")}
+          icon={<Icon name="palette" size={13} />}
           disabled={menuDisabled}
           onClick={(event) => {
             event.stopPropagation();
             triggerRef.current?.click();
           }}
-        >
-          <Icon name="palette" size={13} />
-        </button>
+        />
       )}
-      <button
+      <IconButton
         ref={triggerRef}
-        type="button"
+        size="sm"
         className="multi-chart-cell-layout-trigger"
-        aria-label={t("workspace.cellMenu", { n: cellNumber(cellId) })}
+        label={t("workspace.cellMenu", { n: cellNumber(cellId) })}
+        icon={<Icon name="more" size={16} />}
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
         title={t("workspace.cellMenuTitle")}
@@ -130,9 +129,7 @@ export default function WorkspaceCellLayoutMenu({
           }
           setOpen((value) => !value);
         }}
-      >
-        <Icon name="more" size={16} />
-      </button>
+      />
       {menuOpen && renderPopover(
         <div
           ref={popoverRef}
@@ -168,46 +165,29 @@ export default function WorkspaceCellLayoutMenu({
             </label>
           </fieldset>
           <div className="workspace-cell-layout-actions">
-            <button
-              type="button"
-              disabled={!canSplit}
-              onClick={() => runAndClose(() => onSplit(cellId, "columns", creationMode))}
-            >
+            <Button size="sm" disabled={!canSplit} onClick={() => runAndClose(() => onSplit(cellId, "columns", creationMode))}>
               {t("workspace.splitRight")}
-            </button>
-            <button
-              type="button"
-              disabled={!canSplit}
-              onClick={() => runAndClose(() => onSplit(cellId, "rows", creationMode))}
-            >
+            </Button>
+            <Button size="sm" disabled={!canSplit} onClick={() => runAndClose(() => onSplit(cellId, "rows", creationMode))}>
               {t("workspace.splitDown")}
-            </button>
+            </Button>
           </div>
           {swapTargets.length > 0 && (
             <div className="workspace-cell-swap-actions" aria-label={t("workspace.swap")}>
               <span>{t("workspace.swapLabel")}</span>
               <div>
                 {swapTargets.map((targetCellId) => (
-                  <button
-                    key={targetCellId}
-                    type="button"
-                    onClick={() => runAndClose(() => onSwap(cellId, targetCellId))}
-                  >
+                  <Button key={targetCellId} size="sm" onClick={() => runAndClose(() => onSwap(cellId, targetCellId))}>
                     {t("workspace.cellN", { n: cellNumber(targetCellId) })}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
           )}
           {children}
-          <button
-            type="button"
-            className="workspace-cell-close-action"
-            disabled={!canClose}
-            onClick={() => runAndClose(() => onClose(cellId))}
-          >
+          <Button size="sm" variant="danger" disabled={!canClose} onClick={() => runAndClose(() => onClose(cellId))}>
             {canClose || layoutDisabled ? t("workspace.closeChart") : t("workspace.keepOneChart")}
-          </button>
+          </Button>
         </div>
       )}
     </div>

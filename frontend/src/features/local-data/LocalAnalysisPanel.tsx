@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { t, getLocale } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
-import { Button, Disclosure, EmptyState, Field, InlineAlert, Input, Select, Textarea } from "../../components/ui/index.js";
+import { Button, Disclosure, EmptyState, Field, InlineAlert, Input, OptionButton, Select, Textarea } from "../../components/ui/index.js";
 import LocalAnalysisCsvImport from "./LocalAnalysisCsvImport.js";
 import type { LocalAnalysisEventStore } from "./localAnalysisStore.js";
 import {
@@ -250,14 +250,14 @@ export default function LocalAnalysisPanel({
         <ul className="local-analysis-event-list">
           {visibleEvents.map((event) => (
             <li data-editing={event.id === editingId ? "true" : undefined} key={event.id}>
-              <button type="button" className="local-analysis-event-main" onClick={() => onFocus(event)}>
+              <OptionButton variant="row" className="local-analysis-event-main" onClick={() => onFocus(event)}>
                 <i style={{ background: event.color }} aria-hidden="true" />
                 <span>
                   <strong>{eventTitle(event)}{event.source === "csv" ? " · CSV" : ""}</strong>
                   <small>{formatEventTime(event.time, manifest.timezone)} · {formatPrice(event.price)}</small>
                   {event.note && <em>{event.note}</em>}
                 </span>
-              </button>
+              </OptionButton>
               <div className="local-analysis-event-actions">
                 <Button size="sm" variant="ghost" onClick={() => onFocus(event)}>{t("local.locate")}</Button>
                 <Button size="sm" variant="ghost" onClick={() => startEdit(event)}>{t("local.edit")}</Button>

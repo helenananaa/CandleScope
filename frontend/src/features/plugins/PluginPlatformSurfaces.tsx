@@ -1,5 +1,5 @@
 import { OverlayLayer } from "../../components/ui/Overlays.js";
-import { Button, Field, InlineAlert, Textarea } from "../../components/ui/index.js";
+import { Button, Field, IconButton, InlineAlert, OptionButton, Textarea } from "../../components/ui/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -156,7 +156,7 @@ function Modal({ title, onClose, children, testId }: React.PropsWithChildren<{
       if (event.target === event.currentTarget) onClose();
     }}>
       <section className="plugin-modal" role="dialog" aria-modal="true" aria-label={title} data-testid={testId} ref={element} tabIndex={-1}>
-        <header><h2>{title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={onClose} data-overlay-close=""><Icon name="close" size={14} /></button></header>
+        <header><h2>{title}</h2><IconButton size="sm" label={t("plugin.host.close")} icon={<Icon name="close" size={14} />} onClick={onClose} data-overlay-close="" /></header>
         <div className="plugin-modal-body">{children}</div>
       </section>
     </div>
@@ -244,10 +244,10 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
       <div className="plugin-command-layout">
         <nav>
           {commands.map((command) => (
-            <button
-              type="button"
+            <OptionButton
+              variant="row"
               key={command.id}
-              className={selectedId === command.id ? "active" : ""}
+              selected={selectedId === command.id}
               onClick={() => {
                 setSelectedId(command.id);
                 setInput(objectDefault(command));
@@ -257,7 +257,7 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
               }}
             >
               <strong>{command.title}</strong><small>{command.id}</small>
-            </button>
+            </OptionButton>
           ))}
         </nav>
         <div className="plugin-command-form">
@@ -308,8 +308,7 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
                       }}
                     />
                   ) : (
-                    <button
-                      type="button"
+                    <Button
                       disabled={fileBusy !== null || running}
                       onClick={async () => {
                         const picker = (window as unknown as { showSaveFilePicker?: NativeSavePicker }).showSaveFilePicker;
@@ -332,13 +331,12 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
                       }}
                     >
                       {t("plugin.host.chooseDestination")}
-                    </button>
+                    </Button>
                   )}
                   {fileStatus[fileInput.field] && <span role="status">{fileStatus[fileInput.field]}</span>}
                 </div>
               ))}
-              <button
-                type="button"
+              <Button variant="primary"
                 disabled={!runtime.view.managementAvailable || running || fileBusy !== null || !filesReady}
                 onClick={async () => {
                   setRunning(true);
@@ -379,7 +377,7 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
                 }}
               >
                 {running ? t("plugin.host.running") : t("plugin.host.runCommand")}
-              </button>
+              </Button>
               {!runtime.view.managementAvailable && <small>{t("plugin.host.managementRequired")}</small>}
             </>
           )}
@@ -425,8 +423,7 @@ export function SettingsSurface({ runtime, contribution }: {
           }}
         />
       )}
-      <button
-        type="button"
+      <Button variant="primary"
         disabled={!runtime.view.managementAvailable || loading || saving || loadError !== null}
         onClick={async () => {
           setSaving(true);
@@ -435,7 +432,7 @@ export function SettingsSurface({ runtime, contribution }: {
         }}
       >
         {saving ? t("plugin.host.saving") : t("plugin.host.saveSettings")}
-      </button>
+      </Button>
     </Modal>
   );
 }
@@ -498,7 +495,7 @@ function ViewSurface({ runtime, contribution }: {
         data-plugin-renderer="sandbox"
         aria-label={contribution.title}
       >
-        <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView} data-overlay-close=""><Icon name="close" size={14} /></button></header>
+        <header><h2>{contribution.title}</h2><IconButton size="sm" label={t("plugin.host.close")} icon={<Icon name="close" size={14} />} onClick={runtime.actions.closeView} data-overlay-close="" /></header>
         <PluginUiErrorBoundary>
           <SandboxPluginFrame runtime={runtime} contribution={contribution} />
         </PluginUiErrorBoundary>
@@ -525,21 +522,20 @@ function ViewSurface({ runtime, contribution }: {
       data-plugin-view={contribution.id}
       aria-label={contribution.title}
     >
-      <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView} data-overlay-close=""><Icon name="close" size={14} /></button></header>
+      <header><h2>{contribution.title}</h2><IconButton size="sm" label={t("plugin.host.close")} icon={<Icon name="close" size={14} />} onClick={runtime.actions.closeView} data-overlay-close="" /></header>
       <PluginUiErrorBoundary>
         {projectionMismatch
           ? <p role="alert">{t("plugin.host.viewMetadataMismatch")}</p>
           : <ViewContent contribution={contribution} projection={projection} />}
       </PluginUiErrorBoundary>
       {primaryCommand && (
-        <button
-          type="button"
+        <Button variant="primary"
           data-plugin-primary-command={primaryCommand.id}
           disabled={!runtime.view.managementAvailable}
           onClick={() => void runtime.actions.invokeCommand(primaryCommand.id, {}).catch(() => undefined)}
         >
           {primaryCommand.title}
-        </button>
+        </Button>
       )}
     </aside>,
   );
@@ -570,7 +566,7 @@ export default function PluginPlatformSurfaces({ runtime }: { runtime: PluginPla
       {openView && <ViewSurface key={openView.id} runtime={runtime} contribution={openView} />}
       {platformError && <div className="plugin-platform-notice plugin-platform-error" role="alert" title={platformError}>{platformError}</div>}
       {runtime.view.notice && (
-        <button type="button" className="plugin-platform-notice" title={runtime.view.notice} onClick={runtime.actions.clearNotice}>{runtime.view.notice}</button>
+        <OptionButton variant="row" className="plugin-platform-notice" title={runtime.view.notice} onClick={runtime.actions.clearNotice}>{runtime.view.notice}</OptionButton>
       )}
     </PluginUiErrorBoundary>
   );

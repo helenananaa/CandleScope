@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { sandboxPluginAssetUrl } from "./pluginPlatformApi.js";
 import {
@@ -177,7 +178,7 @@ export default function SandboxPluginFrame({
         <div className="plugin-sandbox-failure" role="alert">
           <strong>{t("plugin.host.sandboxFailed", {}, locale)}</strong>
           <span>{failure}</span>
-          <button type="button" onClick={reload}>{t("plugin.host.sandboxReload", {}, locale)}</button>
+          <Button size="sm" onClick={reload}>{t("plugin.host.sandboxReload", {}, locale)}</Button>
         </div>
       ) : (
         <OpaquePluginFrame

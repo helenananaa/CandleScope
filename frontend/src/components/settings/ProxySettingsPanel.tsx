@@ -1,6 +1,6 @@
 import { useState } from "react";
 import ProxySubscriptionImport from "../../features/settings/ProxySubscriptionImport.js";
-import { Button } from "../ui/Button.js";
+import { Button, OptionButton } from "../ui/Button.js";
 import { Checkbox, Field, Input, Select } from "../ui/Field.js";
 import { Disclosure, InlineAlert } from "../ui/Display.js";
 import { t } from "../../i18n/index.js";
@@ -82,17 +82,16 @@ export default function ProxySettingsPanel({
             <div className="st-group-desc">{t("settings.proxy.desc")}</div>
             <div className="st-theme-grid st-proxy-mode-grid">
                 {PROXY_MODES.map((mode) => (
-                    <button
+                    <OptionButton
                         key={mode.value}
-                        type="button"
-                        className={`st-theme-card ${proxyMode === mode.value ? 'active' : ''}`}
+                        className="st-theme-card"
+                        selected={proxyMode === mode.value}
                         disabled={busy}
-                        aria-pressed={proxyMode === mode.value}
                         onClick={() => onProxyModeChange(mode.value)}
                     >
                         <span className="st-theme-icon"><Icon name={mode.icon} size={22} /></span>
                         <span className="st-theme-label">{t(mode.labelKey)}</span>
-                    </button>
+                    </OptionButton>
                 ))}
             </div>
 

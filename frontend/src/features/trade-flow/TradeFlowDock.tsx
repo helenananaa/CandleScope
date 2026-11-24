@@ -308,7 +308,7 @@ function TradeFlowDock({
       style={{ height }}
       aria-label={mode === "profile" ? t("trade.profileAria") : t("trade.tapeAria")}
     >
-      <header className="ob-header tf-header">
+      <header className="ob-header">
         {onRequestClose && (
           <IconButton size="sm" onClick={onRequestClose}
             label={mode === "profile" ? t("trade.collapseProfile") : t("trade.collapseTape")}

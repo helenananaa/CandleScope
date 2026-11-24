@@ -1,4 +1,4 @@
-import { Button } from "../../components/ui/Button.js";
+import { Button, OptionButton } from "../../components/ui/Button.js";
 import { InlineAlert } from "../../components/ui/Display.js";
 import { Input, Select } from "../../components/ui/Field.js";
 import { TabPanel, Tabs } from "../../components/ui/Choice.js";
@@ -118,9 +118,9 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
       {section === "installed" && runtime.view.catalog && <>
         <div className={`pc-library ${mobileDetail ? "pc-show-detail" : ""} ${visible.length ? "" : "pc-library-empty"}`}>
           {visible.length > 0 ? <>
-            <nav className="pc-list" aria-label={t("pc.installed")}>{visible.map((plugin) => <button type="button" key={plugin.id} aria-current={selected?.id === plugin.id ? "true" : undefined} onClick={() => { setSelectedId(plugin.id); setMobileDetail(true); }}>
+            <nav className="pc-list" aria-label={t("pc.installed")}>{visible.map((plugin) => <OptionButton variant="row" key={plugin.id} aria-current={selected?.id === plugin.id ? "true" : undefined} onClick={() => { setSelectedId(plugin.id); setMobileDetail(true); }}>
               <span className="pc-list-title">{plugin.name}</span><span>{plugin.publisher} · {plugin.version}</span><small>{t(`pc.${pluginStatus(plugin)}`)}</small>
-            </button>)}</nav>
+            </OptionButton>)}</nav>
             {selected && <PluginDetail key={selected.id} selected={selected} {...detailState} runtime={runtime} onBack={() => setMobileDetail(false)} onDiscover={() => navigate("discover")} />}
           </> : unifiedCount ? null : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
             <p>{query || filter !== "all" ? t("pc.search") : t("pc.emptyHint")}</p>

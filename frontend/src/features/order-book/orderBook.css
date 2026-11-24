@@ -8,7 +8,7 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   contain: layout paint style;
@@ -27,7 +27,7 @@
   padding: 0 8px 0 6px;
   gap: 6px;
   background: rgba(0, 0, 0, 0.04);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .order-book-dock.collapsed .ob-header {
   border-bottom: 0;
@@ -81,7 +81,7 @@
 }
 .ob-delivery-mode {
   padding: 2px 5px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
@@ -162,7 +162,7 @@
 .ob-column-header {
   flex: 0 0 25px;
   height: 25px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   user-select: none;
@@ -207,7 +207,7 @@
   cursor: default;
   contain: layout paint style;
 }
-.ob-level-row:hover { background: var(--bg-hover); }
+.ob-level-row:hover { background: var(--surface-hover); }
 .ob-level-row > span:not(.ob-depth-bar) { position: relative; z-index: 1; }
 .ob-level-row .ob-price { text-align: left; }
 .ob-ask .ob-price { color: var(--wl-down-text); }
@@ -241,9 +241,9 @@
   min-height: 34px;
   padding: 4px 8px;
   gap: 8px;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-2);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
@@ -286,7 +286,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
 .ob-range-controls .ui-select { width: auto; max-width: 100%; field-sizing: content; font-size: var(--font-size-xs); }

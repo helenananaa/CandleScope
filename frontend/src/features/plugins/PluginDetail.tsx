@@ -1,6 +1,8 @@
 import { Button } from "../../components/ui/Button.js";
+import { Tabs } from "../../components/ui/Choice.js";
+import { tabId, tabPanelId } from "../../components/ui/helpers.js";
 import { Badge, InlineAlert } from "../../components/ui/Display.js";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { PermissionRows, ProviderRows, PaperRows, TrustRequestMatrix, TrustModeControl } from "./PluginManagementSections.js";
@@ -13,6 +15,9 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
 }) {
   useLocale();
   const [page, setPage] = useState("overview");
+  const tabsId = useId();
+  // The page shown below the tabs is their tab panel.
+  const panel = { role: "tabpanel", id: tabPanelId(tabsId, page), "aria-labelledby": tabId(tabsId, page) } as const;
   const [pending, setPending] = useState(false);
   const [confirmation, setConfirmation] = useState<"uninstall" | "rollback" | null>(null);
   const settings = runtime.view.registries.settings.filter((item) => item.pluginId === selected.id);
@@ -29,7 +34,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
     finally { setPending(false); }
   };
   return <section className="pc-detail" aria-label={selected.name} aria-busy={pending}>
-    <button className="pc-back" type="button" onClick={onBack}>{t("pc.back")}</button>
+    <Button variant="ghost" size="sm" className="pc-back" onClick={onBack}>{t("pc.back")}</Button>
     <header className="pc-detail-header">
       <div className="pc-monogram" aria-hidden="true">{selected.name.slice(0, 1).toUpperCase()}</div>
       <div><h3>{selected.name}</h3><p>{selected.publisher} · {selected.version}</p></div>
@@ -39,28 +44,30 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
       {t("unified.legacyUpgrade")}
     </InlineAlert> : <div className="plugin-action-row pc-detail-actions">
       {selected.state === "active"
-        ? <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("disable")}>{t("plugin.disable")}</button>
+        ? <Button disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("disable")}>{t("plugin.disable")}</Button>
         : selected.permissions.activationReady
           ? <Button variant="primary" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("enable")}>{t("plugin.enable")}</Button>
           : <Button variant="primary" onClick={() => setPage("permissions")}>{t("plugin.permissions")}</Button>}
       {pending && <span role="status">{t("pc.working")}</span>}
       <details className="pc-more"><summary>{t("pc.more")}</summary><div>
-        <button type="button" disabled={pending || !runtime.view.managementAvailable || !detail?.rollback.available} onClick={() => setConfirmation("rollback")}>{t("plugin.rollback")}</button>
-        <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => setConfirmation("uninstall")}>{t("plugin.uninstall")}</button>
+        <Button disabled={pending || !runtime.view.managementAvailable || !detail?.rollback.available} onClick={() => setConfirmation("rollback")}>{t("plugin.rollback")}</Button>
+        <Button disabled={pending || !runtime.view.managementAvailable} onClick={() => setConfirmation("uninstall")}>{t("plugin.uninstall")}</Button>
       </div></details>
     </div>}
     {!retired && confirmation && <section className="pc-confirm" aria-label={t(`plugin.${confirmation}`)}>
       <strong>{t(`plugin.${confirmation}`)} · {selected.name}</strong>
       <p>{confirmation === "uninstall" ? t("plugin.host.uninstallConfirm", { name: selected.name }) : t("plugin.rollbackAvailable", { target: detail?.rollback.target?.version ?? detail?.rollback.target?.state ?? t("plugin.previousActive") })}</p>
       <p>{t("plugin.dataRetentionHint")}</p>
-      <div className="plugin-action-row"><button type="button" disabled={pending} onClick={() => setConfirmation(null)}>{t("workspace.cancel")}</button><button className="pc-danger" type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate(confirmation)}>{t(`plugin.${confirmation}`)}</button></div>
+      <div className="plugin-action-row"><Button disabled={pending} onClick={() => setConfirmation(null)}>{t("workspace.cancel")}</Button><Button variant="danger" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate(confirmation)}>{t(`plugin.${confirmation}`)}</Button></div>
     </section>}
-    <nav className="pc-detail-tabs" aria-label={selected.name}>
-      {(["overview", ...(settings.length ? ["configure"] : []), "permissions", "diagnostics"] as const).map((key) => <button type="button" key={key} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{t(key === "permissions" ? "plugin.trustRuntime" : key === "diagnostics" ? "pc.diagnostics" : key === "configure" ? "pc.configure" : "pc.overview")}</button>)}
-    </nav>
+    <Tabs id={tabsId} className="pc-detail-tabs" label={selected.name} value={page} onChange={setPage}
+      tabs={(["overview", ...(settings.length ? ["configure"] : []), "permissions", "diagnostics"] as const).map((key) => ({
+        value: key,
+        label: t(key === "permissions" ? "plugin.trustRuntime" : key === "diagnostics" ? "pc.diagnostics" : key === "configure" ? "pc.configure" : "pc.overview"),
+      }))} />
     {loading && <p role="status">{t("plugin.loadingDetail")}</p>}
     {error && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => void reload()}>{t("shell.retry")}</Button>}>{error}</InlineAlert>}
-    {page === "overview" && <div className="pc-detail-body">
+    {page === "overview" && <div className="pc-detail-body" {...panel}>
       {/* The badge above states the plugin's status; the overview adds only an active plugin's health. */}
       {!retired && detail && selected.state === "active" && <p>{detail.health.available ? t("plugin.available") : t("plugin.unavailableReason", { reason: detail.health.unavailableReason ?? t("plugin.unknownReason") })}</p>}
       {!retired && !selected.permissions.activationReady && <InlineAlert tone="warning">{t("plugin.host.grantEveryPermission")}</InlineAlert>}
@@ -82,8 +89,8 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
                     />
 
     </div>}
-    {page === "configure" && <div className="pc-detail-body">{settings.map((item) => <button type="button" key={item.id} disabled={!runtime.view.managementAvailable} onClick={() => runtime.actions.openSettings(item.id)}>{item.title}</button>)}</div>}
-    {page === "permissions" && <div className="pc-detail-body">
+    {page === "configure" && <div className="pc-detail-body" {...panel}>{settings.map((item) => <Button key={item.id} disabled={!runtime.view.managementAvailable} onClick={() => runtime.actions.openSettings(item.id)}>{item.title}</Button>)}</div>}
+    {page === "permissions" && <div className="pc-detail-body" {...panel}>
                     {(detail?.trust ?? selected.trust) && (() => {
                       const trust = (detail?.trust ?? selected.trust)!;
                       return (
@@ -114,7 +121,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
                     })()}
       {!retired && detail && <PermissionRows runtime={runtime} detail={detail} reload={reload} />}
     </div>}
-    {page === "diagnostics" && <div className="pc-detail-body">
+    {page === "diagnostics" && <div className="pc-detail-body" {...panel}>
       <p>{selected.id} · {selected.trust?.mode ?? selected.trustLevel}</p>
                     {detail && (
                       <>
@@ -150,7 +157,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
 
                       </>
                     )}
-      <button type="button" onClick={onDiscover}>{t("pc.discover")}</button>
+      <Button onClick={onDiscover}>{t("pc.discover")}</Button>
     </div>}
   </section>;
 }

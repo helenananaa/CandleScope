@@ -111,9 +111,19 @@ and tests colocated with source files.
 
 ### Design checks
 
-`npm run check:styles` reports the design-refactor metrics (unstyled class names,
-raw buttons, inline styles, `!important`, native dialogs). It only warns for now;
-see [FRONTEND_DESIGN_REFACTOR_PLAN.md](FRONTEND_DESIGN_REFACTOR_PLAN.md) §7.
+`npm run check:styles` (part of `npm run check`) reports the design-refactor
+metrics and fails when one that has reached zero comes back: class names with no
+CSS rule, `!important` outside `prefers-reduced-motion`, native dialogs, the
+legacy `--bg-*` colour names, selectors with unbalanced brackets, static inline
+styles (`style={{}}` with only literal values; values computed at render time stay
+inline) and raw `<button>`s outside `src/components/ui`. Use a kit primitive
+(`Button`, `IconButton`, `ControlButton`, `OptionButton`, `MenuItemButton`) instead
+of a raw button; the few that must stay raw are listed, with their reasons, in
+`RAW_BUTTON_EXCEPTIONS` in `scripts/check-style-metrics.mjs`. `*-btn` class
+families have a ratchet there that fails the check if the count rises. A
+rule that must win everywhere goes in `src/styles/overrides.css` (the `overrides`
+cascade layer) instead of using `!important`. See
+[FRONTEND_DESIGN_REFACTOR_PLAN.md](FRONTEND_DESIGN_REFACTOR_PLAN.md) §7.
 
 With the backend and Vite dev server running, capture named UI states in both
 themes for before/after review, then pair two runs in a comparison page:

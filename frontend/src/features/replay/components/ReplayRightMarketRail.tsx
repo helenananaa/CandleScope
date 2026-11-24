@@ -152,8 +152,7 @@ function ReplayRightMarketRail({
 
     return (
       <section
-        className="replay-market-dock"
-        style={{ height: "100%" }}
+        className="replay-market-dock replay-market-dock-fill"
         data-active-dock={dockAttr}
         aria-label={t("replay.rail.dockAria", { title }, locale)}
       >

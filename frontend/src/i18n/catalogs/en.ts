@@ -3117,6 +3117,8 @@ export const en = {
   "css.collapse": "Collapse",
 
   "scale.auto": "Auto scale",
+
+  "scale.menu": "Price scale",
   "scale.invert": "Invert scale",
   "scale.regular": "Regular",
   "scale.log": "Logarithmic",

@@ -2773,6 +2773,7 @@ export const uk = {
   "css.expand": "Розгорнути",
   "css.collapse": "Згорнути",
   "scale.auto": "Автомасштаб",
+  "scale.menu": "Цінова шкала",
   "scale.invert": "Інвертувати шкалу",
   "scale.regular": "Звичайна",
   "scale.log": "Логарифмічна",

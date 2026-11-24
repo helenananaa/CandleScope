@@ -14,7 +14,7 @@ import type {
   ChartWorkspaceTemplateId,
 } from "./chartWorkspaceTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
-import { useAnchoredPopup } from "../../components/ui/index.js";
+import { Button, ControlButton, OptionButton, useAnchoredPopup } from "../../components/ui/index.js";
 
 interface LayoutRect {
   x: number;
@@ -143,10 +143,10 @@ function WorkspaceLayoutPicker({
 
   return (
     <div className="workspace-layout-picker" ref={rootRef}>
-      <button
+      <ControlButton
         ref={triggerRef}
-        type="button"
-        className={`ui-control workspace-layout-trigger ${open ? "is-active" : ""}`}
+        className="workspace-layout-trigger"
+        active={open}
         data-save-state={saveState}
         onPointerEnter={onPreloadManager}
         onFocus={onPreloadManager}
@@ -158,7 +158,7 @@ function WorkspaceLayoutPicker({
       >
         <LayoutThumbnail tree={tree} />
         <span className="workspace-layout-caret" aria-hidden="true"><Icon name="chevron-down" size={12} /></span>
-      </button>
+      </ControlButton>
 
       {open && (
         <div
@@ -176,12 +176,11 @@ function WorkspaceLayoutPicker({
             {templates.map((template) => {
               const active = layout === template.id;
               return (
-                <button
+                <OptionButton
                   key={template.id}
-                  ref={active && ready && !locked ? currentRef : undefined}
-                  type="button"
-                  className={active ? "active" : ""}
-                  aria-pressed={active}
+                  variant="row"
+                  {...(active && ready && !locked ? { ref: currentRef } : {})}
+                  selected={active}
                   disabled={!ready || locked}
                   title={chartWorkspaceLayoutLabel(template.id)}
                   aria-label={chartWorkspaceLayoutLabel(template.id)}
@@ -192,12 +191,14 @@ function WorkspaceLayoutPicker({
                 >
                   <LayoutThumbnail tree={template.tree} />
                   <span>{chartWorkspaceTemplateCellCount(template.id)}</span>
-                </button>
+                </OptionButton>
               );
             })}
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            fullWidth
             className="workspace-layout-manage"
             onClick={() => {
               close(false);
@@ -206,7 +207,7 @@ function WorkspaceLayoutPicker({
           >
             {t("workspace.manage")}
             <span aria-hidden="true">→</span>
-          </button>
+          </Button>
         </div>
       )}
     </div>

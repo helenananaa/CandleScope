@@ -1,28 +1,22 @@
 @layer features {
-.plugin-trust-install-card {
-  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--border-color));
-}
 
-.plugin-trust-review,
 .plugin-trust-installed-summary,
 .plugin-trust-mode-control {
   display: grid;
   gap: 12px;
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-subtle));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-1) 94%, var(--color-warning) 6%);
 }
 
-.plugin-trust-source,
 .plugin-trust-runtime,
 .plugin-trust-diffs > div {
   display: grid;
   gap: 4px;
 }
 
-.plugin-trust-source code,
 .plugin-trust-runtime code {
   overflow-wrap: anywhere;
   color: var(--text-accent);
@@ -49,7 +43,7 @@
   display: grid;
   gap: 4px;
   padding: 9px 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 60%, transparent);
 }
@@ -76,7 +70,7 @@
   min-height: 74px;
   resize: vertical;
   padding: 9px 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-2);
   color: var(--text-primary);
@@ -87,7 +81,7 @@
   gap: 8px;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
 
@@ -96,16 +90,6 @@
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
-}
-
-.plugin-trust-confirmations .is-danger {
-  border-color: var(--color-danger);
-  color: var(--text-danger);
-}
-
-.plugin-state-pill.is-warn {
-  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
-  color: var(--text-warning);
 }
 
 @media (max-width: 720px) {

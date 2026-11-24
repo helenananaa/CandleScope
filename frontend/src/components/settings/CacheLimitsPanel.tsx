@@ -1,4 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
+import { OptionButton } from "../ui/Button.js";
 import { SegmentedControl } from "../ui/Choice.js";
 import { Disclosure, InlineAlert } from "../ui/Display.js";
 import { Checkbox, Field, Input } from "../ui/Field.js";
@@ -275,17 +276,16 @@ export default function CacheLimitsPanel({
                 <div className="st-group-desc">{t("settings.cache.dbSummary")}</div>
                 <div className="st-preset-cards">
                     {DB_PRESETS.map((preset) => (
-                        <button
+                        <OptionButton
                             key={preset.key}
-                            type="button"
-                            className={`st-preset-card ${currentPreset === preset.key ? 'active' : ''}`}
-                            aria-pressed={currentPreset === preset.key}
+                            className="st-preset-card"
+                            selected={currentPreset === preset.key}
                             onClick={() => handlePresetChange(preset.key)}
                         >
                             <span className="st-preset-level" aria-hidden="true">{[1, 2, 3, 4].map((step) => <span key={step} className={step <= preset.level ? "on" : undefined} />)}</span>
                             <span className="st-preset-name">{t(preset.labelKey)}</span>
                             <span className="st-preset-desc">{t(preset.descKey)}</span>
-                        </button>
+                        </OptionButton>
                     ))}
                 </div>
                 {isCustomPreset && <InlineAlert>{t("settings.cache.custom")}</InlineAlert>}

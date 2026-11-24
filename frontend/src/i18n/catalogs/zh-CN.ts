@@ -3332,6 +3332,8 @@ export const zhCN = {
   "css.collapse": "收起",
 
   "scale.auto": "自动缩放",
+
+  "scale.menu": "价格坐标轴",
   "scale.invert": "反转坐标轴",
   "scale.regular": "常规",
   "scale.log": "对数",

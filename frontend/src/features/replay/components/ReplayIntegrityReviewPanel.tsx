@@ -3,7 +3,7 @@ import { confirmAction } from "../../../components/ui/overlay/overlayApi.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { Icon } from "../../../components/icons/Icon.js";
-import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, Input, Select } from "../../../components/ui/index.js";
+import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, Input, MenuItemButton, Select } from "../../../components/ui/index.js";
 import { replayAccountModeLabel, replayAuditStatusLabel, replayLiquidationFidelityLabel, replayMutationLabel, replayRevisionKindLabel, trainingIntegrityLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
 
 import { buildEquityPolyline } from "../replayIntegrityModel.js";
@@ -471,19 +471,16 @@ export default function ReplayIntegrityReviewPanel({
                   <ul className="replay-drawer-list replay-review-timeline" aria-label={t("replay.integrity.timeline")}>
                     {review.events.map((event) => (
                       <li key={event.event_id}>
-                        <button
-                          type="button"
-                          className="ui-menu-item replay-review-event"
+                        <MenuItemButton
+                          className="replay-review-event"
                           aria-current={event.event_id === review.selected_event_id ? "true" : undefined}
                           data-review-event-category={event.category}
                           onClick={() => void integrityRuntime.actions.controlReview("JUMP", { eventId: event.event_id })}
                           disabled={busy}
                         >
-                          <span className="ui-menu-label">
-                            <strong>#{event.timeline_sequence} {event.event_type}</strong>
-                            <span>{event.public_time.label} · {event.category}{event.detail?.text !== undefined ? ` · ${String(event.detail.text)}` : ""}</span>
-                          </span>
-                        </button>
+                          <strong>#{event.timeline_sequence} {event.event_type}</strong>
+                          <span>{event.public_time.label} · {event.category}{event.detail?.text !== undefined ? ` · ${String(event.detail.text)}` : ""}</span>
+                        </MenuItemButton>
                       </li>
                     ))}
                   </ul>
