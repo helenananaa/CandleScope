@@ -871,6 +871,7 @@ export const he = {
   "indicator.name.macd": "התכנסות והתבדרות ממוצעים נעים (MACD)",
   "indicator.name.atr": "טווח אמיתי ממוצע (ATR)",
   "indicator.name.vol": "נפח (VOL)",
+  "indicator.description.vol": "עמודות נפח בצבע לפי כיוון הנר",
   "indicator.hide": "הסתרה",
   "indicator.show": "הצגה",
   "indicator.viewReference": "צפייה ביישום הייחוס",

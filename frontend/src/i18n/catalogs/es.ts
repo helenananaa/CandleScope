@@ -870,6 +870,7 @@ export const es = {
   "indicator.name.macd": "Convergencia y divergencia de medias móviles (MACD)",
   "indicator.name.atr": "Rango verdadero medio (ATR)",
   "indicator.name.vol": "Volumen (VOL)",
+  "indicator.description.vol": "Barras de volumen coloreadas según la dirección de la vela",
   "indicator.hide": "Ocultar",
   "indicator.show": "Mostrar",
   "indicator.viewReference": "Ver la implementación de referencia",

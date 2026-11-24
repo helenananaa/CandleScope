@@ -864,6 +864,7 @@ export const pl = {
   "indicator.name.macd": "Zbieżność/rozbieżność średnich kroczących (MACD)",
   "indicator.name.atr": "Średni rzeczywisty zakres (ATR)",
   "indicator.name.vol": "Wolumen (VOL)",
+  "indicator.description.vol": "Słupki wolumenu w kolorze zależnym od kierunku świecy",
   "indicator.hide": "Ukryj",
   "indicator.show": "Pokaż",
   "indicator.viewReference": "Zobacz implementację referencyjną",

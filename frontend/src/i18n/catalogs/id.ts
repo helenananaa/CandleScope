@@ -864,6 +864,7 @@ export const id = {
   "indicator.name.macd": "Moving Average Convergence Divergence (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Volume (VOL)",
+  "indicator.description.vol": "Batang volume berwarna sesuai arah lilin",
   "indicator.hide": "Sembunyikan",
   "indicator.show": "Tampilkan",
   "indicator.viewReference": "Lihat implementasi referensi",

@@ -865,6 +865,7 @@ export const ptPT = {
   "indicator.name.macd": "Convergência e divergência de médias móveis (MACD)",
   "indicator.name.atr": "Amplitude verdadeira média (ATR)",
   "indicator.name.vol": "Volume (VOL)",
+  "indicator.description.vol": "Barras de volume coloridas de acordo com a direção da vela",
   "indicator.hide": "Ocultar",
   "indicator.show": "Mostrar",
   "indicator.viewReference": "Ver implementação de referência",

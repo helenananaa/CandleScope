@@ -1353,6 +1353,7 @@ function LiveChartCell({
             viewHeights={marketRail.viewHeights}
             onViewHeightChange={marketRail.onViewHeightChange}
             {...(study.masked ? {} : { trading: tradingBinding })}
+            timezone={model.chartWorkspace.chart.chartProps.timezone}
           />
         </Suspense>,
         portalHosts.rightRail,

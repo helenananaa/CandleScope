@@ -865,6 +865,7 @@ export const hu = {
   "indicator.name.macd": "Mozgóátlag-konvergencia/divergencia (MACD)",
   "indicator.name.atr": "Átlagos valódi tartomány (ATR)",
   "indicator.name.vol": "Volumen (VOL)",
+  "indicator.description.vol": "Volumenoszlopok a gyertya iránya szerinti színnel",
   "indicator.hide": "Elrejtés",
   "indicator.show": "Megjelenítés",
   "indicator.viewReference": "Referenciamegvalósítás megtekintése",

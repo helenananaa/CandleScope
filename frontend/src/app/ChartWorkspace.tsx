@@ -124,6 +124,7 @@ function ChartWorkspace({
               : { onTogglePanelCollapsed: marketRail.onTogglePanelCollapsed })}
             viewHeights={marketRail.viewHeights}
             onViewHeightChange={marketRail.onViewHeightChange}
+            timezone={chart.chartProps.timezone}
           />
         </React.Suspense>
       )}

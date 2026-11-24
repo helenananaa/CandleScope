@@ -7,9 +7,20 @@ const NAMES: Record<string, MessageKey> = {
   ATR: "indicator.name.atr", VOL: "indicator.name.vol",
 };
 
+/** Built-ins whose catalog description says more than their name. */
+const DESCRIPTIONS: Record<string, MessageKey> = {
+  VOL: "indicator.description.vol",
+};
+
 export function indicatorDisplayName(indicator: Pick<IndicatorDefinition, "id" | "name" | "engineName">): string {
   const engine = indicator.engineName?.toUpperCase() || "";
   return Object.hasOwn(NAMES, engine) ? t(NAMES[engine]!) : indicator.name || indicator.id;
+}
+
+/** Built-in descriptions come from the app catalogs; the backend copy is a fallback for other indicators. */
+export function indicatorDescription(indicator: { engineName?: string | null | undefined; description?: string | undefined }): string {
+  const engine = indicator.engineName?.toUpperCase() || "";
+  return Object.hasOwn(DESCRIPTIONS, engine) ? t(DESCRIPTIONS[engine]!) : indicator.description || "";
 }
 
 /** Computed output owns placement; custom catalog defaults are not execution results. */

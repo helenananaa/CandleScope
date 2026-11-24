@@ -865,6 +865,7 @@ export const th = {
   "indicator.name.macd": "เส้นค่าเฉลี่ยเคลื่อนที่ลู่เข้าลู่ออก (MACD)",
   "indicator.name.atr": "ค่าเฉลี่ยช่วงราคาที่แท้จริง (ATR)",
   "indicator.name.vol": "วอลุ่ม (VOL)",
+  "indicator.description.vol": "แท่งวอลุ่มที่มีสีตามทิศทางของแท่งเทียน",
   "indicator.hide": "ซ่อน",
   "indicator.show": "แสดง",
   "indicator.viewReference": "ดูการอ้างอิงการทำงาน",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -17,6 +18,7 @@ from app.indicator.events import IndicatorEvent, IndicatorEventType
 from app.indicator.custom_store import CustomIndicatorStore
 from app.indicator.engine import indicator_code_hash
 from app.indicator.script_identity import script_hash, short_script_hash
+from app.indicator.registry import registry
 from app.indicator.types import IndicatorKey
 from app.indicator.range_result_service import IndicatorRangeRevisionChangedError
 
@@ -702,6 +704,32 @@ def test_macd_histogram_colors_follow_value_sign() -> None:
     assert "#negative" in colors_by_time.values()
     for timestamp, value in values_by_time.items():
         assert colors_by_time[timestamp] == ("#positive" if value >= 0 else "#negative")
+
+
+_CJK_TEXT = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]")
+
+
+def test_builtin_indicator_metadata_is_english() -> None:
+    """Built-in labels are English; the app's catalogs translate what people see."""
+    presets = _indicator_client(_RangeDataManager([])).get("/api/v1/indicators/presets").json()
+    assert {preset["engineName"] for preset in presets} >= {"MA", "EMA", "BOLL", "RSI", "MACD", "ATR", "VOL"}
+
+    texts: list[tuple[str, str]] = []
+    for preset in presets:
+        name = preset["engineName"]
+        texts += [(f"{name}.{field}", preset[field]) for field in ("name", "description", "category")]
+        texts += [(f"{name}.param.{param['key']}", param["label"]) for param in preset["paramSchema"]]
+        indicator = registry.get(name)(params=preset["params"])
+        meta = indicator.get_meta()
+        texts += [(f"{name}.meta.category", meta.category), (f"{name}.meta.description", meta.description)]
+        texts += [
+            (f"{name}.output.{key}", config.get("display_name", ""))
+            for key, config in indicator._get_output_configs().items()
+        ]
+
+    assert [(where, text) for where, text in texts if _CJK_TEXT.search(text or "")] == []
+    vol = next(preset for preset in presets if preset["engineName"] == "VOL")
+    assert (vol["name"], vol["category"]) == ("Volume", "Volume")
 
 
 def test_indicator_ws_error_message_has_structured_detail() -> None:

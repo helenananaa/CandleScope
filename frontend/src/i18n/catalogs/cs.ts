@@ -865,6 +865,7 @@ export const cs = {
   "indicator.name.macd": "Konvergence a divergence klouzavých průměrů (MACD)",
   "indicator.name.atr": "Průměrný skutečný rozsah (ATR)",
   "indicator.name.vol": "Objem (VOL)",
+  "indicator.description.vol": "Sloupce objemu obarvené podle směru svíčky",
   "indicator.hide": "Skrýt",
   "indicator.show": "Zobrazit",
   "indicator.viewReference": "Zobrazit referenční implementaci",

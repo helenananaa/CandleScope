@@ -865,6 +865,7 @@ export const ar = {
   "indicator.name.macd": "تقارب وتباعد المتوسطات (MACD)",
   "indicator.name.atr": "متوسط المدى الحقيقي (ATR)",
   "indicator.name.vol": "الحجم (VOL)",
+  "indicator.description.vol": "أعمدة الحجم ملوّنة حسب اتجاه الشمعة",
   "indicator.hide": "إخفاء",
   "indicator.show": "إظهار",
   "indicator.viewReference": "عرض التنفيذ المرجعي",

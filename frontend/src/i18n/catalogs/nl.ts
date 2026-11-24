@@ -865,6 +865,7 @@ export const nl = {
   "indicator.name.macd": "Moving Average Convergence Divergence (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Volume (VOL)",
+  "indicator.description.vol": "Volumebalken gekleurd naar de richting van de kaars",
   "indicator.hide": "Verbergen",
   "indicator.show": "Tonen",
   "indicator.viewReference": "Referentie-implementatie bekijken",

@@ -26,7 +26,7 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
-import { indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
+import { indicatorDescription, indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
 import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
@@ -46,39 +46,24 @@ import type {
   IndicatorEditorValue,
 } from "./IndicatorEditor.js";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  "趋势": "趋势",
-  "震荡": "震荡",
-  "波动": "波动率",
-  "成交量": "成交量",
-  "contract-data": "合约数据",
-  "custom": "自定义",
-  // English fallbacks (lowercase)
-  "trend": "趋势",
-  "momentum": "动量",
-  "volatility": "波动率",
-  "volume": "成交量",
-  "oscillator": "震荡",
-  // English fallbacks (capitalized — as reported by backend engine)
-  "Trend": "趋势",
-  "Oscillator": "震荡",
-  "Volatility": "波动率",
-  "Volume": "成交量",
-};
-
+/**
+ * Catalog category → stable group key. Built-ins report English categories;
+ * the Chinese entries only recognise categories saved by older builds and
+ * custom scripts. Labels come from the message catalogs, never from here.
+ */
 const CATEGORY_GROUP_KEYS: Record<string, string> = {
-  "趋势": "trend",
-  "动量": "momentum",
-  "震荡": "oscillator",
-  "波动率": "volatility",
-  "成交量": "volume",
-  "合约数据": "contract-data",
-  "自定义": "custom",
+  trend: "trend", Trend: "trend", "趋势": "trend",
+  momentum: "momentum", Momentum: "momentum", "动量": "momentum",
+  oscillator: "oscillator", Oscillator: "oscillator", "震荡": "oscillator",
+  volatility: "volatility", Volatility: "volatility", "波动": "volatility", "波动率": "volatility",
+  volume: "volume", Volume: "volume", "成交量": "volume",
+  "contract-data": "contract-data", "合约数据": "contract-data",
+  custom: "custom", "自定义": "custom",
 };
 
 function categoryGroupKey(category: string | null | undefined, fallback: string): string {
   const raw = category || fallback;
-  return CATEGORY_GROUP_KEYS[CATEGORY_LABELS[raw] || raw] || raw;
+  return Object.hasOwn(CATEGORY_GROUP_KEYS, raw) ? CATEGORY_GROUP_KEYS[raw]! : raw;
 }
 
 const CATEGORY_MESSAGE_KEYS: Record<string, MessageKey> = {
@@ -93,7 +78,7 @@ const CATEGORY_MESSAGE_KEYS: Record<string, MessageKey> = {
 
 function categoryDisplayLabel(cat: string): string {
   const key = CATEGORY_MESSAGE_KEYS[cat];
-  return key ? t(key) : (CATEGORY_LABELS[cat] || cat);
+  return key ? t(key) : cat;
 }
 
 const SOURCE_OPTIONS = ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4", "hlcc4"];
@@ -262,7 +247,7 @@ function marketStudyMatchesSearch(
     study.id,
     study.description,
     study.category,
-    CATEGORY_LABELS[study.category || "contract-data"],
+    categoryDisplayLabel(categoryGroupKey(study.category, "contract-data")),
     study.unsupportedReason,
     study.statusText,
   ].some((value) => String(value || "").toLowerCase().includes(query));
@@ -639,6 +624,7 @@ export default function IndicatorPanel({
       indicatorDisplayName(p).toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
       (p.description || "").toLowerCase().includes(q) ||
+      indicatorDescription(p).toLowerCase().includes(q) ||
       (p.category || "").toLowerCase().includes(q)
     );
   });
@@ -824,7 +810,7 @@ export default function IndicatorPanel({
                                     {!retired && !support.supported && <Badge>{t("indicator.replayUnavailable")}</Badge>}
                                   </span>
                                   <span className="indicator-row-desc">
-                                    {[preset.description, meta].filter(Boolean).join(" · ")}
+                                    {[indicatorDescription(preset), meta].filter(Boolean).join(" · ")}
                                   </span>
                                   {!support.supported && support.reason && (
                                     <span className="indicator-row-warning">{support.reason}</span>

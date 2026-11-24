@@ -865,6 +865,7 @@ export const sv = {
   "indicator.name.macd": "Moving Average Convergence Divergence (MACD)",
   "indicator.name.atr": "Average True Range (ATR)",
   "indicator.name.vol": "Volym (VOL)",
+  "indicator.description.vol": "Volymstaplar färgade efter ljusets riktning",
   "indicator.hide": "Dölj",
   "indicator.show": "Visa",
   "indicator.viewReference": "Visa referensimplementation",

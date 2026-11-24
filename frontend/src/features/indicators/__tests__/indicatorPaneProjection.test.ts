@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getLocale, setLocale } from "../../../i18n/index.js";
+import { loadLocaleCatalog } from "../../../i18n/registry.js";
 import { buildIndicatorPaneData } from "../indicatorPaneProjection.js";
 
 const hiddenIndicator = {
@@ -77,4 +79,19 @@ test("hline-only separate output materializes a placeholder-backed pane", () => 
   assert.equal(projected.subPanes.length, 1);
   assert.equal(projected.subPanes[0]?.id, "separate-pine-hline-only");
   assert.deepEqual(projected.subPanes[0]?.lines, []);
+});
+
+test("built-in pane labels use the app language, not the name saved with the indicator", async () => {
+  await loadLocaleCatalog("ja");
+  const previous = getLocale();
+  const volume = { id: "vol", engineName: "VOL", name: "成交量", lines: [{ id: "vol", pane: "volume", type: "histogram", data: [{ time: 10, value: 5 }] }] };
+  const custom = { id: "mine", name: "My oscillator", lines: [{ id: "p0", pane: "separate", type: "line", data: [{ time: 10, value: 1 }] }] };
+  try {
+    setLocale("en");
+    assert.deepEqual(buildIndicatorPaneData([volume, custom]).subPanes.map((pane) => pane.label), ["Volume (VOL)", "My oscillator"]);
+    setLocale("ja");
+    assert.equal(buildIndicatorPaneData([volume]).subPanes[0]?.label, "出来高 (VOL)");
+  } finally {
+    setLocale(previous);
+  }
 });
