@@ -152,7 +152,7 @@ the loader looks for `create_plugin()` first, then `plugin`.
 Use:
 
 ```bash
-curl http://localhost:8000/api/v1/exchanges/diagnostics
+curl http://127.0.0.1:18080/api/v1/exchanges/diagnostics
 ```
 
 Diagnostics report loaded/error status, source, plugin API version, protocol

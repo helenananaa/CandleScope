@@ -16,9 +16,15 @@
 
 ## Quick Start
 
-The web backend starts on CPython 3.11+. First-party Pine bundles remain
-Windows CPython 3.12 only; other hosts degrade that capability and still serve
-K-lines and built-in indicators.
+The web backend starts on CPython 3.11+. Pine runs in the first-party
+`candlescope.pine-compat` plugin on CPython 3.12. The desktop packages for
+Windows x64 and macOS (Apple Silicon and Intel) bundle it, built from the pins in
+`frontend/scripts/desktop-plugin-sources.json`. A source install runs Pine once
+the plugin is installed through the plugin manager, or once
+`CANDLESCOPE_BUNDLED_UNIFIED_PINE` names a bundled descriptor; see the
+[plugin lifecycle guide](app/plugin_lifecycle/README_zh.md) (Chinese). Without
+it, Pine is unavailable and the backend still serves K-lines and built-in
+indicators.
 
 Linux / macOS:
 
@@ -104,6 +110,11 @@ All application APIs are mounted under `/api/v1`.
 | Settings | proxy get/update/test, storage repair, gap scan, storage health, cache limits |
 | Subscriptions | list, sync, prices snapshot, get/set/delete symbol tier |
 | Replay | v2 TrainingRun catalog/create/list/command/review/fork/report routes, plus the internal adapter get/command/journal/report and `WS /stream/replay/{session_id}` |
+
+The other areas (order flow, alerts, history downloads, data preparation, the
+local data library, strategy runs, backtests, practice and read-only accounts,
+plugins and support) are listed in [API.md](../API.md#other-api-areas). A
+running backend serves the full OpenAPI schema at `/docs`.
 
 The enhanced K-line volume, delta, and CVD-contribution contract is documented in [`docs/KLINE_ORDER_FLOW_CONTRACT_zh.md`](../docs/KLINE_ORDER_FLOW_CONTRACT_zh.md).
 
@@ -310,9 +321,14 @@ the fidelity claim.
 - BAR replay has no legacy SQLite fallback. Keep
   `REPLAY_HISTORY_ARCHIVE_DIR` and its published epochs intact because active
   Runs pin those immutable catalog revisions.
-- Replay storage schema upgrades are forward-only. Before starting a build that
-  migrates `replay.db`, stop replay and back up both `replay.db` and its
-  `.datasets` directory. A full rollback to an older replay-aware build must
+- Replay storage schema upgrades are forward-only. Before a migration raises a
+  database's schema version, the backend keeps a copy next to it, for example
+  `replay.db.pre-replay-training-v26-to-v29.sqlite`; the backtest, continuous
+  strategy and trading account stores do the same. The app never deletes these
+  `*.pre-*` copies. [Release notes](../RELEASE_NOTES.md#going-back-to-030-after-upgrading)
+  give the restore steps. The copies cover the database files only, so before
+  starting a build that migrates `replay.db`, also back up its `.datasets`
+  directory. A full rollback to an older replay-aware build must
   either keep `REPLAY_ENABLED=0` or restore that pre-upgrade recovery set; it
   must not open a newer schema with the older runtime.
 

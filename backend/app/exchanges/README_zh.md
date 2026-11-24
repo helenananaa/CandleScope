@@ -134,7 +134,7 @@ loader 会优先寻找 `create_plugin()`，其次寻找 `plugin`。
 使用：
 
 ```bash
-curl http://localhost:8000/api/v1/exchanges/diagnostics
+curl http://127.0.0.1:18080/api/v1/exchanges/diagnostics
 ```
 
 diagnostics 会报告每个插件的 loaded/error 状态、来源、plugin API version、protocol class、

@@ -6,6 +6,9 @@ matching, fees, funding, risk, account, ledger, report, Study, and audit.
 
 This package has no backend, database, network, or Plugin Platform client.
 
+Templates are in `templates/`. To write a strategy, run it on a chart or check a
+template offline, see the [Python strategy guide](../../docs/BACKTEST_PYTHON_LOCAL_BETA_GUIDE_zh.md) (Chinese).
+
 ## Strategy cannot
 
 - Import Host modules or open CandleScope SQLite

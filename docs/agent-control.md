@@ -121,4 +121,4 @@ node cli.mjs download --window main-window --id "导出回执的 fileRef" --out 
 
 2026-10-08 原生样本闭环还验证了全部主窗口命令组 JSON 状态、权限默认关闭、延迟加载的设置/提醒/指标/数据工作台、图表预览与绘图导出租约、文件完整哈希、跨窗口隔离、CSV 上传到原有库流程、项目文件返回和重载失效。
 
-真实业务验收：先构建 frontend/dist，再在适配器目录运行 node real-backend-smoke.mjs。它启动隔离的实际后端，以确定性数据和离线网络 guard 验证 800 根 CSV 的逐行导入/质量、EMA 输出、完整项目恢复、已安装 Pyne 引擎的运行/取消/报告，以及 BAR/ONE_WAY 训练的创建、选市场、模拟买卖、结束、账户审计和报告。产物在 output/control-real-backend/；Python/引擎前置条件见适配器 README。此轮真实业务已通过，报告与精确边界见 [能力清单](agent-control-coverage.md) 和 [验收摘要](evidence/agent-control-real-backend-20261008.json)。真实交易所、实盘订单、历史精确账户/双向持仓训练、安装包发布与全部 UI 等价性仍需独立验收。
+真实业务验收：先构建 frontend/dist，再在适配器目录运行 node real-backend-smoke.mjs。它启动隔离的实际后端，以确定性数据和离线网络 guard 验证 800 根 CSV 的逐行导入/质量、EMA 输出、完整项目恢复、已安装 Pine 运行时上原生 Pine 策略的运行/取消/报告，以及 BAR/ONE_WAY 训练的创建、选市场、模拟买卖、结束、账户审计和报告。产物在 output/control-real-backend/；Python/引擎前置条件见适配器 README。此轮真实业务已通过，报告与精确边界见 [能力清单](agent-control-coverage.md) 和 [验收摘要](evidence/agent-control-real-backend-20261008.json)。真实交易所、实盘订单、历史精确账户/双向持仓训练、安装包发布与全部 UI 等价性仍需独立验收。
