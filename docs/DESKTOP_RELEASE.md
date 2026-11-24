@@ -52,6 +52,9 @@ the workflow refuses to replace it: fix the problem and tag a new version.
 - **On the Windows build:**
   - It runs the desktop host tests, packages the installer, and checks the sidecar
     and retired-Pyne rejection on the bundled Python.
+  - It uses the qualified CCXT fork wheel, checked against the SHA-256 in
+    `backend/ccxt-fork.lock.json`. The macOS jobs rebuild that pure-Python wheel
+    from the pinned source and must match the same hash.
   - It installs silently into a folder with a space in its name, then launches and
     restarts the installed app.
   - It uninstalls silently and confirms that user data in `%APPDATA%\CandleScope Replay` is kept.
