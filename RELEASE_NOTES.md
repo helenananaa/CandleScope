@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Chart strategies and live bars
+
+A chart strategy's result covers the history on the chart; it does not extend
+itself as new bars close. To run a Python strategy on live bars, choose
+**Run mode → History + live** or **Live only** (运行模式 → 历史接实时 / 纯实时)
+in the strategy panel, on a 1-minute chart. Pine strategies on the chart run on
+history only in this release.
+
 ### Going back to 0.3.0 after upgrading
 
 CandleScope 0.3.0 (the 2026-10-25 build) cannot open a profile after this
