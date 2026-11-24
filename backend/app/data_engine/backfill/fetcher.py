@@ -27,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from contextlib import nullcontext
@@ -78,6 +79,15 @@ ProgressCallback = Callable[
 ]  # task, fetched, total
 ErrorCallback = Callable[[BackfillTask, str], Awaitable[None]]  # task, error_msg
 RateLimiter = Callable[[], Awaitable[None]]  # async sleep / token-bucket
+
+# Per fetch() call: one gate per rate-limit bucket, sized to the endpoint's
+# concurrency. A call's tasks and archive-routed REST pieces (tails, fallback
+# ranges) share one deferrable chunk demand. Without the gate, a piece that met
+# its own sibling on a one-slot endpoint deferred the whole chunk and discarded
+# the sibling's rows, and every retry raced the same way (RC item 23, #446).
+_SIBLING_GATES: contextvars.ContextVar[dict[str, asyncio.Semaphore] | None] = (
+    contextvars.ContextVar("backfill_fetch_sibling_gates", default=None)
+)
 
 
 class FetchBatchDeferred(RateLimitDeferred):
@@ -313,7 +323,13 @@ class HistoricalFetcher:
                     on_full_task(task)
         coros = [self._fetch_rest_task(task, consume=on_native_page) if stream
                  else self._fetch_task(task, route_plan) for task, stream in zip(tasks, streaming)]
-        raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        # Tasks created below inherit this call's gates; concurrent calls
+        # (other chunks) get their own and still meet in public admission.
+        gates = _SIBLING_GATES.set({})
+        try:
+            raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        finally:
+            _SIBLING_GATES.reset(gates)
 
         deferred = [
             result for result in raw_results if isinstance(result, RateLimitDeferred)
@@ -392,7 +408,7 @@ class HistoricalFetcher:
 
     async def _fetch_rest_task(self, task: BackfillTask, *, consume=None) -> FetchResult | FetchReceipt:
         """Fetch all REST pages for a single task."""
-        async with self._semaphore:
+        async with self._sibling_gate(task), self._semaphore:
             if consume is None:
                 return await self._fetch_rest_task_inner(task)
             width, slots = stream_grid(task, self._cfg.fetch_batch_size)
@@ -1171,6 +1187,28 @@ class HistoricalFetcher:
             task.market_type
         )
         return get_shared_rate_limit_semaphore(rule, fallback=max(1, int(limit)))
+
+    def _sibling_gate(self, task: BackfillTask):
+        """Queue one fetch's REST work behind its own siblings on an endpoint.
+
+        Physical (CCXT) admission defers a chunk's request when the endpoint
+        slot is busy. When the holder is the same chunk, deferring cannot help:
+        the chunk reruns and races itself again. A waiting sibling holds no
+        extra worker, global REST slot or quota, and a slot held by any other
+        owner still defers the chunk through public admission as before.
+        """
+        gates = _SIBLING_GATES.get()
+        if gates is None:
+            return nullcontext()
+        try:
+            rule = self._rate_limit_rule(task, self._historical_request(task))
+            limit = rule.max_concurrency or self._rate_limit_policy(task).concurrency_for(task.market_type)
+        except Exception:
+            return nullcontext()  # No known endpoint limit: keep the old behaviour.
+        gate = gates.get(rule.bucket_key)
+        if gate is None:
+            gate = gates[rule.bucket_key] = asyncio.Semaphore(max(1, int(limit)))
+        return gate
 
     def _global_fetch_concurrency(self) -> int:
         configured = getattr(self._cfg, "fetch_global_concurrency", None)
