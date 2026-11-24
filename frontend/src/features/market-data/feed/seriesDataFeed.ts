@@ -466,6 +466,42 @@ function unionRange(
   };
 }
 
+/**
+ * A pending before-page demands its own page, not every row a backfill wrote.
+ * One storage change can cover a whole hole, for example between two far
+ * date-seek windows. Read page after page into the window, it grew to the bar
+ * budget, and the prepend trim then dropped the newest rows: the ones in view.
+ * Bound the read to the window's coverage plus the page. When the page extent
+ * cannot be derived for the interval, the event range is kept as before.
+ */
+function pendingLoadMoreFetchRange(
+  series: MarketSeries,
+  eventRange: TimeRangeMs | null,
+  pending: PendingBeforePage,
+  activeCoverage: TimeRangeMs | null,
+): TimeRangeMs | null {
+  if (!eventRange) return eventRange;
+  const before = Number(pending.before);
+  const bars = Math.max(1, Math.floor(Number(pending.bars ?? 500)) || 500);
+  if (!Number.isFinite(before)) return eventRange;
+  const timeline = createIntervalTimeline(series.interval);
+  let start: number | null = null;
+  if (timeline) {
+    start = before;
+    for (let index = 0; index < bars && start !== null; index += 1) {
+      const previous: number | null = timeline.previous(start);
+      start = previous !== null && previous < start ? previous : null;
+    }
+  }
+  const seconds = parseIntervalSeconds(series.interval);
+  if (start === null && seconds) start = before - bars * seconds;
+  if (start === null || !Number.isFinite(start)) return eventRange;
+  return intersectRanges(eventRange, {
+    start: Math.max(0, start) * 1_000,
+    end: Math.max(activeCoverage?.end ?? 0, before * 1_000),
+  });
+}
+
 function rangesTouch(left: TimeRangeMs | null, right: TimeRangeMs | null): boolean {
   if (!left || !right) return !left && !right;
   return left.start <= right.end + 1 && right.start <= left.end + 1;
@@ -1424,15 +1460,16 @@ export class SeriesDataFeed {
     const isPendingInitial = Boolean(
       pendingInitial && isSameSeries(job.series, pendingInitial),
     );
-    const isPendingLoadMore = Boolean(pendingBeforePage);
     const activeRows = getCacheRows(job.series) || [];
     const activeCoverage = activeCoverageMsFromRows(activeRows);
     const activeOverlap = intersectRanges(job.range, activeCoverage);
-    const fetchRange = (
-      (isPendingInitial || isPendingLoadMore)
-        ? job.range
-        : activeOverlap
-    );
+    const fetchRange = isPendingInitial
+      ? job.range
+      : pendingBeforePage
+        ? pendingLoadMoreFetchRange(job.series, job.range, pendingBeforePage, activeCoverage)
+        : activeOverlap;
+    // Nothing of the page was written: its own poll settles it.
+    if (!fetchRange && pendingBeforePage && job.storageRevisionFloor) pendingBeforePage.nextPollAt = Date.now();
     let loadedAny = false;
     let initialResolved = false;
     let rangeVerified = false;
@@ -2407,9 +2444,15 @@ export class SeriesDataFeed {
       return true;
     }
 
-    const fetchRange = (isPendingInitial || isPendingLoadMore)
+    const fetchRange = isPendingInitial
       ? eventRange
-      : activeOverlap;
+      : pendingBeforePage
+        ? pendingLoadMoreFetchRange(eventSeries, eventRange, pendingBeforePage, activeCoverage)
+        : activeOverlap;
+    if (!fetchRange && !isPendingInitial && pendingBeforePage && eventRange) {
+      pendingBeforePage.nextPollAt = Date.now();
+      return true;
+    }
     const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange, storageRevisionFloor);
     this.backfillRecovery.enqueue(this.seriesKey(eventSeries), {
       series: eventSeries,
