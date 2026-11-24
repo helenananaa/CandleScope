@@ -607,6 +607,9 @@ export function useKlineStreamRuntime({
                   acknowledgementState,
                   msgInterval,
                 );
+                // A forming row linked to a verified closed-range readback ends
+                // recovery here; the tick commit below then re-reads the label.
+                consumerRecovery.observeRealtime(seriesDataFeed, series, tick, message.stream_version);
               }
 
               if (fresh && effect.updatesQuote && msgInterval === "1m" && tick.close != null) {

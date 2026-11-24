@@ -1,21 +1,43 @@
 import { hasVerifiedRangeCoverage, recoveryRetryDecision } from "../quality/klineQualityPolicy.js";
 import type { SeriesDataFeed } from "./seriesDataFeed.js";
+import type { FeedResult } from "../klineContracts.js";
 import type { KlineBar, MarketSeries } from "../marketDataTypes.js";
 import { nextIntervalTime, previousIntervalTime } from "../../../utils/intervalTimeline.js";
-import { parseMarketVersion, sameStream } from "../manager/marketHealth.js";
+import { parseMarketVersion, sameStream, type MarketStreamVersion } from "../manager/marketHealth.js";
+
+interface FormingObservation { row: KlineBar; version: MarketStreamVersion }
+
+/** A verified strict range of closed rows that still lacks its forming bucket. */
+interface ClosedRangeProof { result: FeedResult; version: MarketStreamVersion; end: number }
+
+interface Checkpoint {
+  series: MarketSeries;
+  times: number[];
+  start: number;
+  end: number;
+  formingEnd: number | null;
+  discoverTail: boolean;
+  epoch: number;
+  retryAt?: number;
+  proof?: ClosedRangeProof;
+  forming?: FormingObservation;
+}
+
+/**
+ * The forming row must be newer than the closed-range snapshot in the same
+ * stream incarnation, with no critical fact (create, close, amend, backfill,
+ * source gap) between them: the barrier counts exactly those events.
+ */
+function formsProof(proof: ClosedRangeProof, forming: FormingObservation): boolean {
+  return forming.row.is_closed === false && Number(forming.row.time) === proof.end
+    && sameStream(proof.version, forming.version) && forming.version.barrier === proof.version.barrier
+    && forming.version.sequence >= proof.version.sequence
+    && forming.version.observed_at_ms >= proof.version.observed_at_ms;
+}
 
 /** A disconnected consumer cannot prove continuity from a recent-tail reload. */
 export class KlineConsumerRecovery {
-  private readonly pending = new Map<string, {
-    series: MarketSeries;
-    times: number[];
-    start: number;
-    end: number;
-    formingEnd: number | null;
-    discoverTail: boolean;
-    epoch: number;
-    retryAt?: number;
-  }>();
+  private readonly pending = new Map<string, Checkpoint>();
   private running = false;
   private readonly abort = new AbortController();
 
@@ -113,7 +135,12 @@ export class KlineConsumerRecovery {
             && times.has(result.effective_end_ms / 1000)
             && nextIntervalTime(checkpoint.series.interval, result.effective_end_ms / 1000) === end) {
             const closedVersion = parseMarketVersion(result.stream_version, checkpoint.series);
-            if (closedVersion?.stable === true) {
+            if (closedVersion?.stable === true && closedVersion.observed_at_ms > 0) {
+              // The backend omits its forming row while its exchange stream
+              // reconnects, so the HTTP tail can stay closed-only for minutes.
+              // Keep the closed proof for a fresh streamed forming row instead.
+              const proof: ClosedRangeProof = { result, version: closedVersion, end };
+              checkpoint.proof = proof;
               const tail = await feed.getLatest(checkpoint.series, {
                 limit: 2, source: "consumer-resync-forming", commit: "none", signal: this.abort.signal,
               });
@@ -122,10 +149,7 @@ export class KlineConsumerRecovery {
               // A correction or a new closed bucket invalidates the combined
               // proof; retry the strict range instead of reopening a final row.
               if (this.pending.get(key) === checkpoint && feed.isCurrent(checkpoint.series, checkpoint.epoch)
-                && !tail.stale && row?.is_closed === false && Number(row.time) === end
-                && tailVersion?.stable === true && sameStream(closedVersion, tailVersion)
-                && tailVersion.barrier === closedVersion.barrier && tailVersion.sequence >= closedVersion.sequence
-                && closedVersion.observed_at_ms > 0 && tailVersion.observed_at_ms >= closedVersion.observed_at_ms) {
+                && !tail.stale && row && tailVersion?.stable === true && formsProof(proof, { row, version: tailVersion })) {
                 publishForming = () => {
                   feed.applyResult(checkpoint.series, { ...tail, data: [row] }, {
                     epoch: checkpoint.epoch, source: "consumer-resync-forming", mode: "tick", commit: "patch-active",
@@ -133,6 +157,11 @@ export class KlineConsumerRecovery {
                 };
                 times.add(end);
                 latest = row;
+              } else if (this.pending.get(key) === checkpoint && checkpoint.forming
+                && formsProof(proof, checkpoint.forming)) {
+                // Already committed by the stream owner; nothing to publish.
+                times.add(end);
+                latest = checkpoint.forming.row;
               }
             }
           }
@@ -162,6 +191,28 @@ export class KlineConsumerRecovery {
       this.running = false;
     }
     return resumed;
+  }
+
+  /**
+   * Record a fresh streamed row. A forming row that extends a retained closed
+   * range proof completes recovery at once; returns true when it did. The
+   * caller has already committed the row itself.
+   */
+  observeRealtime(feed: SeriesDataFeed, series: MarketSeries, row: KlineBar, streamVersion: unknown): boolean {
+    if (this.abort.signal.aborted || row.is_closed !== false) return false;
+    const key = feed.seriesKey(series);
+    const checkpoint = this.pending.get(key);
+    if (!checkpoint || !feed.isCurrent(checkpoint.series, checkpoint.epoch)) return false;
+    const version = parseMarketVersion(streamVersion, checkpoint.series);
+    if (!version) return false;
+    checkpoint.forming = { row, version };
+    const proof = checkpoint.proof;
+    if (!proof || !formsProof(proof, checkpoint.forming)) return false;
+    this.pending.delete(key);
+    feed.applyResult(checkpoint.series, proof.result, {
+      epoch: checkpoint.epoch, source: "consumer-resync", mode: "range", commit: "active",
+    });
+    return true;
   }
 
   observeAvailability(): void {
