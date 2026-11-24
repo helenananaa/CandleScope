@@ -2,7 +2,7 @@
 
 .workspace-navigation { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
 .workspace-navigation :is(a, button, span) { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; text-decoration: none; font: 500 var(--font-size-sm)/1.4 var(--font-sans); white-space: nowrap; }
-.workspace-navigation [aria-current='page'] { color: var(--text-accent); background: var(--bg-hover); }
+.workspace-navigation [aria-current='page'] { color: var(--text-accent); background: var(--surface-hover); }
 .workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
 

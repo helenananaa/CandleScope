@@ -89,15 +89,23 @@ export function classNamesInCss(source) {
   return new Set([...withoutComments.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((match) => match[1]));
 }
 
+// The colour names tokens.css replaced (Phase 1) and dropped (Phase 8). Extension themes still use them
+// in candlescope.theme/1; features/extensions/state.ts writes them as the design tokens.
+const LEGACY_COLOR_TOKEN = /--(?:bg-(?:primary|secondary|tertiary|hover)|border-color)\b/g;
+
 export function collectMetrics(files, read = (file) => fs.readFileSync(file, "utf8")) {
   const styleFiles = files.filter((file) => file.endsWith(".css") || file.endsWith("Styles.tsx"));
   const componentFiles = files.filter((file) => file.endsWith(".tsx") && !file.endsWith("Styles.tsx") && !/\.test\.tsx$/.test(file));
   const defined = new Set();
   let important = 0;
+  let legacyColorTokens = 0;
   for (const file of styleFiles) {
     const css = read(file);
     for (const name of classNamesInCss(css)) defined.add(name);
     important += (css.match(/!important/g) ?? []).length;
+  }
+  for (const file of files.filter((f) => /\.(css|tsx?)$/.test(f) && !/\.test\.tsx?$/.test(f))) {
+    legacyColorTokens += (read(file).match(LEGACY_COLOR_TOKEN) ?? []).length;
   }
   const unstyled = [];
   let rawButtons = 0;
@@ -126,6 +134,7 @@ export function collectMetrics(files, read = (file) => fs.readFileSync(file, "ut
     inlineStyles,
     important,
     nativeDialogs,
+    legacyColorTokens,
   };
 }
 
@@ -138,6 +147,7 @@ function report(metrics) {
     ["Inline style={{}}", metrics.inlineStyles, "dynamic only"],
     ["!important in stylesheets", metrics.important, 0],
     ["window.confirm / window.alert", metrics.nativeDialogs, 0],
+    ["Legacy colour token names (--bg-*)", metrics.legacyColorTokens, 0],
   ];
   console.log("Style metrics (warn-only; see FRONTEND_DESIGN_REFACTOR_PLAN.md §7)\n");
   for (const [label, value, target] of rows) console.log(`  ${label.padEnd(38)} ${String(value).padStart(5)}   target ${target}`);
@@ -157,6 +167,11 @@ export function main(argv = process.argv.slice(2)) {
     report(metrics);
   }
   if (argv.includes("--strict") && (metrics.unstyledClasses || metrics.important || metrics.nativeDialogs)) process.exitCode = 1;
+  // Already at zero: a legacy colour name coming back fails the check now, not only with --strict.
+  if (metrics.legacyColorTokens) {
+    console.error(`\n${metrics.legacyColorTokens} legacy colour token name(s) (--bg-*, --border-color); use --surface-* / --border-subtle.`);
+    process.exitCode = 1;
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

@@ -413,7 +413,7 @@
   width: 44px;
   height: 28px;
   padding: 2px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
   background: var(--surface-0);
   cursor: pointer;
@@ -512,14 +512,14 @@
 .strategy-research-shell :where(.strategy-research-script, .strategy-research-result-slot) :where(button:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)) {
   min-height: 34px;
   padding: 7px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-primary);
   font: 500 13px/1.4 var(--font-sans);
 }
 .strategy-research-shell button { cursor: pointer; }
-.strategy-research-shell button:not(.ui-control):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .strategy-template-card)):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
+.strategy-research-shell button:not(.ui-control):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .strategy-template-card)):hover:not(:disabled) { background: var(--surface-hover); border-color: var(--strategy-link); }
 .strategy-research-shell button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):disabled { opacity: .55; cursor: not-allowed; }
 .strategy-research-shell :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .ui-input, .ui-disclosure-summary, .strategy-template-card)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
 /* Content links only; the shared top bar keeps its own navigation colors, kit link-buttons their own. */

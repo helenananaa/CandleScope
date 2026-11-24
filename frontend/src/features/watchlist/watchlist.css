@@ -7,8 +7,8 @@
 .watchlist-sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-left: 1px solid var(--border-subtle);
   flex-shrink: 0;
   overflow: hidden;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -42,7 +42,7 @@
   overflow: hidden;
 }
 
-.wl-collapse-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.wl-collapse-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
 .wl-add-list-btn:hover { color: var(--text-accent); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
 
 .wl-table-header > button {
@@ -95,7 +95,7 @@
   transition: all 0.15s;
   gap: 2px;
 }
-.wl-collapsed-tab:hover { background: var(--bg-hover); }
+.wl-collapsed-tab:hover { background: var(--surface-hover); }
 .wl-collapsed-dot {
   width: 6px;
   height: 6px;
@@ -111,7 +111,7 @@
 
 .wl-accordion-scroll::-webkit-scrollbar { width: 4px; }
 .wl-accordion-scroll::-webkit-scrollbar-track { background: transparent; }
-.wl-accordion-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: var(--radius-xs); }
+.wl-accordion-scroll::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: var(--radius-xs); }
 /* ── List block ── */
 .wl-list-block {
   position: relative;
@@ -127,7 +127,7 @@
 
 .wl-list-header:hover .wl-list-grip { opacity: 0.8; }
 
-.wl-list-toggle:hover { color: var(--text-primary); background: var(--bg-hover); }
+.wl-list-toggle:hover { color: var(--text-primary); background: var(--surface-hover); }
 
 /* ── List body ── */
 .wl-list-body {
@@ -146,7 +146,7 @@
 /* ── Symbol row (draggable, table-style) ── */
 .wl-sym-wrapper { position: relative; }
 
-.wl-sym-row:hover { background: var(--bg-hover); }
+.wl-sym-row:hover { background: var(--surface-hover); }
 .wl-sym-row.active {
   background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
   border-right-color: var(--accent-blue);
@@ -250,8 +250,8 @@
 .wl-context-menu {
   position: fixed;
   z-index: var(--z-menu);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   min-width: 160px;
@@ -287,13 +287,13 @@
   transition: all 0.12s;
   text-align: left;
 }
-.wl-ctx-item:hover { background: var(--bg-hover); }
+.wl-ctx-item:hover { background: var(--surface-hover); }
 .wl-ctx-item-danger { color: var(--text-down); }
 .wl-ctx-item-danger:hover { background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 
 .wl-ctx-divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--border-subtle);
   margin: 4px 6px;
 }
 .wl-ctx-sub-header {
@@ -329,7 +329,7 @@
 }
 
 /* ── Light theme overrides ── */
-[data-theme='light'] .watchlist-sidebar { background: var(--bg-secondary); }
+[data-theme='light'] .watchlist-sidebar { background: var(--surface-1); }
 [data-theme='light'] .wl-list-header { background: rgba(0, 0, 0, 0.03); }
 [data-theme='light'] .wl-list-header:hover { background: rgba(0, 0, 0, 0.06); }
 [data-theme='light'] .wl-context-menu,
@@ -344,7 +344,7 @@
   height: 36px;
   padding: 0 8px;
   gap: 6px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.04);
 }
@@ -378,7 +378,7 @@
   display: flex;
   align-items: center;
   padding: 5px 8px 5px 6px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   background: rgba(0, 0, 0, 0.03);
   flex-shrink: 0;
   gap: 2px;
@@ -432,7 +432,7 @@
   gap: 4px;
   padding: 5px 6px 5px 4px;
   background: rgba(0, 0, 0, 0.06);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: grab;
   user-select: none;
   transition: background 0.15s;
@@ -506,7 +506,7 @@
 .wl-list-name-input {
   flex: 1;
   min-width: 0;
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   border: 1px solid var(--accent-blue);
   border-radius: var(--radius-xs);
   color: var(--text-primary);

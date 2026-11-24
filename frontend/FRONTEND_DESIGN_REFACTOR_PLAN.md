@@ -698,6 +698,22 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Hindi and Arabic (152 visits, the 19 states that open without the local service): Arabic is the first right-to-left language of row 7c4, and two existing right-to-left faults are fixed. The layout menu's popover was anchored by `right: 0` and opened past the window's left edge (cut at every width); it now uses `inset-inline-end`. The header's wordmark read "ScopeCandle"; it keeps left-to-right order. What remains is cut with its full text on hover. The CSV import's volume option already fits in both. The rail's tab titles fit. Both scripts draw in system fonts, since the interface font has no Devanagari or Arabic (known gap).
 - Next: row 7c4's last language, Hebrew (7c13), right-to-left like Arabic.
 
+**Phase 8 lands in three parts** (split decided 2026-11-23, when it started). It is built on a local merge of the design (#564) and strategy (#565) integration PRs into main, because dead CSS can only be found on code that includes both; its PRs target main once both have merged.
+
+| Part | Scope |
+|---|---|
+| 8a | Colour tokens: the legacy `--bg-primary` / `--bg-secondary` / `--bg-tertiary` / `--bg-hover` / `--border-color` names out of the stylesheets and the aliases out of `tokens.css`. These names are also the colour names of the theme extension contract (`candlescope.theme/1`, checked by `backend/app/plugin_lifecycle/appearance.py`), so a theme keeps them and the app writes each as the design token it stands for. Chart panes with their own appearance set the token names. A check rejects the old names |
+| 8b | Dead CSS, the remaining unstyled class names and `!important` (except reduced motion); `npm run check` runs the style metrics strictly, with ratchets on the counts that have not reached their target |
+| 8c | After launch: the §7 targets still open — raw `<button>` (266 → ≤ 20), static inline styles, the `*-btn` families onto the kit |
+
+**Phase 8a is done (branch `design/phase-8-cleanup`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_8A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_8A.md).
+
+- 416 uses of the five legacy colour names in 31 stylesheets and one component now use `--surface-0` / `--surface-1` / `--surface-2` / `--surface-hover` / `--border-subtle`; the aliases are gone from `tokens.css`. In the app theme nothing changes: a computed-style comparison of 19 states in both themes, with hover and focus forced, finds no difference.
+- Theme extensions keep their contract. `features/extensions/state.ts` writes `bg-primary` as `--surface-0` and so on, so a theme now colours every surface and border; before, only the rules still on the old names followed it (since Phase 1), and the rest kept the app's colours (the Paper example left 15 elements on the market page in the app's whites and greys).
+- Chart panes with their own appearance set `--border-subtle` instead of `--border-color`; inside such a pane every surface and border follows the chart. The only element that changes there is the loading spinner's track, which now takes the chart's background.
+- `check:styles` counts the old names and fails on any (the first guardrail that fails today rather than with `--strict`).
+- Next: 8b.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

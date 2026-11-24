@@ -40,3 +40,13 @@ test("metrics flag unstyled classes, raw buttons and native dialogs", () => {
   assert.equal(metrics.important, 1);
   assert.equal(metrics.nativeDialogs, 1);
 });
+
+test("metrics count legacy colour token names in stylesheets and components, not theme contract keys", () => {
+  const files = {
+    "/src/a.css": ".panel { background: var(--bg-primary); border: 1px solid var(--border-color); border-color: red; }",
+    "/src/B.tsx": 'export const B = () => <div style={{ background: "var(--bg-hover)" }} />;',
+    "/src/theme.ts": 'export const MAP = { "bg-primary": "surface-0", "border-color": "border-subtle" };',
+    "/src/ok.css": ".panel { background: var(--surface-0); border: 1px solid var(--border-subtle); }",
+  };
+  assert.equal(collectMetrics(Object.keys(files), (file) => files[file]).legacyColorTokens, 3);
+});

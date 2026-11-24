@@ -16,9 +16,9 @@
 .plugin-action-row button,
 .plugin-modal button,
 .plugin-view-surface button {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   color: var(--text-secondary);
   padding: 6px 9px;
   font: inherit;
@@ -61,9 +61,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
   color: var(--text-primary);
 }
@@ -73,7 +73,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .plugin-modal h2,
 .plugin-view-surface h2,
@@ -88,9 +88,9 @@
 .plugin-native-field select {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   color: var(--text-primary);
   padding: 8px 10px;
 }
@@ -107,7 +107,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 10px 12px;
 }
@@ -157,7 +157,7 @@
 .plugin-marketplace-roots article,
 .plugin-marketplace-list > article {
   padding: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 24%, transparent);
 }
@@ -178,7 +178,7 @@
 .plugin-marketplace-assurances > span,
 .plugin-marketplace-assurances > details {
   padding: 4px 7px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -200,7 +200,7 @@
   flex-direction: column;
   gap: 5px;
   overflow: auto;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-subtle);
   padding-right: 12px;
 }
 .plugin-command-layout nav button,
@@ -231,7 +231,7 @@
   margin: 0;
   padding: 8px;
   background: var(--surface-0);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
 .plugin-command-file {
@@ -239,7 +239,7 @@
   gap: 6px;
   margin-bottom: 12px;
   padding: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 18%, transparent);
 }
@@ -255,7 +255,7 @@
   margin: 0 0 14px;
 }
 .plugin-native-group .plugin-native-group {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 12px;
 }
@@ -270,7 +270,7 @@
   align-items: center;
 }
 .plugin-native-checkbox small { grid-column: 2; }
-.plugin-native-array-row { border-left: 2px solid var(--border-color); padding-left: 10px; margin-bottom: 8px; }
+.plugin-native-array-row { border-left: 2px solid var(--border-subtle); padding-left: 10px; margin-bottom: 8px; }
 .plugin-action-row { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0; }
 .plugin-paper-panel {
   margin: 14px 0;
@@ -285,8 +285,8 @@
   position: fixed;
   z-index: calc(var(--z-overlay) + 350);
   overflow: auto;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-1);
   color: var(--text-primary);
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
   padding-bottom: 16px;
@@ -307,10 +307,10 @@
 .plugin-native-table-wrap { overflow: auto; }
 .plugin-native-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
 .plugin-native-table th,
-.plugin-native-table td { padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
+.plugin-native-table td { padding: 8px; border-bottom: 1px solid var(--border-subtle); text-align: left; white-space: nowrap; }
 .plugin-native-table th { color: var(--text-muted); }
 .plugin-native-list { display: grid; gap: 8px; padding: 0; list-style: none; }
-.plugin-native-list li { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.plugin-native-list li { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .plugin-native-detail { display: grid; grid-template-columns: minmax(100px, auto) 1fr; gap: 8px 14px; }
 .plugin-native-detail dt { color: var(--text-muted); }
 .plugin-native-detail dd { margin: 0; }
@@ -333,9 +333,9 @@
   min-height: 180px;
   max-height: 1200px;
   box-sizing: border-box;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 .plugin-sandbox-failure {
   display: grid;
@@ -356,21 +356,21 @@
 .plugin-permissions article {
   margin: 10px 0;
   padding: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
 .plugin-permissions article > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
 .plugin-permissions pre,
-.plugin-manager-detail pre { max-height: 160px; overflow: auto; white-space: pre-wrap; color: var(--text-muted); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-control); }
+.plugin-manager-detail pre { max-height: 160px; overflow: auto; white-space: pre-wrap; color: var(--text-muted); background: var(--surface-0); padding: 8px; border-radius: var(--radius-control); }
 .plugin-ui-fallback {
   position: fixed;
   z-index: var(--z-toast);
   right: 16px;
   bottom: 38px;
   max-width: min(480px, 90vw);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-1);
   color: var(--text-primary);
   padding: 10px 14px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
@@ -427,7 +427,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   border-radius: var(--radius-lg);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent-blue) 14%, transparent), color-mix(in srgb, var(--accent-purple) 6%, transparent)),
-    var(--bg-primary);
+    var(--surface-0);
   box-shadow: 0 12px 30px rgba(2, 6, 23, 0.16);
 }
 .plugin-settings-hero h3 {
@@ -445,9 +445,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 .plugin-settings-summary > div {
   display: grid;
@@ -456,7 +456,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   padding: 14px 16px;
 }
 .plugin-settings-summary > div + div {
-  border-left: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-subtle);
 }
 .plugin-settings-summary strong {
   overflow: hidden;
@@ -473,7 +473,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-0) 24%, transparent);
 }
@@ -497,9 +497,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   align-items: center;
   min-height: 24px;
   padding: 0 9px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -520,7 +520,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
 }
 .plugin-settings-page .plugin-v1-compatibility {
   padding: 16px;
-  border-color: var(--border-color);
+  border-color: var(--border-subtle);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-0) 24%, transparent);
 }
@@ -532,9 +532,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   display: grid;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--surface-0);
 }
 /* Host-managed runtimes and symbol providers: one row each, like the runtime list. */
 .plugin-runtime-registry-card {
@@ -549,9 +549,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   display: grid;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   overflow-wrap: anywhere;
 }
 .plugin-runtime-registry-row strong,
@@ -628,9 +628,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
 }
 .plugin-settings-page button,
 .plugin-install-button {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
+  background: var(--surface-2);
   color: var(--text-secondary);
   padding: 7px 10px;
   font: inherit;
@@ -699,7 +699,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
 .plugin-settings-page .plugin-marketplace-panel {
   margin-top: 0;
   padding: 16px;
-  border-color: var(--border-color);
+  border-color: var(--border-subtle);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-0) 24%, transparent);
 }
@@ -712,9 +712,9 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   gap: 5px;
   min-height: 88px;
   padding: 16px;
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--surface-0);
   text-align: center;
 }
 .plugin-empty-state strong {
@@ -749,7 +749,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-rin
   }
 
   .plugin-settings-summary > div + div {
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-subtle);
     border-left: 0;
   }
 

@@ -111,7 +111,7 @@
 .native-performance-readout strong { color: var(--text-primary); }
 .native-performance svg { display: block; width: 100%; height: auto; min-height: 150px; color: var(--text-primary); }
 .native-performance svg text { fill: var(--text-secondary); font: var(--font-size-xs) var(--font-sans); }
-.native-chart-grid { stroke: var(--border-color); stroke-width: .6; stroke-dasharray: 3 4; }
+.native-chart-grid { stroke: var(--border-subtle); stroke-width: .6; stroke-dasharray: 3 4; }
 .native-performance-line, .native-drawdown-line, .native-benchmark-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .native-performance-line { stroke: var(--candle-up); }
 .native-drawdown-line { stroke: var(--candle-down); }

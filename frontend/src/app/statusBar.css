@@ -12,8 +12,8 @@
   height: 24px;
   padding: 0 12px;
   overflow: hidden;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;

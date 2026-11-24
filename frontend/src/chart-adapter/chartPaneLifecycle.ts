@@ -213,13 +213,11 @@ export function chartPaneCssVariables(options: PaneAppearanceOptions & {
       "--text-primary": colors.textColor,
       "--text-secondary": colors.textColor,
       "--text-muted": colors.textColor,
-      "--bg-primary": colors.bgColor,
-      "--bg-secondary": colors.bgColor,
       "--surface-0": colors.bgColor,
       "--surface-1": colors.bgColor,
       "--surface-2": colors.bgColor,
       "--surface-3": colors.bgColor,
-      "--border-color": colors.borderColor,
+      "--border-subtle": colors.borderColor,
     } : {}),
   };
 }

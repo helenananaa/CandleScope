@@ -38,7 +38,7 @@ export function ChartLoadError({ error, context, onRetry }: { error: string; con
             value={diagnostic}
             onFocus={(event) => event.currentTarget.select()}
             rows={6}
-            style={{ width: "100%", maxWidth: 520, color: "var(--text-primary)", background: "var(--bg-primary)" }}
+            style={{ width: "100%", maxWidth: 520, color: "var(--text-primary)", background: "var(--surface-0)" }}
           />
         )}
       </div>

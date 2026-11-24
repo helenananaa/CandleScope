@@ -34,7 +34,7 @@ body {
   font-family: var(--font-sans);
   /* Fixed-width digits so prices, sizes and timers do not shift as they tick */
   font-variant-numeric: tabular-nums;
-  background-color: var(--bg-primary);
+  background-color: var(--surface-0);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
