@@ -35,3 +35,8 @@ export class MainSeriesPriceFormatTracker {
     return { type: "price" as const, precision: this.precision, minMove: Number(`1e-${this.precision}`) };
   }
 }
+
+/** The precision the chart shows for these bars, for labels drawn beside them. */
+export function seriesPricePrecision(rows: readonly ChartSeriesInputRow[]): number {
+  return new MainSeriesPriceFormatTracker().resolve(rows).precision;
+}

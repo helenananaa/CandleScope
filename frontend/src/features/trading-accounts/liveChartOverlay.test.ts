@@ -11,6 +11,7 @@ import { createReplayMarkerSource, fillMarkerGroups } from "./replayMarkerSource
 import type { JournalEntry, PracticeOrder, Trade, TradeLeg } from "./tradingTypes.js";
 import { floorIntervalTime } from "../../utils/intervalTimeline.js";
 import { structuralMock } from "../../test/testHelpers.js";
+import { setLocale } from "../../i18n/index.js";
 
 const BTC = { exchange: "binance", marketType: "futures", symbol: "BTCUSDT" };
 const HOUR = 3_600;
@@ -185,4 +186,24 @@ test("same-side fills in one candle share a marker with exact qty and weighted p
     { time: 10 * HOUR, side: "sell", qty: "0.001", price: 82100, count: 1 },
     { time: 11 * HOUR, side: "buy", qty: "0.1", price: 81000, count: 1 },
   ]);
+});
+
+test("fill marker labels round slipped fill prices to the chart's precision and keep the quantity's step", () => {
+  setLocale("en");
+  const legs = [
+    leg("f1", "sell", "open", "1.178", "1698.270156", 10 * HOUR + 60),
+    leg("f2", "buy", "close", "1.191", "1685.998583", 11 * HOUR + 60),
+    leg("f3", "buy", "open", "0.5", "1685.998583", 12 * HOUR + 60),
+    leg("f4", "buy", "add", "0.25", "1686.020156", 12 * HOUR + 120),
+  ];
+  const source = createReplayMarkerSource({ up: "green", down: "red", note: "blue" });
+  const labels = { buy: "B", sell: "S", note: "N" };
+  source.update({ legs, notes: [], cursorSec: Infinity, intervalSec: HOUR, lastVisibleSec: 13 * HOUR, labels, pricePrecision: 2 });
+  assert.deepEqual(source.getSnapshot().markers.map(marker => marker.text), [
+    "S 1.178 @ 1,698.27",
+    "B 1.191 @ 1,686.00",
+    "B 0.75 ×2 @ 1,686.01",
+  ]);
+  source.update({ legs: legs.slice(0, 1), notes: [], cursorSec: Infinity, intervalSec: HOUR, lastVisibleSec: 13 * HOUR, labels });
+  assert.equal(source.getSnapshot().markers[0]!.text, "S 1.178 @ 1,698.270156", "without the chart's precision the fill keeps its digits");
 });

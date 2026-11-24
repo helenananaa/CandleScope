@@ -150,7 +150,8 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
       if (controller.signal.aborted) return;
       if (result.interval !== interval) return;  // a run for another interval never draws on this chart
       void locale;
-      source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: owner }), result.interval, owner);
+      const labels = strategyOverlayLabels();
+      source.setOverlay((pricePrecision) => buildStrategyOverlay(result, { labels, idPrefix: owner, pricePrecision }), result.interval, owner);
       setShown({ run: { family, runId, ...(followsRunId ? { followsRunId } : {}) }, result });
     };
     const fail = (failure: unknown) => {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { combineChartLayerSources, type ChartLayerSource } from "../../../plugins/pluginChartLayerSource.js";
+import { setLocale } from "../../../../i18n/index.js";
+import { SeriesWindowStore } from "../../../market-data/window/seriesWindowStore.js";
 import { parseRunResult, type RunResult } from "../runResult.js";
 import { boundVisibleConnectors, buildStrategyOverlay, fillActions, StrategyOverlaySource, type StrategyOverlayLabels } from "../strategyOverlay.js";
 import { overlayRunForNative, shownOverlayRun } from "../useStrategyRunOverlay.js";
@@ -262,3 +264,39 @@ test("a live run's status frames reach the cell with their progress, before each
   assert.ok(events.includes("read"), "each frame with a result still reads it");
 });
 
+
+function noisyPositionResult(price: string): RunResult {
+  const result = fixture("host-bar-builtin");
+  return {
+    ...result,
+    fills: [{ ...result.fills[0]!, price, qty: "2" }],
+    trades: [],
+    open_position: { side: "LONG", qty: "2", avg_price: price },
+  };
+}
+
+test("fill and position labels round float noise to the chart's price precision", () => {
+  setLocale("en");
+  const overlay = buildStrategyOverlay(noisyPositionResult("0.9530000000000001"), { labels: LABELS, idPrefix: "n", pricePrecision: 3 });
+  assert.equal(overlay.markers[0]?.text, "open long 0.953");
+  const position = overlay.entries.find((entry) => entry.id === "n:position");
+  assert.equal(position?.item.type === "price-line" ? position.item.text : null, "Long 2 @ 0.953");
+});
+
+test("a deferred overlay is rebuilt for the chart's price precision once its bars load", () => {
+  setLocale("en");
+  const result = noisyPositionResult("1698.270156");
+  const source = new StrategyOverlaySource();
+  const store = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "precision" });
+  source.setSeries(store);
+  source.setOverlay((pricePrecision) => buildStrategyOverlay(result, { labels: LABELS, idPrefix: "n", pricePrecision }), "1m", "run:host:n");
+  const positionText = () => {
+    const entry = source.layer.getSnapshot().entries.find((item) => item.id === "n:position");
+    return entry?.item.type === "price-line" ? entry.item.text : null;
+  };
+  assert.equal(positionText(), "Long 2 @ 1,698.270156", "before bars load the price keeps its own digits");
+  store.replace([{ time: 660, open: 1698.1, high: 1701.25, low: 1695, close: 1698.3 }], { source: "test" });
+  assert.equal(positionText(), "Long 2 @ 1,698.27");
+  assert.equal(source.markers.getSnapshot().markers[0]?.text, "open long 1,698.27");
+  source.dispose();
+});
