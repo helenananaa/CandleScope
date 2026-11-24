@@ -17,6 +17,7 @@ on:
       - "backend/requirements*.txt"
       - ".github/scripts/verify_windows_python_worker.py"
       - ".github/workflows/windows-python-worker.yml"
+      - "!**/*.md"
   workflow_dispatch:
 
 permissions:

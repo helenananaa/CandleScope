@@ -3,7 +3,7 @@ name: macOS desktop
 on:
   push:
     branches: [main]
-    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml", "!**/*.md", "packages/**/*.md"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
@@ -25,6 +25,8 @@ on:
       - "backend/ccxt-fork.lock.json"
       - "backend/scripts/install_ccxt_fork.py"
       - "packages/candlescope-control/**"
+      - "!**/*.md"
+      - "packages/candlescope-control/**/*.md"
   workflow_dispatch:
 
 permissions:
