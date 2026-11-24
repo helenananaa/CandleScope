@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Large custom intervals load slowly the first time
+
+A custom interval such as 89m is built from 1-minute bars. The first time a
+chart opens one, or scrolls back into history that is not stored yet, the app
+downloads and builds those bars first. That can take one to several minutes;
+the chart shows "正在加载更早数据…" ("Loading earlier data…") meanwhile, and
+the bars it shows have no holes. Later opens use the stored bars and are much
+faster, though still slower while other charts are loading history. Faster
+loads are planned for a later release.
+
 ### Chart strategies and live bars
 
 A chart strategy's result covers the history on the chart; it does not extend
