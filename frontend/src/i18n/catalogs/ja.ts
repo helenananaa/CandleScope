@@ -4006,6 +4006,7 @@ export const ja = {
   "chartTester.issue.serverDetail": "戦略のコンパイル検査に失敗。定位した箇所を直して再実行してください。",
   "chartTester.prepareDataRun": "データを準備して実行",
   "chartTester.run.resolving": "確認中…",
+  "chartTester.run.waitingForChart": "チャートデータを読み込み中…",
   "chartTester.run.queued": "キュー待ち",
   "chartTester.run.running": "実行中",
   "chartTester.stopObserving": "待機を停止",

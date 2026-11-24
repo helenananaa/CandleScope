@@ -3671,6 +3671,7 @@ export const id = {
   "chartTester.issue.serverDetail": "Kompilasi strategi gagal. Perbaiki masalah yang ditemukan dan jalankan lagi.",
   "chartTester.prepareDataRun": "Siapkan data dan jalankan",
   "chartTester.run.resolving": "Memeriksa…",
+  "chartTester.run.waitingForChart": "Data grafik masih dimuat…",
   "chartTester.run.queued": "Dalam antrean",
   "chartTester.run.running": "Berjalan",
   "chartTester.stopObserving": "Berhenti menunggu",

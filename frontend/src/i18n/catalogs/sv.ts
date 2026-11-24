@@ -3671,6 +3671,7 @@ export const sv = {
   "chartTester.issue.serverDetail": "Strategikompilering misslyckades. Åtgärda det lokaliserade problemet och kör igen.",
   "chartTester.prepareDataRun": "Förbered data och kör",
   "chartTester.run.resolving": "Kontrollerar…",
+  "chartTester.run.waitingForChart": "Diagramdata laddas fortfarande…",
   "chartTester.run.queued": "Köad",
   "chartTester.run.running": "Kör",
   "chartTester.stopObserving": "Sluta vänta",

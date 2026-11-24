@@ -3671,6 +3671,7 @@ export const tr = {
   "chartTester.issue.serverDetail": "Strateji derlemesi başarısız oldu. Konumlandırılan sorunu düzeltin ve yeniden çalıştırın.",
   "chartTester.prepareDataRun": "Veriyi hazırla ve çalıştır",
   "chartTester.run.resolving": "Kontrol ediliyor…",
+  "chartTester.run.waitingForChart": "Grafik verileri hâlâ yükleniyor…",
   "chartTester.run.queued": "Kuyrukta",
   "chartTester.run.running": "Çalışıyor",
   "chartTester.stopObserving": "Beklemeyi durdur",

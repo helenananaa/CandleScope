@@ -136,6 +136,7 @@ import TopBar from "./TopBar.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { Icon } from "../components/icons/Icon.js";
+import { chartStrategyChartDataReady } from "../features/backtest/chart-tester/chartStrategyChartData.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
@@ -1286,6 +1287,12 @@ function LiveChartCell({
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
               active={active}
               panelOpen={strategyPanelOpen && !study.masked}
+              chartDataReady={chartStrategyChartDataReady({
+                barCount: sourceMarketData.status.barCount,
+                loading: sourceMarketData.view.loading,
+                initialHistoryPending: sourceMarketData.status.initialHistoryPending,
+                meta: sourceMarketData.view.meta,
+              }, liveSourceSession)}
               continuousChartActive={active && !obscured && !study.masked && quickReplay === null}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}

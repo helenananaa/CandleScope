@@ -850,6 +850,11 @@ export async function runResearchBacktest(options: {
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
+  /**
+   * The current chart's series must be committed before its range can be resolved (RC 34): right after
+   * a switch the backend has no stored bars yet. Resolves once the chart is ready; rejects on abort.
+   */
+  waitForChartData?(signal: AbortSignal | undefined): Promise<void>;
   /** Follows the created run to its terminal record; the strategy data manager streams it (no polling). */
   waitForTerminal: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
@@ -908,6 +913,7 @@ export async function runResearchBacktest(options: {
     }
     const contextRequest = chartContextRequestForFrozen(frozen);
     if (options.source.kind === "MARKET_HISTORY") contextRequest.end_time_ms = options.source.endTimeMsExclusive - 1;
+    if (options.source.kind === "CURRENT_CHART") await options.waitForChartData?.(options.signal);
     if (!precise && options.source.kind === "CURRENT_CHART" && options.source.materializeResolution) {
       options.onStage?.("MATERIALIZING");
       await options.api.materializeChartContext({
@@ -1056,6 +1062,7 @@ export async function runChartStrategyBacktest(options: {
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
+  waitForChartData?: Parameters<typeof runResearchBacktest>[0]["waitForChartData"];
 }): Promise<ChartStrategyRunOutcome> {
   return runResearchBacktest({
     api: options.api,
@@ -1073,6 +1080,7 @@ export async function runChartStrategyBacktest(options: {
     ...(options.onResolution ? { onResolution: options.onResolution } : {}),
     ...(options.onRunCreated ? { onRunCreated: options.onRunCreated } : {}),
     ...(options.onRunUpdate ? { onRunUpdate: options.onRunUpdate } : {}),
+    ...(options.waitForChartData ? { waitForChartData: options.waitForChartData } : {}),
   });
 }
 

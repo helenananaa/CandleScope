@@ -3675,6 +3675,7 @@ export const zhHK = {
   "chartTester.issue.serverDetail": "策略編譯檢查失敗。請按定位修改後再次執行。",
   "chartTester.prepareDataRun": "準備數據並執行",
   "chartTester.run.resolving": "正在檢查…",
+  "chartTester.run.waitingForChart": "圖表數據仍在載入…",
   "chartTester.run.queued": "排隊中",
   "chartTester.run.running": "執行中",
   "chartTester.stopObserving": "停止等待",

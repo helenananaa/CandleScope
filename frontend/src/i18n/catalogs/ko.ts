@@ -4211,6 +4211,7 @@ export const ko = {
   "chartTester.issue.serverDetail": "전략 컴파일 검사 실패. 표시된 위치를 고친 뒤 다시 실행.",
   "chartTester.prepareDataRun": "데이터 준비 후 실행",
   "chartTester.run.resolving": "검사 중…",
+  "chartTester.run.waitingForChart": "차트 데이터를 아직 불러오는 중…",
   "chartTester.run.queued": "대기 중",
   "chartTester.run.running": "실행 중",
   "chartTester.stopObserving": "대기 중지",

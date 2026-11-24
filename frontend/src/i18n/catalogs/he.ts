@@ -3677,6 +3677,7 @@ export const he = {
   "chartTester.issue.serverDetail": "קומפילציית האסטרטגיה נכשלה. תקנו את הבעיה שאותרה והריצו שוב.",
   "chartTester.prepareDataRun": "הכנת נתונים והרצה",
   "chartTester.run.resolving": "בודק…",
+  "chartTester.run.waitingForChart": "נתוני הגרף עדיין נטענים…",
   "chartTester.run.queued": "בתור",
   "chartTester.run.running": "רץ",
   "chartTester.stopObserving": "הפסקת המתנה",

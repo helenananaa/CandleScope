@@ -3671,6 +3671,7 @@ export const pl = {
   "chartTester.issue.serverDetail": "Kompilacja strategii nie powiodła się. Napraw wskazany problem i uruchom ponownie.",
   "chartTester.prepareDataRun": "Przygotuj dane i uruchom",
   "chartTester.run.resolving": "Sprawdzanie…",
+  "chartTester.run.waitingForChart": "Dane wykresu wciąż się ładują…",
   "chartTester.run.queued": "W kolejce",
   "chartTester.run.running": "Uruchomione",
   "chartTester.stopObserving": "Przestań czekać",

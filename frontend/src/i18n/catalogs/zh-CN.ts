@@ -4267,6 +4267,7 @@ export const zhCN = {
   "chartTester.issue.serverDetail": "策略编译检查失败。请按定位修改后再次运行。",
   "chartTester.prepareDataRun": "准备数据并运行",
   "chartTester.run.resolving": "正在检查…",
+  "chartTester.run.waitingForChart": "图表数据仍在加载…",
   "chartTester.run.queued": "排队中",
   "chartTester.run.running": "运行中",
   "chartTester.stopObserving": "停止等待",

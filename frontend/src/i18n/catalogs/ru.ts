@@ -3672,6 +3672,7 @@ export const ru = {
   "chartTester.issue.serverDetail": "Компиляция стратегии не удалась. Исправьте найденную проблему и запустите снова.",
   "chartTester.prepareDataRun": "Подготовить данные и запустить",
   "chartTester.run.resolving": "Проверка…",
+  "chartTester.run.waitingForChart": "Данные графика ещё загружаются…",
   "chartTester.run.queued": "В очереди",
   "chartTester.run.running": "Выполняется",
   "chartTester.stopObserving": "Прекратить ожидание",

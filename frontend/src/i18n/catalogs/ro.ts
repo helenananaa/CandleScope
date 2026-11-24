@@ -3671,6 +3671,7 @@ export const ro = {
   "chartTester.issue.serverDetail": "Compilarea strategiei a eșuat. Corectați problema localizată și rulați din nou.",
   "chartTester.prepareDataRun": "Pregătește datele și rulează",
   "chartTester.run.resolving": "Se verifică…",
+  "chartTester.run.waitingForChart": "Datele graficului încă se încarcă…",
   "chartTester.run.queued": "În coadă",
   "chartTester.run.running": "Se rulează",
   "chartTester.stopObserving": "Oprește așteptarea",

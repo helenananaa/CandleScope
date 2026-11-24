@@ -3671,6 +3671,7 @@ export const hi = {
   "chartTester.issue.serverDetail": "रणनीति कंपाइलेशन विफल। स्थित समस्या ठीक करें और फिर चलाएँ।",
   "chartTester.prepareDataRun": "डेटा तैयार करें और चलाएँ",
   "chartTester.run.resolving": "जाँच हो रही है…",
+  "chartTester.run.waitingForChart": "चार्ट डेटा अभी लोड हो रहा है…",
   "chartTester.run.queued": "कतार में",
   "chartTester.run.running": "चल रहा है",
   "chartTester.stopObserving": "प्रतीक्षा रोकें",
