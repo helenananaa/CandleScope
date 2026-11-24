@@ -4,8 +4,10 @@ import test from "node:test";
 import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRecord } from "../../backtestApi.js";
 import type { BacktestResultReplayFrame, BacktestRunRecord } from "../../backtestTypes.js";
 import { StrategyRunStreamError } from "../../backtestRunStream.js";
+import { PreparationApiError } from "../../../data-preparation/api.js";
 import {
   buildChartStrategyRunBody,
+  chartStrategyDataErrorCode,
   chartStrategyQuickPresetIdForMarket,
   chartStrategyRunDiagnostics,
   freezeChartStrategyRunRequest,
@@ -490,6 +492,27 @@ test("backend Run capacity is actionable and never hidden behind generic retry",
   assert.equal(diagnostics.action, "wait-and-retry");
   assert.equal(diagnostics.details.retryable, true);
   assert.equal(diagnostics.details.retry_after_ms, 1000);
+});
+
+test("a preparation failure keeps its code and asks for the chart data, not a backend retry (RC 34)", () => {
+  // A run right after a market switch used to fail here with BACKTEST_API_UNAVAILABLE ("service unavailable").
+  const missing = chartStrategyRunDiagnostics(new PreparationApiError(
+    "RANGE_REQUIRED", "No local history exists; select a time range to download", 409,
+  ));
+  assert.equal(missing.code, "RANGE_REQUIRED");
+  assert.equal(missing.message, "No local history exists; select a time range to download");
+  assert.equal(missing.action, "resolve-data");
+  // A preparation job that ended FAILED reaches the run the same way (waitForPreparation).
+  const incomplete = chartStrategyRunDiagnostics(new PreparationApiError(
+    "COVERAGE_INCOMPLETE", "Historical source did not supply the complete requested range", 200,
+  ));
+  assert.equal(incomplete.code, "COVERAGE_INCOMPLETE");
+  assert.equal(incomplete.action, "resolve-data");
+  for (const code of ["RANGE_REQUIRED", "INVALID_RANGE", "WARMUP_RANGE_INSUFFICIENT", "COVERAGE_INCOMPLETE", "DATA_SNAPSHOT_MISMATCH"]) {
+    assert.equal(chartStrategyDataErrorCode(code), true, code);
+  }
+  assert.equal(chartStrategyDataErrorCode("RUN_CAPACITY_EXCEEDED"), false);
+  assert.equal(chartStrategyRunDiagnostics(new Error("socket hang up")).code, "BACKTEST_API_UNAVAILABLE");
 });
 
 const importedSource = {

@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
+from app.data_preparation.models import STRATEGY_BAR_INPUT_LIMIT, PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
 from app.backtest.workbench_identity import preparation_identity
@@ -286,7 +286,11 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     if interval is None:
         raise HTTPException(422, detail={"code": "INVALID_INTERVAL", "message": "Select a supported interval"})
     host = getattr(request.app.state, "data_manager", None)
-    bounds = await call_storage(request, runtime.chart_context._host_range, context, host, "1m") if host is not None else None
+    # All available data is the chart's own stored series, read as the chart-context resolver reads it.
+    # A native 5m chart stores 5m rows: its 1m rows are absent or an unrelated live tail.
+    route = runtime.chart_context._resolve_host_interval(context)
+    series_interval = route.source_interval if route is not None else "1m"
+    bounds = await call_storage(request, runtime.chart_context._host_range, context, host, series_interval) if host is not None else None
     if bounds is None and context.range_mode == "ALL_AVAILABLE":
         existing = await call_storage(request, runtime.chart_context.resolve, context.wire())
         if existing["status"] == "READY":
@@ -299,6 +303,14 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     end = interval.next_ms(interval.floor_ms(bounds[1]))
     if end > int(time.time() * 1000):
         end = interval.floor_ms(int(time.time() * 1000))
+    if context.range_mode == "ALL_AVAILABLE":
+        # Preparation acquires one-minute rows. A long stored series keeps its latest bars that fit
+        # one strategy input; the resolved range reports exactly which bars the run uses.
+        earliest = end - STRATEGY_BAR_INPUT_LIMIT * 60_000
+        if start < earliest:
+            start = interval.floor_ms(earliest)
+            if start < earliest:
+                start = interval.next_ms(start)
     if end <= start:
         raise HTTPException(422, detail={"code": "INVALID_RANGE", "message": "Select a range containing closed bars"})
     requested_start = start
@@ -340,6 +352,8 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
         await invoke_async(lambda: service(request).storage(revision, runtime, payload.strategy.strategy_revision_id))
         intent["strategy"] = _operator_python_payload(request, payload.strategy.model_dump())
         intent["strategy"]["warmup_bars"] = warmup_bars
+        # The frozen context is always CUSTOM; the run records the range the user chose.
+        intent["strategy"]["chart_range_mode"] = context.range_mode
         intent["preparation"] = {"warmup_bars": warmup_bars, "requested_start_ms": requested_start,
                                  "prepared_start_ms": start}
     existing = await call_storage(request, runtime.chart_context.resolve, frozen_context)

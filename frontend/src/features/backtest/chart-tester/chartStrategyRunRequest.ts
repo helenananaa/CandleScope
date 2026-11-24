@@ -8,7 +8,7 @@ import {
   type StrategyRevisionRecord,
 } from "../backtestApi.js";
 import { validExecutionOverrides, validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
-import type { PreparationJob } from "../../data-preparation/api.js";
+import { PreparationApiError, type PreparationJob } from "../../data-preparation/api.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
@@ -1089,8 +1089,16 @@ function sourceDiagnostics(message: string): Array<Record<string, unknown>> {
   }
 }
 
+/** Data that is missing, incomplete or outside the prepared range: resolve the chart again rather than wait on the backend. */
+export function chartStrategyDataErrorCode(code: string): boolean {
+  return code.includes("DATA") || code.includes("SNAPSHOT") || code.includes("CONTEXT")
+    || code.includes("RANGE") || code.includes("COVERAGE");
+}
+
 export function chartStrategyRunDiagnostics(error: unknown): ChartStrategyRunDiagnostics {
-  const code = error instanceof BacktestApiError || error instanceof ChartStrategyRunError || error instanceof StrategyRunStreamError
+  // A preparation failure keeps its own code: a missing chart range is not an unavailable backend.
+  const code = error instanceof BacktestApiError || error instanceof ChartStrategyRunError
+    || error instanceof StrategyRunStreamError || error instanceof PreparationApiError
     ? error.code
     : "BACKTEST_API_UNAVAILABLE";
   const message = error instanceof BacktestApiError
@@ -1105,7 +1113,7 @@ export function chartStrategyRunDiagnostics(error: unknown): ChartStrategyRunDia
   if (code.includes("FEE") || code.includes("PRESET")) action = "confirm-fee";
   else if (code.includes("INTERVAL")) action = "switch-interval";
   else if (code.includes("FIDELITY")) action = "use-fast";
-  else if (code.includes("DATA") || code.includes("SNAPSHOT") || code.includes("CONTEXT")) action = "resolve-data";
+  else if (chartStrategyDataErrorCode(code)) action = "resolve-data";
   else if (code.includes("PROVIDER") || code.includes("SMOKE")) action = "fix-strategy";
   else if (code.includes("BUDGET") || code === "RUN_CAPACITY_EXCEEDED") action = "wait-and-retry";
   return { code, message, details, action, sourceDiagnostics: sourceDiagnostics(message) };
