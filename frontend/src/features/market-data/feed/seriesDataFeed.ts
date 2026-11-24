@@ -26,6 +26,7 @@ import type {
   MergeCacheData,
   PatchCacheTick,
   PendingBeforePage,
+  PendingInitialSeries,
   SeriesDataFeedConfig,
   StorageRevisionFloor,
   TerminalHistoryGap,
@@ -500,6 +501,28 @@ function pendingLoadMoreFetchRange(
     start: Math.max(0, start) * 1_000,
     end: Math.max(activeCoverage?.end ?? 0, before * 1_000),
   });
+}
+
+/**
+ * A pending initial window demands its own range, not every row a storage
+ * change wrote. The backend's daily-open lookup stores the 00:00 UTC 1m bar of
+ * each priced symbol. Read back into a 1m chart whose initial window started
+ * at 05:29, that bar became a lone first row with a five-hour hole after it,
+ * and when it was the first row the chart received, the first view was fitted
+ * to it. Bound the read to the pending range and the rows that touch it. A
+ * count-back window with no range yet is bounded by its rows; the initial
+ * verification reads the window itself.
+ */
+function pendingInitialFetchRange(
+  eventRange: TimeRangeMs | null,
+  pending: PendingInitialSeries,
+  activeCoverage: TimeRangeMs | null,
+): TimeRangeMs | null {
+  if (!eventRange) return eventRange;
+  const owned = pending.range
+    ? rangesTouch(pending.range, activeCoverage) ? unionRange(pending.range, activeCoverage) : pending.range
+    : activeCoverage;
+  return intersectRanges(eventRange, owned);
 }
 
 function rangesTouch(left: TimeRangeMs | null, right: TimeRangeMs | null): boolean {
@@ -1463,8 +1486,8 @@ export class SeriesDataFeed {
     const activeRows = getCacheRows(job.series) || [];
     const activeCoverage = activeCoverageMsFromRows(activeRows);
     const activeOverlap = intersectRanges(job.range, activeCoverage);
-    const fetchRange = isPendingInitial
-      ? job.range
+    const fetchRange = isPendingInitial && pendingInitial
+      ? pendingInitialFetchRange(job.range, pendingInitial, activeCoverage)
       : pendingBeforePage
         ? pendingLoadMoreFetchRange(job.series, job.range, pendingBeforePage, activeCoverage)
         : activeOverlap;
@@ -2444,8 +2467,8 @@ export class SeriesDataFeed {
       return true;
     }
 
-    const fetchRange = isPendingInitial
-      ? eventRange
+    const fetchRange = isPendingInitial && pendingInitial
+      ? pendingInitialFetchRange(eventRange, pendingInitial, activeCoverage)
       : pendingBeforePage
         ? pendingLoadMoreFetchRange(eventSeries, eventRange, pendingBeforePage, activeCoverage)
         : activeOverlap;
