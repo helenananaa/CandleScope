@@ -16,8 +16,12 @@
 
 ## 快速启动
 
-Web 后端在 CPython 3.11+ 上可以启动。首方 Pine 插件包仍只支持 Windows
-CPython 3.12；其他系统会把该能力降级，同时继续提供 K 线和内置指标。
+Web 后端在 CPython 3.11+ 上可以启动。Pine 在首方 `candlescope.pine-compat` 插件中运行，
+需要 CPython 3.12。Windows x64 和 macOS（Apple Silicon 与 Intel）桌面安装包已内置该插件，
+按 `frontend/scripts/desktop-plugin-sources.json` 的固定版本构建。源码安装需要先通过插件管理
+安装它，或用 `CANDLESCOPE_BUNDLED_UNIFIED_PINE` 指定随包描述符，见
+[插件生命周期说明](app/plugin_lifecycle/README_zh.md)。未安装时 Pine 不可用，后端继续提供
+K 线和内置指标。
 
 Linux / macOS：
 
@@ -100,6 +104,9 @@ Engine runtime。Host 配置、`.cspkg` 安装、回滚和安全边界见
 | Symbols | `GET /symbols/exchange-info`, `POST /symbols/exchange-info/refresh` |
 | Settings | proxy get/update/test、storage repair、gap scan、storage health、cache limits |
 | Subscriptions | list、sync、prices snapshot、get/set/delete symbol tier |
+
+其余接口（订单流、告警、历史下载、数据准备、本地资料库、策略运行、回测、模拟账户与只读账户、
+插件和支持）见 [API_zh.md](../API_zh.md#其他-api)。运行中的后端在 `/docs` 提供完整 OpenAPI 文档。
 
 K 线 HTTP/WS 的增强成交量、Delta 与 CVD contribution 契约见 [`docs/KLINE_ORDER_FLOW_CONTRACT_zh.md`](../docs/KLINE_ORDER_FLOW_CONTRACT_zh.md)。
 

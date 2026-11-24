@@ -1,6 +1,11 @@
 # ADR-BACKTEST-015：统一策略运行模型——一种 Run，模式拆成字段，界面按用途划分
 
 - 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”；2026-11-22 用户确认 O1、O4；2026-11-23 用户确认 O3）
+- 实施：P0–P6 已在 2026-11-23 经集成 PR #565 合并到 main（原分步 PR #513–#563）。首个正式版本不设
+  `VITE_CHART_STRATEGY_FOLLOW_ENABLED`（默认关闭），图表上的 FOLLOW 界面保持关闭：固定结果不随新 K 线
+  延伸、原生 Pine 不跟随实时行情、单列表与前向 K 线界面及 `forward` 控制命令都不出现。实时运行仍走图表
+  策略测试器的运行模式（纯历史 / 历史接实时 / 纯实时；仅 Python、仅 1 分钟图表），见
+  [RELEASE_NOTES.md](../../RELEASE_NOTES.md#chart-strategies-and-live-bars)。
 - 日期：2026-11-21
 - 基线：`main@aae80d98`
 - 修订：[ADR-BACKTEST-002](ADR-BACKTEST-002-host-owned-execution.md)（补充 `authority=SCRIPT` 例外）、[ADR-BACKTEST-013](ADR-BACKTEST-013-CHART-FIRST-STRATEGY-TESTER.md)（图表层不再暴露引擎和模式切换）

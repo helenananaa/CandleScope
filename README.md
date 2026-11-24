@@ -203,7 +203,7 @@ Download the build for your system from the
 
 ### From source
 
-Requirements: Python 3.11+ (3.12 recommended), Node.js 20+ and npm 10+.
+Requirements: Python 3.11+ (3.12 recommended), Node.js 22.12+ and npm 10+.
 
 ```bash
 git clone https://github.com/helenananaa/CandleScope.git

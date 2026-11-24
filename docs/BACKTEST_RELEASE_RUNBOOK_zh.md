@@ -1,5 +1,9 @@
 # Backtest 发布与回滚手册
 
+> 这是 2026-08 M10 候选时的历史记录，下面的状态和“不授权发布”只描述当时。
+> 现在的桌面版发布流程见 [DESKTOP_RELEASE.md](DESKTOP_RELEASE.md)。“运行时紧急停用”一节仍然
+> 适用：`BACKTEST_ENABLED=0` 时后端不注册回测和策略路由。
+
 状态：M10 已在 `codex/backtest-foundation` 形成干净候选
 `04b55582b2f73ad48b50fca67eb498fc2ce0fae6` 与完成提交
 `2bbc67c84c85568bbdebdbeece2cd7015c150354`。生产 flags 保持 0。
@@ -30,7 +34,7 @@ python -m pytest tests/backtest_contract tests/test_backtest_control_plane.py te
 
 ```powershell
 Set-Location frontend
-$env:BACKTEST_BASE_URL='http://127.0.0.1:8000/api/v1/backtests'
+$env:BACKTEST_BASE_URL='http://127.0.0.1:18080/api/v1/backtests'
 npm run smoke:backtest
 npm run soak:backtest
 ```

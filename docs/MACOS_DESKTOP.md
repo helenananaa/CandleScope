@@ -73,12 +73,13 @@ correctness, first-launch Gatekeeper approval, or an Apple-notarized installatio
 The backend's complete pytest and optional plugin package suites are separate
 from this packaging job.
 
-## Pine / Pyne plugins
+## Pine plugin
 
-Desktop packaging preserves the existing plugin installation model. It bundles
-the plugin SDK, not the independently released Pine/Pyne engines or plugin
-bundles. Pine runtime v0.3.2 provides separate macOS `cp310-abi3` wheels for
-`arm64` and `x86_64`, but a runtime wheel alone does not make the current
-Windows-targeted CandleScope plugin bundle a supported macOS bundle. A macOS
-plugin release, its platform metadata and the corresponding engine version
-must be validated together before advertising Pine/Pyne support in this app.
+Each package bundles the first-party Pine plugin (`candlescope.pine-compat`)
+for its own architecture, so Pine indicators and strategies need no download.
+`frontend/scripts/prepare-desktop-plugins.py` builds pine-compat-runtime from the
+commit pinned in `frontend/scripts/desktop-plugin-sources.json` and pairs it
+with the bridge in `packages/candlescope-plugin-pine-compat`.
+
+Pyne is retired. The app lists Pyne scripts from older builds as retired and
+does not run them; it leaves their files in place.

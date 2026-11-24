@@ -178,7 +178,7 @@
 
 ### 从源码运行
 
-需要 Python 3.11+（推荐 3.12）、Node.js 20+ 与 npm 10+。
+需要 Python 3.11+（推荐 3.12）、Node.js 22.12+ 与 npm 10+。
 
 ```bash
 git clone https://github.com/helenananaa/CandleScope.git
