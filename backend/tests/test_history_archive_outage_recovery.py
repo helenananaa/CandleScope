@@ -304,15 +304,21 @@ def test_initial_load_interrupted_then_symbol_switch_interrupted_both_complete(t
             assert result.bars_count == EXPECTED_BARS
             opens = [bar.open_time for bar in result.bars]
             assert opens == list(range(RANGE_START_MS, RANGE_END_MS + 1, H4_MS))
-            # The cut left the archive object unavailable; REST filled its month.
-            assert result.metadata["rest_fallback_ranges"] == 1
-            assert result.metadata["archive_errors"]
+            if symbol == "BTCUSDT":
+                # The cut left the archive object unavailable; REST filled its month.
+                assert result.metadata["rest_fallback_ranges"] == 1
+                assert result.metadata["archive_errors"]
             # Pieces of one chunk queue behind each other instead of deferring it.
             assert deferrals == 0, reasons
 
         assert archive_http.requests == 2  # one per symbol, then the negative cache
         counters = router.snapshot()["metrics"]["counters"]
-        assert counters["archive_negative_cache_hits"] >= 2
+        # Two archive failures in a row (one per symbol) trip the route breaker:
+        # the switched symbol's retry goes straight to REST instead of meeting
+        # its object's negative cache again (ADR-DATA-001 §4.2).
+        assert not router.route_health.available("binance")
+        assert counters["archive_negative_cache_hits"] >= 1
+        assert counters["archive_unhealthy_rest_routes"] >= 1
 
     asyncio.run(_run())
 
