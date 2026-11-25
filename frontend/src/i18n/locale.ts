@@ -20,7 +20,8 @@ export function normalizeLocale(value: unknown): LocaleId {
 /** The system's preferred languages, most preferred first; empty where no browser is available. */
 export function systemLanguages(): readonly string[] {
   if (typeof navigator === "undefined") return [];
-  if (Array.isArray(navigator.languages) && navigator.languages.length > 0) return navigator.languages;
+  const languages: readonly string[] | undefined = navigator.languages;
+  if (languages && languages.length > 0) return languages;
   return typeof navigator.language === "string" && navigator.language ? [navigator.language] : [];
 }
 
