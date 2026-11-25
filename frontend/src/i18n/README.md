@@ -29,8 +29,9 @@ chrome. It is app-wide infrastructure, not a business feature.
 - A profile with no saved settings (first launch, or an unreadable save) starts
   in the first of the system's preferred languages (`navigator.languages`,
   which Electron fills from the OS) that resolves to a registered locale, using
-  the same parent and alias matching as saved values; with no supported
-  preference it starts in `zh-CN`. Saved settings, including older saves that
+  the same parent and alias matching as saved values. When the system names
+  only unsupported languages (for example `sw`, or bare `pt`) it starts in
+  `en`; when no system preference is known at all it starts in `zh-CN`. Saved settings, including older saves that
   have no `locale`, keep their language; the system is never consulted again
   once a language is saved.
 - The default Chinese and English catalogs are bundled with startup; all other

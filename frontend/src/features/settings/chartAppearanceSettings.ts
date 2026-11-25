@@ -4,6 +4,7 @@ import {
   DEFAULT_LOCALE,
   detectSystemLocale,
   setLocaleAsync,
+  systemLanguages,
   normalizeLocale,
   type LocaleId,
 } from "../../i18n/index.js";
@@ -219,12 +220,18 @@ export function migrateApplicationSettings(settings: ChartSettings): ChartSettin
   return settings.theme === "custom" ? { ...settings, theme: chartSchemeForBackground(settings.customBg) } : settings;
 }
 
+/** First-launch language when the system names languages but supports none of them. */
+const UNSUPPORTED_SYSTEM_LANGUAGE_FALLBACK: LocaleId = "en";
+
 /**
  * Settings for a profile that has none saved: the language follows the system's
- * preferences when one of them is supported, otherwise the product default.
+ * preferences when one of them is supported, English when the system names only
+ * unsupported ones, and the product default when no system preference is known.
  */
-function firstLaunchSettings(systemLanguages?: readonly string[]): ChartSettings {
-  return { ...normalizeSettings(), locale: detectSystemLocale(systemLanguages) ?? DEFAULT_LOCALE };
+function firstLaunchSettings(languages: readonly string[] = systemLanguages()): ChartSettings {
+  const locale = detectSystemLocale(languages)
+    ?? (languages.length > 0 ? UNSUPPORTED_SYSTEM_LANGUAGE_FALLBACK : DEFAULT_LOCALE);
+  return { ...normalizeSettings(), locale };
 }
 
 /**
@@ -233,13 +240,13 @@ function firstLaunchSettings(systemLanguages?: readonly string[]): ChartSettings
  */
 export function parseStoredSettings(
   saved: string | null | undefined,
-  systemLanguages?: readonly string[],
+  languages?: readonly string[],
 ): ChartSettings {
-  if (!saved) return firstLaunchSettings(systemLanguages);
+  if (!saved) return firstLaunchSettings(languages);
   try {
     return migrateApplicationSettings(normalizeSettings(JSON.parse(saved)));
   } catch {
-    return firstLaunchSettings(systemLanguages);
+    return firstLaunchSettings(languages);
   }
 }
 

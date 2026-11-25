@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { detectSystemLocale } from "../../../i18n/index.js";
+import { detectSystemLocale, systemLanguages } from "../../../i18n/index.js";
 import {
   normalizeSettings,
   parseStoredSettings,
@@ -96,7 +96,7 @@ test("settings storage changes synchronize the complete settings snapshot across
   assert.equal(parseStoredSettings(JSON.stringify({ locale: "ru" })).locale, "ru");
   assert.equal(settingsFromStorageChange("unrelated-key", "{}"), null);
   // Clearing storage in another window is a fresh profile: it follows the system like a first launch.
-  assert.equal(settingsFromStorageChange(null, null)?.locale, detectSystemLocale() ?? "zh-CN");
+  assert.equal(settingsFromStorageChange(null, null)?.locale, detectSystemLocale() ?? (systemLanguages().length > 0 ? "en" : "zh-CN"));
   const spanish = settingsFromStorageChange("candlescope-settings", JSON.stringify({
     locale: "es-MX",
   }));
@@ -272,9 +272,13 @@ test("first launch follows the first supported system language", () => {
   assert.equal(parseStoredSettings(null, ["ar-EG"]).locale, "ar");
 });
 
-test("first launch falls back to zh-CN when no system language is supported", () => {
+test("first launch falls back to English when no system language is supported", () => {
+  assert.equal(parseStoredSettings(null, ["sw-KE", "pt", "not a tag"]).locale, "en");
+  assert.equal(parseStoredSettings("{broken", ["sw"]).locale, "en");
+});
+
+test("first launch keeps zh-CN when the system names no language", () => {
   assert.equal(parseStoredSettings(null, []).locale, "zh-CN");
-  assert.equal(parseStoredSettings(null, ["sw-KE", "pt", "not a tag"]).locale, "zh-CN");
 });
 
 test("an unreadable save is treated as first launch", () => {
