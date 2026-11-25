@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 import time as py_time
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -96,6 +97,37 @@ def _service(
         storage_provider=lambda: storage,  # type: ignore[return-value]
         backfill_trigger_provider=lambda: (lambda *args: triggers.append(args)),
     )
+
+
+def test_warm_start_storage_read_yields_and_rejects_detached_generation():
+    async def run():
+        agg = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        agg.add_target('BTCUSDT', '89m')
+        entered, release = threading.Event(), threading.Event()
+        loop_thread = threading.get_ident()
+
+        class BlockingStorage(_Storage):
+            def query_bars(self, **kwargs):
+                assert threading.get_ident() != loop_thread
+                entered.set()
+                assert release.wait(3)
+                return [_row(0, 60_000, 10)]
+
+        cache = BarCache()
+        service = _service(cache=cache, aggregator=agg, storage=BlockingStorage(), triggers=[])
+        with patch('app.data_engine.data_manager.warm_start.time.time', return_value=61):
+            task = asyncio.create_task(service.seed_if_needed('BTCUSDT', '89m',
+                exchange='binance', market_type='spot', had_stream=True))
+            try:
+                await _wait_until(entered.is_set)
+                agg.remove_target('BTCUSDT', '89m')
+                agg.add_target('BTCUSDT', '89m')
+            finally:
+                release.set()
+            await task
+        assert agg.get_bucket_state('BTCUSDT', '89m', 0) is None
+        assert cache.get_latest(SeriesKey.create('BTCUSDT', '89m'), 1) == []
+    asyncio.run(run())
 
 
 def test_warm_start_standard_interval_seeds_active_bar_without_events() -> None:
