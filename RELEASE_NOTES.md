@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.0 (2026-11-25)
+
 This is the first public release of the CandleScope desktop app, for Windows and macOS (Apple Silicon and Intel). The same app also runs in the browser at [app.candlescope.app](https://app.candlescope.app). If you used the 0.3.0 test build from 2026-10-25, this release opens and upgrades your profile; read [Going back to 0.3.0](#going-back-to-030-after-upgrading) first if you may want to return to it.
 
 ### New since 0.3.0
@@ -10,12 +12,14 @@ This is the first public release of the CandleScope desktop app, for Windows and
 
 - A redesigned interface with light and dark themes, one Settings dialog with the Plugin Center inside it, visible keyboard focus everywhere, and less motion when your system asks for it.
 - 30 interface languages, including right-to-left Arabic and Hebrew.
+- On first launch the app uses your system language when it is one of the 30, and English otherwise. A language you already chose stays.
 
 **Charts and drawing**
 
 - New drawing tools: arrows, multi-point arrow paths, editable polylines, parallel channels, rectangle zones, and price and time rulers.
 - Each chart keeps its own appearance, and you can link styles across charts.
 - Go to any date on a live chart.
+- New drawings are blue by default. Drawings you already made keep their colour.
 
 **Indicators and alerts**
 
@@ -52,6 +56,7 @@ This is the first public release of the CandleScope desktop app, for Windows and
 
 - A Windows installer. Uninstalling keeps your data.
 - If the backend stops unexpectedly, the app restarts it and tells you.
+- A data folder that was moved, copied or restored from a backup to another location still starts.
 - When an exchange is unreachable, its charts say they are offline instead of loading without end.
 - Before upgrading a database, the app keeps a copy of it for going back; see [Going back to 0.3.0](#going-back-to-030-after-upgrading).
 - Import a Clash proxy subscription and route market data through its nodes.
