@@ -18,7 +18,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from .demands import Demand, DemandOwner
 from .pieces import MAX_PIECE_BARS, Piece, PieceResult, cut_pieces
@@ -32,6 +32,23 @@ HAND_BACK_SECONDS = 300.0
 SourceFor = Callable[[str], tuple[str, int]]
 ClosedUntil = Callable[[str], int]
 Executor = Callable[[Piece, Callable[[], bool]], Awaitable[PieceResult]]
+
+
+class SubmittingExecutor(Protocol):
+    """An executor that submits a piece synchronously and waits for it later.
+
+    ``submit`` returns a handle (a coordinator request id) at once, so a
+    caller registering demand can hand it to the API before the piece runs.
+    """
+
+    def submit(self, piece: Piece) -> Any: ...
+
+    async def wait(self, handle: Any, piece: Piece, still_wanted: Callable[[], bool]) -> PieceResult: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _SubmitFailed:
+    error: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +66,7 @@ class SymbolHistoryPlanner:
         self,
         key: SymbolKey,
         *,
-        executor: Executor,
+        executor: Executor | SubmittingExecutor,
         source_for: SourceFor,
         closed_until: ClosedUntil,
         on_committed: Callable[[Piece, PieceResult], None] | None = None,
@@ -80,6 +97,7 @@ class SymbolHistoryPlanner:
         self._slots: dict[str, SlotMap] = {}
         self._demands: dict[tuple[DemandOwner, str, Any], tuple[Demand, str]] = {}
         self._running: dict[str, tuple[Piece, asyncio.Task]] = {}
+        self._handles: dict[str, Any] = {}
         self._hand_backs: list[tuple[float, str, int, int]] = []
         self._pump_handle: asyncio.Handle | None = None
         self._closed = False
@@ -182,6 +200,27 @@ class SymbolHistoryPlanner:
         pieces.sort(key=lambda piece: (piece.urgency, -piece.end_ms))
         return pieces
 
+    def pump_now(self) -> None:
+        """Start what can start now, synchronously (a caller about to read handles)."""
+        if self._pump_handle is not None:
+            self._pump_handle.cancel()
+        self._pump()
+
+    def handles_over(self, source_interval: str, start_ms: int, end_ms: int) -> list[Any]:
+        """Handles of running pieces that overlap a source range, oldest first."""
+        return [self._handles[piece.piece_id] for piece, _ in self._running.values()
+                if piece.piece_id in self._handles and piece.source_interval == source_interval
+                and piece.start_ms < end_ms and start_ms < piece.end_ms]
+
+    def register_now(self, demand: Demand) -> list[Any]:
+        """Register, start what can start, and return the handles serving this demand."""
+        self.register(demand)
+        self.pump_now()
+        source, width = self._source_for(demand.target_interval)
+        slots = self._slots[source]
+        start, end = slots.align(demand.start_ms, min(demand.end_ms, self._closed_until(source)))
+        return self.handles_over(source, start, end)
+
     def _pump(self) -> None:
         self._pump_handle = None
         if self._closed:
@@ -190,13 +229,24 @@ class SymbolHistoryPlanner:
         capacity = self._max_running - len(self._running)
         if capacity <= 0:
             return
+        submit = getattr(self._executor, "submit", None)
         for piece in self.next_pieces()[:capacity]:
             slots = self._slots[piece.source_interval]
             slots.in_flight.add(piece.start_ms, piece.end_ms)
             self.metrics["pieces_started"] += 1
             self.metrics["bars_started"] += piece.bars
+            handle = None
+            if callable(submit):
+                try:
+                    handle = submit(piece)
+                except Exception as error:  # noqa: BLE001 - a refused submission hands the range back
+                    logger.warning("history piece %s %s [%s, %s) was not submitted: %r", self.key.symbol,
+                                   piece.source_interval, piece.start_ms, piece.end_ms, error)
+                    handle = _SubmitFailed(repr(error)[:300])
+                else:
+                    self._handles[piece.piece_id] = handle
             task = asyncio.get_running_loop().create_task(
-                self._run(piece), name=f"symbol-history:{self.key.symbol}:{piece.source_interval}:{piece.piece_id}")
+                self._run(piece, handle), name=f"symbol-history:{self.key.symbol}:{piece.source_interval}:{piece.piece_id}")
             self._running[piece.piece_id] = (piece, task)
 
     def _still_wanted(self, piece: Piece) -> bool:
@@ -204,11 +254,17 @@ class SymbolHistoryPlanner:
             return False
         return bool(self._slots[piece.source_interval].owners_over(piece.start_ms, piece.end_ms))
 
-    async def _run(self, piece: Piece) -> None:
+    async def _run(self, piece: Piece, handle: Any = None) -> None:
         slots = self._slots[piece.source_interval]
+        still_wanted = lambda: self._still_wanted(piece)  # noqa: E731
         try:
             try:
-                result = await self._executor(piece, lambda: self._still_wanted(piece))
+                if isinstance(handle, _SubmitFailed):
+                    result = PieceResult("failed", error=handle.error)
+                elif callable(getattr(self._executor, "submit", None)):
+                    result = await self._executor.wait(handle, piece, still_wanted)
+                else:
+                    result = await self._executor(piece, still_wanted)
             except asyncio.CancelledError:
                 result = PieceResult("cancelled")
                 if self._closed:
@@ -220,6 +276,7 @@ class SymbolHistoryPlanner:
         finally:
             slots.in_flight.remove(piece.start_ms, piece.end_ms)
             self._running.pop(piece.piece_id, None)
+            self._handles.pop(piece.piece_id, None)
         for start, end in result.written:
             start, end = max(start, piece.start_ms), min(end, piece.end_ms)
             if start < end:
