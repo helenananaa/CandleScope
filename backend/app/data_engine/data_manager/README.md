@@ -217,7 +217,8 @@ The component dependency direction is explicit:
   merged on source slots, cut into pieces by urgency and recency, and run by an
   injected executor. It is off by default (`HISTORY_SYMBOL_PLANNER_ENABLED=0`).
   When on, `DataManager.enable_history_planner` routes chart reads' missing
-  base ranges for single-base derived intervals (89m on 1m, 90s on 1s) to it:
+  base ranges for single-base derived intervals on 1m-or-wider Binance/OKX bases
+  (89m on 1m) to it:
   pieces run as source-interval coordinator repairs (`coordinator_executor`)
   and their ids go back to the API; a served read's target window then goes to
   the existing target path, which only derives when the base is present

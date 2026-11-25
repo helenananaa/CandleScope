@@ -26,6 +26,8 @@ class FakeResolver:
     def resolve(self, *, exchange, market_type, interval, purpose):
         if interval == "89m":
             return SimpleNamespace(kind=IntervalRouteKind.DERIVED, base_interval="1m")
+        if interval == "90s":
+            return SimpleNamespace(kind=IntervalRouteKind.DERIVED, base_interval="1s")
         return SimpleNamespace(kind=IntervalRouteKind.NATIVE, base_interval=None)
 
 
@@ -113,6 +115,11 @@ def test_only_single_base_chart_reads_go_to_the_planner():
         assert not takes(base_interval="5m")  # not this interval's history base
         assert not takes(metadata={"required_history_composition": {"policy": "k130"}})
         assert not takes(metadata={"series_identity": {"provider_id": "x"}})
+        assert takes(exchange="okx")
+        # The engine reuses stored base only on 1m-or-wider Binance/OKX bases; elsewhere the
+        # served read's target run would fetch the whole base again.
+        assert not takes(exchange="binance", market_type="spot", target_interval="90s", base_interval="1s")
+        assert not takes(exchange="bybit")
     asyncio.run(run())
 
 

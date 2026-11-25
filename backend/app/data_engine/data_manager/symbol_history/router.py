@@ -1,12 +1,12 @@
 """DataManager's side of the planner: which missing ranges it takes, and their lifecycle (ADR-DATA-001 S5).
 
 With ``HISTORY_SYMBOL_PLANNER_ENABLED``, a chart read's missing base range for
-a single-base derived interval (89m on 1m, 90s on 1s) becomes planner demand
+a single-base derived interval on a 1m-or-wider base (89m on 1m) becomes planner demand
 instead of a target-interval repair. Pieces run as source-interval repairs
 (``CoordinatorPieceExecutor``), so the source table has one writer lane; their
 request ids go back to the API, which waits on and leases them as before.
 Everything else (native charts, composed history, non-default identities,
-non-read requesters) keeps the existing path.
+non-read requesters, sub-minute bases such as 90s on 1s) keeps the existing path.
 
 Once every source slot of a demand is present or handed back, the demand is
 served: its target window goes to the existing target-interval path as one
@@ -29,7 +29,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from app.data_engine.interval_policy import last_closed_bar_open_ms, parse_interval_ms
+from app.data_engine.interval_policy import (
+    IntervalAlignment, last_closed_bar_open_ms, parse_interval_ms, parse_interval_spec,
+)
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolver, IntervalRouteKind
 
 from .coordinator_executor import CoordinatorPieceExecutor, request_fields
@@ -44,6 +46,10 @@ REGISTER_TIMEOUT_SECONDS = 2.0
 MAX_SUBMITTED_PIECES = 16
 # Chart reads (api/v1/klines.py). The engine reuses stored base slots only for these.
 READ_REQUESTERS = frozenset({"klines_history", "klines_history_before", "klines_range"})
+# ...and only on these routes (BackfillEngine._reuse_derived_components): elsewhere, such as 90s on
+# 1s, a served read's target run would fetch the whole base again, so those keep the existing path.
+REUSED_BASE_EXCHANGES = frozenset({"binance", "okx"})
+MIN_REUSED_BASE_MS = 60_000
 
 # project_base_repair_to_target(symbol=, target_interval=, base_interval=, start_ms=, end_ms=,
 #                               exchange=, market_type=) -> {"interval", "start_ms", "end_ms"} | None
@@ -89,7 +95,16 @@ class HistoryDemandRouter:
                          or metadata.get("bounded_history_batch_contract") is not None
                          or metadata.get("series_identity") is not None):
             return False
-        return self.base_for(exchange, market_type, target_interval) == base_interval
+        if exchange not in REUSED_BASE_EXCHANGES:
+            return False
+        if self.base_for(exchange, market_type, target_interval) != base_interval:
+            return False
+        for interval, min_ms in ((base_interval, MIN_REUSED_BASE_MS), (target_interval, 0)):
+            spec = parse_interval_spec(interval)
+            if (spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH or spec.phase_ms
+                    or spec.nominal_ms < min_ms):
+                return False
+        return True
 
     def base_for(self, exchange: str, market_type: str, interval: str) -> str | None:
         """The history base of a derived interval, or None (native or unknown)."""
