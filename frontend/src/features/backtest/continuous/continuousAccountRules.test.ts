@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
+  defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
 } from "./continuousAccountRules.js";
 
 const initialization = { runId: "bt_research", versionHash: `sha256:${"1".repeat(64)}`, outputMode: "SIGNAL" as const, warmupBars: 0 };
@@ -25,6 +25,15 @@ test("leverage is a practice account's on futures and 1 elsewhere", () => {
   assert.equal(forwardAccountLeverage("LEGACY", "futures", "5"), "1");
   assert.deepEqual(["1", "125", "2.5"].map(validForwardLeverage), [true, true, true]);
   assert.deepEqual(["0", "126", "", "1e2", "-1"].map(validForwardLeverage), [false, false, false, false, false]);
+});
+
+test("a new forward run's fee is a practice account's taker fee; a continued result keeps its own", () => {
+  // AddAccountDialog and the backend's DEFAULT_PRACTICE_SETTINGS default takerFeeRate to 0.0005.
+  assert.equal(defaultForwardFeeBps(), "5");
+  assert.equal(Number(defaultForwardFeeBps()) / 10_000, 0.0005);
+  const continued = { initialBalance: "1", equityPercent: "1", leverage: "5", slippageBps: "0" };
+  assert.equal(defaultForwardFeeBps({ ...continued, feeBps: "4" }), "4");
+  assert.equal(defaultForwardFeeBps({ ...continued, feeBps: "0" }), "0", "an explicit zero fee stays zero");
 });
 
 test("each model adds its own execution fields", () => {
