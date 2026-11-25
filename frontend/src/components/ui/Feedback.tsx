@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { t } from "../../i18n/index.js";
 import { Button, IconButton } from "./Button.js";
 import { Dialog } from "./Overlays.js";
-import { toastStore, type Toast } from "./overlay/toastStore.js";
+import { toastStore, type Toast, type ToastAction } from "./overlay/toastStore.js";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -41,6 +41,9 @@ function ToastItem({ toast }: { toast: Toast }) {
     const timer = setTimeout(() => toastStore.dismiss(toast.id), toast.durationMs);
     return () => clearTimeout(timer);
   }, [toast.id, toast.durationMs, paused]);
+  const actionButton = (action: ToastAction, variant?: "ghost") => (
+    <Button size="sm" {...(variant ? { variant } : {})} onClick={() => { action.onClick(); toastStore.dismiss(toast.id); }}>{action.label}</Button>
+  );
   return (
     <div className="ui-toast" data-tone={toast.tone} role={toast.tone === "danger" ? "alert" : "status"}
       onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)}
@@ -48,8 +51,14 @@ function ToastItem({ toast }: { toast: Toast }) {
       <div className="ui-toast-text">
         <strong className="ui-toast-title">{toast.title}</strong>
         {toast.message ? <span className="ui-toast-message">{toast.message}</span> : null}
+        {toast.secondaryAction ? (
+          <div className="ui-toast-actions">
+            {toast.action ? actionButton(toast.action) : null}
+            {actionButton(toast.secondaryAction, "ghost")}
+          </div>
+        ) : null}
       </div>
-      {toast.action ? <Button size="sm" onClick={() => { toast.action?.onClick(); toastStore.dismiss(toast.id); }}>{toast.action.label}</Button> : null}
+      {toast.action && !toast.secondaryAction ? actionButton(toast.action) : null}
       <IconButton size="sm" label={t("common.close")} onClick={() => toastStore.dismiss(toast.id)}
         icon={<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>} />
     </div>
