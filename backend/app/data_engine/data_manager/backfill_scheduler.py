@@ -6,6 +6,7 @@ This owner does not read storage, mutate caches, or import the coordinator.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import heapq
 import logging
 import sys
@@ -1227,6 +1228,12 @@ class BackfillScheduler:
                 series.active = chunk.parent_id
                 if chunk.parent_id in series.pending:
                     series.pending.remove(chunk.parent_id)
+                # A fresh context: a drain runs wherever it is triggered (a
+                # submit inside another run's acquisition scope, a finished
+                # chunk's task, a timer scheduled there), and create_task would
+                # copy that run's fence, computation, fetch-gate and
+                # memory-lease ContextVars into this chunk. Each run acquires
+                # its own; deletion permission travels in the request metadata.
                 task = asyncio.create_task(
                     self._run_chunk(chunk),
                     name=(
@@ -1235,6 +1242,7 @@ class BackfillScheduler:
                         f"{chunk.request.symbol}@{chunk.request.interval}:"
                         f"{chunk.sequence}"
                     ),
+                    context=contextvars.Context(),
                 )
                 self._tasks[chunk.chunk_id] = task
                 aged_dispatch = chunk.dispatch_bypasses >= self.max_dispatch_bypass
