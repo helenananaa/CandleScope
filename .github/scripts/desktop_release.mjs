@@ -12,7 +12,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 export const EXPECTED_PACKAGES = [
   { platform: "darwin", arch: "arm64", label: "macOS, Apple silicon (M1 and later)", files: (v) => [`CandleScope-${v}-macos-arm64.dmg`, `CandleScope-${v}-macos-arm64.zip`] },
   { platform: "darwin", arch: "x64", label: "macOS, Intel", files: (v) => [`CandleScope-${v}-macos-x64.dmg`, `CandleScope-${v}-macos-x64.zip`] },
-  { platform: "win32", arch: "x64", label: "Windows 10 and 11 (x64)", files: (v) => [`CandleScope-${v}-windows-x64-setup.exe`] },
+  { platform: "win32", arch: "x64", label: "Windows 10 and 11 (x64)", files: (v) => [`CandleScope-${v}-windows-x64-setup.exe`, `CandleScope-${v}-windows-x64.zip`] },
 ];
 
 export function readVersions(root = repoRoot) {
@@ -111,8 +111,9 @@ export function releaseBody({ version, notes, repository, ref, dryRun }) {
     "",
     "- **macOS:** open the DMG and drag CandleScope to Applications. Open it; when macOS says it cannot verify the app, go to **System Settings → Privacy & Security** and choose **Open Anyway**.",
     "- **Windows:** run the setup file. If SmartScreen says *Windows protected your PC*, choose **More info → Run anyway**. Uninstalling keeps your data in `%APPDATA%\\CandleScope Replay`.",
+    "- **Windows without installing:** extract the ZIP to a folder and run `CandleScope.exe`; SmartScreen asks the same way. Delete the folder to remove it. It keeps its data in the same `%APPDATA%\\CandleScope Replay` folder as the installed app, so run one or the other.",
     "",
-    "首次打开：安装包没有使用付费证书签名。macOS 被拦截后到 **系统设置 → 隐私与安全性** 选择 **仍要打开**；Windows 在 SmartScreen 提示中选择 **更多信息 → 仍要运行**。",
+    "首次打开：安装包没有使用付费证书签名。macOS 被拦截后到 **系统设置 → 隐私与安全性** 选择 **仍要打开**；Windows 在 SmartScreen 提示中选择 **更多信息 → 仍要运行**。Windows 的 ZIP 版无需安装：解压到一个文件夹后运行 `CandleScope.exe`，删除文件夹即可移除；它和安装版共用 `%APPDATA%\\CandleScope Replay` 里的数据，两者不要同时运行。",
     "",
     "## What's new",
     "",

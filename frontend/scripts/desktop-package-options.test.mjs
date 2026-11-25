@@ -23,16 +23,18 @@ test("macOS distributables preserve explicit architecture and never publish", ()
   assert.ok(pkg.build.mac.artifactName.includes("${arch}"));
 });
 
-test("the Windows installer is per-user, never publishes, and keeps user data on uninstall", () => {
+test("Windows ships a per-user installer and a ZIP, never publishes, and keeps user data on uninstall", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
   const args = pkg.scripts["desktop:package:win"].split(" ").slice(2);
   assert.deepEqual(desktopBuilderArguments([...args, "--x64"]), [
-    "--win", "nsis", "--publish", "never", "--x64",
+    "--win", "nsis", "zip", "--publish", "never", "--x64",
   ]);
-  assert.deepEqual(pkg.build.win.target, ["nsis"]);
+  assert.deepEqual(pkg.build.win.target, ["nsis", "zip"]);
   assert.equal(pkg.build.nsis.oneClick, false);
   assert.equal(pkg.build.nsis.perMachine, false);
   assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
-  // The release workflow and record-desktop-artifacts.mjs find the installer by this name.
+  // The release workflow and record-desktop-artifacts.mjs find both files by these names:
+  // the installer keeps its -setup suffix, the ZIP takes the platform name.
   assert.match(pkg.build.nsis.artifactName, /-windows-\$\{arch\}-setup\.\$\{ext\}$/);
+  assert.match(pkg.build.win.artifactName, /-windows-\$\{arch\}\.\$\{ext\}$/);
 });

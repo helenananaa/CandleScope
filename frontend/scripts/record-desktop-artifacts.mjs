@@ -3,10 +3,10 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-// macOS ships a DMG and a ZIP per architecture; Windows ships one installer.
+// Each architecture ships two files: macOS a DMG and a ZIP, Windows an installer and a ZIP.
 const expected = {
   darwin: { pattern: /\.(dmg|zip)$/, count: 2, signature: "ad-hoc", describe: "one DMG and one ZIP" },
-  win32: { pattern: /-setup\.exe$/, count: 1, signature: "unsigned", describe: "one setup EXE" },
+  win32: { pattern: /(-setup\.exe|\.zip)$/, count: 2, signature: "unsigned", describe: "one setup EXE and one ZIP" },
 }[process.platform];
 if (!expected) throw new Error(`No desktop distributables are defined for ${process.platform}`);
 const directory = path.resolve("desktop-dist");
