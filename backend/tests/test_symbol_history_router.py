@@ -36,6 +36,11 @@ class FakeCoordinator:
         self.calls: list[dict] = []
         self.outcomes: dict[str, asyncio.Future] = {}
         self.listeners: list = []
+        self.released: list[tuple[str, str]] = []
+
+    async def release_demand(self, request_id, *, owner_id, cancel_if_unobserved=True, reason=""):
+        self.released.append((request_id, owner_id))
+        return True
 
     def trigger(self, symbol, interval, start_ms, end_ms, exchange="binance", market_type="spot", **kwargs):
         request_id = f"rq{len(self.calls) + 1}"
@@ -50,6 +55,9 @@ class FakeCoordinator:
 
     def add_demand_listener(self, listener) -> None:
         self.listeners.append(listener)
+
+    def lease(self, request_id) -> str:
+        return next(call for call in self.calls if call["id"] == request_id)["metadata"]["demand_owner_id"]
 
     def pieces(self) -> list[dict]:
         return [call for call in self.calls if call["interval"] == "1m"]
@@ -121,6 +129,9 @@ def test_a_read_is_served_by_source_pieces_and_a_poll_adds_nothing():
         assert {(call["reason"], call["priority"], call["requester"]) for call in pieces} == {
             ("initial_history", 10, "symbol_history")}
         assert all(call["metadata"]["requires_trusted_finality"] for call in pieces)
+        # Each piece holds its own lease, so the scheduler can cancel it once no chart wants it.
+        leases = {call["metadata"]["demand_owner_id"] for call in pieces}
+        assert len(leases) == 2 and all(lease.startswith("symbol_history:binance:futures:BTCUSDT:") for lease in leases)
         assert coordinator.targets() == []
 
         assert sorted(read(router)) == sorted(ids)  # the chart polls: same pieces, nothing submitted
@@ -225,6 +236,9 @@ def test_a_newer_scope_generation_releases_the_read_so_nothing_is_derived():
         first, second = read(router)
         [listener] = coordinator.listeners
         listener("scope", "pane-1", 4)
+        await tick()
+        # Nothing wants the pieces: their own leases go, so the scheduler may cancel them.
+        assert sorted(coordinator.released) == [(first, coordinator.lease(first)), (second, coordinator.lease(second))]
         coordinator.finish(first)
         coordinator.finish(second)
         await tick()
@@ -242,11 +256,16 @@ def test_a_revoked_owner_releases_its_reads():
         coordinator = FakeCoordinator()
         router = make_router(coordinator, asyncio.get_running_loop())
         first, second = read(router)
+        read(router, start=T0 + 2 * DAY, end=T0 + 2 * DAY + 59 * MINUTE, metadata={"demand_owner_id": "pane-2"})
         coordinator.listeners[0]("owner", "pane-1")
+        await tick()
+        # pane-2 still wants part of the newest piece: only the older piece is released.
+        assert coordinator.released == [(second, coordinator.lease(second))]
         coordinator.finish(first)
         coordinator.finish(second)
         await tick()
-        assert coordinator.targets() == []
+        [target] = coordinator.targets()  # only pane-2's read is served
+        assert target["metadata"]["demand_owner_id"] == "pane-2"
         await router.close()
     asyncio.run(run())
 

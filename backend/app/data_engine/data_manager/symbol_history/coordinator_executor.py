@@ -7,7 +7,10 @@ on those targets recompute as they do for any derived repair. The request id
 is the piece's handle: the API waits on it and leases it as before.
 
 Submission is synchronous (``BackfillCoordinator.trigger`` on the loop), the
-wait is ``wait_for_request``.
+wait is ``wait_for_request``. Each piece holds a demand lease of its own, so
+the scheduler cancels it like any chart repair once the planner no longer
+wants it (``release``) and no API lease remains; without one it would run on
+after its charts closed.
 """
 from __future__ import annotations
 
@@ -33,6 +36,9 @@ class _Coordinator(Protocol):
                 market_type: str = ..., **kwargs: Any) -> str: ...
 
     async def wait_for_request(self, request_id: str) -> Any: ...
+
+    async def release_demand(self, request_id: str, *, owner_id: str, cancel_if_unobserved: bool = True,
+                             reason: str = ...) -> bool: ...
 
 
 def request_fields(urgency: int) -> tuple[str, int]:
@@ -61,6 +67,7 @@ class CoordinatorPieceExecutor:
             **self._metadata,
             "requires_trusted_finality": True,
             "symbol_history_piece": piece.piece_id,
+            "demand_owner_id": self.lease_owner(piece),
             "requested_range": {"start_ms": piece.start_ms, "end_ms": piece.end_ms - piece.width_ms},
         }
         targets = self._targets_for(piece) if self._targets_for is not None else []
@@ -72,6 +79,15 @@ class CoordinatorPieceExecutor:
             self._key.exchange, self._key.market_type,
             reason=reason, priority=priority, requester=REQUESTER, metadata=metadata,
         )
+
+    def lease_owner(self, piece: Piece) -> str:
+        key = self._key
+        return f"{REQUESTER}:{key.exchange}:{key.market_type}:{key.symbol}:{piece.piece_id}"
+
+    async def release(self, handle: str, piece: Piece) -> None:
+        """No demand wants this piece any more: drop its lease (cancels it if no API lease remains)."""
+        await self._coordinator.release_demand(handle, owner_id=self.lease_owner(piece),
+                                               cancel_if_unobserved=True, reason="symbol_history_unwanted")
 
     async def wait(self, handle: str, piece: Piece, still_wanted: Callable[[], bool]) -> PieceResult:
         outcome = await self._coordinator.wait_for_request(handle)

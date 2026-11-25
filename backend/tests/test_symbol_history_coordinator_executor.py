@@ -30,6 +30,10 @@ class FakeCoordinator:
     async def wait_for_request(self, request_id):
         return await self.outcomes[request_id]
 
+    async def release_demand(self, request_id, *, owner_id, cancel_if_unobserved=True, reason=""):
+        self.calls.append(("release", request_id, owner_id, cancel_if_unobserved, reason))
+        return True
+
     def finish(self, request_id, status, *, written=(), error=None, retryable=False):
         _, symbol, interval, start, end, exchange, market_type, kwargs = next(
             call for call in self.calls if call[0] == request_id)
@@ -104,4 +108,16 @@ def test_the_planner_hands_out_coordinator_request_ids():
         await plan.drain()
         assert plan.snapshot()["sources"]["1m"]["missing_bars"] == 0
         await plan.close()
+    asyncio.run(run())
+
+
+def test_a_piece_holds_its_own_lease_and_release_drops_it():
+    async def run():
+        coordinator = FakeCoordinator()
+        executor = CoordinatorPieceExecutor(coordinator, KEY)
+        handle = executor.submit(piece())
+        owner = coordinator.calls[0][-1]["metadata"]["demand_owner_id"]
+        assert owner == "symbol_history:binance:futures:BTCUSDT:p1"  # piece() names its piece p1
+        await executor.release(handle, piece())
+        assert coordinator.calls[-1] == ("release", handle, owner, True, "symbol_history_unwanted")
     asyncio.run(run())

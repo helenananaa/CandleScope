@@ -45,6 +45,8 @@ class SubmittingExecutor(Protocol):
 
     async def wait(self, handle: Any, piece: Piece, still_wanted: Callable[[], bool]) -> PieceResult: ...
 
+    # Optional: ``async def release(handle, piece)`` stops a submitted piece no demand wants any more.
+
 
 @dataclass(frozen=True, slots=True)
 class _SubmitFailed:
@@ -98,12 +100,14 @@ class SymbolHistoryPlanner:
         self._demands: dict[tuple[DemandOwner, str, Any], tuple[Demand, str]] = {}
         self._running: dict[str, tuple[Piece, asyncio.Task]] = {}
         self._handles: dict[str, Any] = {}
+        self._releasing: set[str] = set()
         self._hand_backs: list[tuple[float, str, int, int]] = []
         self._pump_handle: asyncio.Handle | None = None
         self._closed = False
         self.metrics = {
             "registered": 0, "unchanged": 0, "released": 0, "served": 0,
             "pieces_started": 0, "pieces_committed": 0, "pieces_failed": 0, "pieces_cancelled": 0,
+            "pieces_released": 0,
             "bars_started": 0, "bars_handed_back": 0,
         }
 
@@ -140,8 +144,33 @@ class SymbolHistoryPlanner:
             self._slots[source].unwant(key)
         if keys:
             self.metrics["released"] += len(keys)
+            self._release_unwanted()
             self._schedule_pump()
         return len(keys)
+
+    def _release_unwanted(self) -> None:
+        """Tell the executor about submitted pieces that no demand wants any more (§6)."""
+        release = getattr(self._executor, "release", None)
+        if not callable(release):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        for piece_id, (piece, _) in list(self._running.items()):
+            handle = self._handles.get(piece_id)
+            if handle is None or piece_id in self._releasing or self._still_wanted(piece):
+                continue
+            self._releasing.add(piece_id)
+            self.metrics["pieces_released"] += 1
+            loop.create_task(self._release(release, handle, piece),
+                             name=f"symbol-history-release:{self.key.symbol}:{piece_id}")
+
+    async def _release(self, release, handle: Any, piece: Piece) -> None:
+        try:
+            await release(handle, piece)
+        except Exception:  # noqa: BLE001 - the piece then runs to its end
+            logger.warning("history piece %s %s was not released", self.key.symbol, piece.piece_id, exc_info=True)
 
     def demands_over(self, piece: Piece) -> list[Demand]:
         """Current demands whose source slots this piece serves (to name its target windows)."""
@@ -323,6 +352,7 @@ class SymbolHistoryPlanner:
             slots.in_flight.remove(piece.start_ms, piece.end_ms)
             self._running.pop(piece.piece_id, None)
             self._handles.pop(piece.piece_id, None)
+            self._releasing.discard(piece.piece_id)
         for start, end in result.written:
             start, end = max(start, piece.start_ms), min(end, piece.end_ms)
             if start < end:
