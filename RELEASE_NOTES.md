@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-- Windows also ships a ZIP. Extract it to a folder and run `CandleScope.exe`; nothing is installed, and deleting the folder removes it. It uses the same data folder as the installed app (`%APPDATA%\CandleScope Replay`), so run one or the other.
+## 1.0.1 (2026-11-26)
+
+A patch release for 1.0.0. Install it over 1.0.0: your data and settings carry over, and nothing in the data folder changes format, so 1.0.0 still opens it.
+
+- **Update notice (desktop).** CandleScope now tells you when a newer version is out, with a link to its release page. It asks GitHub once at startup and at most once a day, never downloads anything itself, and stays quiet if GitHub can't be reached. You can turn it off in **Settings → About & support → Check for updates**. This release still has to be downloaded by hand; later releases are announced in the app.
+- **Fixed: the chart could open zoomed in.** On a slow first launch the chart could open zoomed in on about 9 bars and stay that way on every reopen. It now fits again when the history arrives, and a zoom that 1.0.0 saved this way is reset on reopen. A zoom you made yourself is kept.
+- **History loads sooner when an archive server is slow.** When an exchange's archive download server (for Binance, data.binance.vision) is slow or unreachable, a chart waiting for history switches to the regular exchange API within about 8 seconds, and an archive server that keeps failing is skipped for 5 minutes.
+- **Custom intervals do less repeated work.** Charts such as 89m no longer request the same history again every second while a bar is forming, and several charts on one symbol no longer download the same data twice. Bars of other custom intervals are no longer thrown away when a daily bar is imported, and the app stays responsive while it rebuilds a forming bar. The first load of a large custom interval can still take a minute or more; the larger rework is planned for 1.1.
+- **Forward runs start with the practice fee.** A new forward run (**Run mode → History + live** or **Live only**) now starts with the practice account's taker fee instead of 0 bps.
+- **Windows ZIP.** Windows also ships a ZIP. Extract it to a folder and run `CandleScope.exe`; nothing is installed, and deleting the folder removes it. It uses the same data folder as the installed app (`%APPDATA%\CandleScope Replay`), so run one or the other.
 
 ## 1.0.0 (2026-11-25)
 
