@@ -5,6 +5,7 @@ import logging
 import inspect
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from app.data_engine.interval_policy import (
@@ -46,6 +47,22 @@ def _base_row_is_final(row: dict) -> bool:
     return row_is_closed(row) and ("source" not in row or source_is_trusted_final(row["source"]))
 
 
+# A forming-bucket seed repair already submitted for the same target bucket
+# owns its components for this long. The scheduler keeps retrying it; the seed
+# only asks again if that demand may have ended without filling the bucket.
+SEED_REPAIR_REARM_SECONDS = 60.0
+
+
+@dataclass(frozen=True, slots=True)
+class _SeedRepair:
+    """The last base repair a forming-bucket seed submitted for one target."""
+
+    scope: tuple[int, object | None]  # (target bucket start, target lifetime)
+    through_ms: int  # exclusive end of the closed components it asked for
+    priority: int
+    rearm_at: float  # time.monotonic()
+
+
 class AggregatorWarmStartService:
     """Seeds aggregator state from cache/storage when streams are started."""
 
@@ -67,10 +84,12 @@ class AggregatorWarmStartService:
         self._interval_resolver = interval_resolver or IntervalResolver()
         self.history_prefix_runtime = None
         self._tail_repair_buckets: dict[SeriesKey, tuple[int, object | None]] = {}
+        self._seed_repairs: dict[SeriesKey, _SeedRepair] = {}
 
     def reset_tail_repairs(self) -> None:
         """A replacement storage binding cannot reuse the old repair demand."""
         self._tail_repair_buckets.clear()
+        self._seed_repairs.clear()
 
     async def seed_if_needed(
         self,
@@ -286,53 +305,61 @@ class AggregatorWarmStartService:
             }
 
         if not is_monthly_interval(interval):
-            elapsed_in_bucket_ms = now_ms - bucket_start_ms
+            base_ms = base_seconds * 1000
             expected_closed_components = max(
                 0,
-                int(elapsed_in_bucket_ms / (base_seconds * 1000)),
+                int((now_ms - bucket_start_ms) / base_ms),
             )
-            actual_closed_components = sum(
-                1
+            final_opens = {
+                open_time
                 for open_time, row in rows_by_open_time.items()
                 if bucket_start_ms <= open_time < now_ms
                 and int(row["close_time"]) < now_ms
                 and _base_row_is_final(row)
-            )
-            if actual_closed_components < expected_closed_components:
-                missing = expected_closed_components - actual_closed_components
-                logger.warning(
-                    "Custom seed %s@%s: expected %d final base bars in current bucket "
-                    "but found %d (%d missing). Triggering base backfill.",
-                    symbol,
-                    interval,
-                    expected_closed_components,
-                    actual_closed_components,
-                    missing,
+            }
+            missing_opens = [
+                open_ms
+                for open_ms in range(
+                    bucket_start_ms,
+                    bucket_start_ms + expected_closed_components * base_ms,
+                    base_ms,
+                )
+                if open_ms not in final_opens
+            ]
+            if missing_opens:
+                target = SeriesKey.create(
+                    symbol, interval, exchange=exchange,
+                    market_type=market_type, identity=series_identity,
                 )
                 try:
-                    self._call_backfill_trigger(
-                        symbol=symbol,
-                        interval=base_interval,
-                        start_ms=bucket_start_ms,
-                        end_ms=now_ms,
-                        exchange=exchange,
-                        market_type=market_type,
-                        reason=self._warmup_reason(focus_scope, subscription_tier),
-                        requester="warm_start_custom_seed",
-                        metadata={
-                            "focus_scope": focus_scope,
-                            "subscription_tier": subscription_tier,
-                            "requested_interval": interval,
-                            "base_interval": base_interval,
-                            "had_stream": True,
-                            "requires_trusted_finality": True,
-                        },
+                    submitted = self._request_seed_repair(
+                        target,
+                        bucket_start_ms=bucket_start_ms,
+                        base_interval=base_interval,
+                        base_ms=base_ms,
+                        now_ms=now_ms,
+                        missing_opens=missing_opens,
+                        focus_scope=focus_scope,
+                        subscription_tier=subscription_tier,
                         series_identity=series_identity,
                     )
                 except Exception as exc:
                     logger.warning(
                         "Failed to trigger base backfill during custom seed: %s",
                         exc,
+                    )
+                else:
+                    log = logger.warning if submitted else logger.debug
+                    log(
+                        "Custom seed %s@%s: expected %d final base bars in current bucket "
+                        "but found %d (%d missing). %s",
+                        symbol,
+                        interval,
+                        expected_closed_components,
+                        expected_closed_components - len(missing_opens),
+                        len(missing_opens),
+                        "Triggering base backfill." if submitted
+                        else "An earlier seed repair still owns them.",
                     )
         else:
             logger.debug(
@@ -449,18 +476,91 @@ class AggregatorWarmStartService:
         expected = max(0, (now_ms-state.bucket_start_ms)//(base_seconds*1000))
         if received >= expected:
             return
+        target = SeriesKey.create(state.symbol, state.interval, exchange=state.exchange,
+                                  market_type=state.market_type, identity=state.identity)
         try:
-            self._call_backfill_trigger(symbol=state.symbol, interval=base_interval,
-                start_ms=state.bucket_start_ms, end_ms=now_ms, exchange=state.exchange,
-                market_type=state.market_type,
-                reason=self._warmup_reason(focus_scope, subscription_tier),
-                requester='warm_start_custom_seed', metadata={
-                    'focus_scope':focus_scope, 'subscription_tier':subscription_tier,
-                    'requested_interval':state.interval, 'base_interval':base_interval,
-                    'had_stream':True, 'requires_trusted_finality':True},
+            self._request_seed_repair(target, bucket_start_ms=state.bucket_start_ms,
+                base_interval=base_interval, base_ms=base_seconds * 1000, now_ms=now_ms,
+                missing_opens=None, focus_scope=focus_scope, subscription_tier=subscription_tier,
                 series_identity=state.identity)
         except Exception as exc:
             logger.warning('Failed to request source fallback warm repair: %s', exc)
+
+    def _request_seed_repair(
+        self,
+        target: SeriesKey,
+        *,
+        bucket_start_ms: int,
+        base_interval: str,
+        base_ms: int,
+        now_ms: int,
+        missing_opens: list[int] | None,
+        focus_scope: str,
+        subscription_tier: str | None,
+        series_identity: KlineSeriesIdentity | None,
+    ) -> bool:
+        """Submit one base repair per forming target bucket and target lifetime.
+
+        Every ``/klines/latest`` poll (about once a second per chart) re-runs
+        this seed. While the first repair waits behind the series' history
+        work, repeating it only churns the scheduler and its ledger: the RC
+        cold 89m load logged 208 submissions in five minutes. A repeat goes
+        out only for components that closed after the earlier demand's edge,
+        for more urgent demand, or after ``SEED_REPAIR_REARM_SECONDS`` in case
+        the earlier demand ended without filling the bucket.
+
+        ``missing_opens`` are the closed component opens without a final
+        row, or ``None`` when only their count is known.
+        """
+        token = self._bar_aggregator.history_target_token(target, target.interval)
+        scope = (bucket_start_ms, token[1] if token is not None else None)
+        closed_edge = bucket_start_ms + max(0, (now_ms - bucket_start_ms) // base_ms) * base_ms
+        reason = self._warmup_reason(focus_scope, subscription_tier)
+        priority = priority_for_reason(reason)
+        monotonic = time.monotonic()
+        previous = self._seed_repairs.get(target)
+        owned = (previous is not None and previous.scope == scope
+                 and monotonic < previous.rearm_at and priority >= previous.priority)
+        start_ms = bucket_start_ms
+        if owned:
+            if missing_opens is None:
+                uncovered = [previous.through_ms] if closed_edge > previous.through_ms else []
+            else:
+                uncovered = [opened for opened in missing_opens if opened >= previous.through_ms]
+            if not uncovered:
+                return False
+            start_ms = uncovered[0]
+        submitted = self._call_backfill_trigger(
+            symbol=target.symbol,
+            interval=base_interval,
+            start_ms=start_ms,
+            end_ms=now_ms,
+            exchange=target.exchange,
+            market_type=target.market_type,
+            reason=reason,
+            requester="warm_start_custom_seed",
+            metadata={
+                "focus_scope": focus_scope,
+                "subscription_tier": subscription_tier,
+                "requested_interval": target.interval,
+                "base_interval": base_interval,
+                "had_stream": True,
+                "requires_trusted_finality": True,
+            },
+            series_identity=series_identity,
+        )
+        if not submitted:
+            return False
+        if owned:
+            # A tail extends the earlier demand; it does not restart its clock.
+            self._seed_repairs[target] = _SeedRepair(
+                scope, closed_edge, min(priority, previous.priority), previous.rearm_at)
+        else:
+            self._seed_repairs[target] = _SeedRepair(
+                scope, closed_edge, priority, monotonic + SEED_REPAIR_REARM_SECONDS)
+            if len(self._seed_repairs) > 2_048:
+                self._seed_repairs.pop(next(iter(self._seed_repairs)), None)
+        return True
 
     async def _seed_standard_interval(
         self,
