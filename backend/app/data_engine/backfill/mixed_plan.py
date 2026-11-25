@@ -5,6 +5,7 @@ ownership, quota and publication remain with their existing owners.
 """
 from collections import deque
 from contextlib import nullcontext
+from functools import lru_cache
 from dataclasses import dataclass, replace
 import math
 import sys
@@ -27,6 +28,7 @@ from app.data_engine.series_identity import identity_from_metadata
 from app.data_engine.storage.revisions import acquisition_revision, StaleAcquisition
 from app.data_engine.market_data.models import MarketChannel
 from app.exchanges import get_exchange_registry
+from app.exchanges.registry import read_capabilities
 from .models import BackfillPlan, IntervalComponent, IntervalDecomposition
 from .cold_cover import choose_cold_sources
 
@@ -51,10 +53,30 @@ def reusable_component(row, width, now_ms, fields):
             return False
         if not row_is_closed(row):
             return False
-        values = chart_field_summary((row,), validate_ohlcv=True).project(enhanced_complete=True)
-        return all(values.get(field) is not None for field in fields)
+        values = tuple(row[name] for name in _OHLCV_FIELDS) + tuple(row.get(name) for name in _ENHANCED_FIELDS)
+        # Keyed by type too: True == 1 and 1 == 1.0, but K130 need not accept them alike.
+        return _complete_k130_fields(tuple((type(value), value) for value in values), tuple(fields))
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
+
+
+_OHLCV_FIELDS = ("open", "high", "low", "close", "volume")
+_ENHANCED_FIELDS = ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
+
+
+@lru_cache(maxsize=65_536)
+def _complete_k130_fields(typed_values, fields):
+    """K130 validation of one row's field values; a pure function of them.
+
+    The same committed minutes are rechecked by every chart and every retry,
+    so the verdict is cached by value. Rows that K130 rejects are not complete.
+    """
+    row = dict(zip(_OHLCV_FIELDS + _ENHANCED_FIELDS, (value for _, value in typed_values)))
+    try:
+        summary = chart_field_summary((row,), validate_ohlcv=True).project(enhanced_complete=True)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return all(summary.get(field) is not None for field in fields)
 
 
 @dataclass(frozen=True)
@@ -160,7 +182,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                         for r in precedence_routes)
     keys = tuple((key.exchange, key.market_type, key.symbol, key.interval, *key.identity.storage_values)
                  for key, _ in precedences)
-    channel = get_exchange_registry().get_capabilities(target.exchange).channel_capability(
+    channel = read_capabilities(get_exchange_registry(), target.exchange).channel_capability(
         MarketChannel.KLINE, target.market_type)
     if channel.history_composition != policy:
         return None
