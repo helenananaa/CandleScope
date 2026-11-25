@@ -8,7 +8,7 @@ until a maintainer reviews the draft and publishes it.
 |---|---|---|
 | macOS, Apple silicon | `macos-15` | `CandleScope-<version>-macos-arm64.dmg` and `.zip` |
 | macOS, Intel | `macos-15-intel` | `CandleScope-<version>-macos-x64.dmg` and `.zip` |
-| Windows 10/11, x64 | `windows-latest` | `CandleScope-<version>-windows-x64-setup.exe` |
+| Windows 10/11, x64 | `windows-latest` | `CandleScope-<version>-windows-x64-setup.exe` and `CandleScope-<version>-windows-x64.zip` |
 
 The release also carries `SHA256SUMS` and `build-manifests.json`, which records the
 commit and CI run that produced each package.
@@ -50,14 +50,17 @@ the workflow refuses to replace it: fix the problem and tag a new version.
   - It runs the backend regression list on that Python.
   - It unpacks the ZIP into a new folder, then launches and restarts the app from there.
 - **On the Windows build:**
-  - It runs the desktop host tests, packages the installer, and checks the sidecar
-    and retired-Pyne rejection on the bundled Python.
+  - It runs the desktop host tests, packages the installer and the ZIP, and checks
+    the sidecar and retired-Pyne rejection on the bundled Python.
   - It uses the qualified CCXT fork wheel, checked against the SHA-256 in
     `backend/ccxt-fork.lock.json`. The macOS jobs rebuild that pure-Python wheel
     from the pinned source and must match the same hash.
   - It installs silently into a folder with a space in its name, then launches and
     restarts the installed app.
   - It uninstalls silently and confirms that user data in `%APPDATA%\CandleScope Replay` is kept.
+  - It unpacks the ZIP into another folder with a space in its name, checks that
+    `CandleScope.exe` and the bundled Python are at the expected places, then launches
+    and restarts the app from there.
 - **When assembling:**
   - Every package must come from the tagged commit and match the checksum that its
     build recorded.
@@ -74,7 +77,7 @@ The packages are not signed with a paid certificate:
 - **macOS:** builds are ad-hoc signed, without an Apple Developer ID or
   notarization. Users allow the first launch in
   **System Settings → Privacy & Security → Open Anyway**.
-- **Windows:** the installer is unsigned. Users choose
+- **Windows:** the installer and the ZIP are unsigned. Users choose
   **More info → Run anyway** in the SmartScreen prompt.
 
 The release notes and both READMEs give these steps. Signing later needs:

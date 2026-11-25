@@ -93,7 +93,7 @@ jobs:
           mkdir -p "$(dirname "$wheel")"
           curl -fsSL --retry 3 -o "$wheel" "$url"
           echo "$sha  $wheel" | sha256sum -c -
-      - name: Package Windows app and installer
+      - name: Package Windows app, installer and ZIP
         run: |
           wheels=(../backend/.cache/ccxt-fork/*/ccxt-*.whl)
           test "${#wheels[@]}" -eq 1
@@ -144,17 +144,36 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Uninstaller exited with $($process.ExitCode)" }
           if (Test-Path (Join-Path $target "CandleScope.exe")) { throw "The uninstaller left CandleScope.exe behind" }
           if (-not (Test-Path (Join-Path $env:APPDATA "CandleScope Replay\data\keep-after-uninstall.txt"))) { throw "The uninstaller removed user data" }
+      - name: Unpack the ZIP into a relocated folder
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $zip = (Resolve-Path "desktop-dist/CandleScope-$version-windows-x64.zip").Path
+          $target = Join-Path $env:RUNNER_TEMP "CandleScope Unpacked"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $target)
+          # Users extract the ZIP and run CandleScope.exe from its top level.
+          if (-not (Test-Path (Join-Path $target "CandleScope.exe"))) { throw "CandleScope.exe is not at the top of the ZIP" }
+          if (-not (Test-Path (Join-Path $target "resources\python-runtime\python\python.exe"))) { throw "Bundled Python is missing from the ZIP" }
+      - name: Launch the unpacked ZIP app and restart with bundled backend
+        timeout-minutes: 10
+        run: >-
+          node scripts/desktop-package-smoke.mjs
+          --executable "$RUNNER_TEMP/CandleScope Unpacked/CandleScope.exe"
+          --playwright-module "$RUNNER_TEMP/desktop-smoke/node_modules/playwright-core"
+          --out ../output/windows-zip-smoke
       - name: Record checksums and source identity
         run: |
           node scripts/record-desktop-artifacts.mjs
           cat desktop-dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
-          echo 'Unsigned installer: no code signing certificate. Only the Desktop release workflow publishes a draft GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload verified installer
+          echo 'Unsigned installer and ZIP: no code signing certificate. Only the Desktop release workflow publishes a draft GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload verified installer and ZIP
         uses: actions/upload-artifact@v4
         with:
           name: CandleScope-windows-x64-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             frontend/desktop-dist/*-setup.exe
+            frontend/desktop-dist/*.zip
             frontend/desktop-dist/SHA256SUMS
             frontend/desktop-dist/build-manifest.json
           if-no-files-found: error
@@ -167,6 +186,7 @@ jobs:
           name: Windows-evidence-x64-${{ github.run_attempt }}
           path: |
             output/windows-package-smoke/**
+            output/windows-zip-smoke/**
             output/windows-bundled-regression.xml
             frontend/desktop-dist/builder-debug.yml
           if-no-files-found: ignore

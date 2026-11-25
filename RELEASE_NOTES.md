@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Windows also ships a ZIP. Extract it to a folder and run `CandleScope.exe`; nothing is installed, and deleting the folder removes it. It uses the same data folder as the installed app (`%APPDATA%\CandleScope Replay`), so run one or the other.
+
 ## 1.0.0 (2026-11-25)
 
 This is the first public release of the CandleScope desktop app, for Windows and macOS (Apple Silicon and Intel). The same app also runs in the browser at [app.candlescope.app](https://app.candlescope.app). If you used the 0.3.0 test build from 2026-10-25, this release opens and upgrades your profile; read [Going back to 0.3.0](#going-back-to-030-after-upgrading) first if you may want to return to it.
