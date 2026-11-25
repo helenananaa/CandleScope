@@ -207,6 +207,11 @@ The component dependency direction is explicit:
 - [backfill_coordinator.py](backfill_coordinator.py) composes these owners with
   the engine, persistent gap ledger, cache readback and event delivery. The
   durable finalizer completes before the scheduler releases shared waiters.
+  It inherits two mixins split out of it (ADR-DATA-001 §8):
+  [backfill_admission.py](backfill_admission.py) holds the request and demand
+  API, request ids and retained outcomes, and
+  [backfill_execution.py](backfill_execution.py) runs one request with retries,
+  verifies it and hands its bars to the cache.
 
 `BackfillCoordinator` is deliberately separate from `BackfillEngine`:
 
