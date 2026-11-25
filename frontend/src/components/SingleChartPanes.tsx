@@ -222,6 +222,7 @@ import {
   ProjectionStore,
   projectPaneDescriptorsToDisplay,
   rememberSurfaceViewport,
+  shouldFollowLiveTail,
   shouldPreserveProjectionViewport,
   selectSurfaceViewportSnapshot,
   selectPeriodViewportRestore,
@@ -249,7 +250,7 @@ import type {
   ChartSurfaceLinkedTimeRange,
   ChartSurfaceVisibleRange,
 } from "../chart-adapter/useChartSurfaceRuntime.js";
-import type { ViewportController } from "../chart-adapter/viewportController.js";
+import type { ViewportController, ViewportLiveTail } from "../chart-adapter/viewportController.js";
 import type {
   AxisTime,
   DisplayRow,
@@ -524,6 +525,16 @@ interface DrawingPresenceState {
 
 function rowsFromStore(store: SeriesWindowView | null | undefined): KlineBar[] {
   return store?.snapshot?.() || [];
+}
+
+function lastDisplayTime(rows: readonly DisplayRow[]): number | null {
+  const time = rows[rows.length - 1]?.time;
+  return typeof time === "number" && Number.isFinite(time) ? time : null;
+}
+
+interface CommitLiveTail {
+  readonly tail: ViewportLiveTail;
+  readonly lastTime: number | null;
 }
 
 function latestFiniteSourceTime(rows: readonly SourceBar[] | null | undefined): number | null {
@@ -2477,6 +2488,44 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return followed;
   }, []);
 
+  // Before a commit renders: where the view sits relative to the latest bar,
+  // if that bar is on screen. Time axes only; ordinal projections and views
+  // bound to a source range or follow-latest keep their own rules.
+  const captureCommitLiveTail = useCallback((
+    previousDisplayRows: readonly DisplayRow[],
+    axisMode: string,
+  ): CommitLiveTail | null => {
+    if (axisMode === "derived-ordinal" || previousDisplayRows.length === 0
+      || (followLatestRef.current && !followLatestDisabledRef.current)
+      || boundSurfaceViewportAnchorRef.current !== null) return null;
+    const tail = viewportControllerRef.current?.captureLiveTail() ?? null;
+    return tail ? { tail, lastTime: lastDisplayTime(previousDisplayRows) } : null;
+  }, []);
+
+  // After it rendered: rows added after that bar keep the newest bar on screen.
+  const followCommitLiveTail = useCallback((
+    captured: CommitLiveTail | null,
+    displayRows: readonly DisplayRow[],
+    store: SeriesWindowView,
+  ): boolean => {
+    if (!captured || pendingSurfaceViewportRef.current !== null
+      || boundSurfaceViewportAnchorRef.current !== null
+      || !shouldFollowLiveTail({
+        latestBarVisible: true,
+        nextLastTime: lastDisplayTime(displayRows),
+        previousLastTime: captured.lastTime,
+        rightEdgeCurrent: !store.rightTruncated,
+        sessionViewportPlaced: hasRestoredRangeRef.current,
+        userInteracted: userInteractedRef.current,
+      })) return false;
+    const followed = viewportControllerRef.current?.followLiveTail(captured.tail) ?? false;
+    recordPerfEvent("chart.viewport.followLiveTail", {
+      applied: followed, bars: displayRows.length, datasetKey: datasetKeyRef.current,
+      rightOffset: captured.tail.rightOffset,
+    });
+    return followed;
+  }, []);
+
   const publishViewportRangeChange = useCallback((visibleRange: ChartSurfaceVisibleRange | null = null) => {
     const range = visibleRange || captureVisibleRange();
     if (range) onViewportRangeChangeRef.current?.(range);
@@ -4052,6 +4101,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         rowIndexMapRef: sourceRowIndexMapRef,
       });
       const previousDisplayRows = displayRowsRef.current;
+      const liveTail = captureCommitLiveTail(
+        previousDisplayRows,
+        getChartTypeDescriptor(activeChartType).axisMode,
+      );
       const projectionPatch = canReuseProjection
         ? projectionStore.applySourceDelta({ type: "replace" }, rows)
         : projectionStore.reset(rows);
@@ -4213,6 +4266,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           isRestoringViewportRef.current = false;
         }
       }
+      if (projectionRendered) followCommitLiveTail(liveTail, displayRows, store);
       if (projectionRendered && followLatestViewport(displayRows)) {
         hasRestoredRangeRef.current = true;
         lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4248,6 +4302,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         drawingSourceTimeHorizonRef.current = nextSourceTimeHorizon;
         const sourceTimeHorizonChanged = nextSourceTimeHorizon !== previousSourceTimeHorizon;
         const previousDisplayRows = projectionStore.displaySnapshot();
+        const liveTail = captureCommitLiveTail(
+          previousDisplayRows,
+          getChartTypeDescriptor(currentChartType).axisMode,
+        );
         // A user-owned historical view must keep elapsed source coordinates
         // through ATR recalibration, even when a normal tick rebuilds the
         // complete ordinal grid. Capture before mutating that projection.
@@ -4449,6 +4507,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         // Synthetic recalibration can remap the axis while retaining the same
         // output count. Following depends on the committed projection, not on
         // whether this tick happened to create an additional brick/column.
+        if (projectionRendered) followCommitLiveTail(liveTail, displayRows, currentStore);
         if (projectionRendered && followLatestViewport(displayRows)) {
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4466,7 +4525,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [captureCommitLiveTail, chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followCommitLiveTail, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     schedulePaintedSessionViewportRestore();

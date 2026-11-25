@@ -426,3 +426,32 @@ test("structural compensation bypasses the interaction lock", () => {
   mustBeDefined(unlock)();
   assert.deepEqual(calls, [["setVisibleLogicalRange", { from: 13, to: 23 }]]);
 });
+
+test("a captured live tail follows rows added after the latest bar, keeping zoom and right space", () => {
+  const { chart, calls, timeScale } = createChart();
+  let content = { from: 0, to: 488 };
+  const controller = new ViewportController({ chartProvider: () => chart, contentLogicalRangeProvider: () => content });
+  // RC reopen: the restore placed the view on the stored tail with 5 bars of right space.
+  timeScale.range = { from: -11, to: 493 };
+  const tail = controller.captureLiveTail();
+  assert.deepEqual(tail, { rightOffset: 5, span: 504 });
+
+  content = { from: 0, to: 499 };
+  assert.equal(controller.followLiveTail(tail), true);
+  assert.deepEqual(calls.at(-1), ["setVisibleLogicalRange", { from: 0, to: 504 }]);
+});
+
+test("no live tail is captured while the latest bar is off screen or new bars are frozen", () => {
+  const { chart, timeScale } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart, contentLogicalRangeProvider: () => ({ from: 0, to: 499 }) });
+  timeScale.range = { from: 100, to: 300 };
+  assert.equal(controller.captureLiveTail(), null);
+  timeScale.range = { from: 0, to: 498.4 };
+  assert.equal(controller.captureLiveTail(), null);
+  timeScale.range = { from: 0, to: 498.6 };
+  assert.notEqual(controller.captureLiveTail(), null);
+
+  assert.equal(controller.restoreProjectionRange({ from: 0, to: 499 }, { immediate: true, freezeOnNewBars: true }), true);
+  assert.equal(controller.captureLiveTail(), null);
+  assert.equal(controller.followLiveTail(null), false);
+});

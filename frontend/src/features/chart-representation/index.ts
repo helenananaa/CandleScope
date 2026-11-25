@@ -9,7 +9,7 @@ export {
 } from "./chartTypeRegistry.js";
 export { createProjector, registerProjectorFactory } from "./projectorFactory.js";
 export { ProjectionStore } from "./projectionStore.js";
-export { shouldPreserveProjectionViewport } from "./projectionViewportPolicy.js";
+export { shouldFollowLiveTail, shouldPreserveProjectionViewport } from "./projectionViewportPolicy.js";
 export {
   bindSurfaceViewportSourceAnchor,
   buildSurfaceViewportCacheKey,

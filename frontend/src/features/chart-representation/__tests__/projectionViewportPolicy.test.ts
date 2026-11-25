@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldPreserveProjectionViewport } from "../projectionViewportPolicy.js";
+import { shouldFollowLiveTail, shouldPreserveProjectionViewport } from "../projectionViewportPolicy.js";
 
 test("viewport preservation requires an existing projected display", () => {
   for (const delta of [
@@ -83,4 +83,36 @@ test("noop, clear, and unknown deltas never preserve the viewport", () => {
       false,
     );
   }
+});
+
+// RC 5/16 reopen: the stored rows end at 03:35, the missed bars arrive as one
+// window commit up to 04:00. The view that showed 03:35 must show 04:00.
+const reopenCommit = {
+  latestBarVisible: true,
+  previousLastTime: 1_795_577_700,
+  nextLastTime: 1_795_579_200,
+  rightEdgeCurrent: true,
+  sessionViewportPlaced: true,
+  userInteracted: false,
+};
+
+test("a live chart showing its latest bar follows rows added after it", () => {
+  assert.equal(shouldFollowLiveTail(reopenCommit), true);
+});
+
+test("the live tail is not followed when the view or the window says otherwise", () => {
+  for (const [name, change] of [
+    ["latest bar off screen (user is in history)", { latestBarVisible: false }],
+    ["jumped-to window whose right edge is not current", { rightEdgeCurrent: false }],
+    ["first view not placed yet (session restore owns it)", { sessionViewportPlaced: false }],
+    ["user moved the view", { userInteracted: true }],
+    ["no rows after the previous latest bar", { nextLastTime: reopenCommit.previousLastTime }],
+    ["rows only removed on the right", { nextLastTime: reopenCommit.previousLastTime - 60 }],
+    ["no previous rows", { previousLastTime: null }],
+    ["no committed rows", { nextLastTime: null }],
+    ["non-finite time", { nextLastTime: Number.NaN }],
+  ] as const) {
+    assert.equal(shouldFollowLiveTail({ ...reopenCommit, ...change }), false, name);
+  }
+  assert.equal(shouldFollowLiveTail(), false);
 });
