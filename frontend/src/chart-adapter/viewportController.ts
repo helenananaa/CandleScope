@@ -22,6 +22,8 @@ const COMPENSATE_INTENT = "compensateShift";
 const LOGICAL_SHIFT_EPSILON = 1e-7;
 /** A bar counts as on screen while at least half of it is inside the range. */
 const LATEST_BAR_VISIBLE_SLACK = 0.5;
+/** Relative slack when a saved spacing is compared with an exact fit. */
+const FIT_SPACING_TOLERANCE = 1e-9;
 
 export interface ViewportLiveTail {
   /** Visible right edge minus the latest market row's logical index. */
@@ -103,6 +105,49 @@ export function logicalRangeForLatestBarPosition({
   if (!Number.isFinite(span) || span <= 0) return null;
   const from = last - span * normalizedPosition;
   return { from, to: from + span };
+}
+
+export interface ViewportFitGeometry {
+  /** Time-scale (plot) width in CSS pixels. */
+  readonly plotWidth: number;
+  /** The chart's own spacing before any fit or restore. */
+  readonly defaultBarSpacing: number;
+}
+
+/**
+ * Fitting `bars` market rows plus the right offset zooms in past the chart's
+ * default spacing: the window holds too few bars to fill the pane. A fresh
+ * profile's first window can be the five-bar latest request, so such a fit
+ * says nothing about the zoom the full history needs.
+ */
+export function isFewBarFit({
+  bars,
+  rightOffset,
+  plotWidth,
+  defaultBarSpacing,
+}: { bars: number; rightOffset: number } & ViewportFitGeometry): boolean {
+  if (!finiteNumber(bars) || bars <= 0 || !finiteNumber(rightOffset)
+    || !finiteNumber(plotWidth) || plotWidth <= 0
+    || !finiteNumber(defaultBarSpacing) || defaultBarSpacing <= 0) return false;
+  return plotWidth / (bars + Math.max(0, rightOffset)) > defaultBarSpacing;
+}
+
+/**
+ * A saved spacing is a few-bar fit of this pane: wider than the default and
+ * exactly width / n for a whole number n of logical units, which is what LWC
+ * sets for a fitted range (spacing = width / (to - from + 1)). A wheel or
+ * pinch zoom scales the spacing by a gesture-dependent factor and lands on a
+ * whole n only by chance. A pane resized since the save no longer matches.
+ */
+export function isFewBarFitSpacing(
+  barSpacing: unknown,
+  { plotWidth, defaultBarSpacing }: ViewportFitGeometry,
+): boolean {
+  if (!finiteNumber(barSpacing) || !finiteNumber(plotWidth) || plotWidth <= 0
+    || !finiteNumber(defaultBarSpacing) || !(barSpacing > defaultBarSpacing)) return false;
+  const units = plotWidth / barSpacing;
+  const whole = Math.round(units);
+  return whole >= 1 && Math.abs(units - whole) <= FIT_SPACING_TOLERANCE * units;
 }
 
 export class ViewportController {
@@ -283,6 +328,45 @@ export class ViewportController {
     }
     timeScale?.fitContent?.();
     return true;
+  }
+
+  private fitGeometry(timeScale: AdapterTimeScale | null): ViewportFitGeometry | null {
+    const plotWidth = safeCall(() => Number(timeScale?.width?.()), Number.NaN);
+    const defaultBarSpacing = Number(this.resetScaleOptions?.barSpacing);
+    return finiteNumber(plotWidth) && plotWidth > 0
+      && finiteNumber(defaultBarSpacing) && defaultBarSpacing > 0
+      ? { plotWidth, defaultBarSpacing } : null;
+  }
+
+  /** Fitting the current market rows zooms in past the default spacing. */
+  contentFitIsFewBar(): boolean {
+    const timeScale = this.getTimeScale();
+    const geometry = this.fitGeometry(timeScale);
+    const content = this.contentRange();
+    if (!geometry || !content) return false;
+    // fitSemanticContent pads with the configured offset, not the current one.
+    const rightOffset = safeCall(() => Number(timeScale?.options?.().rightOffset), 0);
+    return isFewBarFit({
+      ...geometry,
+      bars: content.to - content.from + 1,
+      rightOffset: finiteNumber(rightOffset) ? rightOffset : 0,
+    });
+  }
+
+  /** A saved spacing is a few-bar fit of the current pane width. */
+  spacingIsFewBarFit(barSpacing: unknown): boolean {
+    const geometry = this.fitGeometry(this.getTimeScale());
+    return geometry !== null && isFewBarFitSpacing(barSpacing, geometry);
+  }
+
+  /**
+   * Fit the market rows again. Never queued: a fit that waited behind a user
+   * gesture would land after it and undo the user's zoom.
+   */
+  refitContent(): boolean {
+    if (this.userInteracting) return false;
+    const timeScale = this.getTimeScale();
+    return timeScale ? this.fitSemanticContent(timeScale) : false;
   }
 
   fitOnce(sessionKey = "default"): boolean {
