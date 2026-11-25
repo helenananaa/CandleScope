@@ -1062,7 +1062,24 @@ class BackfillScheduler:
                 continue
             if start_ms <= end_ms:
                 ranges.append((start_ms, end_ms))
-        return ranges or [(int(request.start_ms), int(request.end_ms))]
+        if not ranges:
+            return [(int(request.start_ms), int(request.end_ms))]
+        # Overlapping windows would fetch the same opens twice. Adjacent
+        # target opens leave no bucket between them; off-grid bounds keep
+        # ordinary inclusive-range adjacency.
+        spec = parse_interval_spec(request.interval)
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted(ranges):
+            if merged:
+                previous = merged[-1][1]
+                edge = (spec.next_ms(previous) if spec is not None
+                        and spec.floor_ms(previous) == previous
+                        and spec.floor_ms(start) == start else previous + 1)
+                if start <= edge:
+                    merged[-1] = (merged[-1][0], max(previous, end))
+                    continue
+            merged.append((start, end))
+        return merged
 
     @staticmethod
     def _newest_first(request: RepairRequest) -> bool:
@@ -2054,9 +2071,18 @@ class BackfillScheduler:
             "retryable": outcome.retryable,
         }
 
-    @staticmethod
-    def _covers(existing: RepairRequest, new: RepairRequest) -> bool:
-        return existing.start_ms <= new.start_ms and existing.end_ms >= new.end_ms
+    @classmethod
+    def _covers(cls, existing: RepairRequest, new: RepairRequest) -> bool:
+        """Whether ``existing`` will fetch every open ``new`` plans, not just span them.
+
+        A request with ``history_fetch_ranges`` fetches only those windows; a
+        hole between them is not covered by its envelope.
+        """
+        if not (existing.start_ms <= new.start_ms and existing.end_ms >= new.end_ms):
+            return False
+        planned = cls._planned_ranges(existing)
+        return all(any(first <= start and end <= last for first, last in planned)
+                   for start, end in cls._planned_ranges(new))
 
     @classmethod
     def _should_merge(cls, existing: RepairRequest, new: RepairRequest) -> bool:
@@ -2086,7 +2112,12 @@ class BackfillScheduler:
                 if part.strip()
             }
 
-        return _is_active_hydration(existing) == _is_active_hydration(new)
+        # Required mixed execution and optional bounded fine-source batches
+        # are different contracts. A covered or merged consumer must not lose
+        # either one to a parent running under another.
+        contracts = ("required_history_composition", "bounded_history_batch_contract")
+        return (_is_active_hydration(existing) == _is_active_hydration(new)
+                and all(existing.metadata.get(key) == new.metadata.get(key) for key in contracts))
 
     @staticmethod
     def _is_failed(status: Any) -> bool:
