@@ -20,6 +20,15 @@ const PRIORITY = {
 };
 const COMPENSATE_INTENT = "compensateShift";
 const LOGICAL_SHIFT_EPSILON = 1e-7;
+/** A bar counts as on screen while at least half of it is inside the range. */
+const LATEST_BAR_VISIBLE_SLACK = 0.5;
+
+export interface ViewportLiveTail {
+  /** Visible right edge minus the latest market row's logical index. */
+  readonly rightOffset: number;
+  /** Visible logical width (to - from). */
+  readonly span: number;
+}
 
 type AdapterChart = IChartApiBase<ChartTime>;
 type AdapterTimeScale = ITimeScaleApi<ChartTime>;
@@ -376,6 +385,36 @@ export class ViewportController {
     return immediate
       ? this.applyImmediateIntent(apply)
       : this.applyIntent("projectionRestore", PRIORITY.restore, apply);
+  }
+
+  /**
+   * The visible range relative to the latest market row, while that row is
+   * on screen. Null when the view sits in history, has no market rows, or is
+   * frozen against new bars (a restored historical projection range).
+   */
+  captureLiveTail(): ViewportLiveTail | null {
+    if (this.frozenOnNewBars) return null;
+    const timeScale = this.getTimeScale();
+    const content = this.contentRange();
+    const logical = safeCall(() => timeScale?.getVisibleLogicalRange?.() ?? null, null);
+    if (!content || !finiteNumber(logical?.from) || !finiteNumber(logical?.to)) return null;
+    const span = logical.to - logical.from;
+    // The chart engine's own new-bar rule: follow while the latest bar shows.
+    if (!(span > 0) || logical.to < content.to - LATEST_BAR_VISIBLE_SLACK
+      || logical.from > content.to + LATEST_BAR_VISIBLE_SLACK) return null;
+    return { rightOffset: logical.to - content.to, span };
+  }
+
+  /** Put a captured live tail back at the latest market row, keeping zoom. */
+  followLiveTail(tail: ViewportLiveTail | null | undefined): boolean {
+    if (!tail || !finiteNumber(tail.rightOffset) || !finiteNumber(tail.span) || !(tail.span > 0)) return false;
+    return this.applyIntent("followLiveTail", PRIORITY.restore, (timeScale) => {
+      const content = this.contentRange();
+      if (!content) return false;
+      const to = content.to + tail.rightOffset;
+      timeScale.setVisibleLogicalRange(toLogicalRange({ from: to - tail.span, to }));
+      return true;
+    });
   }
 
   followLatest(

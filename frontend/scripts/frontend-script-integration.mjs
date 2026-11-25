@@ -27,10 +27,11 @@ const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
 const quickReplayStep = process.argv.includes("--quick-replay-step");
 const chartTimeNavigation = process.argv.includes("--chart-time-navigation");
+const chartReopenLiveTail = process.argv.includes("--chart-reopen-live-tail");
 const replayNotes = process.argv.includes("--replay-notes");
 const chartViewport = process.argv.includes("--chart-viewport");
 const practiceOrderTicket = process.argv.includes("--practice-order-ticket");
-const fixture = chartViewport ? "chart-viewport-browser.html" : practiceOrderTicket ? "practice-order-ticket-browser.html" : chartIndicator ? "chart-indicator-browser.html" : backendSyntheticPinned ? "backend-synthetic-pinned-browser.html" : backendSynthetic ? "backend-synthetic-browser.html" : chartMarketPrepend ? "chart-market-prepend-browser.html" : chartMarketCalculation ? "chart-market-calculation-browser.html" : chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = chartViewport ? "chart-viewport-browser.html" : practiceOrderTicket ? "practice-order-ticket-browser.html" : chartIndicator ? "chart-indicator-browser.html" : backendSyntheticPinned ? "backend-synthetic-pinned-browser.html" : backendSynthetic ? "backend-synthetic-browser.html" : chartMarketPrepend ? "chart-market-prepend-browser.html" : chartMarketCalculation ? "chart-market-calculation-browser.html" : chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : chartReopenLiveTail ? "chart-reopen-live-tail-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -184,7 +185,7 @@ app.on("window-all-closed",()=>app.quit());
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!backendSynthetic && !chartCalculation && !chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
+  if (!backendSynthetic && !chartCalculation && !chartTimeNavigation && !chartReopenLiveTail && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));
