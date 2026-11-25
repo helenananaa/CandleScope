@@ -85,6 +85,7 @@ class AccountSynchronizer:
         self.last_ws_received_ms: int | None = None
         self.ws_error: str | None = None
         self.overflow = False
+        self.overflows = 0
         self.ignored_contracts = 0
         self.requested_full = False
         self.channel_errors: dict[str,str] = {}
@@ -126,6 +127,7 @@ class AccountSynchronizer:
             self.queue.put_nowait((self.now_ms(),message))
         except asyncio.QueueFull:
             self.overflow = True
+            self.overflows += 1
             self.ws_error = "ACCOUNT_STREAM_OVERFLOW"
         self.changed.set()
         self.state_changed()
@@ -274,6 +276,7 @@ class AccountSynchronizer:
         await self.current()
         await self.recent()
         now = self.now_ms()
+        overflows = self.overflows
         full = force_full or self.requested_full or self.overflow or now-self.last_full_scan >= 60*60*1000
         scans = {row["kind"]:row for row in await asyncio.to_thread(self.repository.scans)}
         pending = [kind for kind in HISTORY if kind not in scans or not scans[kind]["complete"]]
@@ -285,7 +288,10 @@ class AccountSynchronizer:
             if full:
                 self.last_full_scan = now
                 self.requested_full = False
-            self.overflow = False
+            # Only an overflow seen before this round chose its scan range is
+            # answered by it; a later one still needs its own full rescan.
+            if self.overflows == overflows:
+                self.overflow = False
             await asyncio.to_thread(self.repository.status,"synced",success=True)
             return True
         await asyncio.to_thread(self.repository.status,"syncing")
