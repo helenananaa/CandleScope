@@ -26,6 +26,13 @@ chrome. It is app-wide infrastructure, not a business feature.
   aliases and optional date/number format locales. `LocaleId`, the settings
   options, locale normalization and catalog checks are derived from it.
 - Persistence lives in `features/settings` (`candlescope-settings.locale`).
+- A profile with no saved settings (first launch, or an unreadable save) starts
+  in the first of the system's preferred languages (`navigator.languages`,
+  which Electron fills from the OS) that resolves to a registered locale, using
+  the same parent and alias matching as saved values; with no supported
+  preference it starts in `zh-CN`. Saved settings, including older saves that
+  have no `locale`, keep their language; the system is never consulted again
+  once a language is saved.
 - The default Chinese and English catalogs are bundled with startup; all other
   catalogs load on demand. Entry points await `initializeLocale(savedLocale)`
   before mounting. Settings await `setLocaleAsync(locale)` before persisting a

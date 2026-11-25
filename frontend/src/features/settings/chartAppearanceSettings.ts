@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { getExtensionState, subscribeExtensions } from "../extensions/state.js";
 import {
   DEFAULT_LOCALE,
+  detectSystemLocale,
   setLocaleAsync,
   normalizeLocale,
   type LocaleId,
@@ -218,12 +219,27 @@ export function migrateApplicationSettings(settings: ChartSettings): ChartSettin
   return settings.theme === "custom" ? { ...settings, theme: chartSchemeForBackground(settings.customBg) } : settings;
 }
 
-export function parseStoredSettings(saved: string | null | undefined): ChartSettings {
-  if (!saved) return normalizeSettings();
+/**
+ * Settings for a profile that has none saved: the language follows the system's
+ * preferences when one of them is supported, otherwise the product default.
+ */
+function firstLaunchSettings(systemLanguages?: readonly string[]): ChartSettings {
+  return { ...normalizeSettings(), locale: detectSystemLocale(systemLanguages) ?? DEFAULT_LOCALE };
+}
+
+/**
+ * Saved settings keep their language, including older saves that have none (those
+ * always showed the default). Only an absent or unreadable save follows the system.
+ */
+export function parseStoredSettings(
+  saved: string | null | undefined,
+  systemLanguages?: readonly string[],
+): ChartSettings {
+  if (!saved) return firstLaunchSettings(systemLanguages);
   try {
     return migrateApplicationSettings(normalizeSettings(JSON.parse(saved)));
   } catch {
-    return normalizeSettings();
+    return firstLaunchSettings(systemLanguages);
   }
 }
 
@@ -256,11 +272,11 @@ export function takeChartAppearanceOfferCheck(): boolean {
 }
 
 function loadSettings(): ChartSettings {
-  if (typeof localStorage === "undefined") return normalizeSettings();
+  if (typeof localStorage === "undefined") return firstLaunchSettings();
   try {
     return parseStoredSettings(localStorage.getItem(SETTINGS_STORAGE_KEY));
   } catch {
-    return normalizeSettings();
+    return firstLaunchSettings();
   }
 }
 
