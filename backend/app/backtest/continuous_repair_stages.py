@@ -28,12 +28,15 @@ class RepairStages:
         self.store = store
         self.root = store.path.parent / "continuous-strategy-repairs"
         self.max_total_bytes, self.max_stage_bytes, self.min_free_bytes = max_total_bytes, max_stage_bytes, min_free_bytes
-        self.owner = {"schema": "candlescope.continuous-repair-stages/1", "database": str(store.path.resolve())}
+        self.database = store.path.resolve()
+        # Markers name the database by its own id as well as its last known
+        # location, so a moved, copied or restored data folder keeps its stages.
+        self.owner = {"schema": "candlescope.continuous-repair-stages/1"}
         self._own(self.root, self.owner)
         self._inventory()
 
-    @staticmethod
-    def _own(path, expected):
+    def _own(self, path, expected):
+        from app.core.profile_relocation import check_marker
         marker = path / "owner.json"
         if linked(path) or linked(marker):
             raise fail("CONTINUOUS_INPUT_OWNERSHIP", "Repair ownership cannot cross a symlink")
@@ -44,19 +47,30 @@ class RepairStages:
                 try: actual = json.loads(marker.read_text())
                 except (OSError, ValueError) as failure:
                     raise fail("CONTINUOUS_INPUT_OWNERSHIP", "Repair ownership receipt is unavailable") from failure
-                if actual != expected:
-                    raise fail("CONTINUOUS_INPUT_OWNERSHIP", "Repair staging belongs to another owner")
+                check = check_marker(actual, expected, database=self.database,
+                                     database_id=self.store.identity(), directory=path.resolve())
+                if not check.owned:
+                    raise fail("CONTINUOUS_INPUT_OWNERSHIP", f"Repair staging in {path} belongs to another owner")
+                recorded = actual.get("database_id")
+                identity = self.store.identity(create=recorded or True)
+                if check.relocated or recorded != identity:
+                    self._write_marker(path, {**expected, "database": str(self.database), "database_id": identity})
                 return
             if any(path.iterdir()):
                 raise fail("CONTINUOUS_INPUT_OWNERSHIP", "Refuse to adopt unmarked repair data")
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._write_marker(path, {**expected, "database": str(self.database),
+                                  "database_id": self.store.identity(create=True)})
+
+    @staticmethod
+    def _write_marker(path, payload):
         fd, name = tempfile.mkstemp(prefix=".repair-owner-", dir=path.parent)
         temporary = Path(name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as output:
-                json.dump(expected, output, sort_keys=True)
+                json.dump(payload, output, sort_keys=True)
                 output.flush(); os.fsync(output.fileno())
-            temporary.replace(marker)
+            temporary.replace(path / "owner.json")
         finally: temporary.unlink(missing_ok=True)
 
     @staticmethod

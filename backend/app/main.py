@@ -539,7 +539,10 @@ async def startup_event() -> None:
                 logger.warning("Subscription routes unavailable: %s", exc)
             app.state.proxy_supervisor = asyncio.create_task(managed.supervise(), name="managed-proxy-recovery")
         await _startup_event_impl()
-    except BaseException:
+    except BaseException as failure:
+        if isinstance(failure, Exception):
+            from app.core.startup_failure import record as record_startup_failure
+            record_startup_failure(failure)
         if RUNTIME_MODE != "LOCAL_OFFLINE":
             await _stop_managed_proxy()
         core = getattr(app.state, "data_manager_core", None)
