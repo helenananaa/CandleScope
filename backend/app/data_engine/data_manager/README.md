@@ -215,8 +215,13 @@ The component dependency direction is explicit:
 - [symbol_history/](symbol_history/__init__.py) is the per-symbol history
   planner (ADR-DATA-001): demands from every chart and stream of a symbol are
   merged on source slots, cut into pieces by urgency and recency, and run by an
-  injected executor. It is off (`HISTORY_SYMBOL_PLANNER_ENABLED=0`) and not yet
-  wired in.
+  injected executor. It is off by default (`HISTORY_SYMBOL_PLANNER_ENABLED=0`).
+  When on, `DataManager.enable_history_planner` routes chart reads' missing
+  base ranges for single-base derived intervals (89m on 1m, 90s on 1s) to it:
+  pieces run as source-interval coordinator repairs (`coordinator_executor`)
+  and their ids go back to the API; a served read's target window then goes to
+  the existing target path, which only derives when the base is present
+  (`router`). Everything else keeps the per-request path.
 
 `BackfillCoordinator` is deliberately separate from `BackfillEngine`:
 

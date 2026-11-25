@@ -102,7 +102,7 @@ class SymbolHistoryPlanner:
         self._pump_handle: asyncio.Handle | None = None
         self._closed = False
         self.metrics = {
-            "registered": 0, "unchanged": 0, "released": 0,
+            "registered": 0, "unchanged": 0, "released": 0, "served": 0,
             "pieces_started": 0, "pieces_committed": 0, "pieces_failed": 0, "pieces_cancelled": 0,
             "bars_started": 0, "bars_handed_back": 0,
         }
@@ -142,6 +142,52 @@ class SymbolHistoryPlanner:
             self.metrics["released"] += len(keys)
             self._schedule_pump()
         return len(keys)
+
+    def demands_over(self, piece: Piece) -> list[Demand]:
+        """Current demands whose source slots this piece serves (to name its target windows)."""
+        return [demand for demand, source in self._demands.values()
+                if source == piece.source_interval and demand.start_ms < piece.end_ms
+                and piece.start_ms < demand.end_ms]
+
+    def settled(self, piece: Piece) -> list[tuple[Demand, tuple[int, int], bool]]:
+        """Demands over this piece with nothing left to plan: ``(demand, (start, end), complete)``.
+
+        A demand settles once each of its closed source slots ``[start, end)``
+        is present or handed back and none is in flight. ``complete`` means
+        every slot is present, so deriving its targets needs no fetch (§2 step 6).
+        """
+        slots = self._slots.get(piece.source_interval)
+        if slots is None:
+            return []
+        settled = []
+        for demand in self.demands_over(piece):
+            start, end = slots.align(demand.start_ms,
+                                     min(demand.end_ms, self._closed_until(piece.source_interval)))
+            if start >= end:
+                continue
+            absent = slots.present.minus(start, end)
+            if any(slots.in_flight.overlaps(a, b) or not slots.handed_back.covers(a, b) for a, b in absent):
+                continue
+            settled.append((demand, (start, end), not absent))
+        return settled
+
+    def demand_keys(self) -> list[Any]:
+        return list(self._demands)
+
+    def drop(self, demand: Demand) -> bool:
+        """Forget one served demand; its owner registers again if it still lacks data."""
+        entry = self._demands.get(demand.key)
+        if entry is None or entry[0] != demand:
+            return False  # replaced by a newer range of the same owner, which stays
+        del self._demands[demand.key]
+        self._slots[entry[1]].unwant(demand.key)
+        self.metrics["served"] += 1
+        return True
+
+    def release_owner_id(self, owner_id: str) -> int:
+        """Release every owner with this id, whatever its scope (a revoked request owner)."""
+        owners = {demand.owner for demand, _ in self._demands.values() if demand.owner.owner_id == owner_id}
+        return sum(self.release(owner) for owner in owners)
 
     def advance_scope(self, scope: str, generation: int) -> int:
         """A newer generation of a demand scope replaces the older generations' demands."""
@@ -322,7 +368,11 @@ class SymbolHistoryPlanner:
 
     @property
     def idle(self) -> bool:
-        return not self._demands and not self._running
+        """No demand, nothing running, and no range handed back to the existing path."""
+        if self._demands or self._running:
+            return False
+        now = self._clock()
+        return not any(until > now for until, *_ in self._hand_backs)
 
     async def drain(self) -> None:
         """Wait until nothing is running or about to start (tests and shutdown)."""
@@ -376,6 +426,9 @@ class PlannerRegistry:
 
     def existing(self, key: SymbolKey) -> SymbolHistoryPlanner | None:
         return self._planners.get(key)
+
+    def keys(self) -> list[SymbolKey]:
+        return list(self._planners)
 
     def prune(self) -> int:
         """Forget planners with no demand and nothing running."""
