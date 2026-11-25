@@ -21,6 +21,18 @@ export function defaultForwardLeverage(marketType: string, initialExecution?: St
   return initialExecution?.leverage ?? (marketType === "spot" ? "1" : "10");
 }
 
+/**
+ * A practice account's default taker fee, 0.0005 (backend `DEFAULT_PRACTICE_SETTINGS`, `AddAccountDialog`),
+ * in basis points. A forward run has one fee field, sent as both its taker and maker fee. Its default
+ * signal output fills at market, which a practice account charges at the taker rate.
+ */
+export const PRACTICE_TAKER_FEE_BPS = "5";
+
+/** The fee a new forward run starts with: a continued result's own fee, otherwise the practice account's. */
+export function defaultForwardFeeBps(initialExecution?: StrategyExecutionOverrides): string {
+  return initialExecution?.feeBps ?? PRACTICE_TAKER_FEE_BPS;
+}
+
 /** The leverage a forward run's account uses: chosen on the practice model for futures, otherwise 1. */
 export function forwardAccountLeverage(model: PythonBarExecutionModel, marketType: string, leverage: string): string {
   return model === "PRACTICE" && marketType !== "spot" ? leverage : "1";
