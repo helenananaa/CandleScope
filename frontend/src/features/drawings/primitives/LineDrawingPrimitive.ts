@@ -15,6 +15,7 @@
  */
 
 import { drawingDataPointsToCoordinates } from "./coordinateUtils.js";
+import { DEFAULT_DRAWING_RENDER_COLOR } from "../rendering/drawingRenderDefaults.js";
 import type {
   BasicLineToolId,
   DrawingAttachedParameter,
@@ -418,7 +419,7 @@ export class LineDrawingPrimitive {
     this._id = opts.id;
     this._lineType = opts.lineType ?? "line-segment";
     this._dataPoints = opts.dataPoints || [];
-    this._color = opts.color || "#f59e0b";
+    this._color = opts.color || DEFAULT_DRAWING_RENDER_COLOR;
     this._lineWidth = opts.lineWidth || 2;
     this._selected = opts.selected || false;
     this._isPreview = opts.isPreview || false;

@@ -6,6 +6,7 @@
  * angle arc, and degree label are rendered in screen space.
  */
 
+import { DEFAULT_DRAWING_RENDER_COLOR } from "../rendering/drawingRenderDefaults.js";
 import { drawingDataPointsToCoordinates } from "./coordinateUtils.js";
 import type {
   AnglePrimitiveOptions,
@@ -391,7 +392,7 @@ export class AngleMeasurementPrimitive {
     this._id = opts.id;
     this._type = "angle-measure";
     this._dataPoints = opts.dataPoints || [];
-    this._color = opts.color || "#f59e0b";
+    this._color = opts.color || DEFAULT_DRAWING_RENDER_COLOR;
     this._lineWidth = opts.lineWidth || 2;
     this._selected = !!opts.selected;
     this._hovered = !!opts.hovered;
