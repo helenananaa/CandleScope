@@ -264,7 +264,10 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
   const valuesLabel = entries.length > 0
     ? `${pane.label}：${entries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`).join("，")}`
     : pane.label;
-  const ariaLabel = seedNotice ? `${valuesLabel}，${seedNotice}` : valuesLabel;
+  // Replay owns an indicator pane before its values exist; its preparation or
+  // error status is the only content such a pane has.
+  const statusLabel = pane.statusText ? `${valuesLabel} · ${pane.statusText}` : valuesLabel;
+  const ariaLabel = seedNotice ? `${statusLabel}，${seedNotice}` : statusLabel;
 
   return (
     <div
@@ -276,6 +279,7 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
       title={ariaLabel}
     >
       <span className="chart-pane-label-heading">{pane.label}</span>
+      {pane.statusText && <span className="chart-pane-label-status" role="status">{pane.statusText}</span>}
       {entries.length > 0 && <LegendValues entries={entries} showLineNames={entries.length > 1} />}
       {seedNotice && <PartialSeedMarker notice={seedNotice} />}
       {noHistoricalData && <span className="chart-pane-label-status">{t("legend.noData")}</span>}
