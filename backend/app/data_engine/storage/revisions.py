@@ -201,6 +201,15 @@ def init_revision_storage(conn):
         # When it has them, name their intervals: an inequality on interval
         # ends the primary-key seek at symbol, so every mutated source row
         # would read the whole family instead of only its derived series.
+        #
+        # A source bar wider than a derived bar cannot affect it. Covers never
+        # clip or split a source bar, so a component lies inside its target,
+        # and finer-source precedence only replaces a coarser component inside
+        # that target. Either way the source is at most the target's width.
+        # Without this bound, a 10007m chart's 1d imports deleted the 89m bars
+        # of another chart, which were built from 1m and were still valid.
+        # Derived bars without ordinary bounds keep the plain overlap rule.
+        source_width = f"COALESCE({alias}.close_time,{alias}.open_time)-{alias}.open_time"
         _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
@@ -216,7 +225,9 @@ def init_revision_storage(conn):
                                      WHERE {dependent_family} AND d.interval<>{alias}.interval)
                     AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                     AND open_time<=COALESCE({alias}.close_time,{alias}.open_time)
-                    AND COALESCE(close_time,open_time)>={alias}.open_time;
+                    AND COALESCE(close_time,open_time)>={alias}.open_time
+                    AND (close_time IS NULL OR close_time<open_time
+                         OR close_time-open_time>={source_width});
                 UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
             END;
         """)
