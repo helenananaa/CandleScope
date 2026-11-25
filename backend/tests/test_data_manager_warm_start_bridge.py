@@ -603,6 +603,100 @@ def test_custom_sync_ignores_rows_from_previous_target_bucket():
     asyncio.run(run())
 
 
+def _seed_trigger_ranges(calls: list[tuple[tuple, dict]]) -> list[tuple[int, int]]:
+    assert all(kwargs["requester"] == "warm_start_custom_seed" for _, kwargs in calls)
+    return [(args[2], args[3]) for args, _ in calls]
+
+
+def test_polled_forming_seed_submits_one_base_repair_per_bucket(monkeypatch) -> None:
+    """RC 2026-11-23 cold 89m: each /klines/latest poll re-ran the custom seed
+    and re-submitted base backfill for the same empty bucket (208x in 5 min)."""
+    async def run() -> None:
+        minute = 60_000
+        width = 89 * minute
+        bucket = (1_795_000_000_000 // width) * width
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTCUSDT", "89m", exchange="binance", market_type="futures")
+        calls: list[tuple[tuple, dict]] = []
+        service = AggregatorWarmStartService(
+            cache=BarCache(), bar_aggregator=aggregator, base_interval="1m",
+            storage_provider=lambda: _Storage(rows=[]),  # type: ignore[return-value]
+            backfill_trigger_provider=lambda: lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+        async def poll(now_ms: int, focus_scope: str = "rest", **kwargs) -> None:
+            with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+                await service.seed_if_needed("BTCUSDT", "89m", exchange="binance", market_type="futures",
+                                             had_stream=True, focus_scope=focus_scope, **kwargs)
+
+        first = bucket + 79 * minute + 1_000
+        for second in range(59):  # one poll a second inside the same minute
+            await poll(first + second * 1_000)
+        assert _seed_trigger_ranges(calls) == [(bucket, first)]
+
+        # One more component closed and is still missing: ask only for it.
+        later = bucket + 80 * minute + 1_000
+        for second in range(30):
+            await poll(later + second * 1_000)
+        assert _seed_trigger_ranges(calls)[1:] == [(bucket + 79 * minute, later)]
+
+        # More urgent demand (a visible chart) is not hidden by REST polling.
+        await poll(later + 31_000, focus_scope="foreground")
+        assert _seed_trigger_ranges(calls)[2:] == []  # rest polls use the same urgency
+        await poll(later + 32_000, focus_scope="subscription", subscription_tier="full")
+        assert len(calls) == 2  # less urgent background demand stays merged
+
+        # The earlier demand may have ended unfilled: re-arm after a while.
+        monkeypatch.setattr("app.data_engine.data_manager.warm_start.SEED_REPAIR_REARM_SECONDS", 0.0)
+        service.reset_tail_repairs()
+        await poll(later + 33_000)
+        assert _seed_trigger_ranges(calls)[2:] == [(bucket, later + 33_000)]
+        await poll(later + 34_000)
+        assert len(calls) == 4  # re-armed at once with a zero interval
+        monkeypatch.setattr("app.data_engine.data_manager.warm_start.SEED_REPAIR_REARM_SECONDS", 60.0)
+        await poll(later + 35_000)
+        await poll(later + 36_000)
+        assert len(calls) == 5
+
+        # A reopened chart is a new target lifetime and a new demand.
+        aggregator.remove_target("BTCUSDT", "89m", exchange="binance", market_type="futures")
+        aggregator.add_target("BTCUSDT", "89m", exchange="binance", market_type="futures")
+        await poll(later + 37_000)
+        assert _seed_trigger_ranges(calls)[5:] == [(bucket, later + 37_000)]
+
+        # So is the next bucket.
+        nxt = bucket + width + 2 * minute + 1_000
+        await poll(nxt)
+        await poll(nxt + 1_000)
+        assert _seed_trigger_ranges(calls)[6:] == [(bucket + width, nxt)]
+
+    asyncio.run(run())
+
+
+def test_seed_repair_upgrades_less_urgent_earlier_demand() -> None:
+    async def run() -> None:
+        width = 45 * 60_000
+        bucket = 100 * width
+        now_ms = bucket + 20 * 60_000 + 1
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        calls: list[tuple[tuple, dict]] = []
+        service = AggregatorWarmStartService(
+            cache=BarCache(), bar_aggregator=aggregator, base_interval="1m",
+            storage_provider=lambda: _Storage(rows=[]),  # type: ignore[return-value]
+            backfill_trigger_provider=lambda: lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            for focus, tier in (("subscription", "full"), ("subscription", "full"), ("foreground", None),
+                                ("foreground", None), ("subscription", "full")):
+                await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot",
+                                             had_stream=True, focus_scope=focus, subscription_tier=tier)
+        assert [kwargs["reason"] for _, kwargs in calls] == ["full_subscription_warmup", "visible_seed_gap"]
+        assert _seed_trigger_ranges(calls) == [(bucket, now_ms), (bucket, now_ms)]
+
+    asyncio.run(run())
+
+
 def test_warm_start_marks_full_subscription_base_backfill_priority() -> None:
     async def _run() -> None:
         fixed_now_ms = (10 * 60 * 60 * 1000) + (50 * 60 * 1000)
