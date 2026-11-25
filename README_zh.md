@@ -166,15 +166,16 @@
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 10/11（x64） | `CandleScope-<version>-win-x64.exe` |
-| macOS（Apple 芯片） | `CandleScope-<version>-mac-arm64.dmg` |
-| macOS（Intel） | `CandleScope-<version>-mac-x64.dmg` |
+| Windows 10/11（x64） | `CandleScope-<version>-windows-x64-setup.exe` |
+| macOS（Apple 芯片） | `CandleScope-<version>-macos-arm64.dmg` |
+| macOS（Intel） | `CandleScope-<version>-macos-x64.dmg` |
 
-<!-- TODO(release)：换成实际的资源文件名，并按本次发布的签名方式保留或删除下面的说明。 -->
+每个版本都附有 `SHA256SUMS`，可用来校验下载的文件。
 
 > [!NOTE]
-> 早期版本尚未使用付费证书签名。macOS 首次打开被拦截后，到 **系统设置 → 隐私与安全性**
+> 安装包尚未使用付费证书签名。macOS 首次打开被拦截后，到 **系统设置 → 隐私与安全性**
 > 选择 **仍要打开**；Windows 在 SmartScreen 提示中选择 **更多信息 → 仍要运行**。
+> 在 Windows 上卸载不会删除你的数据。
 
 ### 从源码运行
 

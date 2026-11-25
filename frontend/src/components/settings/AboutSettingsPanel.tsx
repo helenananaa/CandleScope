@@ -1,6 +1,6 @@
 import { Button } from "../ui/Button.js";
 import { Disclosure } from "../ui/Display.js";
-import { Field, Select, Textarea } from "../ui/Field.js";
+import { Field, Select, Switch, Textarea } from "../ui/Field.js";
 import { buttonClassName } from "../ui/helpers.js";
 import { useEffect, useState } from "react";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
@@ -10,6 +10,7 @@ import BrandMark from "../brand/BrandMark.js";
 import { Icon } from "../icons/Icon.js";
 import { APP_BUILD, APP_VERSION, SUPPORT_REPOSITORY, createSupportBundle, downloadSupportBundle,
     environmentInfo, fetchBackendSupport, issueUrl, type BackendSupport } from "../../features/settings/supportDiagnostics.js";
+import { updateChecksSupported, useUpdateCheckEnabled } from "../../features/app-update/useAppUpdateCheck.js";
 
 /** Open-source projects CandleScope is built on, named in the credits (names, not translated). */
 const CREDITED_LIBRARIES = ["React", "Lightweight Charts", "FastAPI", "SQLite"];
@@ -33,6 +34,7 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
     const [exporting, setExporting] = useState(false);
     const [feedback, setFeedback] = useState<"copied" | "copyFailed" | "exported" | "partial" | "exportFailed" | null>(null);
     const [manualCopy, setManualCopy] = useState("");
+    const [checkForUpdates, setCheckForUpdates] = useUpdateCheckEnabled();
     useEffect(() => {
         const controller = new AbortController();
         void fetchBackendSupport(15, controller.signal).then(value => { if (!controller.signal.aborted) setBackend(value); }).catch(() => {
@@ -90,6 +92,11 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
             <p className="st-support-hint" role="status" aria-live="polite">{feedback ? t(`settings.support.${feedback}`) : ""}</p>
             {manualCopy && <Textarea className="st-code" rows={6} aria-label={t("settings.support.environment")} readOnly value={manualCopy} onFocus={event => event.target.select()} />}
         </section>
+        {updateChecksSupported() && <section className="st-group" aria-labelledby="support-updates">
+            <h3 id="support-updates" className="st-group-title">{t("settings.updates.title")}</h3>
+            <Switch checked={checkForUpdates} onChange={setCheckForUpdates}
+                label={t("settings.updates.check")} description={t("settings.updates.checkHint")} />
+        </section>}
         <section className="st-group" aria-labelledby="support-environment">
             <h3 id="support-environment" className="st-group-title">{t("settings.support.environment")}</h3>
             <div className="st-about-stack">

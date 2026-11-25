@@ -188,18 +188,17 @@ Download the build for your system from the
 
 | System | Package |
 |---|---|
-| Windows 10/11 (x64) | `CandleScope-<version>-win-x64.exe` |
-| macOS (Apple Silicon) | `CandleScope-<version>-mac-arm64.dmg` |
-| macOS (Intel) | `CandleScope-<version>-mac-x64.dmg` |
+| Windows 10/11 (x64) | `CandleScope-<version>-windows-x64-setup.exe` |
+| macOS (Apple Silicon) | `CandleScope-<version>-macos-arm64.dmg` |
+| macOS (Intel) | `CandleScope-<version>-macos-x64.dmg` |
 
-<!-- TODO(release): replace the package names with the real asset names, and
-     keep or drop the note below to match how this release is signed. -->
+Each release also lists `SHA256SUMS` for checking a download.
 
 > [!NOTE]
-> Early builds are not yet signed with a paid certificate. On macOS, open
+> Builds are not yet signed with a paid certificate. On macOS, open
 > **System Settings → Privacy & Security** after the first launch attempt and
 > choose **Open Anyway**. On Windows, choose **More info → Run anyway** in the
-> SmartScreen prompt.
+> SmartScreen prompt. Uninstalling on Windows keeps your data.
 
 ### From source
 

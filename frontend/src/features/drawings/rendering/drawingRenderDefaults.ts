@@ -20,7 +20,7 @@ import type {
   TextAlign,
 } from "../drawingTypes.js";
 
-export const DEFAULT_DRAWING_RENDER_COLOR = "#f59e0b";
+export const DEFAULT_DRAWING_RENDER_COLOR = "#3b82f6";
 export const DEFAULT_DRAWING_RENDER_LINE_WIDTH = 2;
 export const DEFAULT_FIBONACCI_RENDER_COLOR = "#0ea5e9";
 export const DEFAULT_TEXT_RENDER_COLOR = "#e2e8f0";

@@ -126,6 +126,17 @@ def bind_desktop_socket(host: str, port: int, *, allow_fallback: bool = True) ->
 
 
 def serve(host: str, port: int) -> None:
+    try:
+        _serve(host, port)
+    except Exception as failure:
+        # Lifespan failures are recorded by the application with their own
+        # cause; this records failures before it starts (binding, endpoint).
+        from app.core.startup_failure import record
+        record(failure)
+        raise
+
+
+def _serve(host: str, port: int) -> None:
     endpoint_file = os.environ.get("CANDLESCOPE_DESKTOP_ENDPOINT_FILE")
     bound_port = os.environ.get("CANDLESCOPE_DESKTOP_BOUND_PORT") if endpoint_file else None
     if bound_port:

@@ -15,6 +15,11 @@ export interface ChartSurfaceVisibleRange {
   rightOffset?: number;
   rightmostTime?: number;
   time?: { from: number; to: number };
+  /**
+   * The view is a fit to a window too short to fill the pane (a first window
+   * of a few bars). It is not a zoom to persist.
+   */
+  provisionalFit?: boolean;
 }
 
 export interface ChartSurfaceLinkedTimeRange {

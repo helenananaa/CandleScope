@@ -6,6 +6,15 @@ import path from "node:path";
 import { ControlFiles } from "./control-files.mjs";
 import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
+/**
+ * Windows' own tool, never one found on PATH: Git for Windows and similar
+ * toolkits can put a Unix `whoami.exe` there, which rejects `/user`, so the
+ * control service could not protect its credential directory and start.
+ */
+export function windowsSystemTool(name, env = process.env) {
+  return path.win32.join(env.SystemRoot || env.SYSTEMROOT || env.windir || "C:\\Windows", "System32", name);
+}
+
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_REPLY_BYTES = 2 * 1024 * 1024;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/;
@@ -204,12 +213,12 @@ export class DesktopControlService {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     if ((await lstat(directory)).isSymbolicLink()) throw new Error("Control directory must not be a link");
     if (process.platform === "win32") {
-      const identity = spawnSync("whoami.exe", ["/user", "/fo", "csv", "/nh"], { encoding: "utf8", windowsHide: true });
+      const identity = spawnSync(windowsSystemTool("whoami.exe"), ["/user", "/fo", "csv", "/nh"], { encoding: "utf8", windowsHide: true });
       const sid = identity.stdout?.match(/S-1-5-[0-9-]+/)?.[0];
       if (identity.status !== 0 || !sid) throw new Error("Could not resolve the control credential owner");
-      const reset = spawnSync("icacls.exe", [directory, "/reset"], { encoding: "utf8", windowsHide: true });
+      const reset = spawnSync(windowsSystemTool("icacls.exe"), [directory, "/reset"], { encoding: "utf8", windowsHide: true });
       if (reset.status !== 0) throw new Error("Could not reset the control credential directory permissions");
-      const acl = spawnSync("icacls.exe", [directory, "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`], { encoding: "utf8", windowsHide: true });
+      const acl = spawnSync(windowsSystemTool("icacls.exe"), [directory, "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`], { encoding: "utf8", windowsHide: true });
       if (acl.status !== 0) throw new Error("Could not protect the control credential directory");
     } else await chmod(directory, 0o700);
     this.server = createServer((request, response) => { void this.handleHttp(request, response); });

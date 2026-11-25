@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { CURSOR_TOOL_IDS, DEFAULT_CURSOR_TOOL } from "./drawingModel.js";
 import type { DrawingToolId, FibonacciLevel, PassiveCursorToolId } from "./drawingTypes.js";
 import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
+import { DEFAULT_DRAWING_RENDER_COLOR } from "./rendering/drawingRenderDefaults.js";
 
 function loadJsonPreference<T>(key: string, fallback: T): T {
   try {
@@ -105,7 +106,7 @@ export function useDrawingToolState(
 ): DrawingToolStateRuntime {
   const localSelection = useDrawingToolSelectionState();
   const drawingToolSelection = sharedSelection ?? localSelection;
-  const [penColor, setPenColor] = useState("#f59e0b");
+  const [penColor, setPenColor] = useState(DEFAULT_DRAWING_RENDER_COLOR);
   const [penSize, setPenSize] = useState(2);
   const [textFontSize, setTextFontSize] = useState(14);
   const [textBold, setTextBold] = useState(false);

@@ -388,9 +388,13 @@ def test_maintenance_service_uses_explicit_dependencies() -> None:
 
 def test_backfill_coordinator_uses_explicit_sinks() -> None:
     """BackfillCoordinator should not hold the whole DataManager facade."""
-    text = (BACKEND_ROOT / "app/data_engine/data_manager/backfill_coordinator.py").read_text(
-        encoding="utf-8",
-        errors="ignore",
+    # The coordinator and the admission/execution mixins it inherits.
+    text = "\n".join(
+        (BACKEND_ROOT / f"app/data_engine/data_manager/{name}.py").read_text(
+            encoding="utf-8",
+            errors="ignore",
+        )
+        for name in ("backfill_coordinator", "backfill_admission", "backfill_execution")
     )
     forbidden = (
         "data_manager:",
@@ -468,6 +472,8 @@ def test_cross_module_dependency_slots_use_named_contracts() -> None:
         BACKEND_ROOT / "app/data_engine/data_manager/manager.py",
         BACKEND_ROOT / "app/data_engine/data_manager/maintenance.py",
         BACKEND_ROOT / "app/data_engine/data_manager/backfill_coordinator.py",
+        BACKEND_ROOT / "app/data_engine/data_manager/backfill_admission.py",
+        BACKEND_ROOT / "app/data_engine/data_manager/backfill_execution.py",
         BACKEND_ROOT / "app/data_engine/data_manager/subscriptions.py",
     ]
     forbidden = (

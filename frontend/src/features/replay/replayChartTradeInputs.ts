@@ -1,5 +1,7 @@
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
+import { formatPrice, formatQty } from "../trading-accounts/tradingFormat.js";
 import type { ReplayStoreSnapshot } from "./replayStore.js";
+import type { ReplayFill } from "./replayTypes.js";
 import type { ReplayTrainingMarketTrack, ReplayTrainingPortfolio } from "./replayV2Types.js";
 
 type TradeSnapshot = Pick<ReplayStoreSnapshot, "sessionId" | "hasAuthoritativeSnapshot" | "virtualTimeMs"
@@ -32,4 +34,14 @@ export function replayChartTradeInputs(
       ? store.orders.filter(order => order.created_time_ms <= cutoff) : [],
     portfolio: settings?.positions !== false && portfolioCurrent ? portfolio : undefined,
   };
+}
+
+/** Fill prices carry slippage digits past the tick, so they round to the chart's price precision. */
+export function replayFillMarkerText(
+  fill: Pick<ReplayFill, "side" | "quantity" | "price">,
+  labels: { readonly buy: string; readonly sell: string },
+  pricePrecision: number | undefined,
+): string {
+  const side = fill.side === "BUY" ? labels.buy : labels.sell;
+  return `${side} ${formatQty(fill.quantity)} @ ${formatPrice(fill.price, pricePrecision)}`;
 }

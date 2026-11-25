@@ -1,5 +1,6 @@
 import { t } from "../../i18n/index.js";
 import type { IndicatorHLine } from "../indicators/indicatorTypes.js";
+import { formatPrice } from "../trading-accounts/tradingFormat.js";
 import type {
   ReplayTrainingPortfolioPosition,
   ReplayV2Json,
@@ -14,6 +15,8 @@ export interface ReplayPositionHLineInput {
   readonly positionMode: ReplayV2PositionMode | null | undefined;
   readonly positions: readonly ReplayTrainingPortfolioPosition[];
   readonly instrumentRules?: readonly InstrumentRuleRecord[];
+  /** The chart's price precision; model prices carry digits past the tick. */
+  readonly pricePrecision?: number | undefined;
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -40,10 +43,6 @@ export function replayMarkFidelityLabel(value: unknown): string {
   return t("replay.hline.modelProxy");
 }
 
-function displayPrice(raw: unknown, parsed: number): string {
-  return typeof raw === "string" && raw.length > 0 ? raw : String(parsed);
-}
-
 function contractSizeFor(
   instrumentRules: readonly InstrumentRuleRecord[],
   trackId: string,
@@ -68,6 +67,7 @@ export function buildReplayPositionHlines({
   positionMode,
   positions,
   instrumentRules = [],
+  pricePrecision,
 }: ReplayPositionHLineInput): IndicatorHLine[] {
   if (selectedTrackId === null || selectedTrackId === undefined) return [];
   const selectedPositions = positions.filter((item) => item.track_id === selectedTrackId);
@@ -93,7 +93,7 @@ export function buildReplayPositionHlines({
         price: entryPrice,
         title: t("replay.hline.avgPrice", {
           side: sideLabel,
-          price: displayPrice(position.entry_price, entryPrice),
+          price: formatPrice(entryPrice, pricePrecision),
         }),
         color: positionSide === "SHORT" ? "#7c3aed" : "#2563eb",
         linestyle: "solid",
@@ -110,7 +110,7 @@ export function buildReplayPositionHlines({
         price: liquidationPrice,
         title: t("replay.hline.liqPrice", {
           side: sideLabel,
-          price: displayPrice(selectedPosition.liquidation_price, liquidationPrice),
+          price: formatPrice(liquidationPrice, pricePrecision),
         }),
         color: "#f59e0b",
         linestyle: "dotted",
@@ -126,7 +126,7 @@ export function buildReplayPositionHlines({
         price: bankruptcyPrice,
         title: t("replay.hline.bankruptcy", {
           side: sideLabel,
-          price: displayPrice(selectedPosition.bankruptcy_price, bankruptcyPrice),
+          price: formatPrice(bankruptcyPrice, pricePrecision),
         }),
         color: "#e11d48",
         linestyle: "dashed",
@@ -154,7 +154,7 @@ export function buildReplayPositionHlines({
       id: `replay-position-risk-reference${idSuffix}`,
       pane: "main",
       price: riskPrice,
-      title: t("replay.hline.riskRef", { price: riskPrice.toFixed(6) }),
+      title: t("replay.hline.riskRef", { price: formatPrice(riskPrice, pricePrecision ?? 6) }),
       color: "#f59e0b",
       linestyle: "dotted",
       linewidth: 1,

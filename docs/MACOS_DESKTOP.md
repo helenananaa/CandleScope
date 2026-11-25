@@ -8,10 +8,15 @@ universal binaries.
 
 ## Download
 
-Open a successful workflow run in GitHub Actions and download the
-`CandleScope-macos-<architecture>-<commit>` artifact. It contains a DMG, a ZIP,
-`SHA256SUMS`, and `build-manifest.json` identifying the exact source commit.
-Artifacts expire after 14 days. A workflow run does not publish a GitHub Release.
+Released versions are on the repository's
+[Releases](https://github.com/helenananaa/CandleScope/releases) page; see
+[Releasing the desktop app](DESKTOP_RELEASE.md) for how they are made.
+
+For a build of any other commit, open a successful workflow run in GitHub
+Actions and download the `CandleScope-macos-<architecture>-<commit>` artifact.
+It contains a DMG, a ZIP, `SHA256SUMS`, and `build-manifest.json` identifying
+the exact source commit. Artifacts expire after 14 days. Only a version tag
+publishes a GitHub Release, as a draft for review.
 
 Choose `arm64` for M1/M2/M3/M4 and other Apple Silicon Macs; choose `x64` for
 Intel Macs. Mount the DMG and copy CandleScope to Applications, or extract the
@@ -21,12 +26,12 @@ After a newer build has opened your profile, 0.3.0 cannot open it until you
 restore the `*.pre-*` copies that the newer build kept in the profile's data
 folder; see [Going back to 0.3.0](../RELEASE_NOTES.md#going-back-to-030-after-upgrading).
 
-These are **ad-hoc signed test builds**, without an Apple Developer ID
+These are **ad-hoc signed builds**, without an Apple Developer ID
 signature or notarization. macOS may block their first launch. Review the source
 and artifact checksum before deciding whether to allow the app through macOS
 Privacy & Security. The workflow does not disable Gatekeeper or install signing
-credentials. Production distribution needs a separately approved signing and
-notarization setup.
+credentials. Developer ID signing and notarization need a separate setup; see
+[Signing](DESKTOP_RELEASE.md#signing).
 
 ## Build on a Mac
 
