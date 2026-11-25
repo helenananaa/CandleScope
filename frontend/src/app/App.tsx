@@ -33,6 +33,7 @@ import { chartWorkspaceCell } from "../features/chart-workspace/chartWorkspaceDo
 import { cellsWithAppearanceOverride, sharedCellAppearanceTheme } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
 import { resolveChartLinkTargetsForChannel } from "../features/chart-workspace/chartWorkspaceLinkModel.js";
 import { useChartAppearanceOffer } from "./useChartAppearanceOffer.js";
+import { updateChecksSupported, useAppUpdateCheck } from "../features/app-update/useAppUpdateCheck.js";
 import WorkspaceLayoutTree from "../features/chart-workspace/WorkspaceLayoutTree.js";
 import WorkspaceLayoutPicker from "../features/chart-workspace/WorkspaceLayoutPicker.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../features/chart-workspace/chartWorkspaceCapacity.js";
@@ -129,6 +130,8 @@ function LiveWorkspaceApp() {
   useExtensionService("workspace", workspace);
   useExtensionService("settings", settings);
   useExtensionService("desktop", desktopWindowManager);
+  // One check per app: the desktop main window asks, other windows and the browser build never do.
+  useAppUpdateCheck(updateChecksSupported() && desktopWindowManager.windowId === "main-window");
   const locale = useLocale();
   // The toolbar is window-global, so every chart interaction controller must
   // consume the same active tool instead of retaining a per-cell copy.

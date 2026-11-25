@@ -10,6 +10,8 @@ export interface ToastOptions {
   title: string;
   message?: string;
   action?: ToastAction;
+  /** A quieter second choice; with one, both actions sit under the message. */
+  secondaryAction?: ToastAction;
   /** Milliseconds before it hides; 0 keeps it until dismissed. Defaults: 5 s, 8 s for danger. */
   durationMs?: number;
 }
@@ -18,6 +20,7 @@ export interface Toast extends Required<Pick<ToastOptions, "tone" | "title">> {
   id: number;
   message: string | undefined;
   action: ToastAction | undefined;
+  secondaryAction: ToastAction | undefined;
   durationMs: number;
 }
 
@@ -34,6 +37,7 @@ export function createToastStore() {
       const tone = options.tone ?? "info";
       const toast: Toast = {
         id: nextId++, tone, title: options.title, message: options.message, action: options.action,
+        secondaryAction: options.secondaryAction,
         durationMs: options.durationMs ?? (tone === "danger" ? 8000 : 5000),
       };
       toasts = [...toasts, toast].slice(-MAX_TOASTS);

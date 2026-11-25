@@ -82,7 +82,8 @@ def main() -> int:
         # 1s history, replay catalog and local import.
         "test_second_history_lifecycle.py", "test_sparse_source_continuity.py", "test_replay_catalog.py",
         "test_local_data_api.py", "test_replay_imported_multimarket.py",
-        # GC, retention and cache protection.
+        # GC, retention and cache protection; derived stores follow a moved or copied data folder.
+        "test_profile_relocation.py",
         "test_bar_cache_protection.py", "test_data_manager_gc.py", "test_gc_execution_safety.py",
         "test_gc_policy.py", "test_gc_settings_validation.py", "test_storage_retention_gc.py",
         "test_manual_history_gc_protection.py",

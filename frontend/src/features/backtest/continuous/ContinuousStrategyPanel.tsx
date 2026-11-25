@@ -20,7 +20,7 @@ import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
 import { readContinuousAccountRows } from "./continuousAccountRows.js";
 import {
-  PRACTICE_ACCOUNT_RULES, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
+  PRACTICE_ACCOUNT_RULES, defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
 } from "./continuousAccountRules.js";
 import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import "./continuousStrategy.css";
@@ -78,7 +78,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [attempt, setAttempt] = useState(0);
   const [from, setFrom] = useState(() => new Date(props.initialFromMs ?? Date.now() - 86400000).toISOString().slice(0, 16));
   const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
-  const [fee, setFee] = useState(props.initialExecution?.feeBps ?? "0"), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
+  const [fee, setFee] = useState(() => defaultForwardFeeBps(props.initialExecution)), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
   const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
   // ADR-BACKTEST-015 P6e: new forward runs trade on the practice account model (continuousAccountRules).
   const executionModel = forwardExecutionModel(props.initialization, reference);

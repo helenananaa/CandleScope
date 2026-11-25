@@ -130,6 +130,51 @@ class PreparationRepository:
             db.execute("INSERT OR IGNORE INTO preparation_settings VALUES ('cache_budget_bytes',?)", (str(self._default_cache_budget_bytes),))
             db.execute("INSERT OR IGNORE INTO preparation_settings VALUES ('prefetch_enabled','false')")
 
+    def database_identity(self, *, create=None):
+        """This database's own id; ``create`` (an id or True) assigns one when it has none.
+
+        Cache ownership names this id rather than the file's absolute path, so a
+        moved or restored data folder still owns its prepared inputs.
+        """
+        from app.core.profile_relocation import new_identity, valid_identity
+        with self.connect() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS preparation_identity ("
+                       "id INTEGER PRIMARY KEY CHECK(id=1), database_id TEXT NOT NULL)")
+            if create:
+                preferred = create if valid_identity(create) else new_identity()
+                db.execute("INSERT OR IGNORE INTO preparation_identity VALUES (1,?)", (preferred,))
+            row = db.execute("SELECT database_id FROM preparation_identity WHERE id=1").fetchone()
+        return None if row is None else str(row[0])
+
+    def relocate_paths(self, old_root, new_root):
+        """Rewrite ledger paths recorded under a data folder that has since moved.
+
+        The storage ledger stores absolute file paths. After a move they would
+        all read as missing; after a copy the new profile would count the
+        original profile's files as its own. Rows already recorded at the new
+        location win over their old copies.
+        """
+        from app.core.profile_relocation import rebase
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            moved = 0
+            for table, columns in (("preparation_publications", "path,kind,bytes,checked_ms"),
+                                   ("preparation_publication_scopes", "path,kind")):
+                for row in db.execute(f"SELECT {columns} FROM {table}").fetchall():
+                    target = rebase(row["path"], old_root, new_root)
+                    if target is None:
+                        continue
+                    values = [target, *[row[name] for name in columns.split(",")[1:]]]
+                    db.execute(f"INSERT OR IGNORE INTO {table} ({columns}) VALUES ({','.join('?' * len(values))})", values)
+                    if table == "preparation_publications":
+                        for (receipt,) in db.execute("SELECT receipt FROM preparation_receipt_files WHERE path=?",
+                                                     (row["path"],)).fetchall():
+                            db.execute("INSERT OR IGNORE INTO preparation_receipt_files VALUES (?,?)", (receipt, target))
+                        db.execute("DELETE FROM preparation_receipt_files WHERE path=?", (row["path"],))
+                    db.execute(f"DELETE FROM {table} WHERE path=?", (row["path"],))
+                    moved += 1
+            return moved
+
     @property
     def cache_budget_bytes(self):
         return self.settings()["cache_budget_bytes"]

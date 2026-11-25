@@ -22,7 +22,26 @@ function cancelledStart() {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitForHealthy(resolveUrl, child, timeoutMs, fetchImpl, instanceId, startupError, cancelled) {
+/** The cause the backend recorded before it stopped (`app.core.startup_failure`), if any. */
+export async function readBackendFailure(file) {
+  if (!file) return null;
+  try {
+    const value = JSON.parse(await readFile(file, "utf8"));
+    if (!value || typeof value.message !== "string" || !value.message.trim()) return null;
+    return {
+      code: typeof value.code === "string" && value.code ? value.code.slice(0, 120) : null,
+      message: value.message.trim().slice(0, 2000),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function describeBackendFailure(failure) {
+  return `The backend stopped while starting: ${failure.message}${failure.code ? ` (${failure.code})` : ""}`;
+}
+
+async function waitForHealthy(resolveUrl, child, timeoutMs, fetchImpl, instanceId, startupError, cancelled, backendFailure) {
   const startedAt = Date.now();
   let lastError = null;
   while (Date.now() - startedAt < timeoutMs) {
@@ -30,10 +49,11 @@ async function waitForHealthy(resolveUrl, child, timeoutMs, fetchImpl, instanceI
     const spawnError = startupError();
     if (spawnError) throw new SidecarStartupError(spawnError.message, { spawnCode: spawnError.code });
     if (child.exitCode !== null || child.signalCode !== null) {
-      throw new SidecarStartupError(`Sidecar exited before it became healthy (${child.exitCode})`, {
-        exitCode: child.exitCode,
-        signalCode: child.signalCode,
-      });
+      const failure = await backendFailure();
+      throw new SidecarStartupError(
+        failure ? describeBackendFailure(failure) : `Sidecar exited before it became healthy (${child.exitCode})`,
+        { exitCode: child.exitCode, signalCode: child.signalCode, backendFailure: failure },
+      );
     }
     try {
       const url = await resolveUrl();
@@ -46,9 +66,11 @@ async function waitForHealthy(resolveUrl, child, timeoutMs, fetchImpl, instanceI
     }
     await delay(100);
   }
-  throw new SidecarStartupError(`Sidecar health check timed out after ${timeoutMs} ms`, {
-    cause: lastError instanceof Error ? lastError.message : String(lastError),
-  });
+  const failure = await backendFailure();
+  throw new SidecarStartupError(
+    failure ? describeBackendFailure(failure) : `Sidecar health check timed out after ${timeoutMs} ms`,
+    { cause: lastError instanceof Error ? lastError.message : String(lastError), backendFailure: failure },
+  );
 }
 
 function signalProcessGroup(pid, signal) {
@@ -165,11 +187,13 @@ export class SidecarSupervisor extends EventEmitter {
     this.readyMs = null;
     const instanceId = randomUUID();
     const endpointFile = this.options.dynamicPort ? `${this.options.logPath}.${instanceId}.endpoint.json` : null;
+    const failureFile = `${this.options.logPath}.${instanceId}.failure.json`;
     const child = spawn(this.options.command, this.options.args, {
       cwd: this.options.cwd,
       env: { ...process.env, ...this.options.env, CANDLESCOPE_DESKTOP_INSTANCE_ID: instanceId,
         CANDLESCOPE_DESKTOP_BOUND_PORT: this.boundPort === null ? "" : String(this.boundPort),
-        CANDLESCOPE_DESKTOP_ENDPOINT_FILE: endpointFile || "" },
+        CANDLESCOPE_DESKTOP_ENDPOINT_FILE: endpointFile || "",
+        CANDLESCOPE_DESKTOP_STARTUP_FAILURE_FILE: failureFile },
       windowsHide: true,
       detached: this.options.processGroup,
       stdio: [this.options.gracefulStdin ? "pipe" : "ignore", logHandle.fd, logHandle.fd],
@@ -208,6 +232,7 @@ export class SidecarSupervisor extends EventEmitter {
         instanceId,
         () => spawnError,
         cancelled,
+        () => readBackendFailure(failureFile),
       );
       // Existing renderers retain this endpoint. Restarts must bind it exactly.
       if (endpointFile) this.boundPort = Number(new URL(this.options.healthUrl).port);
@@ -234,6 +259,8 @@ export class SidecarSupervisor extends EventEmitter {
         await rm(endpointFile, { force: true });
         await rm(endpointFile.replace(/\.json$/, ".tmp"), { force: true });
       }
+      await rm(failureFile, { force: true });
+      await rm(`${failureFile}.tmp`, { force: true });
     }
   }
 

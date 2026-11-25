@@ -26,6 +26,7 @@ export const RUN = [
   { flag: "--history-stages", fixture: "history-stages-browser.html" },
   { flag: "--chart-time-navigation", fixture: "chart-time-navigation-browser.html" },
   { flag: "--chart-reopen-live-tail", fixture: "chart-reopen-live-tail-browser.html" },
+  { flag: "--chart-first-fit", fixture: "chart-first-fit-browser.html" },
   { flag: "--interval-admission", fixture: "interval-admission-browser.html" },
   { flag: "--market-health", fixture: "market-health-browser.html" },
   { flag: "--indicator-flow", fixture: "indicator-flow-browser.html" },

@@ -30,7 +30,9 @@ class MacKeychainVault:
     def __init__(self, root: Path):
         if sys.platform != "darwin":
             raise AccountDataError("MACOS_KEYCHAIN_REQUIRED")
-        context = hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:32]
+        # The namespace follows the data folder when it moves (see secret_namespace_origin).
+        from app.core.profile_relocation import secret_namespace_origin
+        context = hashlib.sha256(secret_namespace_origin(root).encode()).hexdigest()[:32]
         self.service = ("io.candlescope.okx-readonly." + context).encode()
         self.security = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
         self.core = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")

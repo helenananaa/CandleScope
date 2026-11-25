@@ -7,6 +7,7 @@
  * timeframe switches.
  */
 
+import { DEFAULT_DRAWING_RENDER_COLOR } from "../rendering/drawingRenderDefaults.js";
 import { drawingDataPointsToCoordinates } from "./coordinateUtils.js";
 import type {
   DrawingAttachedParameter,
@@ -407,7 +408,7 @@ export class ShapeDrawingPrimitive {
     this._type = "shape";
     this._shapeType = normalizeShapeType(opts.shapeType);
     this._dataPoints = opts.dataPoints || [];
-    this._color = opts.color || "#f59e0b";
+    this._color = opts.color || DEFAULT_DRAWING_RENDER_COLOR;
     this._lineWidth = opts.lineWidth || 2;
     this._fillColor = opts.fillColor || this._color;
     this._fillOpacity = normalizeOpacity(opts.fillOpacity);

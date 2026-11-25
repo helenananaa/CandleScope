@@ -502,6 +502,8 @@ interface AuxiliaryDisplayState {
 const LEFT_EDGE_TRIGGER_BARS = 15;
 const HISTORY_WHEEL_GESTURE_IDLE_MS = 160;
 const VISIBLE_RANGE_SAVE_DEBOUNCE_MS = 500;
+/** Frames to wait for the chart to draw a restored zoom at its final width. */
+const SAVED_FIT_CHECK_FRAMES = 6;
 // v1 layouts may contain 30px panes produced by sequential setHeight replay.
 // Keep the corrected ratio-based layout isolated from those polluted values.
 const SINGLE_PANE_HEIGHT_KEY_PREFIX = "single-v2:";
@@ -535,6 +537,23 @@ function lastDisplayTime(rows: readonly DisplayRow[]): number | null {
 interface CommitLiveTail {
   readonly tail: ViewportLiveTail;
   readonly lastTime: number | null;
+}
+
+/**
+ * The session view is a fit to a window too short to fill the pane at the
+ * chart's default spacing (#572: a fresh profile's first window can be the
+ * five-bar latest request). Until the user moves the view, more rows refit
+ * it, and its spacing is not saved.
+ */
+interface ProvisionalFit {
+  readonly datasetKey: string | null;
+  readonly bars: number;
+}
+
+/** A restored saved spacing that may be a 1.0.0 few-bar fit, checked once drawn. */
+interface SavedFitCheck {
+  readonly datasetKey: string | null;
+  readonly barSpacing: number;
 }
 
 function latestFiniteSourceTime(rows: readonly SourceBar[] | null | undefined): number | null {
@@ -1046,6 +1065,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const transferredHistoryFrameRef = useRef<number | null>(null);
   const hasRestoredRangeRef = useRef(false);
   const lastViewportRestoreSourceRef = useRef<string | null>(null);
+  const provisionalFitRef = useRef<ProvisionalFit | null>(null);
+  const savedFitCheckRef = useRef<SavedFitCheck | null>(null);
   const visibleRangeSaveTimerRef = useRef<TimerHandle | null>(null);
   const activeSubPaneCountRef = useRef(0);
   const activeSubPanesRef = useRef<IndicatorSubPane[]>(subPanes);
@@ -2084,6 +2105,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
   const markViewportRangeChanged = useCallback((userDriven: boolean) => {
     liveSessionViewportRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2254,6 +2277,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
     liveSessionViewportRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     settleDatasetViewportTransfer("interrupted");
     followLatestDisabledRef.current = false;
     const rawPosition = Number(latestBarPositionRef.current);
@@ -2421,12 +2446,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       intervalRef.current, futureTimeAxisDataRef.current) ?? (sourceFrom != null && sourceTo != null
       ? { from: Math.min(sourceFrom, sourceTo), to: Math.max(sourceFrom, sourceTo) }
       : null);
-    return buildVisibleRangeSnapshot({
+    const snapshot = buildVisibleRangeSnapshot({
       barSpacing: visibleRange.barSpacing,
       logicalRange: visibleRange.logical,
       rightOffset: viewportControllerRef.current?.captureRightOffset() ?? visibleRange.scrollPosition,
       timeRange: sourceTimeRange,
     });
+    const provisional = provisionalFitRef.current;
+    // Persistence skips a few-bar fit; every other consumer reads it as usual.
+    return snapshot && provisional !== null && provisional.datasetKey === (datasetKeyRef.current ?? null)
+      && !userInteractedRef.current ? { ...snapshot, provisionalFit: true } : snapshot;
   }, [chartAdapter]);
 
   const captureViewportTransfer = useCallback(() => {
@@ -3916,6 +3945,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       // early restore here consumed the snapshot against the wrong interval.
       hasRestoredRangeRef.current = false;
       lastViewportRestoreSourceRef.current = null;
+      provisionalFitRef.current = null;
+      savedFitCheckRef.current = null;
       // The main LWC series stays mounted, but drawing/auxiliary consumers must
       // not observe the outgoing projection under the incoming dataset key.
       setDrawingSurfaceDataKey(null);
@@ -3936,6 +3967,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     followLatestDisabledRef.current = false;
     hasRestoredRangeRef.current = false;
     lastViewportRestoreSourceRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     // The mounted series still contains the outgoing dataset. An empty cache
     // would turn an empty incoming synthetic projection into a no-op, leaving
     // old bricks visible beneath the new interval label until history arrives.
@@ -3961,6 +3994,85 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     scheduleTransferredHistoryFill,
     settleDatasetViewportTransfer,
   ]);
+
+  // #572: a fit to a window too short to fill the pane stays provisional
+  // until the user or a placement moves the view.
+  const markSessionFit = useCallback((sessionKey: string | null) => {
+    provisionalFitRef.current = surfaceAxisModeRef.current !== "derived-ordinal"
+      && viewportControllerRef.current?.contentFitIsFewBar()
+      ? { datasetKey: sessionKey, bars: displayRowsRef.current.length } : null;
+  }, []);
+
+  // After a commit rendered: rows added to a provisional fit refit the view,
+  // so history that arrives after a few-bar first window is shown whole.
+  const refitProvisionalFit = useCallback((displayRows: readonly DisplayRow[]): boolean => {
+    const fit = provisionalFitRef.current;
+    if (!fit) return false;
+    if (fit.datasetKey !== (datasetKeyRef.current ?? null) || userInteractedRef.current
+      || pendingSurfaceViewportRef.current !== null || boundSurfaceViewportAnchorRef.current !== null
+      || (followLatestRef.current && !followLatestDisabledRef.current)
+      || surfaceAxisModeRef.current === "derived-ordinal") {
+      provisionalFitRef.current = null;
+      return false;
+    }
+    if (displayRows.length <= fit.bars || !viewportControllerRef.current?.refitContent()) return false;
+    markSessionFit(fit.datasetKey);
+    recordPerfEvent("chart.viewport.provisionalRefit", {
+      bars: displayRows.length, datasetKey: fit.datasetKey, previousBars: fit.bars,
+      provisional: provisionalFitRef.current !== null,
+    });
+    return true;
+  }, [markSessionFit]);
+
+  // 1.0.0 saved the spacing of a fit to a few-bar first window, and every
+  // reopen restored it (#572). A saved spacing that is exactly a fit of the
+  // drawn pane width and wider than the default is that fit, not a zoom the
+  // user made, so fit the window instead. The chart settles its plot width
+  // (the price axis depends on what is visible) only when it draws the
+  // restored zoom, so the check runs over the next frames.
+  const savedFitCheckFrameRef = useRef<number | null>(null);
+  const scheduleSavedFitCheck = useCallback((check: SavedFitCheck) => {
+    savedFitCheckRef.current = check;
+    if (savedFitCheckFrameRef.current !== null) cancelAnimationFrame(savedFitCheckFrameRef.current);
+    let frames = 0;
+    const step = () => {
+      savedFitCheckFrameRef.current = null;
+      const controller = viewportControllerRef.current;
+      if (savedFitCheckRef.current !== check) return;
+      if (!controller || check.datasetKey !== (datasetKeyRef.current ?? null) || userInteractedRef.current
+        || pendingSurfaceViewportRef.current !== null || boundSurfaceViewportAnchorRef.current !== null) {
+        savedFitCheckRef.current = null;
+        return;
+      }
+      if (!controller.spacingIsFewBarFit(check.barSpacing)) {
+        frames += 1;
+        if (frames < SAVED_FIT_CHECK_FRAMES) savedFitCheckFrameRef.current = requestAnimationFrame(step);
+        else savedFitCheckRef.current = null;
+        return;
+      }
+      savedFitCheckRef.current = null;
+      let refit = false;
+      isRestoringViewportRef.current = true;
+      try {
+        refit = controller.refitContent();
+      } finally {
+        isRestoringViewportRef.current = false;
+      }
+      if (refit) markSessionFit(check.datasetKey);
+      recordPerfEvent("chart.viewport.savedFewBarFit", {
+        applied: refit, barSpacing: check.barSpacing, bars: displayRowsRef.current.length,
+        datasetKey: check.datasetKey, provisional: provisionalFitRef.current !== null,
+      });
+      if (!refit) return;
+      publishViewportRangeChange();
+      scheduleVisibleRangeSave();
+    };
+    savedFitCheckFrameRef.current = requestAnimationFrame(step);
+  }, [markSessionFit, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  useEffect(() => () => {
+    if (savedFitCheckFrameRef.current !== null) cancelAnimationFrame(savedFitCheckFrameRef.current);
+    savedFitCheckFrameRef.current = null;
+  }, []);
 
   const sessionViewportInputsRef = useRef({ dataMeta, datasetKey, savedVisibleRange, seriesStore });
   useLayoutEffect(() => {
@@ -3991,6 +4103,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     if (followLatestViewport(displayRowsRef.current)) {
       hasRestoredRangeRef.current = true;
       lastViewportRestoreSourceRef.current = "follow-latest";
+      provisionalFitRef.current = null;
+      savedFitCheckRef.current = null;
       publishViewportRangeChange();
       notifyLinkedViewportReady();
       return;
@@ -4014,20 +4128,30 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } finally {
       isRestoringViewportRef.current = false;
     }
+    if (restored) {
+      savedFitCheckRef.current = null;
+      if (restorePlan.mode === "fit") markSessionFit(datasetKey ?? null);
+      else provisionalFitRef.current = null;
+    }
     recordPerfEvent("chart.viewport.restore", {
       applied: Boolean(restored),
       bars: rows.length,
       datasetKey,
       mode: restorePlan?.mode || "fit",
+      provisional: provisionalFitRef.current !== null,
       visibleLogicalRange: captureVisibleRange()?.logical || null,
     });
     if (restored) {
       hasRestoredRangeRef.current = true;
       lastViewportRestoreSourceRef.current = dataMeta?.source || null;
+      if (restorePlan.mode === "anchor" && restorePlan.barSpacing != null
+        && surfaceAxisModeRef.current !== "derived-ordinal") {
+        scheduleSavedFitCheck({ datasetKey: datasetKey ?? null, barSpacing: restorePlan.barSpacing });
+      }
       publishViewportRangeChange();
     }
     notifyLinkedViewportReady();
-  }, [captureVisibleRange, followLatestViewport, notifyLinkedViewportReady, publishViewportRangeChange]);
+  }, [captureVisibleRange, followLatestViewport, markSessionFit, notifyLinkedViewportReady, publishViewportRangeChange, scheduleSavedFitCheck]);
 
   const sessionViewportRestoreFrameRef = useRef<number | null>(null);
   const schedulePaintedSessionViewportRestore = useCallback(() => {
@@ -4236,6 +4360,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           if (restored) {
             hasRestoredRangeRef.current = true;
             lastViewportRestoreSourceRef.current = "surface-viewport-transfer";
+            provisionalFitRef.current = null;
+            savedFitCheckRef.current = null;
             materializeRuntimePaneLayout(
               chartRef.current,
               containerRef.current,
@@ -4266,7 +4392,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           isRestoringViewportRef.current = false;
         }
       }
-      if (projectionRendered) followCommitLiveTail(liveTail, displayRows, store);
+      if (projectionRendered && !refitProvisionalFit(displayRows)) followCommitLiveTail(liveTail, displayRows, store);
       if (projectionRendered && followLatestViewport(displayRows)) {
         hasRestoredRangeRef.current = true;
         lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4474,6 +4600,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             if (restored) {
               hasRestoredRangeRef.current = true;
               lastViewportRestoreSourceRef.current = "dataset-viewport-transfer";
+              provisionalFitRef.current = null;
+              savedFitCheckRef.current = null;
               materializeRuntimePaneLayout(
                 chartRef.current,
                 containerRef.current,
@@ -4507,7 +4635,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         // Synthetic recalibration can remap the axis while retaining the same
         // output count. Following depends on the committed projection, not on
         // whether this tick happened to create an additional brick/column.
-        if (projectionRendered) followCommitLiveTail(liveTail, displayRows, currentStore);
+        if (projectionRendered && !refitProvisionalFit(displayRows)) followCommitLiveTail(liveTail, displayRows, currentStore);
         if (projectionRendered && followLatestViewport(displayRows)) {
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4525,7 +4653,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [captureCommitLiveTail, chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followCommitLiveTail, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [captureCommitLiveTail, chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followCommitLiveTail, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refitProvisionalFit, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     schedulePaintedSessionViewportRestore();

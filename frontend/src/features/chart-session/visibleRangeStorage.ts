@@ -94,6 +94,9 @@ export function saveVisibleRangeForInterval(
 ): void {
   void dataMeta;
   const rangeRecord = isRecord(range) ? range : {};
+  // A fit to a few-bar first window says nothing about the zoom the full
+  // history needs (#572). Keep whatever was saved before; reopening fits.
+  if (rangeRecord.provisionalFit === true) return;
   const normalized = normalizeVisibleRange({ ...rangeRecord, savedAt: Date.now() });
   const storageKey = buildVisibleRangeStorageKey(symbol, interval, marketType, exchange, scope);
   if (!symbol || !storageKey || !normalized) return;
