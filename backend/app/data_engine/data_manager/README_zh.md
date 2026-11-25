@@ -204,6 +204,9 @@ planner 会选择需要的 source streams。对于自定义周期，可能会启
   通过显式回调执行修复、持久化最终结果和完成通知，不导入协调器或直接访问存储、缓存。
 - [backfill_coordinator.py](backfill_coordinator.py) 将以上组件与引擎、持久化缺口账本、
   缓存回读和事件交付连接起来。持久化最终结果完成后，调度器才释放共享等待者。
+  它继承从中拆出的两个 mixin（ADR-DATA-001 §8）：
+  [backfill_admission.py](backfill_admission.py) 是请求与需求 API、请求 id 和保留的结果；
+  [backfill_execution.py](backfill_execution.py) 带重试执行一个请求、校验并把 K 线交给缓存。
 
 `BackfillCoordinator` 和 `BackfillEngine` 分离：
 
