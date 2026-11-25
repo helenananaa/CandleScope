@@ -22,3 +22,17 @@ test("macOS distributables preserve explicit architecture and never publish", ()
   assert.equal(pkg.build.mac.notarize, false);
   assert.ok(pkg.build.mac.artifactName.includes("${arch}"));
 });
+
+test("the Windows installer is per-user, never publishes, and keeps user data on uninstall", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
+  const args = pkg.scripts["desktop:package:win"].split(" ").slice(2);
+  assert.deepEqual(desktopBuilderArguments([...args, "--x64"]), [
+    "--win", "nsis", "--publish", "never", "--x64",
+  ]);
+  assert.deepEqual(pkg.build.win.target, ["nsis"]);
+  assert.equal(pkg.build.nsis.oneClick, false);
+  assert.equal(pkg.build.nsis.perMachine, false);
+  assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
+  // The release workflow and record-desktop-artifacts.mjs find the installer by this name.
+  assert.match(pkg.build.nsis.artifactName, /-windows-\$\{arch\}-setup\.\$\{ext\}$/);
+});
