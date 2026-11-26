@@ -23,6 +23,27 @@ export const MARKET_TABS: MarketTab[] = [
   { key: "futures", label: "合约", icon: "📄" },
 ];
 
+const UNDERLYING_CLASSES = new Set(["stock", "etf", "forex", "index", "commodity"]);
+const UNDERLYING_REGIONS = new Set(["us", "hk", "kr", "cn"]);
+
+export interface VenueContractUnderlying {
+  /** `search.asset.*` key of what the contract tracks. */
+  assetKey: string;
+  /** `search.region.*` key for a stock with a known market, else null. */
+  regionKey: string | null;
+}
+
+/**
+ * A crypto-venue contract on a traditional underlying, such as Binance's gold
+ * or AAPL perpetuals. Its price is the contract's, not the original market's.
+ */
+export function venueContractUnderlying(symbol: SymbolSearchItem): VenueContractUnderlying | null {
+  const underlying = typeof symbol.underlyingClass === "string" ? symbol.underlyingClass : "";
+  if (!UNDERLYING_CLASSES.has(underlying) || (symbol.assetClass || "crypto") !== "crypto") return null;
+  const region = typeof symbol.underlyingRegion === "string" ? symbol.underlyingRegion : "";
+  return { assetKey: underlying, regionKey: underlying === "stock" && UNDERLYING_REGIONS.has(region) ? region : null };
+}
+
 export const ROW_HEIGHT = 40;
 export const VISIBLE_ROWS = 14;
 

@@ -2024,3 +2024,59 @@ def test_bybit_metric_history_sends_exact_window_and_endpoint_limit(monkeypatch,
     capabilities = plugin.capabilities()
     assert capabilities.channel_capability(MarketChannel.OPEN_INTEREST, market_type).history_policy.max_page_size == 200
     assert capabilities.channel_capability(MarketChannel.FUNDING_RATE, market_type).history_policy.max_page_size == 200
+
+
+def _binance_usdm_info(symbol: str, base: str, contract_type: str, underlying_type: str) -> dict[str, Any]:
+    return {
+        "symbol": symbol, "pair": symbol, "contractType": contract_type, "deliveryDate": 4133404800000,
+        "onboardDate": 1765440300000, "status": "TRADING", "maintMarginPercent": "2.5000",
+        "requiredMarginPercent": "5.0000", "baseAsset": base, "quoteAsset": "USDT", "marginAsset": "USDT",
+        "pricePrecision": 2, "quantityPrecision": 3, "baseAssetPrecision": 8, "quotePrecision": 8,
+        "underlyingType": underlying_type, "underlyingSubType": ["TradFi"], "triggerProtect": "0.0200",
+        "liquidationFee": "0.015000", "marketTakeBound": "0.02",
+        "filters": [
+            {"minPrice": "0.01", "tickSize": "0.01", "maxPrice": "200000", "filterType": "PRICE_FILTER"},
+            {"stepSize": "0.001", "minQty": "0.001", "maxQty": "10000", "filterType": "LOT_SIZE"},
+            {"minQty": "0.001", "filterType": "MARKET_LOT_SIZE", "stepSize": "0.001", "maxQty": "1000"},
+            {"notional": "5", "filterType": "MIN_NOTIONAL"},
+        ],
+        "orderTypes": ["LIMIT", "MARKET"], "timeInForce": ["GTC"],
+    }
+
+
+@pytest.mark.parametrize(("exchange_id", "market_type"), [("binance", "futures"), ("binanceusdm", "swap.linear")])
+def test_binance_ccxt_catalog_files_tradfi_perpetuals_under_their_underlying(
+    monkeypatch: Any, caplog, exchange_id: str, market_type: str,
+) -> None:
+    """The live Binance USD-M catalog comes through CCXT; it must classify like the native one."""
+    from ccxt.async_support import binance
+
+    from app.exchanges.ccxt_ext.generic import load_ccxt_symbols
+
+    exchange = binance({"options": {"defaultType": "future"}})
+    infos = [
+        _binance_usdm_info("BTCUSDT", "BTC", "PERPETUAL", "COIN"),
+        _binance_usdm_info("XAUUSDT", "XAU", "TRADIFI_PERPETUAL", "COMMODITY"),
+        _binance_usdm_info("AAPLUSDT", "AAPL", "TRADIFI_PERPETUAL", "EQUITY"),
+        _binance_usdm_info("BONDUSDT", "BOND", "TRADIFI_PERPETUAL", "RATES"),
+    ]
+    markets = [exchange.parse_market(info) for info in infos]
+
+    async def load_markets(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        exchange.markets = {market["symbol"]: market for market in markets}
+        return exchange.markets
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr("app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange)
+    symbols = asyncio.run(load_ccxt_symbols(
+        get_ccxt_catalog_entry(exchange_id), market_type, IngestionConfig(proxy_mode="none"), native_ids=True,
+    ))
+    rows = {item.symbol: item.to_dict() for item in symbols}
+
+    assert set(rows) == {"BTCUSDT", "XAUUSDT", "AAPLUSDT"}
+    assert "RATES" in caplog.text
+    assert rows["XAUUSDT"]["assetClass"] == rows["BTCUSDT"]["assetClass"] == "crypto"
+    assert rows["XAUUSDT"]["expiryAtMs"] is None
+    assert (rows["XAUUSDT"]["underlyingClass"], rows["XAUUSDT"]["displayName"]) == ("commodity", "Gold")
+    assert (rows["AAPLUSDT"]["underlyingClass"], rows["AAPLUSDT"]["underlyingRegion"]) == ("stock", "us")
+    assert "underlyingClass" not in rows["BTCUSDT"]

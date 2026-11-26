@@ -28,6 +28,11 @@ from app.exchanges.models import (
 )
 
 from app.exchanges.contract_rules import binance_contract_rules
+from app.exchanges.venue_underlyings import (
+    BINANCE_TRADFI_CONTRACT_TYPE,
+    binance_futures_underlying,
+    warn_unknown_underlyings,
+)
 from .protocol import BinanceExchangeProtocol
 
 logger = logging.getLogger("candlescope.exchange.binance")
@@ -159,6 +164,13 @@ def _timestamp_ms(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+# Binance USD-M lists two perpetual contract types; TRADIFI_PERPETUAL contracts
+# (gold, crude oil, stocks) are crypto-venue series too (see venue_underlyings).
+_PERPETUAL_CONTRACT_TYPES = frozenset({"PERPETUAL", BINANCE_TRADFI_CONTRACT_TYPE})
+# Binance's far-future deliveryDate placeholder for contracts that never expire.
+_PERPETUAL_DELIVERY_PLACEHOLDER_MS = 4133404800000
 
 
 def _price_tick_size(item: dict[str, Any]) -> str:
@@ -662,12 +674,18 @@ class BinanceExchangeAdapter:
         data = await self._fetch_exchange_info(urls_to_try, "/fapi/v1/exchangeInfo")
 
         symbols: list[SymbolInfo] = []
+        unknown_tradfi: set[str] = set()
         for item in data.get("symbols", []):
             if item.get("status") != "TRADING":
                 continue
-            if item.get("contractType") != "PERPETUAL":
+            if item.get("contractType") not in _PERPETUAL_CONTRACT_TYPES:
+                continue
+            underlying = binance_futures_underlying(item)
+            if underlying is None:
+                unknown_tradfi.add(str(item.get("underlyingType") or ""))
                 continue
             contract_type = str(item.get("contractType", ""))
+            delivery_ms = _timestamp_ms(item.get("deliveryDate"))
             symbols.append(
                 SymbolInfo(
                     symbol=item["symbol"],
@@ -685,12 +703,15 @@ class BinanceExchangeAdapter:
                     expiry_at_ms=(
                         None
                         if contract_type == "PERPETUAL"
-                        else _timestamp_ms(item.get("deliveryDate"))
+                        or delivery_ms == _PERPETUAL_DELIVERY_PLACEHOLDER_MS
+                        else delivery_ms
                     ),
                     price_tick_size=_price_tick_size(item),
+                    **underlying,
                     **binance_contract_rules(item),
                 ),
             )
+        warn_unknown_underlyings(self.id, unknown_tradfi)
         return symbols
 
     async def _fetch_exchange_info(

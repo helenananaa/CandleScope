@@ -28,7 +28,7 @@ export function parseDiscoveryResult(value: unknown): DiscoveryResult {
   }
   if (value.symbols.some((item: unknown) => !record(item)
     || ["symbol", "exchange", "marketType", "seriesKey"].some((key) => typeof item[key] !== "string" || !item[key])
-    || ["providerId", "venue", "assetClass", "seriesVariant", "priceAdjustment", "sessionVariant", "volumeSemantics"].some((key) => item[key] != null && typeof item[key] !== "string"))) {
+    || ["providerId", "venue", "assetClass", "seriesVariant", "priceAdjustment", "sessionVariant", "volumeSemantics", "underlyingClass", "underlyingRegion"].some((key) => item[key] != null && typeof item[key] !== "string"))) {
     throw new Error("Invalid symbol search identity");
   }
   const facets = (key: string): DiscoveryFacet[] => {

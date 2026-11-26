@@ -24,6 +24,7 @@ def main() -> int:
         "test_data_manager_warm_start_bridge.py", "test_backfill_interest_priority.py",
         "test_bar_basis_migration.py", "test_pre_migration_copy.py", "test_calendar_basis.py",
         "test_catalog_worker.py", "test_exchange_registry_plugins.py", "test_fixed_anchor.py",
+        "test_symbol_discovery.py",
         "test_ingestion_health_observer.py", "test_ingestion_session_types.py",
         "test_interval_resolution.py", "test_interval_admission_contract.py",
         "test_oi_local_history.py",

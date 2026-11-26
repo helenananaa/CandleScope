@@ -144,6 +144,10 @@ def text(row: dict, key: str) -> str:
 
 
 def asset_class(row: dict) -> str:
+    # A venue contract on a traditional underlying (Binance XAUUSDT) is filed
+    # under what it tracks; its series identity stays crypto (ADR-DATA-002 Q1).
+    if underlying := text(row, "underlyingClass").lower():
+        return underlying
     asset = text(row, "assetClass").lower()
     market = text(row, "marketType").lower()
     if asset in {"stock", "equity", "equities"} or market == "stock":
