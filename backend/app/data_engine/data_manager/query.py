@@ -1249,6 +1249,10 @@ class QueryEngine:
                 ),
             )
 
+    def calendar_for(self, key: SeriesKey):
+        """The trading calendar deciding which bars ``key`` should have, or None."""
+        return self._calendar_for(key)
+
     def _calendar_for(self, key: SeriesKey):
         from app.exchanges.trade_candles import uses_trade_candles
         if key.identity.is_legacy_default_for(key.exchange) and uses_trade_candles(key.exchange, key.market_type, key.interval):

@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from app.data_engine.data_manager.backfill_contracts import RepairRequest
+from app.data_engine.history.expected_bars import bucket_end_ms, session_calendar
 from app.data_engine.kline_quality import source_is_trusted_final
 from app.data_engine.series_identity import SERIES_IDENTITY_METADATA_KEY
 from app.data_engine.storage.klines_repo import query_klines
@@ -30,8 +31,11 @@ from .storage import storage_call
 class BarPreparationAdapter:
     def __init__(self, root: Path, *, coordinator, replay_service=None, local_data=None,
                  query=query_klines, now_ms=lambda: int(time.time() * 1000), backtest_runtime=None,
-                 host_history_path=None, replay_library=None):
+                 host_history_path=None, replay_library=None, calendar_for=None):
         self.root = Path(root)
+        # (symbol, interval, *, exchange, market_type, series_identity) -> the
+        # series' trading calendar (ADR-DATA-002 D2); None keeps the minute grid.
+        self.calendar_for = calendar_for
         self.root.mkdir(parents=True, exist_ok=True)
         self.coordinator = coordinator
         self.replay_library = replay_library
@@ -141,13 +145,32 @@ class BarPreparationAdapter:
                           order="ASC", exchange=requirement.exchange, market_type=requirement.market_type,
                           **({"series_identity": identity} if identity is not None else {}))
 
+    def _calendar(self, requirement):
+        """The requirement's session calendar, or None for the plain minute grid."""
+        if self.calendar_for is None:
+            return None
+        try:
+            return session_calendar(self.calendar_for(
+                requirement.symbol, requirement.interval, exchange=requirement.exchange,
+                market_type=requirement.market_type, series_identity=requirement.series_identity()))
+        except Exception:
+            return None
+
     @staticmethod
-    def _complete(rows, requirement, *, require_trusted_source=True):
-        return len(rows) == (requirement.end_ms - requirement.start_ms) // 60_000 and all(
-            int(row["open_time"]) == requirement.start_ms + i * 60_000
-            and int(row["close_time"]) == requirement.start_ms + (i + 1) * 60_000 - 1
+    def _complete(rows, requirement, *, calendar=None, require_trusted_source=True):
+        """Every expected 1m bar of ``[start_ms, end_ms)``; a closed market expects none."""
+        if calendar is None:
+            return len(rows) == (requirement.end_ms - requirement.start_ms) // 60_000 and all(
+                int(row["open_time"]) == requirement.start_ms + i * 60_000
+                and int(row["close_time"]) == requirement.start_ms + (i + 1) * 60_000 - 1
+                and (not require_trusted_source or source_is_trusted_final(row.get("source")))
+                for i, row in enumerate(rows))
+        expected = list(calendar.expected_opens(requirement.start_ms, requirement.end_ms - 1, requirement.interval))
+        return len(rows) == len(expected) and all(
+            int(row["open_time"]) == open_ms
+            and int(row["close_time"]) == bucket_end_ms(calendar, open_ms, requirement.interval) - 1
             and (not require_trusted_source or source_is_trusted_final(row.get("source")))
-            for i, row in enumerate(rows))
+            for open_ms, row in zip(expected, rows))
 
     async def acquire(self, requirement: Requirement, key: str):
         if requirement.role == "TRADES":
@@ -164,7 +187,8 @@ class BarPreparationAdapter:
     async def complete_host_bars(self, requirement, key):
         """Read the requested closed 1m bars through the shared repair coordinator."""
         rows = await storage_call(self._rows, requirement)
-        if not self._complete(rows, requirement):
+        calendar = self._calendar(requirement)
+        if not self._complete(rows, requirement, calendar=calendar):
             if self.coordinator is None:
                 raise PreparationError("DOWNLOAD_UNAVAILABLE", "Historical download service is unavailable")
             repair = RepairRequest(
@@ -189,7 +213,7 @@ class BarPreparationAdapter:
             else:
                 await self.coordinator.request_and_wait(repair)
             rows = await storage_call(self._rows, requirement)
-        if not self._complete(rows, requirement):
+        if not self._complete(rows, requirement, calendar=calendar):
             raise PreparationError("COVERAGE_INCOMPLETE", "Historical source did not supply the complete requested range", retryable=True)
         await storage_call(self._record_host_history)
         return rows
@@ -234,7 +258,8 @@ class BarPreparationAdapter:
             if "series is unavailable" in str(exc):
                 return None
             raise
-        return rows if self._complete(rows, requirement, require_trusted_source=False) else None
+        return rows if self._complete(rows, requirement, calendar=self._calendar(requirement),
+                                      require_trusted_source=False) else None
 
     def _write(self, rows, requirement, origin="host_history"):
         # Verify OHLC values with the existing importer at publication as well.
@@ -677,7 +702,8 @@ class BarPreparationAdapter:
                     manifest = self.local_data.freeze_host_bars(
                         rows, dataset_id=f"local-{context[:32]}", name=f"{exchange} {symbol} {interval}",
                         exchange=exchange, market_type=market, symbol=symbol, interval=interval,
-                        chart_context_hash=f"sha256:{context}", series_identity=series_identity)
+                        chart_context_hash=f"sha256:{context}", series_identity=series_identity,
+                        calendar=self._calendar(Requirement.model_validate(fragments[0]["requirement"])))
                     self._record_dataset(manifest["dataset_id"], reservation=reservation)
                 result["inputs"].append({"exchange": exchange, "market_type": market, "symbol": symbol,
                                          "interval": interval, "dataset_id": manifest["dataset_id"],

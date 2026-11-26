@@ -721,6 +721,7 @@ async def _startup_event_impl() -> None:
                 backtest_runtime=getattr(app.state, "backtest_runtime", None),
                 host_history_path=KLINES_DB_PATH,
                 replay_library=getattr(app.state, "replay_library", None),
+                calendar_for=getattr(getattr(app.state, "data_manager", None), "series_calendar", None),
             ),
             enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
         )
