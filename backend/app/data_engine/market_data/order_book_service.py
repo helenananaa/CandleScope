@@ -230,6 +230,9 @@ class OrderBookService:
                     raise RuntimeError(
                         "order-book engine identity is active without a physical lease",
                     )
+                # A new physical feed may number its snapshots from 1 again;
+                # the previous feed's last record must not outrank them.
+                self.hub.reset_state((validated,))
                 self._physical[validated] = reservation
                 self._start_worker()
                 self._activation_started_at_ms[validated] = int(time.time() * 1000)
