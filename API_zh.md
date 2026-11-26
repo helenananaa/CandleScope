@@ -748,6 +748,7 @@ cache limits 请求体：
 | 回测 | `/backtests` | 回测运行与报告，含 `/backtests/native`、`/backtests/continuous` 和 `/backtests/external` |
 | 模拟账户 | `/trading` | 模拟交易账户、订单和交易日志 |
 | 只读账户 | `/readonly-accounts` | 只读同步和对账真实交易所账户 |
+| 数据源 | `/data-sources` | 保存、测试和删除内置数据源（Twelve Data）的个人密钥；只接受桌面版会话，密钥不会返回 |
 | 插件 | `/api/v2/plugins`（不在 `/api/v1` 下） | 插件目录、安装和插件运行时 |
 | 支持 | `/api/v1/support` | 生成支持报告用的诊断信息 |
 

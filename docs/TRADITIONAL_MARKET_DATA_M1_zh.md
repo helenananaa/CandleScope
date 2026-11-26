@@ -34,7 +34,7 @@ M1 对 `/time_series` 显式发送 `adjust=none`。这意味着当前保存的�
 
 ## 3. 配置
 
-在启动后端的环境中设置：
+桌面版可以在「设置 → 数据源」中保存 key（macOS 钥匙串 / Windows 凭据管理器，ADR-DATA-002 D4），保存的 key 优先于下面的环境变量。没有保存 key 时，在启动后端的环境中设置：
 
 ```powershell
 $env:INGESTION_TWELVE_DATA_API_KEY = "your-server-side-key"

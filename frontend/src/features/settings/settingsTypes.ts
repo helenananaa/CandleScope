@@ -14,6 +14,7 @@ export type SettingsCategory =
   | "appearance"
   | "network"
   | "exchanges"
+  | "dataSources"
   | "data"
   | "ai"
   | "plugins"

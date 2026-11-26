@@ -100,7 +100,7 @@ shared adapter 允许 L3 使用 HTTP fallback，同时不停止其他订阅者�
 | `INGESTION_HTTP_BASE_URLS_FUTURES` | Binance futures HTTP endpoints |
 | `INGESTION_WS_BASE_URLS_FUTURES` | Binance futures WS endpoints |
 | `INGESTION_HTTP_TIMEOUT` | HTTP 请求超时 |
-| `INGESTION_TWELVE_DATA_API_KEY` | Twelve Data 服务端 API key；未配置时 provider fail-closed |
+| `INGESTION_TWELVE_DATA_API_KEY` | Twelve Data API key 的后备来源；设置 → 数据源中保存的 key（宿主凭据库）优先。两者都没有时 provider fail-closed |
 | `INGESTION_TWELVE_DATA_HTTP_BASE_URLS` | Twelve Data HTTP endpoint，默认 `https://api.twelvedata.com` |
 | `INGESTION_TWELVE_DATA_WS_ENABLED` | 是否启用 Twelve Data Basic 共享实时价格流，默认 `true` |
 | `INGESTION_TWELVE_DATA_WS_MAX_SYMBOLS` | 逻辑订阅上限，默认且硬性封顶 `8` |
