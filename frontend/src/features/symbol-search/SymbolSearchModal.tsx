@@ -9,7 +9,7 @@ import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { formatExchangeLabel, formatSymbolLabel } from "./symbolSearchFilter";
+import { formatExchangeLabel, formatSymbolLabel, venueContractUnderlying } from "./symbolSearchFilter";
 import { SourcePicker } from "./SourcePicker";
 import { useSymbolSearchRuntime } from "./useSymbolSearchRuntime";
 import type { UseSymbolSearchRuntimeOptions } from "./useSymbolSearchRuntime.js";
@@ -205,6 +205,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                   );
                   const isFavorite = favoriteSet.has(symbol._key);
                   const inWatchlists = getSymbolWatchlists(symbol._key);
+                  const underlying = venueContractUnderlying(symbol);
 
                   return (
                     <div
@@ -230,6 +231,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       <span className="sym-modal-col-pair sym-modal-row-pair" title={symbol.symbol}>
                         <span className="sym-modal-pair-label">{formatSymbolLabel(symbol)}</span>
                         {isCurrent && <Badge tone="accent">{t("search.current")}</Badge>}
+                        {underlying && <Badge tone="warning" title={t("search.contractPriceHint")}>{t("search.contractPrice")}</Badge>}
                         {hasWatchlists && inWatchlists.length > 0 && (
                           <span className="sym-modal-wl-indicators">
                             {inWatchlists.map((watchlist) => (
@@ -245,6 +247,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       </span>
                       <span className="sym-modal-col-base sym-modal-row-base">
                         <span className="sym-modal-cell-text">{typeof symbol.displayName === "string" && symbol.displayName ? symbol.displayName : symbol.baseAsset}</span>
+                        {underlying && <small className="sym-modal-cell-note">{underlying.regionKey ? tKey(`search.region.${underlying.regionKey}`) : tKey(`search.asset.${underlying.assetKey}`)}</small>}
                         {symbol.groupStart && (symbol.groupSourceCount || 0) > 1 && <small className="sym-modal-cell-note">{t("search.sourceCount", { count: symbol.groupSourceCount || 0 })}</small>}
                       </span>
                       <span className="sym-modal-col-quote">{symbol.quoteAsset}</span>

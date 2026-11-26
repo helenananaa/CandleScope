@@ -505,6 +505,11 @@ def serialize_exchange_capabilities(capabilities: Any) -> dict[str, Any]:
     return payload
 
 
+# Asset classes a venue contract may track. Same vocabulary as the series
+# identity's asset_class, except crypto, which is the default and stays empty.
+UNDERLYING_CLASSES = frozenset({"", "stock", "etf", "forex", "index", "commodity"})
+
+
 @dataclass(slots=True)
 class SymbolInfo:
     """Canonical symbol metadata used by the frontend and registry cache."""
@@ -548,6 +553,11 @@ class SymbolInfo:
     quantity_origin: str = ""
     quantity_rule_model: str = ""
     contract_value_model: str = ""
+    # What a venue contract tracks (ADR-DATA-002 Q1): grouping and labels only.
+    # It never enters the series identity; a Binance XAUUSDT perpetual stays a
+    # crypto-venue series whose underlying_class is commodity.
+    underlying_class: str = ""
+    underlying_region: str = ""
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -591,6 +601,17 @@ class SymbolInfo:
         ).strip()
         self.venue_mic = str(self.venue_mic or "").strip().upper()
         self.underlying_symbol = str(self.underlying_symbol or "").strip().upper()
+        self.underlying_class = str(self.underlying_class or "").strip().lower()
+        if self.underlying_class not in UNDERLYING_CLASSES:
+            raise ValueError("unsupported underlying_class")
+        self.underlying_region = str(self.underlying_region or "").strip().lower()
+        if self.underlying_region and (
+            not self.underlying_class
+            or not self.underlying_region.isascii()
+            or not self.underlying_region.isalpha()
+            or len(self.underlying_region) > 8
+        ):
+            raise ValueError("underlying_region must be a short region code on a classified underlying")
         self.option_right = str(self.option_right or "").strip().lower()
         if self.option_right not in {"", "call", "put"}:
             raise ValueError("option_right must be call, put, or empty")
@@ -673,6 +694,10 @@ class SymbolInfo:
                 data[key] = value
         if self.contract_type:
             data["contractType"] = self.contract_type
+        if self.underlying_class:
+            data["underlyingClass"] = self.underlying_class
+        if self.underlying_region:
+            data["underlyingRegion"] = self.underlying_region
         if self.price_tick_size:
             data["priceTickSize"] = self.price_tick_size
         lot = next((item for item in self.raw.get("filters", []) if item.get("filterType") == "LOT_SIZE"), {})

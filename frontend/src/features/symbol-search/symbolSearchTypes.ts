@@ -13,6 +13,9 @@ export interface SymbolSearchItem extends Record<string, unknown> {
   priceAdjustment?: string;
   sessionVariant?: string;
   volumeSemantics?: string;
+  /** What a venue contract tracks (Binance XAUUSDT: commodity). Never part of the series identity. */
+  underlyingClass?: string;
+  underlyingRegion?: string;
   seriesKey?: string;
   groupKey?: string;
   groupStart?: boolean;

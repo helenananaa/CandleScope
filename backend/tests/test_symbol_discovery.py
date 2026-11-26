@@ -42,6 +42,23 @@ def test_stocks_do_not_group_across_venues_or_adjustments():
     assert len({item["groupKey"] for item in result["symbols"]}) == 3
 
 
+
+def test_venue_contracts_are_filed_under_their_underlying_without_merging_with_it():
+    gold_perp = row("binance", "XAUUSDT", "futures", baseAsset="XAU", contractType="TRADIFI_PERPETUAL",
+                    underlyingClass="commodity", displayName="Gold")
+    gold_spot = row("twelvedata", "XAU/USD", "commodity", baseAsset="XAU", quoteAsset="USD",
+                    assetClass="commodity", venue="PHYSICAL", displayName="Gold Spot")
+    rows = [row(), gold_perp, gold_spot]
+    commodities = discovery.build_result(rows, discovery.DiscoveryQuery(asset_class="commodity"), [])
+    assert [item["symbol"] for item in commodities["symbols"]] == ["XAU/USD", "XAUUSDT"]
+    assert len({item["groupKey"] for item in commodities["symbols"]}) == 2
+    # The perpetual keeps its crypto-venue identity; only the filter files it under gold.
+    assert next(item for item in commodities["symbols"] if item["symbol"] == "XAUUSDT")["assetClass"] == "crypto"
+    assert {item["key"]: item["count"] for item in commodities["facets"]["assetClasses"]} == {"commodity": 2, "crypto": 1}
+    crypto = discovery.build_result(rows, discovery.DiscoveryQuery(asset_class="crypto"), [])
+    assert [item["symbol"] for item in crypto["symbols"]] == ["BTCUSDT"]
+    assert discovery.build_result(rows, discovery.DiscoveryQuery(search="gold"), [])["total"] == 2
+
 def test_search_facets_pagination_and_revision_guard():
     rows = [row(), row("okx"), row("provider", "AAPL", "stock", displayName="Apple Inc", venue="XNAS", assetClass="stock", quoteAsset="USD")]
     result = discovery.build_result(rows, discovery.DiscoveryQuery(search="apple", asset_class="stock"), [])

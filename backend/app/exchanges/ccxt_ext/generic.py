@@ -31,6 +31,7 @@ from app.exchanges.catalog_worker import (
 )
 from app.exchanges.contract_rules import ccxt_contract_rules, precision_increment
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
+from app.exchanges.venue_underlyings import venue_contract_underlying, warn_unknown_underlyings
 from app.exchanges.pagination import ReverseTimePaginationPolicy
 from app.exchanges.public_admission import (
     PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
@@ -950,6 +951,7 @@ async def load_ccxt_symbols(
             (resolved_selection,) if resolved_selection else entry.market_types
         )
         symbols: list[SymbolInfo] = []
+        unknown_underlyings: set[str] = set()
         for market in exchange.markets.values():
             if market.get("active") is False:
                 continue
@@ -968,6 +970,11 @@ async def load_ccxt_symbols(
             quote = str(market.get("quote") or "").strip()
             if not symbol or not base or not quote:
                 continue
+            raw_info = market.get("info")
+            underlying = venue_contract_underlying(entry.exchange_id, selection or selected, raw_info)
+            if underlying is None:
+                unknown_underlyings.add(str(raw_info.get("underlyingType") or ""))
+                continue
             symbols.append(
                 SymbolInfo(
                     symbol=symbol,
@@ -982,6 +989,7 @@ async def load_ccxt_symbols(
                     listed_at_ms=_timestamp(market.get("created")),
                     expiry_at_ms=_timestamp(market.get("expiry")),
                     price_tick_size=_price_tick_size(exchange, market),
+                    **underlying,
                     **({"volume_semantics": GATE_INVERSE_CONTRACTS.volume_semantics}
                        if entry.exchange_id == "gate" and selected == "swap.inverse" else {}),
                     **ccxt_contract_rules(exchange, market, tick_mode=ccxt.TICK_SIZE,
@@ -990,6 +998,7 @@ async def load_ccxt_symbols(
             )
     finally:
         await close_ccxt_exchange(exchange)
+    warn_unknown_underlyings(entry.exchange_id, unknown_underlyings)
     symbols.sort(key=lambda item: item.symbol)
     if native_ids:
         for symbol in symbols:

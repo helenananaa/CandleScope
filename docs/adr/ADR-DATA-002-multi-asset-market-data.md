@@ -77,7 +77,10 @@ Twelve Data（M1/M2，`docs/TRADITIONAL_MARKET_DATA_M1_zh.md`、`M2`）是传统
 
 - 24×7 交易：XAUUSDT、AAPLUSDT、CLUSDT 在 2026-11-21 至 11-23 的 1h K 线里，48 根周末 K 线都有成交量。
 - `data.binance.vision` 有月度归档（`XAUUSDT-1m-2026-10.zip` 返回 200）。
-- 被我们自己的目录代码过滤：`exchanges/plugins/binance/adapter.py:668` 只放行 `PERPETUAL`。
+- 实际运行的 Binance U 本位目录走 CCXT 通用加载（`ccxt_ext/generic.py` 的 `load_ccxt_symbols`），246 个
+  TRADING 合约已经在目录里，只是没有分类，看起来和加密永续一样。原生目录
+  （`exchanges/plugins/binance/adapter.py` 的 `_load_futures_symbols`）只放行 `PERPETUAL`，会把它们过滤掉。
+  （本节初稿把原生目录当成了实际路径，D0 实测后更正。）
 - CCXT 4.5.60 不认识这个合约类型，只是因为交割日是远期占位值 `4133404800000`，才碰巧被归成 swap
   （`binance.parse_market`，249 个里 248 个；SETTLING 的 ANTHROPICUSDT 有真实交割日）。
 - 其他 CCXT 交易所的 TradFi 合约已经作为普通 swap 混在目录里，没有分类，并按 24×7 处理。
@@ -231,7 +234,7 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
   宿主声明能接受的连接器版本范围和必需 schema；不满足就拒绝加载，不回退。
 - **它是交易所连接器，不只是数据插件**：行情 + 账户（#176），契约按两个 contribution 设计。
 - **独立发版本身不会开放更多品种**：品种来自交易所运行时返回的目录。TradFi 分类按交易所写在
-  `venue_strategies.py`，不依赖升级 CCXT。
+  `exchanges/venue_underlyings.py`（原生目录和 CCXT 目录共用），不依赖升级 CCXT。
 
 ### 7.4 用户自己接数据
 
@@ -286,8 +289,9 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 
 | 阶段 | 版本 | 内容 | 验收 |
 | --- | --- | --- | --- |
-| D0 | 1.1 | Binance 放行 `TRADIFI_PERPETUAL`；`underlying_class` 分组和"合约价格"标注；合约规则沿用 `binance_contract_rules` | XAUUSDT、CLUSDT、AAPLUSDT：图表、Pine/Python 策略、FOLLOW、回放、练习账户、月度归档都跑通 |
-| D0b | 1.1 | CCXT 交易所的 TradFi 合约按 `venue_strategies.py` 分类，并逐家核对交易时段；Hyperliquid HIP-3 加载 | 至少一个非 Binance 交易所的黄金、原油合约可用，非 24×7 的品种不报缺口 |
+| D0 | 1.1 | Binance 原生目录和 CCXT 目录（`binance`、`binanceusdm`）都按 `underlyingType` 分类 `TRADIFI_PERPETUAL`；`underlying_class` 分组和品种搜索里的"合约价格"标注；合约规则沿用 `binance_contract_rules` | XAUUSDT、CLUSDT、AAPLUSDT：图表、Pine/Python 策略、FOLLOW、回放、练习账户、月度归档都跑通 |
+| D0c | 1.1 | "合约价格"标注跟到图表标题、策略报告、回放和练习账户（按品种元数据查 `underlying_class`）；资金费率周期按合约读取（XAU 是 4 小时，策略回测目前默认 8 小时） | 上面三个合约在这四处都看得到标注；XAUUSDT 策略结果按 4 小时结算资金费 |
+| D0b | 1.1 | 其他 CCXT 交易所的 TradFi 合约按 `venue_underlyings.py` 分类，并逐家核对交易时段；Hyperliquid HIP-3 加载 | 至少一个非 Binance 交易所的黄金、原油合约可用，非 24×7 的品种不报缺口 |
 | D1 | 1.1 | SeriesRef 贯穿策略测试、研究来源、回放、数据准备、练习账户；hash 规则按 §3 | 用 Twelve Data AAPL 1m（环境变量 key）跑通图表 → 策略测试 → 回放 → 练习账户；现有运行和回放的 hash 不变 |
 | D2 | 1.1 | 完整性改用日历；持续策略去掉加密限定，改看日历和能力 | 美股休市、节假日、半日市不报不完整；Binance 和 OKX 现有结果不变 |
 | D3 | 1.1 | §5 的名字判断全部改成能力 | 对 Binance/OKX 行为不变；无该能力的来源明确提示不支持 |
