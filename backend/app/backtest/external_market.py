@@ -6,6 +6,7 @@ from app.market_dataset.trades import assert_trade_stream
 from app.simulation.book_kernel import assert_book_chain
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
+from .pine_ticker import pine_ticker_symbol
 
 
 def freeze_execution(native, payload, bars, *, allow_bar_callbacks=False):
@@ -23,10 +24,10 @@ def freeze_execution(native, payload, bars, *, allow_bar_callbacks=False):
         from .runtime import _read_trade_events
         runtime = native.runtime
         dataset = runtime._freeze_trade_dataset(exchange=payload.get("exchange", "binance"), market_type=payload.get("market_type", "usdm"),
-            symbol=payload["context"]["symbol"].split(":")[-1], start_time_ms=payload["start_time_ms"], end_time_ms=payload["end_time_ms"])
+            symbol=pine_ticker_symbol(payload["context"]["symbol"]), start_time_ms=payload["start_time_ms"], end_time_ms=payload["end_time_ms"])
         events = _read_trade_events(runtime._require_trade_archive(), dataset, max_events=runtime.settings.max_trade_events)
     else:
-        if data["symbol"] != payload["context"]["symbol"].split(":")[-1]:
+        if data["symbol"] != pine_ticker_symbol(payload["context"]["symbol"]):
             raise BacktestError("DATA_SNAPSHOT_MISMATCH", "execution symbol differs from chart")
         check_execution_market(data, payload)
         events = tuple(MarketEvent(sequence=i+1, event_time_ms=item["time_ms"], role=item["role"], payload=item["payload"]) for i,item in enumerate(data["events"]))

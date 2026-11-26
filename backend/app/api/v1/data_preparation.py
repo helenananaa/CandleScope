@@ -8,6 +8,7 @@ from app.data_preparation.models import STRATEGY_BAR_INPUT_LIMIT, PreparationErr
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
 from app.backtest.workbench_identity import preparation_identity
+from app.backtest.pine_ticker import pine_ticker_symbol
 from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData, WorkbenchBarSettings, PineHostEnvironment
 from app.api.v1.backtests import _operator_python_payload
 
@@ -105,7 +106,7 @@ async def prepare_frozen_external_strategy(request: Request, payload: FrozenExte
     run = payload.run.model_dump(mode="json")
     await call_storage(request, validate_frozen_external, runtime, run)
     requirement = Requirement(exchange=run["exchange"], market_type=run["market_type"],
-        symbol=run["context"]["symbol"].split(":")[-1], role="TRADES",
+        symbol=pine_ticker_symbol(run["context"]["symbol"]), role="TRADES",
         start_ms=run["start_time_ms"], end_ms=run["end_time_ms"] + 1)
     return await invoke_async(lambda: instance.submit(PreparationRequest(
         idempotency_key=payload.idempotency_key, consumer="STRATEGY", requirements=[requirement],
@@ -342,7 +343,8 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
             start = invoke(lambda: warmup_start(interval, start, warmup_bars))
     frozen_context = {**context.wire(), "range_mode": "CUSTOM", "start_time_ms": start, "end_time_ms": end - 1}
     base = Requirement(exchange=context.exchange, market_type=context.market_type,
-                       symbol=context.symbol, start_ms=start, end_ms=end)
+                       symbol=context.symbol, start_ms=start, end_ms=end,
+                       identity=context.identity.to_dict() if context.identity is not None else None)
     requirements = [base]
     if context.fidelity_preference == "PRECISE":
         requirements.append(base.model_copy(update={"role": "TRADES"}))

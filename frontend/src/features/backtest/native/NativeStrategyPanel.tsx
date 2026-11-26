@@ -47,6 +47,7 @@ import { command, contextReference } from "../../app-control/commandRegistry.js"
 import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
 import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
 import { browserHost } from "../../../app/browserHost.js";
+import { klineSeriesIdentityField } from "../../market-data/klineSeriesIdentity.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -426,7 +427,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             ...(automaticExecution === null ? {} : { execution: automaticExecution }),
             contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
             context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
-              interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", ...range } };
+              interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", ...range,
+              ...klineSeriesIdentityField(context.exchange, context) } };
         };
         const range = { start_time_ms: startTime, end_time_ms: endTime - 1 };
         const prepared = await prepareRun("/native-strategy", await submissionFor(range));
@@ -475,6 +477,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       }) : await nativeApi<ChartContextResolution>("/chart-context/resolve", {
         exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
         interval: context.interval, range_mode: "ALL_AVAILABLE", fidelity_preference: "FAST",
+        ...klineSeriesIdentityField(context.exchange, context),
       });
       if (!alive.current) return;
       setResolution(frozen);
@@ -501,6 +504,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             const resolved = await nativeApi<ChartContextResolution>("/chart-context/resolve", {
               exchange: context.exchange, market_type: context.marketType, symbol: context.symbol, interval: context.interval,
               range_mode: "CUSTOM", ...next, fidelity_preference: "FAST",
+              ...klineSeriesIdentityField(context.exchange, context),
             }, undefined, signal);
             if (resolved.status !== "READY") return null;
             const payload = await chartRunPayload(resolved, next);

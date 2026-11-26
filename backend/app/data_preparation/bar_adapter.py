@@ -13,6 +13,7 @@ from pathlib import Path
 
 from app.data_engine.data_manager.backfill_contracts import RepairRequest
 from app.data_engine.kline_quality import source_is_trusted_final
+from app.data_engine.series_identity import SERIES_IDENTITY_METADATA_KEY
 from app.data_engine.storage.klines_repo import query_klines
 
 from .models import (
@@ -133,10 +134,12 @@ class BarPreparationAdapter:
             raise PreparationError("STORAGE_BUDGET", "Requested range exceeds the estimated input budget")
 
     def _rows(self, requirement):
+        identity = requirement.series_identity()
         return self.query(requirement.symbol, requirement.interval,
                           start_ms=requirement.start_ms, end_ms=requirement.end_ms - 1,
                           limit=(requirement.end_ms - requirement.start_ms) // 60_000 + 1,
-                          order="ASC", exchange=requirement.exchange, market_type=requirement.market_type)
+                          order="ASC", exchange=requirement.exchange, market_type=requirement.market_type,
+                          **({"series_identity": identity} if identity is not None else {}))
 
     @staticmethod
     def _complete(rows, requirement, *, require_trusted_source=True):
@@ -169,7 +172,8 @@ class BarPreparationAdapter:
                 start_ms=requirement.start_ms, end_ms=requirement.end_ms - 60_000,
                 exchange=requirement.exchange, market_type=requirement.market_type,
                 reason="data_preparation", priority=40, requester=f"preparation:{key}",
-                wait_policy="wait", metadata={"requires_trusted_finality": True},
+                wait_policy="wait", metadata={"requires_trusted_finality": True,
+                    **({SERIES_IDENTITY_METADATA_KEY: requirement.identity} if requirement.identity is not None else {})},
             )
             if hasattr(self.coordinator, "acquire_demand"):
                 request_id = self.coordinator.request(repair)
@@ -202,6 +206,9 @@ class BarPreparationAdapter:
         return None
 
     def _archive_rows(self, requirement):
+        # Replay archives hold exchange-native series only (ADR-DATA-002 D1).
+        if requirement.identity is not None:
+            return None
         repository = getattr(self.replay_service, "_repository", None)
         if repository is None:
             return None

@@ -5,6 +5,7 @@ import { seriesKeyFor } from "../feed/fetchPlanner.js";
 import { buildChartDatasetKey } from "../../chart-session/chartDatasetKey.js";
 import {
   isLegacyKlineSeriesIdentity,
+  klineSeriesIdentityField,
   klineSeriesIdentityQuery,
   resolveKlineSeriesIdentity,
 } from "../klineSeriesIdentity.js";
@@ -101,4 +102,18 @@ test("Twelve Data identity reaches API query and every chart cache boundary", ()
   assert.match(seriesKeyFor(twelveData), /^twelvedata:xngs:stock:ohlcv:raw:regular:shares:/);
   assert.match(buildChartDatasetKey(twelveData), /^twelvedata:xngs:stock:ohlcv:raw:regular:shares::/);
   assert.match(buildSeriesWindowKey(twelveData), /^twelvedata:xngs:stock:ohlcv:raw:regular:shares::/);
+});
+
+test("request bodies carry an identity field only for a non-default series (ADR-DATA-002 D1)", () => {
+  assert.deepEqual(klineSeriesIdentityField("binance", {}), {});
+  assert.deepEqual(klineSeriesIdentityField("binance", { providerId: "binance" }), {});
+  assert.deepEqual(klineSeriesIdentityField("twelvedata", {
+    providerId: "twelvedata", venue: "XNGS", assetClass: "stock", seriesVariant: "ohlcv",
+    priceAdjustment: "raw", sessionVariant: "regular", volumeSemantics: "shares",
+  }), {
+    identity: {
+      provider_id: "twelvedata", venue: "xngs", asset_class: "stock", series_variant: "ohlcv",
+      price_adjustment: "raw", session_variant: "regular", volume_semantics: "shares",
+    },
+  });
 });
