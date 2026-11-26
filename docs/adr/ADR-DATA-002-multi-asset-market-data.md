@@ -93,10 +93,14 @@ Twelve Data（M1/M2，`docs/TRADITIONAL_MARKET_DATA_M1_zh.md`、`M2`）是传统
   按它资产代码的 `NCSK/NCCO/NCFX/NCSI` 命名空间分类。同一个标的各家归类不一（PAXG/XAUT 在 Bitget、Gate、KuCoin
   等是金属，在 Bybit、Kraken、Deribit 是加密；BloFin 把 XAU、XAG 标成 Crypto），一律以交易所自己的标记为准。
   Hyperliquid HIP-3 已在目录里（CCXT 默认只加载前 9 个 dex，现改为全部），但市场数据没有类别字段，暂不分类。
+  HIP-3 市场由部署者无许可上架，名字会被复用、改名或下架；手工维护的 `dex:NAME` 表会悄悄过期，错标比不标更糟。
+  等 Hyperliquid 提供资产类别，或合约 v2（D6）允许 provider 自己声明后再分类。
   MEXC、HTX、Toobit、Paradex、LBank、Lighter、WOOFi Pro 没有可靠类别标记，不分类。
 - 交易时段（2026-11-21/22 周末 1h K 线）：上述交易所的黄金、原油、股票合约都 24×7 有成交；例外是
   BingX 外汇（`NCFX…`，周五 22:00 至周日约 18:00 UTC 无 K 线）和 Hibachi（外汇和 XAG 周末无成交）。
   股票合约在 Deribit、Crypto.com、Kraken 有零成交的小时，但 K 线不缺。
+  Hyperliquid HIP-3 也是 24×7：10 个 dex 里有活跃市场的是 xyz、para、io、mkts，共 178 个，周末 48 根 1h K 线都在。
+  股票、ETF、指数有零成交的小时，但 K 线不缺；11-24 才上线的 3 个市场，上线后也没有缺口。
 - 分类只决定搜索里的标签，不决定能否画图。图表要求 K 线边界有证据（`native_bar_spec`，ISSUE 117）：
   现在只有 OKX、Binance 有声明，Bybit、Bitget 的 linear 1m 和 Gate 的 linear 5m 有 fixture；
   BingX、BloFin、KuCoin、XT、Kraken、Deribit、Crypto.com、WEEX、Phemex、Hibachi、Hyperliquid 的合约能搜到，
