@@ -1,6 +1,6 @@
 # ADR-DATA-002：多市场行情——统一数据来源契约，进入系统后数据平等
 
-- 状态：Proposed（待用户确认 §10 的 Q1–Q7）
+- 状态：Accepted（2026-11-26 用户确认，§10 的 Q1–Q7 全部按提议执行）
 - 日期：2026-11-26
 - 基线：`main@1a12541fe`（1.0.1）
 - 关联：#572（数据、存储与行情来源）、#455（provider→venue 选择与旧引用映射）、#353（Bybit 与非 CCXT 自定义 provider）、
@@ -266,6 +266,8 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 | CME 交易所级期货 | [Databento](https://databento.com/docs/knowledge-base/new-users/usage-based-pricing-and-data-credits)：送 $125 历史额度，实时订阅约 $179/月 | 付费 | — | — | 用户自带付费 key |
 
 ## 10. 需要确认的问题
+
+2026-11-26 用户确认：Q1–Q7 全部按下列提议执行。
 
 - **Q1 TradFi 合约的身份。** 提议：保持现有加密身份（交易所 binance、24×7、合约张数成交量），新增
   `underlying_class` 只用于分组和关联，不进序列身份。理由：数据语义确实是加密交易所的永续合约，不需要迁移存储。
