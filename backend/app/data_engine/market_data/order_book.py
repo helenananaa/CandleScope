@@ -460,11 +460,20 @@ class OrderBookEngine:
         }
 
     def activate_stream(self, identity: OrderBookIdentity) -> bool:
+        """Start one feed; its update ids are never ordered against a previous feed's.
+
+        Provider-managed books (CCXT) number snapshots per source session, so
+        a restarted feed begins again at 1.  Keeping the stopped feed's last
+        snapshot would reject every new one as stale until the new count
+        passed the old one.
+        """
+
         normalized = _normalize_identity(identity)
         if normalized in self._active_streams:
             return False
         self._reserve_capacity(normalized)
-        self._states.setdefault(normalized, None)
+        self._states[normalized] = None
+        self._states.move_to_end(normalized)
         self._active_streams.add(normalized)
         self._metrics["stream_activations"] += 1
         return True

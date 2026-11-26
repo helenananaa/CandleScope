@@ -501,6 +501,41 @@ async def test_late_callback_from_released_generation_is_rejected() -> None:
 
 
 @_async_test
+async def test_restarted_feed_publishes_although_its_update_ids_start_again() -> None:
+    # Provider-managed books (CCXT) number snapshots per source session.  A
+    # feed that ran for a while and was restarted (last consumer left, then a
+    # panel retry or the HTTP snapshot route asked again) starts from 1.  The
+    # old feed's last snapshot must not reject the new feed's snapshots.
+    factory = _Factory()
+    service = _service(factory)
+    key = _key()
+    await service.ensure_stream(key, consumer_id="panel")
+    for update_id in range(1, 461):
+        await factory.emit(key, _event(update_id))
+    await _wait_until(
+        lambda: (current := service.current(key)) is not None
+        and current.event.sequence == 460,
+    )
+    old_revision = service.current(key).revision  # type: ignore[union-attr]
+    await service.release_stream(key, consumer_id="panel")
+    assert len(factory.stop_calls) == 1
+
+    task = asyncio.create_task(
+        service.transient_snapshot(key, consumer_id="http-request", timeout_seconds=1),
+    )
+    await _wait_until(lambda: len(factory.start_calls) == 2)
+    await factory.emit(key, _event(1))
+    record = await task
+
+    assert record.event.sequence == 1
+    assert record.revision > old_revision
+    diagnostics = service.diagnostics()
+    assert diagnostics["events_stale"] == 0
+    assert diagnostics["hub_publish_rejected"] == 0
+    await service.shutdown()
+
+
+@_async_test
 async def test_queued_event_is_rechecked_against_generation_at_dequeue() -> None:
     factory = _Factory()
     service = _service(factory)
