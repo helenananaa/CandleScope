@@ -11,6 +11,7 @@ import random
 import threading
 import time
 import weakref
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -76,6 +77,11 @@ class _MarketRefreshState:
 
 
 _market_refresh_state: dict[tuple[str, str], _MarketRefreshState] = {}
+# Rows that query-only providers (Twelve Data) returned to a bounded search. They
+# have no full catalog, so synchronous metadata readers find a market here once
+# it has been searched or selected (ADR-DATA-002 D1).
+_PROVIDER_SEARCH_ROWS_LIMIT = 4096
+_provider_search_rows: OrderedDict[tuple[str, str, str], dict[str, Any]] = OrderedDict()
 _market_refresh_tasks: dict[tuple[str, str], asyncio.Task[int]] = {}
 _market_refresh_timers: dict[tuple[str, str], asyncio.TimerHandle] = {}
 _market_auto_refresh_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
@@ -155,6 +161,45 @@ def get_cached_symbol_metadata(
     for item in _symbol_cache.get(key, ()):
         if str(item.get("symbol", "")).upper() == normalized_symbol:
             return copy.deepcopy(item)
+    searched = _provider_search_rows.get((*key, normalized_symbol))
+    return copy.deepcopy(searched) if searched is not None else None
+
+
+def _remember_provider_rows(exchange: str, market_type: str, rows: list[dict[str, Any]]) -> None:
+    key = _market_cache_key(exchange, market_type)
+    for row in rows:
+        symbol = str(row.get("symbol", "")).strip().upper()
+        if not symbol:
+            continue
+        entry = (*key, symbol)
+        _provider_search_rows[entry] = copy.deepcopy(row)
+        _provider_search_rows.move_to_end(entry)
+    while len(_provider_search_rows) > _PROVIDER_SEARCH_ROWS_LIMIT:
+        _provider_search_rows.popitem(last=False)
+
+
+async def ensure_provider_symbol_metadata(
+    exchange: str,
+    market_type: str,
+    symbol: str,
+) -> dict[str, Any] | None:
+    """Find one symbol of a query-only provider by a bounded search."""
+
+    cached = get_cached_symbol_metadata(exchange, market_type, symbol)
+    if cached is not None:
+        return cached
+    # Venue-qualified symbols (AAPL:NASDAQ) are found by their ticker.
+    for term in dict.fromkeys((symbol.strip(), symbol.strip().split(":", 1)[0])):
+        try:
+            rows = await search_provider_symbols(exchange=exchange, market_type=market_type, search=term)
+        except SymbolCatalogError as exc:
+            logger.warning("Provider symbol lookup failed for %s:%s:%s: %s", exchange, market_type, symbol, exc)
+            return None
+        if rows is None:
+            return None
+        found = get_cached_symbol_metadata(exchange, market_type, symbol)
+        if found is not None:
+            return found
     return None
 
 
@@ -178,6 +223,8 @@ def evict_exchange_metadata(exchange: str) -> int:
         if key[0] == normalized_exchange
     }
     removed = sum(len(_symbol_cache.get(key, ())) for key in keys)
+    for entry in [entry for entry in _provider_search_rows if entry[0] == normalized_exchange]:
+        del _provider_search_rows[entry]
     for key in keys:
         _symbol_cache.pop(key, None)
         _market_refresh_state.pop(key, None)
@@ -1109,7 +1156,9 @@ async def search_provider_symbols(
             str(exc),
             retryable=False,
         ) from exc
-    return [item.to_dict() for item in symbols]
+    rows = [item.to_dict() for item in symbols]
+    _remember_provider_rows(normalized_exchange, market_type, rows)
+    return rows
 
 
 async def query_symbols(

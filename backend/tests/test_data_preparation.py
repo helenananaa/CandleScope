@@ -1001,3 +1001,33 @@ async def test_bar_adapter_reads_and_repairs_the_requirement_series(tmp_path):
     assert len(repairs) == 1
     assert repairs[0].metadata["series_identity"] == STOCK_IDENTITY
     assert reads and all(read == KlineSeriesIdentity(**STOCK_IDENTITY) for read in reads)
+
+
+@async_test
+async def test_a_replay_market_serves_only_the_series_it_holds(tmp_path):
+    pytest.importorskip("pyarrow")
+    from app.data_engine.series_identity import identity_from_mapping
+    from app.replay.catalog import ReplaySeriesIdentity
+    from app.replay.history_archive import ReplayHistoryArchiveWriter, ReplayHistoryRepository
+
+    root = tmp_path / "archive"
+
+    def query(*_args, series_identity=None, **_kwargs):
+        return bars() if series_identity is not None else []
+
+    replay = NS(_repository=ReplayHistoryRepository(root),
+                settings=NS(replay_history_archive_dir=root, replay_history_origin_uri=None))
+    adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=None, replay_service=replay, query=query)
+    stock = _stock_requirement(symbol="AAPL:NASDAQ")
+    receipt, _ = await adapter.acquire(stock, "stock")
+    assert receipt["origin"] != "replay_archive"
+    request = PreparationRequest(idempotency_key="replay-stock-1", consumer="REPLAY", requirements=[stock])
+    await adapter.publish(request, [{"key": "stock", "requirement": stock.model_dump(), "receipt": receipt}], "job-1")
+
+    manifest = ReplayHistoryArchiveWriter(root).current_manifest(
+        ReplaySeriesIdentity("twelvedata", "stock", "AAPL:NASDAQ"), "1m")
+    assert manifest.identity.series == identity_from_mapping("twelvedata", STOCK_IDENTITY)
+    # The market's own series comes back from the archive; the route's exchange default does not.
+    again, _ = await adapter.acquire(stock, "again")
+    assert again["origin"] == "replay_archive"
+    assert adapter._archive_rows(stock.model_copy(update={"identity": None})) is None

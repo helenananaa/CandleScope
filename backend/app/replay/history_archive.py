@@ -1062,8 +1062,27 @@ def _catalog_directory(
         / "catalogs"
         / _safe_component(identity.exchange, "exchange")
         / _safe_component(identity.market_type, "market_type")
-        / _safe_component(identity.symbol, "symbol")
+        / _symbol_path_component(identity.symbol)
         / _interval_path_component(interval)
+    )
+
+
+def _symbol_path_component(symbol: str) -> str:
+    """A path for every replay symbol; existing safe symbols keep their name.
+
+    Venue-qualified symbols (Twelve Data ``AAPL:NASDAQ``) contain ``:``, which
+    paths cannot hold. They are spelled ``_`` + the symbol with every byte
+    outside ``[A-Za-z0-9.]`` written ``-xx``. A safe symbol never starts with
+    ``_``, and ``-`` always starts an escape, so no two symbols share a path.
+    """
+
+    normalized = validate_identifier(symbol, field_name="symbol")
+    if _SAFE_COMPONENT.fullmatch(normalized) is not None and normalized not in {".", ".."}:
+        return normalized
+    return "_" + "".join(
+        character if character.isascii() and (character.isalnum() or character == ".")
+        else "".join(f"-{byte:02x}" for byte in character.encode())
+        for character in normalized
     )
 
 
@@ -1367,6 +1386,13 @@ class ReplayHistoryArchiveWriter:
                 f"unsupported replay-history interval: {interval}"
             )
         existing = self.current_manifest(identity, interval)
+        if existing is not None and existing.identity.series != identity.series:
+            if identity.series is not None:
+                raise ReplayHistoryArchiveError(
+                    "replay market already holds another kline series"
+                )
+            # Callers that only know the route keep the market's recorded series.
+            identity = existing.identity
         objects = _merge_catalog_objects(
             existing.objects if merge_current and existing is not None else (),
             tuple(new_objects),

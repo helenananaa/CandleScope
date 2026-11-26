@@ -379,13 +379,18 @@ async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
     from app.exchanges.symbol_catalog import (
+        ensure_provider_symbol_metadata,
         get_cached_symbol_metadata,
         refresh_exchange_metadata,
     )
     from app.replay.runtime import start_replay_runtime
 
-    async def refresh_instrument_metadata(exchange: str, market_type: str):
-        return await refresh_exchange_metadata(exchange, market_type=market_type)
+    async def refresh_instrument_metadata(exchange: str, market_type: str, symbol: str | None = None):
+        refreshed = await refresh_exchange_metadata(exchange, market_type=market_type)
+        if symbol is not None:
+            # Query-only providers (Twelve Data stocks) have no full catalog to refresh.
+            await ensure_provider_symbol_metadata(exchange, market_type, symbol)
+        return refreshed
 
     if sys.platform == "emscripten":
         runtime = await _start_library_replay(app.state.local_data_service)
