@@ -50,6 +50,7 @@ class _PagedBarArchive:
         page_rows: int,
         page_loader: Callable[[int, int, int], tuple[ReplayBar, ...]],
         verified_halts: tuple[ReplayBarHalt, ...] = (),
+        calendar: object | None = None,
     ) -> None:
         interval_ms = parse_interval_ms(snapshot.interval)
         if interval_ms is None or interval_ms <= 0:
@@ -84,7 +85,7 @@ class _PagedBarArchive:
             raise TypeError("page_loader must be callable")
         self.snapshot = snapshot
         self.interval_ms = interval_ms
-        self.schedule = ReplayBarSchedule(snapshot.interval, verified_halts)
+        self.schedule = ReplayBarSchedule(snapshot.interval, verified_halts, calendar)
         self.terminal_open_ms = terminal_open_ms
         self.page_rows = page_rows
         self.page_loader = page_loader
@@ -243,10 +244,11 @@ class PagedBarReplaySource:
         page_rows: int,
         page_loader: Callable[[int, int, int], tuple[ReplayBar, ...]],
         verified_halts: tuple[ReplayBarHalt, ...] = (),
+        calendar: object | None = None,
     ) -> None:
         if not isinstance(snapshot, BarDatasetSnapshot):
             raise TypeError("snapshot must be BarDatasetSnapshot")
-        BarReplaySource._validate_snapshot(snapshot)
+        BarReplaySource._validate_snapshot(snapshot, calendar=calendar)
         if terminal_kind not in {BAR_TERMINAL_SOURCE_LATEST_CLOSED, BAR_TERMINAL_REQUESTED_HORIZON}:
             raise ValueError("paged BAR terminal kind must bind a fixed historical horizon")
         for field_name, value in (
@@ -271,6 +273,7 @@ class PagedBarReplaySource:
             page_rows=page_rows,
             page_loader=page_loader,
             verified_halts=verified_halts,
+            calendar=calendar,
         )
         initial_ref = snapshot.snapshot_ref().to_dict()
         snapshot_ref: dict[str, object] = {
@@ -413,10 +416,10 @@ class PagedBarReplaySource:
 
 
 class BarReplaySource:
-    def __init__(self, snapshot: BarDatasetSnapshot) -> None:
+    def __init__(self, snapshot: BarDatasetSnapshot, *, calendar: object | None = None) -> None:
         if not isinstance(snapshot, BarDatasetSnapshot):
             raise TypeError("snapshot must be BarDatasetSnapshot")
-        self._validate_snapshot(snapshot)
+        self._validate_snapshot(snapshot, calendar=calendar)
         self._snapshot = snapshot
         self._warmup_rows = snapshot.warmup_rows
         self._rows = snapshot.replay_rows
@@ -524,7 +527,7 @@ class BarReplaySource:
         return self._index >= len(self._rows)
 
     @staticmethod
-    def _validate_snapshot(snapshot: BarDatasetSnapshot) -> None:
+    def _validate_snapshot(snapshot: BarDatasetSnapshot, *, calendar: object | None = None) -> None:
         if snapshot.schema_version != BAR_DATASET_SCHEMA_VERSION:
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_MISMATCH,
@@ -570,7 +573,21 @@ class BarReplaySource:
                 "BAR source replay boundary does not match snapshot rows",
             )
         expected_open_ms = rows[0].open_time_ms
+        # ADR-DATA-002 D2: on a session calendar the next bar is the next one it trades.
+        calendar_opens = (
+            None if calendar is None
+            else tuple(calendar.expected_opens(rows[0].open_time_ms, rows[-1].open_time_ms, snapshot.interval))
+        )
+        if calendar_opens is not None and (
+            len(calendar_opens) != len(rows) or calendar_opens[0] != rows[0].open_time_ms
+        ):
+            raise ReplayDomainError(
+                ReplayErrorCode.DATA_GAP,
+                "BAR source rows do not follow their trading calendar",
+            )
         for index, row in enumerate(rows):
+            if calendar_opens is not None:
+                expected_open_ms = calendar_opens[index]
             if not isinstance(row, ReplayBar):
                 raise ReplayDomainError(
                     ReplayErrorCode.DATASET_INCOMPLETE,

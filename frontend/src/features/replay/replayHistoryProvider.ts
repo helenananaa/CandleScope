@@ -41,7 +41,8 @@ export interface ReplayHistoryPolicy {
 export interface ReplayHistoryExcludedRange {
   readonly start_ms: number;
   readonly end_ms: number;
-  readonly reason: "source_gap" | "source_gap_affected_display_bucket";
+  /** `market_closed`: a session-calendar market's closure, not missing data (ADR-DATA-002 D2). */
+  readonly reason: "source_gap" | "source_gap_affected_display_bucket" | "market_closed";
   readonly source_reason: string;
 }
 
@@ -489,7 +490,7 @@ function parseExcludedRange(
   const endMs = integer(source.end_ms, `${path}.end_ms`);
   if (endMs < startMs) fail(path, "must contain an ordered inclusive range");
   const reason = string(source.reason, `${path}.reason`);
-  if (reason !== "source_gap" && reason !== "source_gap_affected_display_bucket") {
+  if (reason !== "source_gap" && reason !== "source_gap_affected_display_bucket" && reason !== "market_closed") {
     fail(`${path}.reason`, "is unsupported");
   }
   return {

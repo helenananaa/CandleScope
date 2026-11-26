@@ -8,17 +8,20 @@ from __future__ import annotations
 
 import asyncio
 import time
+from bisect import bisect_left
 from dataclasses import replace
 
+from app.data_engine.history.expected_bars import opens_before
 from app.data_engine.interval_policy import compute_bucket_start_ms
 from app.replay.bars.builder import ReplayBarBuilder
 from app.replay.canonical import canonical_sha256
+from app.replay.catalog import replay_calendar
 from app.replay.dataset import validate_replay_repository_bar
 from app.replay.display_time import SourceBucketTimeMapper
 from app.replay.errors import ReplayDomainError
 from app.replay.models import ReplaySessionConfig
 from app.replay.training.errors import TrainingRunError
-from app.replay.training.history import _bound_source_start_ms, _decode_bar_snapshot
+from app.replay.training.history import _bound_source_start_ms, _decode_bar_snapshot, declare_market_closures
 
 from .market_inputs import MarketRows
 from .models import PreparationError, PreparationRequest, Requirement, fingerprint
@@ -33,12 +36,57 @@ from .replay_origin import (
 )
 
 
+def _context_calendar(snapshot):
+    """ADR-DATA-002 D2: the series' session calendar on its actual timeline, or None.
+
+    Context rows are read on the actual timeline, so a blind run needs no shift.
+    """
+    try:
+        return replay_calendar(snapshot.provenance.calendar_id)
+    except ReplayDomainError as exc:
+        raise TrainingRunError("HISTORY_POLICY_INVALID",
+                               "replay history trading calendar is not registered", status_code=503) from exc
+
+
+def _context_requirement(snapshot, start_ms, end_ms, recorded=None):
+    """A context read of the run's own kline series (ADR-DATA-002 D1)."""
+    identity = snapshot.identity
+    series = identity.series.to_dict() if identity.series is not None else recorded
+    return Requirement(exchange=identity.exchange, market_type=identity.market_type, symbol=identity.symbol,
+                       start_ms=start_ms, end_ms=end_ms, **({"identity": series} if series is not None else {}))
+
+
+def _traded_bucket_count(calendar, mapper, end, ordinal, want):
+    """Display buckets back from ``end`` that hold ``want`` traded buckets' minutes.
+
+    A bucket holds at most its length in traded minutes, so this many traded
+    minutes span at least ``want`` buckets with trading; closures add none.
+    """
+    minutes = max(1, mapper.interval_ms // 60_000)
+    try:
+        first = opens_before(calendar, end, min(8192, want * minutes), "1m")[0]
+    except LookupError:
+        return want
+    return max(want, ordinal - mapper.actual_bucket_ordinal(mapper.actual_containing_bucket_open(first)))
+
+
 class ReplayHistoryContext:
     def __init__(self, preparation, *, wait_seconds=20, origin_resolver=None):
         self.preparation = preparation
         self.wait_seconds = wait_seconds
         self.origins = ReplayContextOrigins(preparation.repository)
         self.origin_resolver = origin_resolver or ReplayOriginResolver()
+        self._recorded = {}
+
+    async def _series(self, snapshot):
+        """The kline series a route-only run's replay market holds (ADR-DATA-002 D1)."""
+        identity = snapshot.identity
+        if identity.series is not None:
+            return None
+        if identity.key not in self._recorded:
+            self._recorded[identity.key] = await asyncio.to_thread(
+                _recorded_series, getattr(self.preparation, "adapter", None), identity)
+        return self._recorded[identity.key]
 
     async def origin(self, *, binding, persisted, repository, discover=False):
         key = source_key(binding, persisted)
@@ -209,7 +257,15 @@ class ReplayHistoryContext:
             actual_replay_start_ms=actual_start, public_replay_start_ms=snapshot.replay_start_ms,
             source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"))
         end = actual_start + ((page["revealed_boundary_ms"] + 1 - snapshot.replay_start_ms) // 60_000) * 60_000
-        start = mapper.actual_containing_bucket_open(end - 1)
+        calendar = _context_calendar(snapshot)
+        if calendar is None:
+            start = mapper.actual_containing_bucket_open(end - 1)
+        else:
+            # ADR-DATA-002 D2: the forming bucket holds the last revealed traded minute.
+            try:
+                start = mapper.actual_containing_bucket_open(opens_before(calendar, end, 1, "1m")[0])
+            except LookupError:
+                return page
         public_start = mapper.public_from_actual(start)
         origin = await self.origin(binding=binding, persisted=persisted, repository=repository)
         if origin is not None and start < origin.start_ms:
@@ -225,16 +281,17 @@ class ReplayHistoryContext:
             return page
         identity = snapshot.identity
         try:
-            rows = await self._rows(Requirement(exchange=identity.exchange,
-                market_type=identity.market_type, symbol=identity.symbol,
-                start_ms=start, end_ms=frozen_start), origin=origin)
+            rows = await self._rows(_context_requirement(snapshot, start, frozen_start,
+                                                         await self._series(snapshot)), origin=origin)
             tail = await self._frozen_rows(repository, snapshot, config, frozen_start, end)
             rows = MarketRows.join((rows, tail), start, end)
             projected = await asyncio.to_thread(project_context, rows, start, end, mapper,
-                                               identity, include_active=True)
+                                               identity, include_active=True, calendar=calendar)
         except (PreparationError, ReplayDomainError) as exc:
             raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
                                    details={"retryable": True}) from exc
+        if not projected:
+            return page
         bars = sorted([*page["bars"], *projected], key=lambda bar: bar["open_time_ms"])
         return {**page, "bars": bars, "history_before_ms": bars[0]["open_time_ms"],
                 "projection_epoch": canonical_sha256({"frozen": page["projection_epoch"],
@@ -242,6 +299,23 @@ class ReplayHistoryContext:
 
     async def extend(self, *, page, binding, persisted, repository,
                      before_ms, limit, expected_history_epoch, origin=None, deadline=None):
+        result = await self._extend(page=page, binding=binding, persisted=persisted, repository=repository,
+            before_ms=before_ms, limit=limit, expected_history_epoch=expected_history_epoch,
+            origin=origin, deadline=deadline)
+        config = ReplaySessionConfig.from_dict(binding["config"])
+        snapshot = _decode_bar_snapshot(persisted, config=config)
+        calendar = _context_calendar(snapshot)
+        if calendar is None:
+            return result
+        # ADR-DATA-002 D2: context bars meet the page across closures too.
+        mapper = SourceBucketTimeMapper.create(interval=result["identity"]["display_interval"],
+            actual_replay_start_ms=int(binding["history_policy"]["actual_replay_start_ms"]),
+            public_replay_start_ms=snapshot.replay_start_ms,
+            source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"))
+        return declare_market_closures(result, calendar=calendar, mapper=mapper, before_ms=before_ms)
+
+    async def _extend(self, *, page, binding, persisted, repository,
+                      before_ms, limit, expected_history_epoch, origin=None, deadline=None):
         if origin is None:
             origin = await self.origin(binding=binding, persisted=persisted, repository=repository)
         epoch = self.context_epoch(page["history_epoch"], origin)
@@ -278,6 +352,9 @@ class ReplayHistoryContext:
         ordinal = mapper.actual_bucket_ordinal(end)
         remaining = limit - len(page["bars"])
         count = min(remaining, max(1, 8192 // max(1, mapper.interval_ms // 60_000)))
+        calendar = _context_calendar(snapshot)
+        if calendar is not None and count > 0:
+            count = _traded_bucket_count(calendar, mapper, end, ordinal, count)
         while count > 0 and (mapper.actual_bucket_open(ordinal - count) < 0
                             or mapper.public_bucket_open(ordinal - count) < boundary):
             count -= 1
@@ -294,19 +371,25 @@ class ReplayHistoryContext:
         rows = []
         try:
             if start < frozen_start:
-                rows = await self._rows(Requirement(
-                    exchange=identity.exchange, market_type=identity.market_type, symbol=identity.symbol,
-                    start_ms=start, end_ms=min(end, frozen_start),
-                ), origin=origin, deadline=deadline)
+                rows = await self._rows(_context_requirement(snapshot, start, min(end, frozen_start),
+                    await self._series(snapshot)), origin=origin, deadline=deadline)
             if end > frozen_start:
                 # Preserve the original revision even if the host later corrects
                 # overlapping bars. Only strictly older context is acquired.
                 tail = await self._frozen_rows(repository, snapshot, config, max(start, frozen_start), end)
                 rows = MarketRows.join((rows, tail) if rows else (tail,), start, end)
-            added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity)
+            added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity,
+                                            calendar=calendar)
         except (PreparationError, ReplayDomainError) as exc:
             raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
                                    details={"retryable": True}) from exc
+        if calendar is not None:
+            # Reaching over closures can span more buckets than the page holds.
+            added = added[-remaining:]
+            if not added:
+                # Nothing trades between the origin and this page.
+                result["has_more"] = False
+                return result
         if not added:
             raise TrainingRunError("HISTORY_SOURCE_INCOMPLETE",
                                    "Earlier history could not form a complete chart bar", status_code=503)
@@ -325,7 +408,16 @@ class ReplayHistoryContext:
             source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"))
         public_end = compute_bucket_start_ms(before_ms, mapper.interval_ms, interval=mapper.interval)
         end = mapper.actual_from_public(public_end)
-        start = mapper.actual_bucket_open(mapper.actual_bucket_ordinal(end) - 1)
+        calendar = _context_calendar(snapshot)
+        if calendar is None:
+            start = mapper.actual_bucket_open(mapper.actual_bucket_ordinal(end) - 1)
+        else:
+            # ADR-DATA-002 D2: the seam is the last bucket that trades before ``end``.
+            try:
+                start = mapper.actual_containing_bucket_open(opens_before(calendar, end, 1, "1m")[0])
+            except LookupError:
+                return page
+            end = mapper.actual_bucket_end(start)
         public_start = mapper.public_from_actual(start)
         if start < (0 if origin is None else origin.start_ms) or public_start < 0 or any(
             bar["open_time_ms"] == public_start for bar in page["bars"]
@@ -343,18 +435,86 @@ class ReplayHistoryContext:
             return page
         identity = snapshot.identity
         try:
-            rows = await self._rows(Requirement(exchange=identity.exchange,
-                market_type=identity.market_type, symbol=identity.symbol,
-                start_ms=start, end_ms=frozen_start), origin=origin, deadline=deadline)
+            rows = await self._rows(_context_requirement(snapshot, start, frozen_start,
+                await self._series(snapshot)), origin=origin, deadline=deadline)
             tail = await self._frozen_rows(repository, snapshot, config, frozen_start, end)
             rows = MarketRows.join((rows, tail), start, end)
-            added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity)
+            added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity,
+                                            calendar=calendar)
         except (PreparationError, ReplayDomainError) as exc:
             raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
                                    details={"retryable": True}) from exc
+        if not added:
+            return page
         bars = sorted([*page["bars"], *added], key=lambda bar: bar["open_time_ms"])
         return {**page, "bars": bars[-limit:], "next_before_ms": bars[-limit:][0]["open_time_ms"],
                 "has_more": page["has_more"] or len(bars) > limit}
+
+
+def _recorded_series(adapter, identity):
+    """The series a replay market recorded with its history, or None."""
+    describe = getattr(getattr(getattr(adapter, "replay_service", None), "_repository", None),
+                       "describe_catalog", None)
+    if not callable(describe):
+        return None
+    from app.replay.history_archive import ReplayHistoryArchiveError
+    try:
+        recorded = describe(identity.symbol, "1m", exchange=identity.exchange, market_type=identity.market_type)
+    except ReplayHistoryArchiveError:
+        return None
+    return recorded["identity"].get("series_identity")
+
+
+def _numeric_policy():
+    from decimal import getcontext
+
+    arithmetic = getcontext()
+    return (arithmetic.prec, arithmetic.rounding, arithmetic.Emin, arithmetic.Emax, arithmetic.clamp,
+            tuple(sorted(signal.__name__ for signal, enabled in arithmetic.traps.items() if enabled)))
+
+
+def _session_context(rows, start, end, mapper, identity, calendar, *, include_active=False):
+    """Display buckets of a session-calendar series (ADR-DATA-002 D2).
+
+    The rows must be exactly the calendar's traded minutes of ``[start, end)``.
+    A bucket the market never trades yields no bar.
+    """
+    from .market_projection import project_session_bucket
+
+    try:
+        opens = [int(value) for value in calendar.expected_opens(start, end - 1, "1m")]
+    except ValueError as exc:
+        raise PreparationError("HISTORY_SOURCE_INCOMPLETE", "Earlier history is outside its trading calendar",
+                               retryable=False) from exc
+    if len(rows) != len(opens):
+        raise PreparationError("HISTORY_SOURCE_INCOMPLETE", "Earlier history contains missing bars", retryable=True)
+    shared = isinstance(rows, MarketRows)
+    numeric_policy = _numeric_policy() if shared else None
+    projected, index = [], 0
+    while index < len(opens):
+        bucket = mapper.actual_containing_bucket_open(opens[index])
+        bucket_end = mapper.actual_bucket_end(bucket)
+        stop = bisect_left(opens, bucket_end, index)
+        now = min(end, bucket_end)
+
+        def reduce(selected=rows[index:stop], bucket_opens=opens[index:stop], bucket=bucket,
+                   bucket_end=bucket_end, now=now):
+            return project_session_bucket(
+                selected, bucket_opens, bucket, bucket_end, now, identity,
+                expected_components=int(calendar.count_expected(bucket, bucket_end - 1, "1m")),
+                include_active=include_active)
+
+        if shared:
+            sources = tuple(sorted({key for key, left, right in rows.sources
+                                    if left < now and right > bucket}))
+            key = ('market-projection.v1', identity.exchange, identity.market_type, identity.symbol,
+                   mapper.interval, mapper.source_bucket_anchor_ms, max(start, bucket), now, include_active,
+                   sources, numeric_policy, calendar.calendar_id)
+            projected.extend(rows.cache.get(key, reduce))
+        else:
+            projected.extend(reduce())
+        index = stop
+    return tuple(projected)
 
 
 def _actual_context(rows, start, end, mapper, identity, *, include_active=False):
@@ -380,17 +540,15 @@ def _actual_context(rows, start, end, mapper, identity, *, include_active=False)
     return projected
 
 
-def project_context(rows, start, end, mapper, identity, *, include_active=False):
-    if not isinstance(rows, MarketRows):
+def project_context(rows, start, end, mapper, identity, *, include_active=False, calendar=None):
+    if calendar is not None:
+        actual = _session_context(rows, start, end, mapper, identity, calendar, include_active=include_active)
+    elif not isinstance(rows, MarketRows):
         actual = _actual_context(rows, start, end, mapper, identity, include_active=include_active)
     else:
-        from decimal import getcontext
-
         from .market_projection import project_bucket
 
-        arithmetic = getcontext()
-        numeric_policy = (arithmetic.prec, arithmetic.rounding, arithmetic.Emin, arithmetic.Emax, arithmetic.clamp,
-                          tuple(sorted(signal.__name__ for signal, enabled in arithmetic.traps.items() if enabled)))
+        numeric_policy = _numeric_policy()
         # Cache closed source buckets, not a chart window or public-time result.
         # Overlapping MA/RSI prefixes and different runs share the same objects.
         # Partial buckets bind their exact end and stay separate from closed ones.
@@ -414,6 +572,13 @@ def project_context(rows, start, end, mapper, identity, *, include_active=False)
         public = mapper.public_from_actual(bar.open_time_ms)
         # Match the replay's source bucket mapping, including blind calendars.
         public_end = mapper.public_bucket_end(public)
+        if calendar is not None:
+            # ADR-DATA-002 D2: closures are not components; keep the traded span.
+            shift = public - bar.open_time_ms
+            result.append(replace(bar, open_time_ms=public, close_time_ms=public_end - 1,
+                first_base_open_ms=bar.first_base_open_ms + shift,
+                last_base_open_ms=bar.last_base_open_ms + shift).to_dict())
+            continue
         components = (public_end - public) // 60_000
         result.append(replace(bar, open_time_ms=public, close_time_ms=public_end - 1,
             first_base_open_ms=public, last_base_open_ms=(public_end - 60_000 if bar.is_closed else public + bar.last_base_open_ms - bar.open_time_ms),

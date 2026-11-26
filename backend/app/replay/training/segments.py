@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from app.data_engine.history.expected_bars import offset_open
 from app.data_engine.interval_policy import parse_interval_ms
 from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
@@ -173,9 +174,12 @@ def _archive_descriptor(
             raise TypeError("history_policy must be a ResolvedHistoryPolicy")
         if history_policy.actual_replay_start_ms != actual_replay_start_ms:
             raise ValueError("archive history policy does not match replay start")
-        policy_start_ms = (
-            history_policy.actual_replay_start_ms
-            - history_policy.effective_warmup_bars * history_policy.interval_ms
+        provenance = (
+            dataset_blob.get("provenance") if isinstance(dataset_blob, Mapping) else None
+        )
+        indicator_start_ms, policy_start_ms, _ = history_policy_window(
+            history_policy,
+            provenance.get("calendar_id") if isinstance(provenance, Mapping) else None,
         )
         if (
             embedded_history_start_ms is not None
@@ -186,11 +190,7 @@ def _archive_descriptor(
         policy_payload = {
             **history_policy.to_dict(include_actual=True),
             "policy_hash": history_policy.policy_hash,
-            "indicator_history_start_ms": (
-                history_policy.actual_replay_start_ms
-                - history_policy.indicator_warmup_bars
-                * history_policy.interval_ms
-            ),
+            "indicator_history_start_ms": indicator_start_ms,
             "dataset_history_start_ms": policy_start_ms,
         }
     elif range_start_ms_override is not None:
@@ -679,6 +679,56 @@ class ResolvedHistoryPolicy:
                 }
             )
         return payload
+
+
+def history_policy_window(
+    policy: "ResolvedHistoryPolicy",
+    calendar_id: object = None,
+) -> tuple[int, int, int]:
+    """(indicator start, dataset warmup start, last forward open) of a policy.
+
+    ADR-DATA-002 D2: on a session calendar, warmup and forward bars are the
+    bars the market trades, so these bounds reach across closures. The policy
+    itself stays calendar-free; the run's selection or dataset names the calendar.
+    """
+    from app.replay.catalog import replay_calendar
+
+    start = policy.actual_replay_start_ms
+    interval_ms = policy.interval_ms
+    forward_bars = policy.forward_cache_ms // interval_ms
+    try:
+        calendar = replay_calendar(None if calendar_id is None else str(calendar_id))
+    except Exception as exc:
+        raise TrainingRunError(
+            "TRAINING_RUN_STORAGE_DEGRADED",
+            "training trading calendar is not registered",
+            status_code=503,
+        ) from exc
+    if calendar is None:
+        return (
+            start - policy.indicator_warmup_bars * interval_ms,
+            start - policy.effective_warmup_bars * interval_ms,
+            start + policy.forward_cache_ms - interval_ms,
+        )
+    interval = _interval_name(interval_ms)
+    try:
+        return (
+            offset_open(calendar, start, -policy.indicator_warmup_bars, interval),
+            offset_open(calendar, start, -policy.effective_warmup_bars, interval),
+            offset_open(calendar, start, max(forward_bars - 1, 0), interval),
+        )
+    except LookupError as exc:
+        raise TrainingRunError(
+            "VISIBLE_HISTORY_COVERAGE_UNAVAILABLE",
+            "the trading calendar does not cover this replay window",
+            status_code=409,
+        ) from exc
+
+
+def _interval_name(interval_ms: int) -> str:
+    if interval_ms % 60_000:
+        raise ValueError("session-calendar replay needs a whole-minute interval")
+    return f"{interval_ms // 60_000}m"
 
 
 def resolve_history_policy(
