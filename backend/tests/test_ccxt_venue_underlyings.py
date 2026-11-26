@@ -319,8 +319,27 @@ def test_sector_fields_treat_new_values_as_crypto() -> None:
     assert venue_contract_underlying(
         "bybit", "swap.linear", _with("bybit", "BTCUSDT", symbolType="adventure"),
     ) == {}
-    # A BingX asset code outside the four TradFi namespaces stays crypto.
-    assert venue_contract_underlying("bingx", "swap.linear", _with("bingx", "BTC-USDT", asset="NCXX1")) == {}
+
+
+@pytest.mark.parametrize(("asset", "underlying_class"), [
+    ("NCSKAAPL2USD", "stock"),
+    ("NCCOGOLD2USD", "commodity"),
+    ("NCFXEUR2USD", "forex"),
+    ("NCSISP5002USD", "index"),
+    # Only these four venue-assigned namespaces are traditional. Any other
+    # code, a new NC namespace included, stays unlabelled until it is mapped.
+    ("NCXX1", None),
+    ("NCETSPY2USD", None),
+    ("NCBDUS10Y2USD", None),
+    ("NCSK", None),
+    ("NCS", None),
+    ("XNCSKAAPL2USD", None),
+    ("BTC", None),
+])
+def test_bingx_labels_only_its_four_asset_namespaces(asset: str, underlying_class: str | None) -> None:
+    row = _with("bingx", "NCSKAAPL2USD-USDT", asset=asset)
+
+    assert venue_contract_underlying("bingx", "swap.linear", row).get("underlying_class") == underlying_class
 
 
 @pytest.mark.parametrize("market_type", ["spot", "option"])
