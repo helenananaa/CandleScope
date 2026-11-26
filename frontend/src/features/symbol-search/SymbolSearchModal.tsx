@@ -10,6 +10,7 @@ import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { formatExchangeLabel, formatSymbolLabel, venueContractUnderlying } from "./symbolSearchFilter";
+import { ContractPriceTag } from "./ContractPriceBadge.js";
 import { SourcePicker } from "./SourcePicker";
 import { useSymbolSearchRuntime } from "./useSymbolSearchRuntime";
 import type { UseSymbolSearchRuntimeOptions } from "./useSymbolSearchRuntime.js";
@@ -231,7 +232,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       <span className="sym-modal-col-pair sym-modal-row-pair" title={symbol.symbol}>
                         <span className="sym-modal-pair-label">{formatSymbolLabel(symbol)}</span>
                         {isCurrent && <Badge tone="accent">{t("search.current")}</Badge>}
-                        {underlying && <Badge tone="warning" title={t("search.contractPriceHint")}>{t("search.contractPrice")}</Badge>}
+                        {underlying && <ContractPriceTag />}
                         {hasWatchlists && inWatchlists.length > 0 && (
                           <span className="sym-modal-wl-indicators">
                             {inWatchlists.map((watchlist) => (

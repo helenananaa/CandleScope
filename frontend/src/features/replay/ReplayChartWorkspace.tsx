@@ -54,6 +54,7 @@ import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { replayWorkspaceSelectionCommand } from "./replayWorkspaceSelection.js";
+import { ContractPriceBadge } from "../symbol-search/ContractPriceBadge.js";
 
 type HostName = "topBar" | "intervalSelector" | "toolbar" | "rightRail" | "featureSurfaces" | "statusBar";
 const HOST_NAMES: HostName[] = ["topBar", "intervalSelector", "toolbar", "rightRail", "featureSurfaces", "statusBar"];
@@ -446,7 +447,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
               tabIndex={0} onPointerDown={() => focusCell(id)} onFocus={() => focusCell(id)}>
               <header className="multi-chart-cell-header" draggable={!workspace.view.layoutLocked}
                 onDragStart={(event) => writeChartCellDragData(event.dataTransfer, id)}>
-                <strong>{cell.session.symbol}</strong><span>{cell.session.interval}</span>
+                <strong>{cell.session.symbol}</strong><ContractPriceBadge market={cell.session} /><span>{cell.session.interval}</span>
                 <IconButton size="sm" className="multi-chart-cell-drawing-visibility"
                   label={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
                   icon={<Icon name={cell.drawingsHidden ? "eye-off" : "eye"} size={14} />}

@@ -137,6 +137,7 @@ import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { Icon } from "../components/icons/Icon.js";
 import { chartStrategyChartDataReady } from "../features/backtest/chart-tester/chartStrategyChartData.js";
+import { ContractPriceBadge } from "../features/symbol-search/ContractPriceBadge.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
@@ -1135,6 +1136,7 @@ function LiveChartCell({
             </span>
           )}
           <strong>{chartSession.view.symbol}</strong>
+          <ContractPriceBadge market={chartSession.view} />
           <span>{formatIntervalLabel(chartSession.view.interval)}</span>
           {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
             <span role="status" className="multi-chart-cell-history-only">{t("interval.historyOnly")}</span>

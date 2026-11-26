@@ -23,6 +23,7 @@ import {
 } from "./tradingFormat.js";
 import type { QuickReplayRequest, Trade, TradingChartContext } from "./tradingTypes.js";
 import { useTradingAccountsRuntime } from "./useTradingAccountsRuntime.js";
+import { ContractPriceBadge } from "../symbol-search/ContractPriceBadge.js";
 
 type Tab = "trade" | "positions" | "history" | "journal" | "stats";
 const TABS: readonly Tab[] = ["trade", "positions", "history", "journal", "stats"];
@@ -244,6 +245,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={trade.id} className="trading-row">
                     <div className="trading-row-main">
                       <strong>{trade.symbol}</strong>
+                      <ContractPriceBadge market={trade} />
                       <DirectionBadge direction={trade.direction}>
                         {t(trade.direction === "long" ? "trading.long" : "trading.short")} {formatQty(trade.openQty)}
                       </DirectionBadge>
@@ -287,6 +289,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                     <OptionButton variant="row" className="trading-row-open" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>
                       <div className="trading-row-main">
                         <strong>{trade.symbol}</strong>
+                        <ContractPriceBadge market={trade} />
                         <DirectionBadge direction={trade.direction}>
                           {t(trade.direction === "long" ? "trading.long" : "trading.short")}
                         </DirectionBadge>
