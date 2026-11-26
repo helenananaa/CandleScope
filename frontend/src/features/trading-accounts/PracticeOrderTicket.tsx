@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button, Checkbox, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { chartInstrumentFields } from "./chartInstrument.js";
 import { tradingApi } from "./tradingApi.js";
 import { formatAmount, formatPrice } from "./tradingFormat.js";
 import type { AccountSummary, TradingAccount, TradingChartContext } from "./tradingTypes.js";
@@ -61,9 +62,7 @@ export default function PracticeOrderTicket({
     setMessage(null);
     try {
       const response = await tradingApi.placeOrder(account.id, {
-        exchange: context.exchange,
-        marketType: context.marketType,
-        symbol: context.symbol,
+        ...chartInstrumentFields(context),
         side,
         ...(hedge ? { positionSide, positionEffect: reduceOnly ? "close" : "open" } : {}),
         type,

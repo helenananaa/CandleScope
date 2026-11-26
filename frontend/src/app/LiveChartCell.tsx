@@ -72,7 +72,7 @@ import {
   type WorkspaceCellDensity,
 } from "../features/chart-workspace/chartWorkspaceGeometry.js";
 import { useMarketDataRuntime } from "../features/market-data/useMarketDataRuntime.js";
-import { resolveKlineSeriesIdentity } from "../features/market-data/klineSeriesIdentity.js";
+import { klineSeriesIdentityField, resolveKlineSeriesIdentity } from "../features/market-data/klineSeriesIdentity.js";
 import { useLiveReferenceMarketChartSource } from "../features/market-chart-platform/useLiveReferenceMarketChartSource.js";
 import {
   initialViewportCountBackCapForCellCount,
@@ -958,6 +958,7 @@ function LiveChartCell({
       exchange: chartSession.view.exchange,
       marketType: chartSession.view.marketType,
       symbol: chartSession.view.symbol,
+      ...klineSeriesIdentityField(liveSourceSession.exchange, liveSourceSession),
       interval: chartSession.view.interval,
       lastPrice: typeof lastClose === "number" && Number.isFinite(lastClose) ? lastClose : null,
       captureImage: () => captureChartPng(chartSurface.actions.getExportSnapshot()),
@@ -979,6 +980,7 @@ function LiveChartCell({
     chartSession.view.symbol,
     chartSurface.actions,
     lastClose,
+    liveSourceSession,
     openTradeReplay,
   ]);
   const tradingOverlay = useTradingChartOverlay({

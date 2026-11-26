@@ -28,6 +28,7 @@ from typing import Any
 from app.core.executors import run_storage
 from app.data_engine.data_manager.models import DataEvent, DataEventType
 
+from .series import market_series
 from .service import Instrument, TradingAccountService
 
 logger = logging.getLogger("trading_accounts.practice")
@@ -38,6 +39,10 @@ MAX_BARS_PER_TICK = 1_000
 # Live updates arriving while a step runs are folded into the next step; this
 # bounds steps per instrument without adding more than a blink of latency.
 EVENT_MIN_GAP_SECONDS = 0.1
+# A market whose 1m stream cannot open is retried after 1 s, doubling up to
+# this. History-only providers such as Twelve Data (ADR-DATA-002 D1c) never
+# open one; their sweeps still match from history.
+STREAM_RETRY_MAX_SECONDS = 60.0
 STEP_EVENTS = frozenset({DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED, DataEventType.BAR_CLOSED})
 
 
@@ -62,13 +67,16 @@ class DataManagerMarket:
     def __init__(self, data_manager: Any) -> None:
         self.data_manager = data_manager
 
-    def latest_bar(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None:
+    def latest_bar(
+        self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,
+    ) -> dict[str, Any] | None:
         result = self.data_manager.query_latest(
             symbol,
             INTERVAL,
             limit=1,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
             auto_backfill=False,
             backfill_reason=None,
             backfill_requester="trading_accounts",
@@ -85,6 +93,8 @@ class DataManagerMarket:
         start_ms: int,
         end_ms: int | None,
         limit: int,
+        *,
+        series_identity: Any = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         result = self.data_manager.query(
             symbol,
@@ -94,6 +104,7 @@ class DataManagerMarket:
             limit=limit,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
             auto_backfill=True,
             backfill_reason="practice_replay",
             backfill_requester="trading_accounts",
@@ -138,6 +149,10 @@ class PracticeRuntime:
         self._task: asyncio.Task[None] | None = None
         self._streams: set[Instrument] = set()
         self._handles: dict[Instrument, Any] = {}
+        # The kline series each stream was opened on (None: the exchange's own).
+        self._series: dict[Instrument, Any] = {}
+        # Instrument -> (monotonic time of the next stream attempt, current delay).
+        self._stream_retry: dict[Instrument, tuple[float, float]] = {}
         # Instrument -> wall time of its oldest live update not yet applied.
         self._pending: dict[Instrument, int] = {}
         self._stepped: set[Instrument] = set()
@@ -192,8 +207,18 @@ class PracticeRuntime:
     async def tick(self) -> None:
         """Sweep: sync streams, then step instruments that events did not."""
         instruments = set(await run_storage(self.service.working_instruments))
+        for instrument in instruments & self._streams:
+            # A market that went idle and was ordered again on another series
+            # in between two sweeps reopens its stream on the new series.
+            if await run_storage(self.service.instrument_series, instrument) != self._series.get(instrument):
+                await self._release(instrument)
+        for instrument in set(self._stream_retry) - instruments:
+            del self._stream_retry[instrument]
+        now = time.monotonic()
         for instrument in instruments - self._streams:
-            await self._ensure(instrument)
+            retry = self._stream_retry.get(instrument)
+            if retry is None or now >= retry[0]:
+                await self._ensure(instrument)
         for instrument in self._streams - instruments:
             await self._release(instrument)
         stepped, self._stepped = self._stepped, set()
@@ -221,6 +246,8 @@ class PracticeRuntime:
 
     async def _ensure(self, instrument: Instrument) -> None:
         exchange, market_type, symbol = instrument
+        series = await run_storage(self.service.instrument_series, instrument)
+        on_series = market_series(series)
 
         async def _on_event(event: DataEvent) -> None:
             if event.bar is not None:
@@ -238,12 +265,22 @@ class PracticeRuntime:
                 INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **on_series,
                 focus_scope="background",
                 subscription_tier="alerts",
                 consumer_id=self._consumer(instrument),
             )
             self._streams.add(instrument)
+            self._series[instrument] = series
+            self._stream_retry.pop(instrument, None)
         except Exception as exc:
+            previous = self._stream_retry.get(instrument)
+            delay = 1.0 if previous is None else min(STREAM_RETRY_MAX_SECONDS, previous[1] * 2)
+            self._stream_retry[instrument] = (time.monotonic() + delay, delay)
+            if previous is not None:
+                # Steps from history report live or catching_up since then.
+                logger.debug("Practice stream still unavailable for %s: %s", instrument, exc)
+                return
             logger.warning("Practice stream unavailable for %s: %s", instrument, exc)
             await run_storage(self.service.set_feed_status, instrument, "unavailable", str(exc))
             return
@@ -255,6 +292,7 @@ class PracticeRuntime:
                 interval=INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **on_series,
                 event_types=set(STEP_EVENTS),
             )
         except Exception:
@@ -264,6 +302,7 @@ class PracticeRuntime:
     async def _release(self, instrument: Instrument) -> None:
         self._streams.discard(instrument)
         self._pending.pop(instrument, None)
+        series = self._series.pop(instrument, None)
         handle = self._handles.pop(instrument, None)
         if handle is not None:
             try:
@@ -277,6 +316,7 @@ class PracticeRuntime:
                 INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **market_series(series),
                 focus_scope="background",
                 subscription_tier="alerts",
                 consumer_id=self._consumer(instrument),
@@ -304,7 +344,8 @@ class PracticeRuntime:
         now = _wall_ms()
         end_ms = min(now, start_ms + (MAX_BARS_PER_TICK - 1) * BAR_SECONDS * 1000)
         try:
-            bars, complete = self.market.bars(*instrument, INTERVAL, start_ms, end_ms, MAX_BARS_PER_TICK)
+            bars, complete = self.market.bars(*instrument, INTERVAL, start_ms, end_ms, MAX_BARS_PER_TICK,
+                                              **market_series(self.service.instrument_series(instrument)))
         except Exception as exc:
             self.service.set_feed_status(instrument, "unavailable", str(exc))
             return None

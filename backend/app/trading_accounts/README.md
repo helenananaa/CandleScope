@@ -24,6 +24,17 @@ uses the sum of both marked notionals divided by leverage. Each close and
 its bracket are scoped to one position lifecycle. Schema v4 preserves older
 orders, fills, trade IDs and journal links with a null position_side.
 
+Each market `(exchange, market_type, symbol)` follows one kline series
+(ADR-DATA-002 D1c). An order may name a provider series in an optional
+`identity` object, such as Twelve Data's AAPL:NASDAQ regular session. Schema v5
+records it as canonical JSON on orders, fills and the practice cursor; NULL is
+the exchange's own series, so older rows keep their meaning. The cursor, marks
+and excursions read that series. While a market has working orders or open
+positions in any account, an order that names another series is refused with
+`TRADING_SERIES_MISMATCH`; an order without `identity` follows the current one.
+Any market type is accepted; only `futures` gets leverage, shorting and hedge
+mode, and every other market type is fully paid and long-only until D5.
+
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).
 - `trades.py`: pure flat-to-flat grouping of fills into trades; reversals split
