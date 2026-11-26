@@ -17,6 +17,8 @@ import { reportAnalytics, reportTrade, formatReportPercent } from "./nativeRepor
 import { NativePerformanceChart } from "./NativePerformanceChart.js";
 import { NativeCostSensitivity } from "./NativeCostSensitivity.js";
 import { researchFidelityLabel } from "../research/researchLabels.js";
+import { ContractPriceNotice } from "../../symbol-search/ContractPriceBadge.js";
+import { nativeReportMarket } from "./nativeReportMarket.js";
 
 interface NativeMarker { time: number; value: number; kind: "entry" | "exit" | "fill" }
 export function NativeCurve({ points, title, markers = [], onLocate }: { points: Array<{ time: number; value: number | null }>; title: string;
@@ -179,6 +181,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   });
   return <section className="native-report" data-view={view}>
     <div className="native-report-context"><span>{run.config?.context?.symbol ?? "—"} · {run.config?.interval ?? run.config?.context?.timeframe ?? "—"}</span><span>{t("report.range")} · {analytics.equity.length ? `${new Date(analytics.equity[0]!.time * 1000).toLocaleDateString(locale)} — ${new Date(analytics.equity.at(-1)!.time * 1000).toLocaleDateString(locale)}` : "—"}</span><span>{t("report.sample")} · {display(analytics.baseline)}</span></div>
+    <ContractPriceNotice market={nativeReportMarket(run)} />
     {controls && <div className="native-report-toolbar">{controls}</div>}
     {result.account_model === "SPOT_CASH_V1" && <p className="native-report-caption">{t("ux.spotCashHint")}</p>}
 

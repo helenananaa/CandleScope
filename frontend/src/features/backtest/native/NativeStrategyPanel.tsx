@@ -35,6 +35,7 @@ import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDock
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
 import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
+import { ContractPriceNotice } from "../../symbol-search/ContractPriceBadge.js";
 import { CHART_RUN_RESULT_VIEWS_ENABLED } from "../chart-tester/chartStrategyTesterFeature.js";
 import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
 import { WorkbenchAccountSettings } from "./WorkbenchAccountSettings.js";
@@ -769,6 +770,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
       {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview" data-testid="run-result-views">
+        <ContractPriceNotice market={props.session} />
         <RunResultSummary result={sharedResult.result} locale={locale} />
         <RunResultTradeList key={sharedResult.run.runId} result={sharedResult.result} locale={locale}
           active={props.active !== false} onLocateTrade={props.onLocateTrade ?? (() => undefined)}

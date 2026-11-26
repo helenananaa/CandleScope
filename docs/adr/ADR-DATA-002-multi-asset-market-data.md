@@ -290,7 +290,7 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 | 阶段 | 版本 | 内容 | 验收 |
 | --- | --- | --- | --- |
 | D0 | 1.1 | Binance 原生目录和 CCXT 目录（`binance`、`binanceusdm`）都按 `underlyingType` 分类 `TRADIFI_PERPETUAL`；`underlying_class` 分组和品种搜索里的"合约价格"标注；合约规则沿用 `binance_contract_rules` | XAUUSDT、CLUSDT、AAPLUSDT：图表、Pine/Python 策略、FOLLOW、回放、练习账户、月度归档都跑通 |
-| D0c | 1.1 | "合约价格"标注跟到图表标题、策略报告、回放和练习账户（按品种元数据查 `underlying_class`）；资金费率周期按合约读取（XAU 是 4 小时，策略回测目前默认 8 小时） | 上面三个合约在这四处都看得到标注；XAUUSDT 策略结果按 4 小时结算资金费 |
+| D0c | 1.1 | "合约价格"标注跟到图表标题、策略报告、回放和练习账户（按品种查 `underlying_class`）。资金费率不用改：历史资金费按实际结算时间记账，结算周期从结算记录推断（1/2/4/8 小时），XAU 是 4 小时；界面不提供带非零费率的固定资金费回测，回放"固定资金费"沙盒的周期由用户自己填（默认 8 小时） | 上面三个合约在这四处都看得到标注；XAUUSDT 的资金费记录按 4 小时结算 |
 | D0b | 1.1 | 其他 CCXT 交易所的 TradFi 合约按 `venue_underlyings.py` 分类，并逐家核对交易时段；Hyperliquid HIP-3 加载 | 至少一个非 Binance 交易所的黄金、原油合约可用，非 24×7 的品种不报缺口 |
 | D1 | 1.1 | SeriesRef 贯穿策略测试、研究来源、回放、数据准备、练习账户；hash 规则按 §3 | 用 Twelve Data AAPL 1m（环境变量 key）跑通图表 → 策略测试 → 回放 → 练习账户；现有运行和回放的 hash 不变 |
 | D2 | 1.1 | 完整性改用日历；持续策略去掉加密限定，改看日历和能力 | 美股休市、节假日、半日市不报不完整；Binance 和 OKX 现有结果不变 |

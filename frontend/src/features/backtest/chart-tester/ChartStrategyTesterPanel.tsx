@@ -107,6 +107,7 @@ const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
 import { overlayRunForNative, shownOverlayRun, type ShownRunResult, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
+import { ContractPriceNotice } from "../../symbol-search/ContractPriceBadge.js";
 import { CHART_RUN_RESULT_VIEWS_ENABLED, CHART_STRATEGY_FOLLOW_ENABLED } from "./chartStrategyTesterFeature.js";
 import { chartFollowStatusLabel, chartFollowStatusTone, type ChartFollowStatus } from "./chartStrategyFollowStatus.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
@@ -1187,6 +1188,7 @@ export function CandleScopeStrategyTesterPanel({
 
         <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult && sharedRunId === result.run.run_id
             ? <div className="chart-strategy-result-overview" data-testid="run-result-views">
+              <ContractPriceNotice market={session} />
               <RunResultSummary result={sharedResult.result} locale={locale} />
               <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}
                 active={active && activeTab === "trades"} onLocateTrade={onLocateTrade}
