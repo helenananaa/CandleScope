@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.backtest.errors import BacktestError
 from app.backtest.native import timeframe
 from app.backtest.native_contracts import RequestedNativeData
+from app.backtest.pine_ticker import pine_ticker_symbol
 from app.data_engine.interval_policy import parse_interval_spec
 from app.local_data.service import LocalDatasetError, LocalDatasetService
 from app.market_dataset.adapters.local_bar import LocalBarSnapshotProvider
@@ -49,7 +50,7 @@ def load_contexts(root, references):
     try:
         for item in references:
             manifest = local.revision_details(item["dataset_id"], item["data_epoch"])["manifest"]
-            ticker = item["symbol"].split(":")[-1]
+            ticker = pine_ticker_symbol(item["symbol"])
             if item["exchange"].lower() == "binance" and item["market_type"] in {"usdm", "futures", "swap"}:
                 ticker = ticker.removesuffix(".P")
             if ticker != manifest["symbol"]:

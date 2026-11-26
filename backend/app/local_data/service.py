@@ -39,6 +39,8 @@ from app.market_dataset.snapshot import MarketDatasetError, canonical_json
 
 
 if TYPE_CHECKING:
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
     from .user_market_trades import UserMarketTradeOptions
 
 
@@ -386,6 +388,7 @@ class LocalDatasetService:
         symbol: str,
         interval: str,
         chart_context_hash: str,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any]:
         """Publish closed Host K-lines through the canonical immutable store.
 
@@ -418,12 +421,14 @@ class LocalDatasetService:
                 str(current.get("market_type") or "").lower(),
                 str(current.get("symbol") or "").upper(),
                 str(current.get("interval") or ""),
+                current.get("identity"),
             )
             expected = (
                 normalized_exchange,
                 normalized_market_type,
                 normalized_symbol,
                 interval_spec.canonical,
+                series_identity.to_dict() if series_identity is not None else None,
             )
             if identity != expected:
                 raise LocalDatasetError(
@@ -521,6 +526,11 @@ class LocalDatasetService:
                 code="host_coverage_incomplete",
             )
 
+        # ADR-DATA-002 D1: a snapshot of a non-default series records which one.
+        # The exchange's own series adds nothing, so its epochs stay as they were.
+        identity_metadata = (
+            {"identity": series_identity.to_dict()} if series_identity is not None else {}
+        )
         base_epoch = self._content_epoch(normalized_symbol, interval_spec, bars, [])
         epoch_hex = hashlib.sha256(
             canonical_json(
@@ -529,6 +539,7 @@ class LocalDatasetService:
                     "exchange": normalized_exchange,
                     "market_type": normalized_market_type,
                     "chart_context_hash": chart_context_hash,
+                    **identity_metadata,
                 }
             ).encode("utf-8")
         ).hexdigest()
@@ -571,6 +582,7 @@ class LocalDatasetService:
                     "exchange": normalized_exchange,
                     "market_type": normalized_market_type,
                     "chart_context_hash": chart_context_hash,
+                    **identity_metadata,
                 },
             )
             published = self._publish(staging, dataset_id, epoch_hex, manifest)

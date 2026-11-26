@@ -8,11 +8,16 @@ import secrets
 import threading
 import time
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from app.data_engine.data_manager.backfill_coordinator import RepairRequest
 from app.data_engine.interval_policy import IntervalSpec, parse_interval_spec
+from app.data_engine.series_identity import (
+    SERIES_IDENTITY_METADATA_KEY,
+    KlineSeriesIdentity,
+    requested_series_identity,
+)
 from app.data_engine.interval_resolution import (
     IntervalPurpose,
     IntervalResolutionError,
@@ -47,12 +52,15 @@ class ChartContextRequest:
     start_time_ms: int | None
     end_time_ms: int | None
     fidelity_preference: str
+    # The series beyond its route (ADR-DATA-002 D1); None is the exchange's own.
+    identity: KlineSeriesIdentity | None = None
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, object]) -> ChartContextRequest:
         interval = parse_interval_spec(str(values.get("interval") or ""))
+        exchange = str(values.get("exchange") or "").strip().lower()
         return cls(
-            exchange=str(values.get("exchange") or "").strip().lower(),
+            exchange=exchange,
             market_type=_MARKET_TYPE_ALIASES.get(
                 str(values.get("market_type") or "").strip().lower(),
                 str(values.get("market_type") or "").strip().lower(),
@@ -77,9 +85,11 @@ class ChartContextRequest:
             fidelity_preference=str(
                 values.get("fidelity_preference") or "FAST"
             ).strip().upper(),
+            identity=requested_series_identity(exchange, values.get("identity")),
         )
 
     def wire(self) -> dict[str, object]:
+        # A default identity stays off the wire, so existing context hashes hold.
         return {
             "exchange": self.exchange,
             "market_type": self.market_type,
@@ -89,7 +99,15 @@ class ChartContextRequest:
             "start_time_ms": self.start_time_ms,
             "end_time_ms": self.end_time_ms,
             "fidelity_preference": self.fidelity_preference,
+            **({"identity": self.identity.to_dict()} if self.identity is not None else {}),
         }
+
+    def repair_metadata(self) -> dict[str, object]:
+        return (
+            {SERIES_IDENTITY_METADATA_KEY: self.identity.to_dict()}
+            if self.identity is not None
+            else {}
+        )
 
 
 @dataclass(slots=True)
@@ -444,6 +462,7 @@ class ChartBacktestContextResolver:
                 metadata={
                     "requires_trusted_finality": True,
                     "chart_context_hash": record.context_hash,
+                    **request.repair_metadata(),
                 },
             )
             try:
@@ -479,6 +498,7 @@ class ChartBacktestContextResolver:
                 symbol=request.symbol,
                 interval=request.interval,
                 chart_context_hash=record.context_hash,
+                series_identity=request.identity,
             )
         except LocalDatasetError as exc:
             raise BacktestError(
@@ -552,16 +572,14 @@ class ChartBacktestContextResolver:
         expires_at_ms = self._now_ms() + TOKEN_TTL_MS
         token = secrets.token_urlsafe(32)
         record = _ResolutionRecord(
-            request=ChartContextRequest(
-                **{
-                    **request.wire(),
-                    "start_time_ms": (
-                        effective_range[0] if effective_range else request.start_time_ms
-                    ),
-                    "end_time_ms": (
-                        effective_range[1] if effective_range else request.end_time_ms
-                    ),
-                }
+            request=replace(
+                request,
+                start_time_ms=(
+                    effective_range[0] if effective_range else request.start_time_ms
+                ),
+                end_time_ms=(
+                    effective_range[1] if effective_range else request.end_time_ms
+                ),
             ),
             context_hash=context_hash,
             status=status,
@@ -715,6 +733,7 @@ class ChartBacktestContextResolver:
             identity.exchange == request.exchange
             and identity.market_type == request.market_type
             and identity.symbol == request.symbol
+            and identity.identity == request.identity
         )
 
     @staticmethod
@@ -759,6 +778,7 @@ class ChartBacktestContextResolver:
                 source_interval,
                 exchange=request.exchange,
                 market_type=request.market_type,
+                series_identity=request.identity,
             )
         except Exception:
             return None
@@ -802,6 +822,7 @@ class ChartBacktestContextResolver:
                 market_type=request.market_type,
                 auto_backfill=False,
                 backfill_requester="backtest_chart_context_resolve",
+                series_identity=request.identity,
             )
         except Exception:
             return None

@@ -547,3 +547,116 @@ def test_chart_context_http_routes_accept_explicit_rollback(tmp_path: Path) -> N
         assert resolved.json()["error"]["code"] == "FLAG_DISABLED"
     finally:
         runtime.shutdown()
+
+
+# ADR-DATA-002 D1: a chart's series identity reaches every Host read.
+STOCK_IDENTITY = {
+    "provider_id": "twelvedata", "venue": "xngs", "asset_class": "stock", "series_variant": "ohlcv",
+    "price_adjustment": "raw", "session_variant": "regular", "volume_semantics": "shares",
+}
+
+
+class _OneSeriesHostData(_HostData):
+    """Stores bars for one series identity only, as Host storage keys them."""
+
+    def __init__(self, identity: Any) -> None:
+        super().__init__()
+        self.identity = identity
+        self.reads: list[Any] = []
+
+    def query(self, *_args: Any, series_identity: Any = None, **_kwargs: Any) -> SimpleNamespace:
+        self.reads.append(series_identity)
+        bars = list(self.bars) if series_identity == self.identity else []
+        return SimpleNamespace(bars=bars, missing_ranges=[])
+
+    def get_bounds(self, *_args: Any, series_identity: Any = None, **_kwargs: Any) -> dict[str, int]:
+        self.reads.append(series_identity)
+        return super().get_bounds() if series_identity == self.identity else {}
+
+
+def _stock_request(**identity: Any) -> dict[str, object]:
+    return {**_request(symbol="AAPL", market_type="stock"), "exchange": "twelvedata", **identity}
+
+
+def test_a_default_identity_leaves_chart_context_requests_and_hashes_unchanged(tmp_path: Path) -> None:
+    from app.backtest.chart_context import ChartContextRequest
+
+    legacy = _request()
+    explicit = {**legacy, "identity": {"provider_id": "binance", "venue": "binance", "asset_class": "crypto"}}
+    assert ChartContextRequest.from_mapping(explicit).identity is None
+    assert ChartContextRequest.from_mapping(explicit).wire() == ChartContextRequest.from_mapping(legacy).wire()
+    assert set(ChartContextRequest.from_mapping(legacy).wire()) == {
+        "exchange", "market_type", "symbol", "interval", "range_mode", "start_time_ms", "end_time_ms",
+        "fidelity_preference",
+    }
+    runtime = _runtime(tmp_path)
+    try:
+        first = runtime.chart_context.resolve(legacy, host_data_manager=_HostData())
+        second = runtime.chart_context.resolve(explicit, host_data_manager=_HostData())
+        assert first["chart_context_hash"] == second["chart_context_hash"]
+        stock = runtime.chart_context.resolve(_stock_request(identity=STOCK_IDENTITY), host_data_manager=_HostData())
+        plain = runtime.chart_context.resolve(_stock_request(), host_data_manager=_HostData())
+        assert stock["chart_context_hash"] != plain["chart_context_hash"]
+    finally:
+        runtime.shutdown()
+
+
+def test_a_chart_series_identity_reaches_host_reads_backfill_and_the_snapshot(tmp_path: Path) -> None:
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    identity = KlineSeriesIdentity(**STOCK_IDENTITY)
+    runtime = _runtime(tmp_path)
+    try:
+        host = _OneSeriesHostData(identity)
+        resolution = runtime.chart_context.resolve(
+            _stock_request(identity=STOCK_IDENTITY), host_data_manager=host
+        )
+        assert resolution["status"] == "NEEDS_DATA", resolution
+
+        class Backfill:
+            async def request_and_wait(self, repair: Any) -> SimpleNamespace:
+                assert repair.metadata["series_identity"] == STOCK_IDENTITY
+                assert repair.series_key[-7:] == identity.storage_values
+                host.bars = [_bar(0), _bar(1), _bar(2)]
+                return SimpleNamespace(status="completed")
+
+        ready = asyncio.run(
+            runtime.chart_context.materialize(
+                resolution_token=resolution["resolution_token"],
+                user_confirmed=True,
+                idempotency_key="stock-series-identity",
+                host_data_manager=host,
+                backfill_coordinator=Backfill(),
+            )
+        )
+        assert ready["status"] == "READY", ready
+        assert host.reads and all(read == identity for read in host.reads)
+        manifest = runtime.local_data.get_manifest(ready["dataset_id"])
+        assert manifest["identity"] == STOCK_IDENTITY
+
+        # The same route without the identity is another series: it neither reads
+        # the stock rows nor reuses their snapshot.
+        other = _OneSeriesHostData(identity)
+        other.bars = list(host.bars)
+        plain = runtime.chart_context.resolve(_stock_request(), host_data_manager=other)
+        assert plain["status"] == "NEEDS_DATA"
+        assert plain.get("dataset_id") != ready["dataset_id"]
+        assert other.reads and all(read is None for read in other.reads)
+        # The stock request finds its own snapshot without touching mutable Host data.
+        again = runtime.chart_context.resolve(
+            _stock_request(identity=STOCK_IDENTITY), host_data_manager=_NoHostReads()
+        )
+        assert again["status"] == "READY"
+        assert again["dataset_id"] == ready["dataset_id"]
+    finally:
+        runtime.shutdown()
+
+
+def test_chart_context_requests_reject_malformed_identities(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    try:
+        for identity in ({"provider_id": 3}, {"region": "us"}, ["twelvedata"]):
+            with pytest.raises((ValueError, BacktestError)):
+                runtime.chart_context.resolve(_stock_request(identity=identity), host_data_manager=_HostData())
+    finally:
+        runtime.shutdown()

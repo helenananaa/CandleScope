@@ -9,6 +9,7 @@ defaults so cache, storage, and API layers do not invent incompatible values.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -162,6 +163,43 @@ def identity_from_mapping(
     )
 
 
+IDENTITY_FIELDS = (
+    "provider_id",
+    "venue",
+    "asset_class",
+    "series_variant",
+    "price_adjustment",
+    "session_variant",
+    "volume_semantics",
+)
+
+
+def requested_series_identity(
+    exchange: str,
+    values: object,
+) -> KlineSeriesIdentity | None:
+    """The series a request names beyond its route, or ``None`` for the exchange's own.
+
+    Requests carry an optional snake_case ``identity`` object next to
+    ``exchange/market_type/symbol``. An absent identity and an explicit default
+    name the same legacy series, so both resolve to ``None``: a request that
+    hashes its fields keeps the hash it had before identities existed
+    (ADR-DATA-002 §3).
+    """
+
+    if values is None:
+        return None
+    if not isinstance(values, Mapping):
+        raise ValueError("identity must be an object")
+    unknown = set(values) - set(IDENTITY_FIELDS)
+    if unknown:
+        raise ValueError(f"identity has unknown fields: {', '.join(sorted(map(str, unknown)))}")
+    if any(value is not None and not isinstance(value, str) for value in values.values()):
+        raise ValueError("identity fields must be strings")
+    identity = identity_from_mapping(exchange, dict(values))
+    return None if identity.is_legacy_default_for(exchange) else identity
+
+
 def identity_from_metadata(
     exchange: str,
     metadata: dict[str, Any] | None,
@@ -183,8 +221,10 @@ __all__ = [
     "DEFAULT_SESSION_VARIANT",
     "DEFAULT_VOLUME_SEMANTICS",
     "KlineSeriesIdentity",
+    "IDENTITY_FIELDS",
     "SERIES_IDENTITY_METADATA_KEY",
     "identity_from_mapping",
     "identity_from_metadata",
+    "requested_series_identity",
     "resolve_kline_series_identity",
 ]

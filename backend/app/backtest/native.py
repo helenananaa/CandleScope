@@ -18,6 +18,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.committed_updates import committed_updates_for
+from app.backtest.pine_ticker import pine_ticker_symbol
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
@@ -281,7 +282,7 @@ class NativeBacktests:
                 raise BacktestError("NATIVE_CAPABILITY_UNSUPPORTED", "Calendar bars require a Pine runtime with host-bar-boundaries/1 support")
             bars = self._freeze(payload)
             manifest = self.runtime.local_data.get_manifest(payload["dataset_id"])
-            if payload["context"]["symbol"].split(":")[-1] != manifest["symbol"] or payload["context"]["timeframe"] != timeframe(payload["interval"]):
+            if pine_ticker_symbol(payload["context"]["symbol"]) != manifest["symbol"] or payload["context"]["timeframe"] != timeframe(payload["interval"]):
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "chart metadata differs from frozen dataset")
             contexts, keys = [], set()
             for context in payload.get("contexts", []):
@@ -290,7 +291,7 @@ class NativeBacktests:
                     raise BacktestError("SCHEMA_UNKNOWN_FIELD", "duplicate requested context")
                 keys.add(pair)
                 requested = self.runtime.local_data.get_manifest(context["dataset_id"])
-                if pair[0].split(":")[-1] != requested["symbol"] or pair[1] != timeframe(context["interval"]):
+                if pine_ticker_symbol(pair[0]) != requested["symbol"] or pair[1] != timeframe(context["interval"]):
                     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "requested metadata differs from frozen dataset")
                 context_metadata = context.get("metadata")
                 context_profile = {}
