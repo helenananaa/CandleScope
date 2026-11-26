@@ -26,8 +26,9 @@ async def test_first_history_preparation_and_metadata_recovery(tmp_path, progres
     available = catalog in {"warm", "recover_selection"}
     refreshes = []
 
-    async def refresh(exchange, market):
+    async def refresh(exchange, market, symbol):
         nonlocal available
+        assert symbol == "LTCUSDT"
         refreshes.append((exchange, market))
         if catalog in {"refresh", "recover_selection"}:
             available = True

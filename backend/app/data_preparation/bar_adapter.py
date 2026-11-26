@@ -206,13 +206,25 @@ class BarPreparationAdapter:
         return None
 
     def _archive_rows(self, requirement):
-        # Replay archives hold exchange-native series only (ADR-DATA-002 D1).
-        if requirement.identity is not None:
-            return None
         repository = getattr(self.replay_service, "_repository", None)
         if repository is None:
             return None
         from app.replay.history_archive import ReplayHistoryArchiveError
+        # A replay market records the one kline series it holds (ADR-DATA-002 D1):
+        # its rows serve only a requirement for that same series.
+        describe = getattr(repository, "describe_catalog", None)
+        if callable(describe):
+            try:
+                recorded = describe(requirement.symbol, requirement.interval,
+                    exchange=requirement.exchange, market_type=requirement.market_type)["identity"]
+            except ReplayHistoryArchiveError as exc:
+                if "series is unavailable" in str(exc):
+                    return None
+                raise
+            if recorded.get("series_identity") != requirement.identity:
+                return None
+        elif requirement.identity is not None:
+            return None
         try:
             rows = repository.query_bars(requirement.symbol, requirement.interval,
                 start_ms=requirement.start_ms, end_ms=requirement.end_ms - 1,
@@ -455,7 +467,8 @@ class BarPreparationAdapter:
         requirement = request.requirements[0]
         feed = await storage_call(self.replay_service.progressive_history.create,
             f"preparation-{job_id}", ReplaySeriesIdentity(requirement.exchange,
-                requirement.market_type, requirement.symbol), planned["start_ms"], planned["end_ms"])
+                requirement.market_type, requirement.symbol, series=requirement.series_identity()),
+            planned["start_ms"], planned["end_ms"])
         return {**planned, "feed_id": feed["id"]}, fragments
 
     async def publish_progressive(self, request, chunks, job_id, plan, fragment):
@@ -600,9 +613,12 @@ class BarPreparationAdapter:
         groups = {}
         for chunk in chunks:
             req = chunk["requirement"]
-            group = (req["exchange"], req["market_type"], req["symbol"], req["interval"])
+            series = req.get("identity")
+            group = (req["exchange"], req["market_type"], req["symbol"], req["interval"],
+                     tuple(sorted(series.items())) if series else None)
             groups.setdefault(group, []).append(chunk)
-        for (exchange, market, symbol, interval), fragments in groups.items():
+        for (exchange, market, symbol, interval, _series), fragments in groups.items():
+            series_identity = Requirement.model_validate(fragments[0]["requirement"]).series_identity()
             if request.consumer == "REPLAY":
                 from app.replay.catalog import ReplaySeriesIdentity
                 from app.replay.history_archive import (
@@ -610,7 +626,7 @@ class BarPreparationAdapter:
                     ReplayHistoryImportBatch,
                 )
                 writer = ReplayHistoryArchiveWriter(self.replay_service.settings.replay_history_archive_dir)
-                identity = ReplaySeriesIdentity(exchange, market, symbol)
+                identity = ReplaySeriesIdentity(exchange, market, symbol, series=series_identity)
                 # Publish bounded fragments; already completed immutable objects
                 # survive interruption and are deduplicated by the writer.
                 for fragment in fragments:
@@ -661,7 +677,7 @@ class BarPreparationAdapter:
                     manifest = self.local_data.freeze_host_bars(
                         rows, dataset_id=f"local-{context[:32]}", name=f"{exchange} {symbol} {interval}",
                         exchange=exchange, market_type=market, symbol=symbol, interval=interval,
-                        chart_context_hash=f"sha256:{context}")
+                        chart_context_hash=f"sha256:{context}", series_identity=series_identity)
                     self._record_dataset(manifest["dataset_id"], reservation=reservation)
                 result["inputs"].append({"exchange": exchange, "market_type": market, "symbol": symbol,
                                          "interval": interval, "dataset_id": manifest["dataset_id"],

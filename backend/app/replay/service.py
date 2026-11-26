@@ -215,7 +215,7 @@ class ReplayService:
             Callable[[str, str, str], Mapping[str, object] | None] | None
         ) = None,
         instrument_metadata_refresher: (
-            Callable[[str, str], Awaitable[object]] | None
+            Callable[[str, str, str], Awaitable[object]] | None
         ) = None,
     ) -> None:
         if not settings.enabled:
@@ -394,7 +394,7 @@ class ReplayService:
             return
         metadata = await asyncio.to_thread(resolver, exchange, market_type, symbol)
         if metadata is None and self._instrument_metadata_refresher is not None:
-            await self._instrument_metadata_refresher(exchange, market_type)
+            await self._instrument_metadata_refresher(exchange, market_type, symbol)
             metadata = await asyncio.to_thread(resolver, exchange, market_type, symbol)
         if metadata is None:
             from .training.errors import TrainingRunError

@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.data_preparation.models import STRATEGY_BAR_INPUT_LIMIT, PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
@@ -15,7 +15,30 @@ from app.api.v1.backtests import _operator_python_payload
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
 
 
-class ReplayPreparationPayload(BaseModel):
+class _ReplayMarketSeries(BaseModel):
+    """A replay market's kline series: absent, or an explicit default, is the exchange's own."""
+
+    identity: dict[str, str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_identity(cls, values):
+        if isinstance(values, dict) and values.get("identity") is not None:
+            from app.data_engine.series_identity import requested_series_identity
+            identity = requested_series_identity(str(values.get("exchange") or "").strip().lower(), values["identity"])
+            values = {**values, "identity": identity.to_dict() if identity is not None else None}
+        return values
+
+    @model_serializer(mode="wrap")
+    def _omit_default_identity(self, handler):
+        # Stored submissions of an exchange's own series keep their exact form.
+        data = handler(self)
+        if isinstance(data, dict) and data.get("identity") is None:
+            data.pop("identity", None)
+        return data
+
+
+class ReplayPreparationPayload(_ReplayMarketSeries):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
     setup: TrainingRunSetupPayload
@@ -394,7 +417,7 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
     start = max(0, first - history_ms) // 60_000 * 60_000
     end = ((last + setup["forward_cache_ms"] + 59_999) // 60_000) * 60_000
     base = Requirement(exchange=payload.exchange, market_type=payload.market_type,
-                       symbol=payload.symbol, start_ms=start, end_ms=end)
+                       symbol=payload.symbol, start_ms=start, end_ms=end, identity=payload.identity)
     requirements = [base]
     if setup["source_kind"] == "AGG_TRADE":
         # Replay's existing catalog and warmup bind bars alongside the tape.
@@ -418,7 +441,7 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
         raise
 
 
-class ReplayMarketPreparationPayload(BaseModel):
+class ReplayMarketPreparationPayload(_ReplayMarketSeries):
     model_config = ConfigDict(extra="forbid")
     run_id: str
     exchange: str
@@ -434,12 +457,16 @@ async def prepare_replay_market(request: Request, payload: ReplayMarketPreparati
     instance = service(request)
     replay = instance.adapter.replay_service
     try:
-        scope = await replay.training.market_track_history(**payload.model_dump())
+        scope = await replay.training.market_track_history(**payload.model_dump(exclude={"identity"}))
     except TrainingRunError as exc:
         raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    identity = (payload.identity if payload.identity is not None
+                else await call_storage(request, _recorded_replay_series, replay, scope))
+    if identity is not None:
+        scope = {**scope, "identity": identity}
     base = Requirement(**{key: scope[key] for key in (
         "exchange", "market_type", "symbol", "start_ms", "end_ms",
-    )})
+    )}, identity=identity)
     requirements = [base]
     if scope["source_kind"] == "AGG_TRADE":
         requirements.append(base.model_copy(update={"role": "TRADES"}))
@@ -447,6 +474,19 @@ async def prepare_replay_market(request: Request, payload: ReplayMarketPreparati
         idempotency_key="replay-market-" + fingerprint(scope), consumer="REPLAY",
         requirements=requirements, intent={"replay_market": scope},
     )))
+
+
+def _recorded_replay_series(replay, scope) -> dict[str, str] | None:
+    """The series a replay market already holds, for a track added without one."""
+    describe = getattr(getattr(replay, "_repository", None), "describe_catalog", None)
+    if not callable(describe):
+        return None
+    from app.replay.history_archive import ReplayHistoryArchiveError
+    try:
+        recorded = describe(scope["symbol"], "1m", exchange=scope["exchange"], market_type=scope["market_type"])
+    except ReplayHistoryArchiveError:
+        return None
+    return recorded["identity"].get("series_identity")
 
 
 class TradeFlowHistoryPreparationPayload(BaseModel):

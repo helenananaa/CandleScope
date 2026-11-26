@@ -6,9 +6,10 @@ import hashlib
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping, Protocol, Sequence
 
+from app.data_engine.series_identity import KlineSeriesIdentity, requested_series_identity
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     is_one_second_interval,
@@ -85,9 +86,21 @@ class KlinesReadRepository(Protocol):
 
 @dataclass(frozen=True, order=True, slots=True)
 class ReplaySeriesIdentity:
+    """A replay market and, when it is not the exchange's own, its kline series.
+
+    A replay market (exchange, market type, symbol) holds one series: the
+    archive refuses a second one. The series identity is recorded with the
+    market's history but takes no part in equality, ordering or the key, so
+    replay runs keep addressing markets by their route (ADR-DATA-002 D1).
+    """
+
     exchange: str
     market_type: str
     symbol: str
+    # Absent from canonical hashes when it is the exchange's own (ADR-DATA-002 §3).
+    series: KlineSeriesIdentity | None = field(
+        default=None, compare=False, metadata={"canonical_omit_value": None},
+    )
 
     def __post_init__(self) -> None:
         for field_name in ("exchange", "market_type", "symbol"):
@@ -96,26 +109,43 @@ class ReplaySeriesIdentity:
                 field_name,
                 validate_identifier(getattr(self, field_name), field_name=field_name),
             )
+        series = self.series
+        if series is not None and not isinstance(series, KlineSeriesIdentity):
+            raise TypeError("series must be a KlineSeriesIdentity")
+        if series is not None and series.is_legacy_default_for(self.exchange):
+            object.__setattr__(self, "series", None)
 
     @property
     def key(self) -> str:
         return f"{self.exchange}:{self.market_type}:{self.symbol}"
 
-    def to_dict(self) -> dict[str, str]:
-        return {
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
             "exchange": self.exchange,
             "market_type": self.market_type,
             "symbol": self.symbol,
         }
+        if self.series is not None:
+            payload["series_identity"] = self.series.to_dict()
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> "ReplaySeriesIdentity":
-        if set(payload) != {"exchange", "market_type", "symbol"}:
+        if not {"exchange", "market_type", "symbol"} <= set(payload) <= {
+            "exchange", "market_type", "symbol", "series_identity",
+        }:
             raise ValueError("replay series identity fields are incompatible")
+        series = payload.get("series_identity")
+        if series is not None and not isinstance(series, Mapping):
+            raise ValueError("replay series identity must be an object")
         return cls(
             exchange=payload["exchange"],  # type: ignore[arg-type]
             market_type=payload["market_type"],  # type: ignore[arg-type]
             symbol=payload["symbol"],  # type: ignore[arg-type]
+            series=(
+                requested_series_identity(str(payload["exchange"]), series)
+                if series is not None else None
+            ),
         )
 
 
