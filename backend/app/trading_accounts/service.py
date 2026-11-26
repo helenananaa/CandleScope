@@ -47,6 +47,9 @@ from app.simulation.practice_account import (
     market_leverage,
     reachable,
 )
+from app.data_engine.series_identity import KlineSeriesIdentity
+
+from .series import market_series, requested_series, series_text, series_view, stored_series
 from .stats import TradeFacts, compute_stats, journal_tags
 from .journal_service import JournalService
 from .store import TradingStore
@@ -61,7 +64,11 @@ CURSOR_FLUSH_MS = 10_000
 
 
 class MarketPort(Protocol):
-    """Read-only candle access used for marks, cursor seeding and excursions."""
+    """Read-only candle access used for marks, cursor seeding and excursions.
+
+    A market that follows a provider series also receives ``series_identity``
+    (ADR-DATA-002 D1c); the exchange's own series is read without it.
+    """
 
     def latest_bar(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None: ...
 
@@ -98,6 +105,7 @@ def _fill_view(row: dict[str, Any]) -> dict[str, Any]:
         "exchange": row["exchange"],
         "marketType": row["market_type"],
         "symbol": row["symbol"],
+        **series_view(row.get("series_identity")),
         "side": row["side"],
         **_hedge_fields(row),
         "qty": dec_str(row["qty"]),
@@ -119,6 +127,7 @@ def _order_view(row: dict[str, Any]) -> dict[str, Any]:
         "exchange": row["exchange"],
         "marketType": row["market_type"],
         "symbol": row["symbol"],
+        **series_view(row.get("series_identity")),
         "side": row["side"],
         **_hedge_fields(row),
         "type": row["type"],
@@ -188,6 +197,8 @@ class _Feed:
     flushed_cursor: Cursor
     # Last measured matcher step: live update -> applied (see practice_runtime).
     timing: dict[str, int] = field(default_factory=dict)
+    # The kline series this market follows; None is the exchange's own.
+    series: KlineSeriesIdentity | None = None
 
 
 def _bar_decimal(bar: dict[str, Any], key: str) -> Decimal:
@@ -404,24 +415,30 @@ class TradingAccountService(JournalService):
         realized = sum((trade.realized_pnl - trade.fees for trade in trades), ZERO)
         return cash + realized
 
-    def _mark(self, instrument: Instrument) -> tuple[Decimal | None, int | None, str]:
+    def _trade_mark(self, trade: Trade) -> tuple[Decimal | None, int | None, str]:
+        return self._mark((trade.exchange, trade.market_type, trade.symbol),
+                          stored_series(trade.exchange, trade.series_identity))
+
+    def _mark(self, instrument: Instrument, series: KlineSeriesIdentity | None) -> tuple[Decimal | None, int | None, str]:
         marks = getattr(self._projection_state, "marks", None)
-        if marks is not None and instrument in marks:
-            return marks[instrument]
-        value = self._read_mark(instrument)
+        key = (instrument, series)
+        if marks is not None and key in marks:
+            return marks[key]
+        value = self._read_mark(instrument, series)
         if marks is not None:
-            marks[instrument] = value
+            marks[key] = value
         return value
 
-    def _read_mark(self, instrument: Instrument) -> tuple[Decimal | None, int | None, str]:
+    def _read_mark(self, instrument: Instrument, series: KlineSeriesIdentity | None) -> tuple[Decimal | None, int | None, str]:
         feed = self._feed(instrument)
-        cursor = feed.cursor if feed is not None else None
+        # A cursor prices only the series it follows.
+        cursor = feed.cursor if feed is not None and feed.series == series else None
         now = self.clock()
         if cursor is not None and now - cursor.observed_ms <= FRESH_PRICE_MS:
             return cursor.last_close, cursor.observed_ms, "practice" if feed.status == "live" else "stale"
         if self.market is not None:
             try:
-                bar = self.market.latest_bar(*instrument)
+                bar = self.market.latest_bar(*instrument, **market_series(series))
             except Exception:
                 bar = None
             if bar is not None:
@@ -449,7 +466,7 @@ class TradingAccountService(JournalService):
             except Exception:
                 # Keep financial views available if optional journal decoding
                 # fails. No empty journal is advertised as a successful read.
-                trades = [trade.to_dict(mark=self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
+                trades = [trade.to_dict(mark=self._trade_mark(trade)[0]
                                         if trade.status == "open" else None)
                           for trade in list(reversed(self._trades(account_id)))[:200]]
                 entries, journal_error = None, "Trading journal unavailable"
@@ -473,8 +490,7 @@ class TradingAccountService(JournalService):
         for trade in trades:
             if trade.status != "open":
                 continue
-            instrument = (trade.exchange, trade.market_type, trade.symbol)
-            mark, mark_ms, mark_source = self._mark(instrument)
+            mark, mark_ms, mark_source = self._trade_mark(trade)
             if mark is None:
                 valuation_status = "unknown"
             elif valuation_status == "current" and mark_source == "stale":
@@ -502,6 +518,7 @@ class TradingAccountService(JournalService):
                 "exchange": instrument[0],
                 "marketType": instrument[1],
                 "symbol": instrument[2],
+                **({"identity": feed.series.to_dict()} if feed and feed.series else {}),
                 "status": feed.status if feed else "waiting",
                 "detail": feed.detail if feed else "",
                 "observedMs": feed.cursor.observed_ms if feed else None,
@@ -543,7 +560,7 @@ class TradingAccountService(JournalService):
             reviewed = any(latest_fields.get(key) for key in ("goodDecisions", "errors", "hypotheses", "adherence"))
             mark = None
             if trade.status == "open":
-                mark = self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
+                mark = self._trade_mark(trade)[0]
             view = trade.to_dict(mark=mark)
             view.update({
                 "noteId": note["id"] if note else None,
@@ -622,7 +639,7 @@ class TradingAccountService(JournalService):
         note, plan = self._trade_note_and_plan(trade, entries, revisions)
         mark = None
         if trade.status == "open":
-            mark = self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
+            mark = self._trade_mark(trade)[0]
         upper = trade.closed_at_ms or self.clock()
         candidates = [
             entry
@@ -711,6 +728,7 @@ class TradingAccountService(JournalService):
         start = trade.opened_at_ms - trade.opened_at_ms % step
         bars, complete = self.market.bars(
             trade.exchange, trade.market_type, trade.symbol, interval, start, end, 5_000,
+            **market_series(stored_series(trade.exchange, trade.series_identity)),
         )
         avg = trade.avg_entry_price
         if not bars or avg is None:
@@ -754,14 +772,16 @@ class TradingAccountService(JournalService):
             allow_short=market_type == "futures",
         )
 
-    def _reference_price(self, instrument: Instrument, client_price: Decimal | None) -> tuple[Decimal, str]:
+    def _reference_price(
+        self, instrument: Instrument, series: KlineSeriesIdentity | None, client_price: Decimal | None,
+    ) -> tuple[Decimal, str]:
         now = self.clock()
         feed = self._feed(instrument)
-        if feed is not None and now - feed.cursor.observed_ms <= FRESH_PRICE_MS:
+        if feed is not None and feed.series == series and now - feed.cursor.observed_ms <= FRESH_PRICE_MS:
             return feed.cursor.last_close, "practice_feed"
         if self.market is not None:
             try:
-                bar = self.market.latest_bar(*instrument)
+                bar = self.market.latest_bar(*instrument, **market_series(series))
             except Exception:
                 bar = None
             if bar is not None and now - int(bar["time"]) * 1000 <= 2 * BAR_MS:
@@ -774,11 +794,13 @@ class TradingAccountService(JournalService):
             status=409,
         )
 
-    def _seed_cursor(self, conn, instrument: Instrument, price: Decimal, now: int) -> None:
+    def _seed_cursor(
+        self, conn, instrument: Instrument, series: KlineSeriesIdentity | None, price: Decimal, now: int,
+    ) -> None:
         bar = None
         if self.market is not None:
             try:
-                bar = self.market.latest_bar(*instrument)
+                bar = self.market.latest_bar(*instrument, **market_series(series))
             except Exception:
                 bar = None
         minute = now // BAR_MS * 60
@@ -807,6 +829,8 @@ class TradingAccountService(JournalService):
             "status": "live",
             "detail": "",
             "updated_at_ms": now,
+            # Seeding starts a new run of this market, on the series it is ordered on.
+            "series_identity": series_text(series),
         })
 
     def place_order(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -822,6 +846,7 @@ class TradingAccountService(JournalService):
         if account["archived"]:
             raise conflict("Archived accounts cannot place orders")
         instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
+        series = requested_series(instrument[0], payload.get("identity"))
         side = str(payload.get("side") or "").lower()
         order_type = str(payload.get("type") or "").lower()
         leg = payload.get("positionSide")
@@ -856,7 +881,18 @@ class TradingAccountService(JournalService):
             raise invalid("reduce-only orders cannot carry a bracket")
 
         now = self.clock()
-        reference, price_source = self._reference_price(instrument, client_price)
+        working_rows = self.store.working_orders_for(*instrument)
+        seed_cursor = not working_rows and instrument not in self.working_instruments()
+        if not seed_cursor:
+            # Every account matches this market on one cursor, so it keeps the
+            # series it follows until its last order and position are gone.
+            feed = self._feed(instrument)
+            followed = feed.series if feed is not None else None
+            if series is not None and series != followed:
+                raise conflict("This market is already followed on another data series",
+                               code="TRADING_SERIES_MISMATCH")
+            series = followed
+        reference, price_source = self._reference_price(instrument, series, client_price)
         trades = self._trades(account_id)
         target = next((trade for trade in trades if trade.status == "open" and trade.position_side == leg
                        and (trade.exchange, trade.market_type, trade.symbol) == instrument), None)
@@ -900,6 +936,7 @@ class TradingAccountService(JournalService):
             "exchange": instrument[0],
             "market_type": instrument[1],
             "symbol": instrument[2],
+            "series_identity": series_text(series),
             "side": side,
             "type": order_type,
             "qty": qty,
@@ -921,11 +958,9 @@ class TradingAccountService(JournalService):
             order_type == "limit" and limit_price is not None
             and ((side == "buy" and limit_price >= reference) or (side == "sell" and limit_price <= reference))
         )
-        working_rows = self.store.working_orders_for(*instrument)
         book = self._buying_power(account, instrument, trades) if marketable else None
-        seed_cursor = not working_rows and instrument not in self.working_instruments()
         if seed_cursor:
-            self._seed_cursor(conn, instrument, reference, now)
+            self._seed_cursor(conn, instrument, series, reference, now)
         self.store.insert(conn, "orders", row)
         if marketable:
             # A marketable order fills now against the reference price.
@@ -943,7 +978,7 @@ class TradingAccountService(JournalService):
             if not matcher.execute(order, reference, now, liquidity="taker"):
                 reason, _ = matcher.result.cancelled[order.id]
                 raise conflict(reason, code="TRADING_" + reason.upper())
-            self._persist_match(conn, account, instrument, matcher, now)
+            self._persist_match(conn, account, instrument, series, matcher, now)
         if seed_cursor:
             # Reload the freshly seeded cursor on next use.
             self._feeds.pop(instrument, None)
@@ -981,10 +1016,12 @@ class TradingAccountService(JournalService):
         conn,
         account: dict[str, Any],
         instrument: Instrument,
+        series: KlineSeriesIdentity | None,
         matcher: PracticeMatcher,
         now: int,
     ) -> None:
         result = matcher.result
+        followed = series_text(series)
         for child in result.created:
             self.store.insert(conn, "orders", {
                 "id": child.id,
@@ -992,6 +1029,7 @@ class TradingAccountService(JournalService):
                 "exchange": instrument[0],
                 "market_type": instrument[1],
                 "symbol": instrument[2],
+                "series_identity": followed,
                 "side": child.side,
                 "type": child.type,
                 "qty": child.qty,
@@ -1017,6 +1055,7 @@ class TradingAccountService(JournalService):
                 "exchange": instrument[0],
                 "market_type": instrument[1],
                 "symbol": instrument[2],
+                "series_identity": followed,
                 "side": fill.side,
                 "qty": fill.qty,
                 "price": fill.price,
@@ -1060,7 +1099,8 @@ class TradingAccountService(JournalService):
                 else:
                     cursor = _cursor_from_row(row)
                     frozen[instrument] = _Feed(cursor, row["status"], row["detail"],
-                        _cursor_key(cursor, row["status"], row["detail"]), int(row["updated_at_ms"]), cursor)
+                        _cursor_key(cursor, row["status"], row["detail"]), int(row["updated_at_ms"]), cursor,
+                        series=stored_series(instrument[0], row.get("series_identity")))
             return frozen[instrument]
         with self.store.locked():
             feed = self._feeds.get(instrument)
@@ -1076,6 +1116,7 @@ class TradingAccountService(JournalService):
                     flushed=_cursor_key(cursor, row["status"], row["detail"]),
                     flushed_at_ms=int(row["updated_at_ms"]),
                     flushed_cursor=cursor,
+                    series=stored_series(instrument[0], row.get("series_identity")),
                 )
                 self._feeds[instrument] = feed
             return feed
@@ -1158,7 +1199,7 @@ class TradingAccountService(JournalService):
                         for account, matcher in self._match_sessions(instrument, rows):
                             for chunk in chunks:
                                 matcher.run(chunk)
-                            self._persist_match(conn, account, instrument, matcher, now)
+                            self._persist_match(conn, account, instrument, feed.series, matcher, now)
                             fills += len(matcher.result.fills)
                     self._write_feed(conn, instrument, cursor, status, detail, now)
                 self._mark_flushed(feed, cursor, status, detail, now)
@@ -1186,7 +1227,7 @@ class TradingAccountService(JournalService):
                 trade_ids[trade.position_side] = trade.id
                 capital -= trade.open_qty * trade.sign * trade.avg_entry_price
             else:
-                mark, _, _ = self._mark(key)
+                mark, _, _ = self._trade_mark(trade)
                 if mark is None:
                     # No buying power from an account with incomplete collateral valuation.
                     marks_available = False
@@ -1287,6 +1328,11 @@ class TradingAccountService(JournalService):
         feed = self._feed(instrument)
         return feed.cursor.bar_time * 1000 if feed is not None else None
 
+    def instrument_series(self, instrument: Instrument) -> KlineSeriesIdentity | None:
+        """The kline series the matcher reads for ``instrument``; None is the exchange's own."""
+        feed = self._feed(instrument)
+        return feed.series if feed is not None else None
+
     # ══════════════════════════════════════════════════════════
     #  Manual fills
     # ══════════════════════════════════════════════════════════
@@ -1296,6 +1342,7 @@ class TradingAccountService(JournalService):
         if account["kind"] != "manual":
             raise conflict("Fills can only be entered on manual accounts", code="TRADING_MANUAL_ONLY")
         instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
+        series = requested_series(instrument[0], payload.get("identity"))
         side = str(payload.get("side") or "").lower()
         if side not in SIDES:
             raise invalid("side must be buy or sell")
@@ -1317,6 +1364,7 @@ class TradingAccountService(JournalService):
                 "exchange": instrument[0],
                 "market_type": instrument[1],
                 "symbol": instrument[2],
+                "series_identity": series_text(series),
                 "side": side,
                 "qty": qty,
                 "price": price,

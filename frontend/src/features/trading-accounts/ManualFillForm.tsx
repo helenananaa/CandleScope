@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { chartInstrumentFields } from "./chartInstrument.js";
 import { tradingApi } from "./tradingApi.js";
 import type { TradingAccount, TradingChartContext } from "./tradingTypes.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
@@ -36,9 +37,7 @@ export default function ManualFillForm({
     try {
       const tsMs = new Date(time).getTime();
       await tradingApi.addFill(account.id, {
-        exchange: context.exchange,
-        marketType: context.marketType,
-        symbol: context.symbol,
+        ...chartInstrumentFields(context),
         side,
         qty,
         price,
