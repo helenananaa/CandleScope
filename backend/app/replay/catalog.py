@@ -9,6 +9,13 @@ from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping, Protocol, Sequence
 
+from app.data_engine.history.expected_bars import (
+    calendar_by_id,
+    offset_open,
+    open_at_or_after,
+    open_runs,
+    opens_before,
+)
 from app.data_engine.series_identity import KlineSeriesIdentity, requested_series_identity
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
@@ -241,6 +248,52 @@ class EligibleWindow:
         }
 
 
+def eligible_window(
+    *,
+    interval: str,
+    interval_ms: int,
+    replay_start_ms: int,
+    warmup_bars: int,
+    replay_bars: int,
+    calendar: object | None = None,
+) -> EligibleWindow:
+    """The window around ``replay_start_ms``, on the interval grid or a session calendar."""
+    if calendar is None:
+        warmup_start_ms = replay_start_ms - warmup_bars * interval_ms
+        replay_end_open_ms = replay_start_ms + (replay_bars - 1) * interval_ms
+    else:
+        try:
+            warmup_start_ms = offset_open(calendar, replay_start_ms, -warmup_bars, interval)
+            replay_end_open_ms = offset_open(calendar, replay_start_ms, replay_bars - 1, interval)
+        except LookupError as exc:
+            raise ReplayDomainError(
+                ReplayErrorCode.NO_ELIGIBLE_WINDOW,
+                "replay window runs past its trading calendar",
+            ) from exc
+    return EligibleWindow(
+        interval=interval,
+        interval_ms=interval_ms,
+        warmup_start_ms=warmup_start_ms,
+        replay_start_ms=replay_start_ms,
+        replay_end_open_ms=replay_end_open_ms,
+        warmup_bars=warmup_bars,
+        replay_bars=replay_bars,
+    )
+
+
+def replay_calendar(calendar_id: str | None) -> object | None:
+    """A replay series' session calendar, or None for the continuous UTC grid."""
+    if not calendar_id or calendar_id == "crypto.24x7.utc":
+        return None
+    try:
+        return calendar_by_id(calendar_id)
+    except LookupError as exc:
+        raise ReplayDomainError(
+            ReplayErrorCode.DATASET_MISMATCH,
+            f"replay trading calendar is not registered: {calendar_id}",
+        ) from exc
+
+
 @dataclass(frozen=True, slots=True)
 class EligibleWindowRange:
     interval: str
@@ -250,6 +303,9 @@ class EligibleWindowRange:
     count: int
     warmup_bars: int
     replay_bars: int
+    # ADR-DATA-002 D2: a session-calendar range lies inside one session, so its
+    # starts stay one interval apart; warmup and forward bars cross closures.
+    calendar: object | None = field(default=None, compare=False, repr=False)
 
     def materialize(self, offset: int) -> EligibleWindow:
         if isinstance(offset, bool) or not isinstance(offset, int):
@@ -257,16 +313,13 @@ class EligibleWindowRange:
         if offset < 0 or offset >= self.count:
             raise IndexError("eligible window offset outside compact range")
         replay_start_ms = self.first_start_ms + offset * self.interval_ms
-        return EligibleWindow(
+        return eligible_window(
             interval=self.interval,
             interval_ms=self.interval_ms,
-            warmup_start_ms=replay_start_ms - self.warmup_bars * self.interval_ms,
             replay_start_ms=replay_start_ms,
-            replay_end_open_ms=(
-                replay_start_ms + (self.replay_bars - 1) * self.interval_ms
-            ),
             warmup_bars=self.warmup_bars,
             replay_bars=self.replay_bars,
+            calendar=self.calendar,
         )
 
     def contains(self, start_ms: int) -> bool:
@@ -1009,8 +1062,10 @@ class ReplayCatalog:
             start_ms=earliest,
             end_ms=latest_closed,
         )
-        if gap_summary.calendar_id not in {"", "crypto.24x7.utc"}:
-            self._candidate_error("non_continuous_calendar_not_supported")
+        try:
+            calendar = replay_calendar(gap_summary.calendar_id)
+        except ReplayDomainError as exc:
+            self._candidate_error("non_continuous_calendar_not_supported", cause=exc)
         ranges = self._eligible_ranges(
             interval,
             interval_ms=interval_ms,
@@ -1019,6 +1074,7 @@ class ReplayCatalog:
             gaps=gap_summary.gaps,
             warmup_bars=warmup_bars,
             replay_bars=replay_bars,
+            calendar=calendar,
         )
         return bounds, gap_summary, ranges
 
@@ -1166,6 +1222,7 @@ class ReplayCatalog:
         gaps: Sequence[GapRange],
         warmup_bars: int,
         replay_bars: int,
+        calendar: object | None = None,
     ) -> tuple[EligibleWindowRange, ...]:
         segments: list[tuple[int, int]] = []
         cursor = earliest_ms
@@ -1177,6 +1234,15 @@ class ReplayCatalog:
         if cursor <= latest_ms:
             segments.append((cursor, latest_ms))
 
+        if calendar is not None:
+            return ReplayCatalog._session_eligible_ranges(
+                interval,
+                interval_ms=interval_ms,
+                segments=segments,
+                warmup_bars=warmup_bars,
+                replay_bars=replay_bars,
+                calendar=calendar,
+            )
         ranges: list[EligibleWindowRange] = []
         for segment_start, segment_end in segments:
             first_start = segment_start + warmup_bars * interval_ms
@@ -1195,6 +1261,45 @@ class ReplayCatalog:
                     replay_bars=replay_bars,
                 )
             )
+        return tuple(ranges)
+
+    @staticmethod
+    def _session_eligible_ranges(
+        interval: str,
+        *,
+        interval_ms: int,
+        segments: Sequence[tuple[int, int]],
+        warmup_bars: int,
+        replay_bars: int,
+        calendar: object,
+    ) -> tuple[EligibleWindowRange, ...]:
+        """Starts whose warmup and forward bars are present, one range per session."""
+        ranges: list[EligibleWindowRange] = []
+        for segment_start, segment_end in segments:
+            try:
+                first_open = open_at_or_after(calendar, segment_start, interval)
+                if first_open > segment_end:
+                    continue
+                last_open = opens_before(calendar, segment_end + 1, 1, interval)[0]
+                first_start = offset_open(calendar, first_open, warmup_bars, interval)
+                last_start = offset_open(calendar, last_open, -(replay_bars - 1), interval)
+            except LookupError:
+                continue
+            if first_start > last_start:
+                continue
+            for run_first, run_last in open_runs(calendar, first_start, last_start, interval):
+                ranges.append(
+                    EligibleWindowRange(
+                        interval=interval,
+                        interval_ms=interval_ms,
+                        first_start_ms=run_first,
+                        last_start_ms=run_last,
+                        count=(run_last - run_first) // interval_ms + 1,
+                        warmup_bars=warmup_bars,
+                        replay_bars=replay_bars,
+                        calendar=calendar,
+                    )
+                )
         return tuple(ranges)
 
     @staticmethod

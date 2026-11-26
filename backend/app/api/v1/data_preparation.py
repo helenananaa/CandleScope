@@ -418,6 +418,14 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
     end = ((last + setup["forward_cache_ms"] + 59_999) // 60_000) * 60_000
     base = Requirement(exchange=payload.exchange, market_type=payload.market_type,
                        symbol=payload.symbol, start_ms=start, end_ms=end, identity=payload.identity)
+    calendar_of = getattr(instance.adapter, "requirement_calendar", None)
+    calendar = calendar_of(base) if callable(calendar_of) else None
+    if calendar is not None:
+        # ADR-DATA-002 D2: warmup and forward cache count the bars the market
+        # trades, so the prepared range reaches across closures.
+        start, end = _session_replay_range(calendar, first, last, warmup_bars=history_ms // 60_000,
+                                           forward_bars=setup["forward_cache_ms"] // 60_000)
+        base = base.model_copy(update={"start_ms": start, "end_ms": end})
     requirements = [base]
     if setup["source_kind"] == "AGG_TRADE":
         # Replay's existing catalog and warmup bind bars alongside the tape.
@@ -425,7 +433,9 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
     prepared = PreparationRequest(
         idempotency_key=payload.idempotency_key, consumer="REPLAY",
         requirements=requirements,
-        progressive=payload.progressive,
+        # Progressive feeds publish fixed minute ranges; a session-calendar
+        # replay is prepared whole before it opens (ADR-DATA-002 D2).
+        progressive=payload.progressive and calendar is None,
         intent={"replay_setup": setup, "display_interval": payload.display_interval,
                 **({"submission": submission} if payload.random_by_market else {})},
     )
@@ -439,6 +449,20 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
             if prior and canonical(prior["request"]["intent"].get("submission")) == canonical(submission):
                 return prior
         raise
+
+
+def _session_replay_range(calendar, first: int, last: int, *, warmup_bars: int, forward_bars: int) -> tuple[int, int]:
+    """Minute range [start, end) holding the warmup and forward bars of a session-calendar replay."""
+    from app.data_engine.history.expected_bars import offset_open, open_at_or_after
+    try:
+        first_open = open_at_or_after(calendar, first, "1m")
+        last_open = max(first_open, open_at_or_after(calendar, last, "1m"))
+        start = offset_open(calendar, first_open, -warmup_bars, "1m")
+        end = offset_open(calendar, last_open, max(forward_bars - 1, 0), "1m") + 60_000
+    except LookupError as exc:
+        raise HTTPException(422, detail={"code": "INVALID_RANGE",
+                                         "message": "The trading calendar does not cover this training range"}) from exc
+    return start, end
 
 
 class ReplayMarketPreparationPayload(_ReplayMarketSeries):

@@ -72,7 +72,10 @@ from .catalog import (
     ReplayCatalogSnapshot,
     ReplaySeriesIdentity,
     SeriesBounds,
+    eligible_window,
+    replay_calendar,
 )
+from app.data_engine.history.expected_bars import shifted_calendar
 from .commands import CommandResult
 from .constants import (
     REPLAY_PROTOCOL,
@@ -894,6 +897,12 @@ class ReplayService:
                 if verified_market_halts
                 else {}
             ),
+            # ADR-DATA-002 D2: a session-calendar window is rebuilt on its calendar.
+            **(
+                {"calendar_id": entry.gap_summary.calendar_id}
+                if replay_calendar(entry.gap_summary.calendar_id) is not None
+                else {}
+            ),
             **(
                 {"agg_trade_catalog_epoch": trade_catalog_epoch}
                 if trade_catalog_epoch is not None
@@ -1016,8 +1025,19 @@ class ReplayService:
         )
         parsed_interval_ms = parse_interval_ms(selected_interval)
         replay_bars, horizon_remainder = divmod(config.horizon_ms, interval_ms)
-        warmup_start_ms = selected_start_ms - config.warmup_bars * interval_ms
-        replay_end_open_ms = selected_start_ms + (replay_bars - 1) * interval_ms
+        calendar = replay_calendar(
+            None if selection.get("calendar_id") is None else str(selection["calendar_id"])
+        )
+        if calendar is None:
+            warmup_start_ms = selected_start_ms - config.warmup_bars * interval_ms
+            replay_end_open_ms = selected_start_ms + (replay_bars - 1) * interval_ms
+        else:
+            bound = eligible_window(
+                interval=selected_interval, interval_ms=interval_ms,
+                replay_start_ms=selected_start_ms, warmup_bars=config.warmup_bars,
+                replay_bars=max(replay_bars, 1), calendar=calendar,
+            )
+            warmup_start_ms, replay_end_open_ms = bound.warmup_start_ms, bound.replay_end_open_ms
         digests = (source_fingerprint, catalog_epoch)
         if source_revision is not None:
             digests = (*digests, source_revision)
@@ -3386,8 +3406,11 @@ class ReplayService:
         actual_dataset: BarDatasetSnapshot,
         paging_manifest: Mapping[str, object] | None,
     ) -> BarReplaySource | PagedBarReplaySource:
+        calendar = self._actor_bar_calendar(
+            actual_dataset=actual_dataset, actor_dataset=actor_dataset
+        )
         if paging_manifest is None:
-            return BarReplaySource(actor_dataset)
+            return BarReplaySource(actor_dataset, calendar=calendar)
         manifest = self._validated_bar_paging_manifest(
             paging_manifest,
             actual_dataset,
@@ -3438,6 +3461,7 @@ class ReplayService:
             page_rows=page_rows,
             page_loader=load_page,
             verified_halts=verified_halts,
+            calendar=calendar,
         )
         shared_query = getattr(self._repository, "shared_market_at_revision", None)
         if callable(shared_query):
@@ -3450,6 +3474,18 @@ class ReplayService:
                 )
             source._archive.shared_factory = shared_factory
         return source
+
+    @staticmethod
+    def _actor_bar_calendar(
+        *,
+        actual_dataset: BarDatasetSnapshot,
+        actor_dataset: BarDatasetSnapshot,
+    ) -> object | None:
+        """The dataset's session calendar on the actor's (possibly shifted) timeline."""
+        return shifted_calendar(
+            replay_calendar(actual_dataset.provenance.calendar_id),
+            actor_dataset.replay_start_ms - actual_dataset.replay_start_ms,
+        )
 
     @staticmethod
     def _actor_bar_halts(
@@ -4231,6 +4267,9 @@ class ReplayService:
                 warmup_bars=dataset.warmup_rows,
                 max_closed_bars=max_closed_bars,
                 verified_halts=verified_halts,
+                calendar=ReplayService._actor_bar_calendar(
+                    actual_dataset=actual_dataset or dataset, actor_dataset=dataset
+                ),
             )
         return ConservativeBarBroker(
             config=broker_config,

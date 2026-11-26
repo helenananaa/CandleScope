@@ -39,6 +39,7 @@ from ..schema import (
 )
 from ..segments import (
     ResolvedHistoryPolicy,
+    history_policy_window,
 )
 from . import ledger as ledger_ops
 
@@ -731,15 +732,6 @@ def validated_selection_preparation(
         required_end_ms=int(row["required_end_ms"]),
         interval_ms=int(row["interval_ms"]),
     )
-    required_start_ms = (
-        history_policy.actual_replay_start_ms
-        - history_policy.effective_warmup_bars * history_policy.interval_ms
-    )
-    required_end_ms = (
-        history_policy.actual_replay_start_ms
-        + history_policy.forward_cache_ms
-        - history_policy.interval_ms
-    )
     try:
         stored_request = json.loads(str(row["request_json"]))
         stored_selection = json.loads(str(row["selection_json"]))
@@ -749,6 +741,10 @@ def validated_selection_preparation(
             "training selection preparation payload is unreadable",
             status_code=503,
         ) from exc
+    _, required_start_ms, required_end_ms = history_policy_window(
+        history_policy,
+        stored_selection.get("calendar_id") if isinstance(stored_selection, Mapping) else None,
+    )
     seed_source = "SERVER" if request.start_mode.value == "RANDOM" else "MANUAL"
     expected_request = request.to_dict(redact_hidden_start=False)
     if request.launch_context is not None:

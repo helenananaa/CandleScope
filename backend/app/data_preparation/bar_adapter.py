@@ -145,6 +145,10 @@ class BarPreparationAdapter:
                           order="ASC", exchange=requirement.exchange, market_type=requirement.market_type,
                           **({"series_identity": identity} if identity is not None else {}))
 
+    def requirement_calendar(self, requirement):
+        """The requirement's session calendar (ADR-DATA-002 D2), or None for the minute grid."""
+        return self._calendar(requirement)
+
     def _calendar(self, requirement):
         """The requirement's session calendar, or None for the plain minute grid."""
         if self.calendar_for is None:
@@ -313,7 +317,8 @@ class BarPreparationAdapter:
                     raise ValueError("cached input checksum mismatch")
                 data = json.loads(raw)
                 requirement = Requirement.model_validate(data["requirement"])
-                if not self._complete(data["rows"], requirement, require_trusted_source=data["origin"] != "replay_archive"):
+                if not self._complete(data["rows"], requirement, calendar=self._calendar(requirement),
+                                      require_trusted_source=data["origin"] != "replay_archive"):
                     raise ValueError("cached input coverage mismatch")
                 after = path.stat()
                 if signature != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
@@ -652,6 +657,8 @@ class BarPreparationAdapter:
                 )
                 writer = ReplayHistoryArchiveWriter(self.replay_service.settings.replay_history_archive_dir)
                 identity = ReplaySeriesIdentity(exchange, market, symbol, series=series_identity)
+                # ADR-DATA-002 D2: the archive records the series' session calendar.
+                calendar = self._calendar(Requirement.model_validate(fragments[0]["requirement"]))
                 # Publish bounded fragments; already completed immutable objects
                 # survive interruption and are deduplicated by the writer.
                 for fragment in fragments:
@@ -673,7 +680,8 @@ class BarPreparationAdapter:
                             rows=rows, source_provider=f"automatic_{fragment['receipt']['origin']}_snapshot",
                             source_object_key=fragment["key"],
                             source_period=f"{fragment['requirement']['start_ms']}:{fragment['requirement']['end_ms']}",
-                        )], listing_boundary_source="automatic_host_history_snapshot")
+                        )], listing_boundary_source="automatic_host_history_snapshot",
+                            calendar_id=None if calendar is None else calendar.calendar_id)
                         if self.publication_repository is not None:
                             from app.replay.shared_market_index import index_path
                             paths = []
