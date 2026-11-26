@@ -1712,6 +1712,24 @@ class DataManager(DataManagerCore):
             return "visible_range_gap"
         return reason or "query_gap"
 
+    def series_calendar(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        exchange: str = "binance",
+        market_type: str = "spot",
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> Any | None:
+        """The trading calendar that decides which bars this series should have.
+
+        Code outside the data engine checks completeness with it (ADR-DATA-002
+        D2), so a closed market is not a gap. None when no calendar is known.
+        """
+        key = SeriesKey.create(symbol, interval, exchange=exchange,
+                               market_type=self._normalize_market_type(market_type), identity=series_identity)
+        return self.query_engine.calendar_for(key)
+
     def get_bounds(
         self,
         symbol: str,

@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.data_engine.bar_basis import BarBasis
+from app.data_engine.history.expected_bars import bucket_end_ms, follows, session_calendar
 
 from app.data_engine.interval_policy import (
     IntervalAlignment,
@@ -389,13 +390,19 @@ class LocalDatasetService:
         interval: str,
         chart_context_hash: str,
         series_identity: KlineSeriesIdentity | None = None,
+        calendar: Any | None = None,
     ) -> dict[str, Any]:
         """Publish closed Host K-lines through the canonical immutable store.
 
         This is deliberately a LocalDatasetService operation rather than a
         chart-context cache. The caller must obtain rows from the Host data
         facade; this method only validates, hashes, and publishes them.
+
+        ``calendar`` is the series' trading calendar (ADR-DATA-002 D2). A
+        session calendar decides which bars must follow each other, so a closed
+        market is not a gap, and the manifest records its ``calendar_id``.
         """
+        calendar = session_calendar(calendar)
 
         self.start()
         interval_spec = parse_interval_spec(interval)
@@ -450,7 +457,12 @@ class LocalDatasetService:
                 open_ms = int(time_seconds) * 1000
             else:
                 open_ms = int(open_time_value)
-            if interval_spec.floor_ms(open_ms) != open_ms:
+            aligned = (
+                interval_spec.floor_ms(open_ms) == open_ms
+                if calendar is None
+                else calendar.first_expected_open(open_ms, open_ms, interval_spec.canonical) == open_ms
+            )
+            if not aligned:
                 raise LocalDatasetError(
                     "Host K-line is not aligned to the requested interval",
                     code="interval_alignment_incompatible",
@@ -461,7 +473,12 @@ class LocalDatasetService:
                         "Host K-lines are duplicated or out of order",
                         code="host_data_invalid",
                     )
-                if interval_spec.next_ms(previous_open) != open_ms:
+                successor = (
+                    interval_spec.next_ms(previous_open) == open_ms
+                    if calendar is None
+                    else follows(calendar, interval_spec.canonical, previous_open, open_ms)
+                )
+                if not successor:
                     raise LocalDatasetError(
                         "Host K-line coverage is incomplete",
                         code="host_coverage_incomplete",
@@ -499,7 +516,11 @@ class LocalDatasetService:
             bars.append(
                 _NormalizedBar(
                     open_time_ms=open_ms,
-                    close_time_ms=interval_spec.next_ms(open_ms) - 1,
+                    close_time_ms=(
+                        interval_spec.next_ms(open_ms)
+                        if calendar is None
+                        else bucket_end_ms(calendar, open_ms, interval_spec.canonical)
+                    ) - 1,
                     open=self._decimal_text(values["open"]),
                     high=self._decimal_text(values["high"]),
                     low=self._decimal_text(values["low"]),
@@ -531,6 +552,10 @@ class LocalDatasetService:
         identity_metadata = (
             {"identity": series_identity.to_dict()} if series_identity is not None else {}
         )
+        # ADR-DATA-002 D2: a session-calendar snapshot names its calendar, which
+        # readers resolve to tell closures from gaps. Always-open series add nothing.
+        if calendar is not None:
+            identity_metadata["calendar_id"] = calendar.calendar_id
         base_epoch = self._content_epoch(normalized_symbol, interval_spec, bars, [])
         epoch_hex = hashlib.sha256(
             canonical_json(

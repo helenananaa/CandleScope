@@ -12,6 +12,13 @@ from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from app.data_engine.data_manager.backfill_coordinator import RepairRequest
+from app.data_engine.history.expected_bars import (
+    bucket_end_ms,
+    calendar_by_id,
+    expected_open_range,
+    opens_follow,
+    session_calendar,
+)
 from app.data_engine.interval_policy import IntervalSpec, parse_interval_spec
 from app.data_engine.series_identity import (
     SERIES_IDENTITY_METADATA_KEY,
@@ -195,7 +202,11 @@ class ChartBacktestContextResolver:
             preview = self._preview(request, manifest, *resolved_range)
             if preview is None:
                 continue
-            if self._preview_is_complete(preview, interval, *resolved_range):
+            try:
+                manifest_calendar = calendar_by_id(manifest.get("calendar_id"))
+            except LookupError:
+                continue
+            if self._preview_is_complete(preview, interval, *resolved_range, calendar=manifest_calendar):
                 return self._ready(request, manifest, preview, *resolved_range)
             if incomplete is None:
                 incomplete = (manifest, preview)
@@ -280,7 +291,10 @@ class ChartBacktestContextResolver:
         )
         bars = list(getattr(local_query, "bars", []) or []) if local_query is not None else []
         missing = self._missing_ranges(local_query)
-        estimated = self._expected_rows(interval, start_ms, end_ms)
+        estimated = self._expected_rows(
+            interval, start_ms, end_ms,
+            calendar=self._series_calendar(request, host_data_manager),
+        )
         available_start, available_end = self._bar_bounds(bars, interval)
         context_hash = self._hash(
             {"request": request.wire(), "start_time_ms": start_ms, "end_time_ms": end_ms}
@@ -443,7 +457,9 @@ class ChartBacktestContextResolver:
         )
         interval = parse_interval_spec(request.interval)
         assert interval is not None
-        if not self._host_query_is_complete(query, interval, start_ms, end_ms):
+        # ADR-DATA-002 D2: a closed market is not missing data.
+        calendar = self._series_calendar(request, host_data_manager)
+        if not self._host_query_is_complete(query, interval, start_ms, end_ms, calendar=calendar):
             if backfill_coordinator is None:
                 raise BacktestError(
                     "HOST_DATA_UNAVAILABLE", "Host backfill service is unavailable"
@@ -477,7 +493,7 @@ class ChartBacktestContextResolver:
                 start_ms=start_ms,
                 end_ms=end_ms,
             )
-        if not self._host_query_is_complete(query, interval, start_ms, end_ms):
+        if not self._host_query_is_complete(query, interval, start_ms, end_ms, calendar=calendar):
             raise BacktestError(
                 "DATA_COVERAGE_INCOMPLETE",
                 "Host data is still incomplete after preparation",
@@ -499,6 +515,7 @@ class ChartBacktestContextResolver:
                 interval=request.interval,
                 chart_context_hash=record.context_hash,
                 series_identity=request.identity,
+                calendar=calendar,
             )
         except LocalDatasetError as exc:
             raise BacktestError(
@@ -514,7 +531,7 @@ class ChartBacktestContextResolver:
             exchange=request.exchange,
             market_type=request.market_type,
         )
-        if not self._preview_is_complete(preview, interval, start_ms, end_ms):
+        if not self._preview_is_complete(preview, interval, start_ms, end_ms, calendar=calendar):
             raise BacktestError(
                 "DATA_COVERAGE_INCOMPLETE", "immutable snapshot coverage is incomplete"
             )
@@ -703,13 +720,23 @@ class ChartBacktestContextResolver:
         interval: IntervalSpec,
         start_ms: int,
         end_ms: int,
+        *,
+        calendar: Any | None = None,
     ) -> bool:
         row_count = int(preview.get("market_row_count") or preview.get("row_count") or 0)
         if row_count < 1:
             return False
         coverage_start = int(preview.get("coverage_start_ms") or start_ms)
         coverage_end = int(preview.get("coverage_end_ms") or end_ms)
-        if coverage_start > interval.floor_ms(start_ms) or coverage_end < end_ms:
+        if calendar is None:
+            required_start, required_end = interval.floor_ms(start_ms), end_ms
+        else:
+            expected = expected_open_range(calendar, start_ms, end_ms, interval.canonical)
+            if expected is None:
+                return False
+            required_start = expected[0]
+            required_end = min(end_ms, bucket_end_ms(calendar, expected[1], interval.canonical) - 1)
+        if coverage_start > required_start or coverage_end < required_end:
             return False
         first_sequence = int(preview.get("first_sequence") or 0)
         last_sequence = int(preview.get("last_sequence") or 0)
@@ -834,6 +861,8 @@ class ChartBacktestContextResolver:
         interval: IntervalSpec,
         start_ms: int,
         end_ms: int,
+        *,
+        calendar: Any | None = None,
     ) -> bool:
         if query is None or cls._missing_ranges(query):
             return False
@@ -841,6 +870,13 @@ class ChartBacktestContextResolver:
         if not bars or any(not bool(getattr(bar, "is_closed", True)) for bar in bars):
             return False
         opens = [int(getattr(bar, "time")) * 1000 for bar in bars]
+        if calendar is not None:
+            expected = expected_open_range(calendar, start_ms, end_ms, interval.canonical)
+            return (
+                expected is not None
+                and (opens[0], opens[-1]) == expected
+                and opens_follow(calendar, interval.canonical, opens)
+            )
         required_first = interval.floor_ms(start_ms)
         required_last = interval.floor_ms(end_ms)
         return (
@@ -848,6 +884,20 @@ class ChartBacktestContextResolver:
             and opens[-1] == required_last
             and all(interval.is_successor(left, right) for left, right in zip(opens, opens[1:]))
         )
+
+    @staticmethod
+    def _series_calendar(request: ChartContextRequest, host_data_manager: Any) -> Any | None:
+        """The series' session calendar (ADR-DATA-002 D2), or None for the interval grid."""
+        resolver = getattr(host_data_manager, "series_calendar", None)
+        if not callable(resolver):
+            return None
+        try:
+            return session_calendar(resolver(
+                request.symbol, request.interval, exchange=request.exchange,
+                market_type=request.market_type, series_identity=request.identity,
+            ))
+        except Exception:
+            return None
 
     @staticmethod
     def _missing_ranges(query: Any | None) -> list[dict[str, Any]]:
@@ -873,7 +923,12 @@ class ChartBacktestContextResolver:
         )
 
     @staticmethod
-    def _expected_rows(interval: IntervalSpec, start_ms: int, end_ms: int) -> int:
+    def _expected_rows(
+        interval: IntervalSpec, start_ms: int, end_ms: int, *, calendar: Any | None = None,
+    ) -> int:
+        if calendar is not None:
+            expected = expected_open_range(calendar, start_ms, end_ms, interval.canonical)
+            return 0 if expected is None else int(calendar.count_expected(expected[0], expected[1], interval.canonical))
         first = interval.floor_ms(start_ms)
         last = interval.floor_ms(end_ms)
         if interval.nominal_ms > 0 and interval.alignment.value != "calendar_month":
