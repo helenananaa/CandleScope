@@ -6,6 +6,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
   ...drawingAnnotationMessages["zh-CN"],
@@ -186,6 +188,14 @@ export const zhCN = {
   "account.lastRead": "最近成功读取：{time}",
   "account.lastEvent": "最近收到私有账户事件：{time}",
   "account.snapshotTime": "快照接收时间：{time}",
+  "account.stale": "已过期",
+  "account.staleTitle": "账户数值已过期",
+  "account.staleAge": "最近更新：{age} · {time}",
+  "account.staleReason.localService": "与 CandleScope 本地服务的连接已断开，正在重连；显示的是最后收到的数值。",
+  "account.staleReason.service": "账户服务未运行，这些数值不会更新。",
+  "account.staleReason.paused": "同步已暂停，这些数值不再更新。点击“同步 / 重试”恢复。",
+  "account.staleReason.error": "同步失败，此后这些数值没有再更新。错误信息见下方。",
+  "account.staleReason.slow": "同步仍在运行，但近期没有更新这些数值。请检查网络或代理设置。",
   "account.unknown": "未知",
   "account.empty": "尚未读取到记录",
   "account.positions": "当前持仓",
@@ -213,8 +223,29 @@ export const zhCN = {
   "account.refresh": "刷新",
   "account.balance": "交易账户余额",
   "account.balanceHelp": "余额包含账户内的其他活动，不代表本永续范围的收益。",
+  "account.feeRates": "手续费率估算",
+  "account.feeRatesHelp": "账户当前手续费等级下的标准费率，仅用于估算成本。实际收取的手续费记录在每笔成交和资金流水中，部分合约另有费率。",
+  "account.feeRatesPending": "尚未读取手续费率。",
+  "account.feeRatesStale": "本次未能读取手续费率，显示的是上次读取的费率。",
+  "account.feeRatesUnavailable": "未能读取手续费率。",
+  "account.feeUsdtMargined": "USDT 本位永续",
+  "account.feeCoinMargined": "币本位永续",
+  "account.makerRate": "挂单费率",
+  "account.takerRate": "吃单费率",
+  "account.feeRebate": "返佣 {rate}",
+  "account.feeTier": "手续费等级 {tier} · 交易所更新时间 {time}",
   "account.equity": "权益",
   "account.cash": "现金余额",
+  "account.marginMode": "保证金模式",
+  "account.marginMode.cross": "全仓",
+  "account.marginMode.isolated": "逐仓",
+  "account.leverage": "杠杆",
+  "account.liquidationPrice": "预估强平价",
+  "account.positionMargin": "占用保证金",
+  "account.settleCurrency": "结算币种",
+  "account.availableMargin": "可用保证金",
+  "account.exchangeTime": "交易所更新时间",
+  "account.marginHelp": "可用保证金是以该币种结算的全仓仓位仍可使用的权益；逐仓仓位使用各自的保证金。强平价为交易所的估算值。",
   "account.newNote": "新建记录",
   "account.pendingFillNote": "准备为成交 {id} 新建笔记。当前草稿需先保存，原有成交关联保持不变。",
   "account.cancelNewNote": "取消新建",
@@ -4804,6 +4835,8 @@ export const zhCN = {
   "chartTester.deleteRetiredDraft": "删除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
+  ...chartTimeZoneMessages["zh-CN"],
+  ...chartTimeShortcutMessages["zh-CN"],
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

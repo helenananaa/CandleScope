@@ -311,6 +311,17 @@ class Okx:
     async def privateGetAccountPositionsHistory(self, params):
         return {"code": "0", "data": []}
 
+    fee_calls = 0
+    fee_failure = None
+
+    async def privateGetAccountTradeFee(self, params):
+        assert params == {"instType": "SWAP"}
+        self.fee_calls += 1
+        if self.fee_failure:
+            raise self.fee_failure
+        return {"code": "0", "data": [{"instType": "SWAP", "level": "Lv2", "maker": "-0.00018", "taker": "-0.00045",
+                                       "makerU": "-0.00018", "takerU": "-0.00045", "ts": str(NOW)}]}
+
     def _history(self, kind, params):
         self.history_calls[kind].append(dict(params))
         if kind not in self.endless:
@@ -446,4 +457,35 @@ def test_overflow_during_an_incremental_round_still_forces_a_full_rescan(account
         assert scan_begins(client, "fills")[-1] == str(three_months_before(client_now[0]))
         assert not sync.overflow
 
+    asyncio.run(run())
+
+
+# --- fee rate estimates --------------------------------------------------------------------
+
+def test_fee_rates_are_read_hourly_and_a_failure_keeps_the_last_rates(account):
+    async def run():
+        repo, client, sync = account
+        assert await sync.reconcile()
+        rates = repo.snapshots()["fee_rates"]["data"]["rates"]
+        assert rates["tier"] == "Lv2" and rates["usdtMargined"] == {"maker": "0.00018", "taker": "0.00045"}
+        assert repo.snapshots()["fee_rates_state"]["data"] == {"error": None}
+        client_now[0] += 10 * 60 * 1000
+        assert await sync.reconcile()
+        assert client.fee_calls == 1  # Not re-read within the hour.
+        client_now[0] += 60 * 60 * 1000
+        client.fee_failure = ccxt.NetworkError("offline")
+        # The optional estimate never fails the account round.
+        assert await sync.reconcile()
+        assert client.fee_calls == 2
+        assert repo.snapshots()["fee_rates"]["data"]["rates"] == rates
+        assert repo.snapshots()["fee_rates_state"]["data"] == {"error": "ACCOUNT_NETWORK_UNAVAILABLE"}
+    asyncio.run(run())
+
+
+def test_a_revoked_key_while_reading_fee_rates_still_stops_the_sync(account):
+    async def run():
+        _, client, sync = account
+        client.fee_failure = AccountDataError("OKX_AUTH_50111")
+        with pytest.raises(AccountDataError, match="OKX_AUTH_50111"):
+            await sync.reconcile()
     asyncio.run(run())

@@ -7,6 +7,7 @@ import {
   notesBefore,
   positionAt,
   protectionOrdersAt,
+  quickReplayCursorAt,
   replayEvents,
   visibleBars,
   type ReplayBar,
@@ -182,4 +183,19 @@ test("events and notes are revealed by the cursor in order", () => {
   assert.equal(nextEventCursor(events, 2 * HOUR, HOUR), 3 * HOUR);
   assert.deepEqual(notesBefore([note], 2 * HOUR), []);
   assert.equal(notesBefore([note], 3 * HOUR).length, 1);
+});
+
+test("go to date reveals the step containing the time and stays inside the replay (PL-6)", () => {
+  const range = { stepSec: 60, minCursor: 1_000 * 60, maxCursor: 2_000 * 60 };
+  // 01:23:45 into minute 1500 → minute 1500 is the last revealed step.
+  assert.deepEqual(quickReplayCursorAt((1_500 * 60 + 45) * 1000, range), { cursor: 1_501 * 60, lastStepSec: 1_500 * 60, clamped: false });
+  assert.deepEqual(quickReplayCursorAt(1_500 * 60 * 1000, range), { cursor: 1_501 * 60, lastStepSec: 1_500 * 60, clamped: false }, "on a boundary");
+  assert.deepEqual(quickReplayCursorAt(10 * 60 * 1000, range), { cursor: 1_000 * 60, lastStepSec: 999 * 60, clamped: true }, "before the setup bars");
+  assert.deepEqual(quickReplayCursorAt(9_000 * 60 * 1000, range), { cursor: 2_000 * 60, lastStepSec: 1_999 * 60, clamped: true }, "after the loaded end");
+  assert.equal(quickReplayCursorAt(-1, range), null);
+  assert.equal(quickReplayCursorAt(Number.NaN, range), null);
+  assert.equal(quickReplayCursorAt(0, { ...range, stepSec: 0 }), null);
+  // An hourly step reveals the whole hour that contains the time.
+  assert.deepEqual(quickReplayCursorAt((10 * HOUR + 1_800) * 1000, { stepSec: HOUR, minCursor: 0, maxCursor: 100 * HOUR }),
+    { cursor: 11 * HOUR, lastStepSec: 10 * HOUR, clamped: false });
 });

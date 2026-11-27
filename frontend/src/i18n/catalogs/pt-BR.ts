@@ -10,6 +10,8 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptBR = {
   ...unifiedMessages["pt-BR"],
@@ -197,6 +199,14 @@ export const ptBR = {
   "account.lastRead": "Última consulta bem-sucedida: {time}",
   "account.lastEvent": "Último evento privado recebido: {time}",
   "account.snapshotTime": "Retrato recebido: {time}",
+  "account.stale": "Desatualizado",
+  "account.staleTitle": "Os valores da conta estão desatualizados",
+  "account.staleAge": "Última atualização: {age} · {time}",
+  "account.staleReason.localService": "A conexão com o serviço local do CandleScope foi perdida. Reconectando; estes são os últimos valores recebidos.",
+  "account.staleReason.service": "O serviço de contas não está em execução, então estes valores não são atualizados.",
+  "account.staleReason.paused": "A sincronização está pausada, então estes valores não são mais atualizados. Escolha Sincronizar / tentar novamente para retomar.",
+  "account.staleReason.error": "A sincronização falhou e estes valores não foram atualizados desde então. O erro aparece abaixo.",
+  "account.staleReason.slow": "A sincronização está em andamento, mas estes valores não foram atualizados recentemente. Verifique a rede ou as configurações de proxy.",
   "account.unknown": "Desconhecido",
   "account.empty": "Nenhum registro retornado ainda",
   "account.positions": "Posições",
@@ -224,8 +234,29 @@ export const ptBR = {
   "account.refresh": "Atualizar",
   "account.balance": "Saldos da conta de negociação",
   "account.balanceHelp": "Estes saldos incluem outras atividades da conta e não representam o resultado deste conjunto de perpétuos.",
+  "account.feeRates": "Estimativa de taxas",
+  "account.feeRatesHelp": "Taxas padrão da sua conta no nível de taxa atual, apenas para estimar custos. As taxas cobradas de fato ficam registradas em cada execução e no livro-caixa, e alguns contratos têm taxas próprias.",
+  "account.feeRatesPending": "As taxas ainda não foram lidas.",
+  "account.feeRatesStale": "Não foi possível ler as taxas desta vez; mostrando as últimas lidas.",
+  "account.feeRatesUnavailable": "Não foi possível ler as taxas.",
+  "account.feeUsdtMargined": "Perpétuos com margem em USDT",
+  "account.feeCoinMargined": "Perpétuos com margem em cripto",
+  "account.makerRate": "Taxa maker",
+  "account.takerRate": "Taxa taker",
+  "account.feeRebate": "Reembolso de {rate}",
+  "account.feeTier": "Nível de taxa {tier} · hora de atualização da corretora {time}",
   "account.equity": "Patrimônio",
   "account.cash": "Saldo em caixa",
+  "account.marginMode": "Modo de margem",
+  "account.marginMode.cross": "Cross",
+  "account.marginMode.isolated": "Isolada",
+  "account.leverage": "Alavancagem",
+  "account.liquidationPrice": "Preço de liquidação estimado",
+  "account.positionMargin": "Margem usada",
+  "account.settleCurrency": "Moeda de liquidação",
+  "account.availableMargin": "Margem disponível",
+  "account.exchangeTime": "Hora de atualização da corretora",
+  "account.marginHelp": "A margem disponível é o patrimônio que as posições cross liquidadas nesta moeda ainda podem usar. Posições isoladas usam a própria margem. Os preços de liquidação são estimativas da corretora.",
   "account.newNote": "Novo registro",
   "account.pendingFillNote": "Preparando uma nova anotação para a execução {id}. Salve primeiro o rascunho atual; o vínculo existente será mantido.",
   "account.cancelNewNote": "Cancelar nova anotação",
@@ -4813,4 +4844,6 @@ export const ptBR = {
   "chartTester.deleteRetiredDraft": "Excluir o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
+  ...chartTimeZoneMessages["pt-BR"],
+  ...chartTimeShortcutMessages["pt-BR"],
 } as const satisfies MessageCatalog;

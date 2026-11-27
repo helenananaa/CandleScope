@@ -43,6 +43,22 @@ export function floorTo(timeSec: number, stepSec: number): number {
   return Math.floor(timeSec / stepSec) * stepSec;
 }
 
+/**
+ * Go to date in quick replay (PL-6) moves the cursor, not just the view: the
+ * step containing `timeMs` becomes the last revealed one, so candles, fills,
+ * notes and P&L are cut exactly as if the replay had been stepped there.
+ * Times outside the replay's range land on its nearest end (`clamped`).
+ */
+export function quickReplayCursorAt(
+  timeMs: number,
+  { stepSec, minCursor, maxCursor }: { readonly stepSec: number; readonly minCursor: number; readonly maxCursor: number },
+): { cursor: number; lastStepSec: number; clamped: boolean } | null {
+  if (!Number.isFinite(timeMs) || timeMs < 0 || !(stepSec > 0) || minCursor > maxCursor) return null;
+  const wanted = floorTo(Math.floor(timeMs / 1000), stepSec) + stepSec;
+  const cursor = Math.max(minCursor, Math.min(maxCursor, wanted));
+  return { cursor, lastStepSec: cursor - stepSec, clamped: cursor !== wanted };
+}
+
 /** Bars visible at the cursor, with the forming bar rebuilt from finer bars. */
 export function visibleBars(
   chartBars: readonly ReplayBar[],
