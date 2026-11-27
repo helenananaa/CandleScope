@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.data_engine.data_manager.models import SeriesKey
+from app.data_engine.history.expected_bars import session_calendar
 from app.market_dataset.snapshot import MarketDatasetError
 from app.simulation.execution_realism import parse_execution_realism
 from .continuous_provider import prepare_provider, _json
@@ -25,17 +26,46 @@ POLICY_FIELDS = {"sizing_policy","fixed_qty","fixed_notional","equity_percent","
 REALISM_FIELDS = {"execution_model_revision","participation_rate","order_end_policy","bar_path_scenario"}
 
 
+CONTINUOUS_SERIES_VARIANTS = frozenset({"native", "ohlcv"})
+CONTINUOUS_VOLUME_SEMANTICS = frozenset({"base_asset", "shares"})
+
+
+def _require_live_bars(key):
+    """Refuse a source that declares no live bars at this interval (ADR-DATA-002 D2c).
+
+    Twelve Data's US equities are history only: its WebSocket sends price
+    ticks, not closed 1m bars. Other resolution failures (an exchange this
+    process has not loaded) are left to the stream the run opens.
+    """
+    from app.data_engine.interval_resolution import (
+        IntervalPurpose, IntervalResolutionError, IntervalResolutionErrorCode, IntervalResolver)
+    from app.exchanges.registry import get_exchange_registry
+    try:
+        # The exchanges this process has loaded: bootstrapping them all here
+        # would take seconds in a fresh worker.
+        IntervalResolver(get_exchange_registry()).resolve(exchange=key.exchange, market_type=key.market_type,
+                                                          interval=key.interval, purpose=IntervalPurpose.REALTIME)
+    except IntervalResolutionError as failure:
+        if failure.code in {IntervalResolutionErrorCode.PURPOSE_UNSUPPORTED,
+                            IntervalResolutionErrorCode.KLINE_CHANNEL_UNAVAILABLE}:
+            raise BacktestError("CONTINUOUS_LIVE_BARS_UNAVAILABLE",
+                f"{key.exchange} has no live {key.interval} bars for this market; "
+                "forward runs follow live bars, so this data source cannot run one") from None
+
+
 def _fixed_interval(interval):
     from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
     spec = parse_interval_spec(interval)
     return spec is not None and not spec.timezone and spec.alignment is not IntervalAlignment.CALENDAR_MONTH
 
 
-def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, follow=False):
+def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, follow=False, calendar=None):
     """Own current code and normalized fees/account before acquiring any data.
 
     ``follow`` (ADR-BACKTEST-015 P4b): a FOLLOW run consumes the chart's own closed
     bars, so any fixed-length chart interval qualifies; forward runs keep 1m.
+    ``calendar`` is the series' trading calendar (ADR-DATA-002 D2c): forward
+    runs do not cross market closures yet.
     """
     if not isinstance(execution, Mapping) or set(execution)-(BASE_FIELDS|POLICY_FIELDS|REALISM_FIELDS):
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown continuing execution fields")
@@ -46,13 +76,24 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     for name in ("funding_interval_hours","max_active_orders","cooldown_events"):
         if name in execution and type(execution[name]) is not int:
             raise BacktestError("CONTINUOUS_INPUT_INVALID",f"{name} must be an integer")
-    if (not isinstance(key,SeriesKey) or (key.interval!="1m" and not (follow and _fixed_interval(key.interval)))
-            or key.market_type not in {"spot","futures"}
+    if not isinstance(key,SeriesKey) or (key.interval!="1m" and not (follow and _fixed_interval(key.interval))):
+        raise BacktestError("FIDELITY_UNSUPPORTED","This continuous source requires 1m bars")
+    if not follow:
+        # A forward run follows live closed bars (ADR-DATA-002 D2c). FOLLOW
+        # reads the chart's stored bars and may follow a history-only source.
+        _require_live_bars(key)
+        if session_calendar(calendar) is not None:
+            raise BacktestError("CONTINUOUS_MARKET_SESSIONS_UNSUPPORTED",
+                "Forward runs need a market that trades around the clock; this market closes between sessions")
+    # Capabilities and price semantics, not the asset class: raw prices and
+    # base-unit volumes on a spot market or on Binance futures (contract rules).
+    if (key.market_type not in {"spot","futures"}
             or (key.market_type=="futures" and key.exchange!="binance")
-            or key.identity.asset_class!="crypto" or key.identity.series_variant!="native"
-            or key.identity.price_adjustment!="raw" or key.identity.session_variant!="continuous"
-            or key.identity.volume_semantics!="base_asset"):
-        raise BacktestError("FIDELITY_UNSUPPORTED","This continuous source requires qualified native crypto UTC 1m OHLCV")
+            or key.identity.series_variant not in CONTINUOUS_SERIES_VARIANTS
+            or key.identity.price_adjustment!="raw"
+            or key.identity.volume_semantics not in CONTINUOUS_VOLUME_SEMANTICS):
+        raise BacktestError("FIDELITY_UNSUPPORTED",
+            "This continuous source requires raw spot or Binance futures OHLCV with base-unit volume")
     provider = prepare_provider(provider)
     payload = {**execution,"output_mode":provider["output_mode"],"market_type":key.market_type}
     try:
