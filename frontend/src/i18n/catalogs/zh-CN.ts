@@ -6,6 +6,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4837,6 +4838,7 @@ export const zhCN = {
   "chartTester.deleteRetiredDraft": "删除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
+  ...drawingSelectionMessages["zh-CN"],
   ...drawingCalculatedMessages["zh-CN"],
   ...replayDrawingSaveMessages["zh-CN"],
   ...chartTimeZoneMessages["zh-CN"],

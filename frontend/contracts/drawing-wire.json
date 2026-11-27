@@ -3,6 +3,7 @@
   "source": "frontend/src/features/drawings/core/drawingWireContract.ts",
   "regenerate": "UPDATE_DRAWING_WIRE_CONTRACT=1 node scripts/run-frontend-tests.mjs src/features/drawings/core/__tests__/drawingWireContract.test.ts",
   "commonStyleKeys": [
+    "groupId",
     "hidden",
     "locked",
     "visibleIntervals"
@@ -242,7 +243,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -284,7 +286,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -321,7 +324,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -386,7 +390,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -421,7 +426,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -451,7 +457,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -484,7 +491,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -528,7 +536,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -600,7 +609,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -643,7 +653,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -686,7 +697,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -721,7 +733,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"
@@ -833,7 +846,8 @@
                 "visibleIntervals": [
                   "1m",
                   "4h"
-                ]
+                ],
+                "groupId": "grp_wire_contract"
               },
               "bounds": {
                 "kind": "deferred"

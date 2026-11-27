@@ -17,7 +17,7 @@ import type { CanonicalDrawingGeometry, DrawingStyle } from "./drawingDocument.j
  * The type checks at the end of this file fail to compile when a list drifts
  * from `CanonicalDrawingGeometry` or `DrawingStyle`.
  */
-export const DRAWING_COMMON_STYLE_KEYS = ["hidden", "locked", "visibleIntervals"] as const;
+export const DRAWING_COMMON_STYLE_KEYS = ["groupId", "hidden", "locked", "visibleIntervals"] as const;
 
 export const DRAWING_GEOMETRY_KEYS = {
   path: ["dataPoints", "kind"],

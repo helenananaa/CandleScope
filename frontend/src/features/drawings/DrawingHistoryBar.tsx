@@ -43,8 +43,9 @@ export default function DrawingHistoryBar({ container, adapter, scope, canUndo, 
       if (owner !== scope || event.defaultPrevented || event.altKey
         || !(event.ctrlKey || event.metaKey) || document.querySelector("dialog[open]")) return;
       const target = event.target;
+      // Clicking the chart focuses its cell, which contains the chart rather than sitting inside it.
       if (target instanceof HTMLElement && target !== document.body && !element.contains(target)
-        && !bar.current?.contains(target)) return;
+        && !target.contains(element) && !bar.current?.contains(target)) return;
       if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
       const key = event.key.toLowerCase();
       const direction = key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" ? "redo" : null;

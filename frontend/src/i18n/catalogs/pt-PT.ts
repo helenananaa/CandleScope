@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyEuropeanPortuguese, replayNoteEuropeanPortuguese, tradeHistoryEuropeanPortuguese, readonlyAccountEuropeanPortuguese, continuousEuropeanPortuguese, tradingAccountsPtPT, nativeEuropeanPortuguese } from "./europeanPortugueseFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4173,6 +4174,7 @@ export const ptPT = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível eliminar o rascunho descontinuado. Tente novamente.",
+  ...drawingSelectionMessages["pt-PT"],
   ...drawingCalculatedMessages["pt-PT"],
   ...replayDrawingSaveMessages["pt-PT"],
   ...chartTimeZoneMessages["pt-PT"],

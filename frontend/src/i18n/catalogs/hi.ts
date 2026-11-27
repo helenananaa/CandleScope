@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHindi, replayNoteHindi, tradeHistoryHindi, readonlyAccountHindi, continuousHindi, tradingAccountsHi, nativeHindi } from "./hindiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4168,6 +4169,7 @@ export const hi = {
   "chartTester.deleteDraft": "हटाएँ",
   "chartTester.deleteRetiredDraft": "बंद ड्राफ़्ट {name} हटाएँ",
   "chartTester.deleteRetiredDraftFailed": "बंद ड्राफ़्ट हटाया नहीं जा सका। फिर से कोशिश करें।",
+  ...drawingSelectionMessages["hi"],
   ...drawingCalculatedMessages["hi"],
   ...replayDrawingSaveMessages["hi"],
   ...chartTimeZoneMessages["hi"],

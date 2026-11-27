@@ -10,6 +10,7 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4781,6 +4782,7 @@ export const ko = {
   "chartTester.deleteRetiredDraft": "지원 종료된 초안 {name} 삭제",
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
+  ...drawingSelectionMessages["ko"],
   ...drawingCalculatedMessages["ko"],
   ...replayDrawingSaveMessages["ko"],
   ...chartTimeZoneMessages["ko"],

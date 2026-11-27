@@ -9,6 +9,7 @@ import { readonlyAccountJapanese, researchBatchJapanese, workbenchJapanese, pine
 import type { MessageCatalog } from "../messageCatalog.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4547,6 +4548,7 @@ export const ja = {
   "chartTester.deleteRetiredDraft": "廃止された下書き {name} を削除",
   "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
+  ...drawingSelectionMessages["ja"],
   ...drawingCalculatedMessages["ja"],
   ...replayDrawingSaveMessages["ja"],
   ...chartTimeZoneMessages["ja"],

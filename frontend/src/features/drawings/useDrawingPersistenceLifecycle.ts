@@ -598,9 +598,10 @@ export function shouldProjectVisibleSceneEntity(
   id: string,
   dynamicOverlayEnabled: boolean,
   activeOverlayEntityId: string | null,
+  companionOverlayEntityIds: ReadonlySet<string> | null = null,
 ): boolean {
   return isPhase8SceneDrawingKind(kind)
-    && (!dynamicOverlayEnabled || id !== activeOverlayEntityId);
+    && (!dynamicOverlayEnabled || (id !== activeOverlayEntityId && companionOverlayEntityIds?.has(id) !== true));
 }
 
 function hasCurrentDrawingVisibleScenePublication({
@@ -837,6 +838,8 @@ export function restorePrePresentationHiddenDrawingSceneRuntime(
 
 export interface UseDrawingPersistenceLifecycleOptions {
   activeOverlayEntityIdRef?: MutableRefObject<string | null>;
+  /** Drawings a multi-drawing drag paints on the dynamic overlay instead of the scene. */
+  companionOverlayEntityIdsRef?: MutableRefObject<ReadonlySet<string>>;
   beforeScopeTransitionRef: MutableRefObject<() => boolean>;
   currentFreehandRef: MutableRefObject<FreehandDrawingPrimitive | null>;
   draggingRef: MutableRefObject<unknown | null>;
@@ -864,6 +867,7 @@ export interface UseDrawingPersistenceLifecycleOptions {
 
 export function useDrawingPersistenceLifecycle({
   activeOverlayEntityIdRef,
+  companionOverlayEntityIdsRef,
   beforeScopeTransitionRef,
   currentFreehandRef,
   draggingRef,
@@ -1325,6 +1329,7 @@ export function useDrawingPersistenceLifecycle({
           node.id,
           dynamicOverlayEnabled,
           activeOverlayEntityIdRef?.current ?? null,
+          companionOverlayEntityIdsRef?.current ?? null,
         ),
         publishScene: (plan) => publishVisibleDrawingScenePlan(
           plan,
@@ -1395,7 +1400,7 @@ export function useDrawingPersistenceLifecycle({
         return result;
       } } : {}),
     });
-  }, [activeOverlayEntityIdRef, authorityMode, dynamicOverlayEnabled, engineMode.effective, hiddenRef, sceneAdapterGetterDelegate, sceneBridge, sceneDocumentOnlyEnabled, sceneRuntime, selectedIdRef, visibleScenePublicationListeners]);
+  }, [activeOverlayEntityIdRef, authorityMode, companionOverlayEntityIdsRef, dynamicOverlayEnabled, engineMode.effective, hiddenRef, sceneAdapterGetterDelegate, sceneBridge, sceneDocumentOnlyEnabled, sceneRuntime, selectedIdRef, visibleScenePublicationListeners]);
 
   const commitPrimitiveDraft = useCallback((
     scopeKey: string,

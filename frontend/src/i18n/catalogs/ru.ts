@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRussian, replayNoteRussian, tradeHistoryRussian, readonlyAccountRussian, continuousRussian, tradingAccountsRu, nativeRussian } from "./russianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4179,6 +4180,7 @@ export const ru = {
   "chartTester.deleteDraft": "Удалить",
   "chartTester.deleteRetiredDraft": "Удалить снятый с поддержки черновик {name}",
   "chartTester.deleteRetiredDraftFailed": "Не удалось удалить снятый с поддержки черновик. Повторите попытку.",
+  ...drawingSelectionMessages["ru"],
   ...drawingCalculatedMessages["ru"],
   ...replayDrawingSaveMessages["ru"],
   ...chartTimeZoneMessages["ru"],

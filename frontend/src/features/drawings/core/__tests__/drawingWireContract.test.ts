@@ -21,7 +21,7 @@ const SAMPLE_CHART_SCOPE = "chart:wire-contract";
 const SAMPLE_UPDATED_AT = 1_795_000_000_000;
 
 const at = (time: number, price: number) => ({ time, price });
-const common = { hidden: false, locked: true, visibleIntervals: ["1m", "4h"] } as const;
+const common = { hidden: false, locked: true, visibleIntervals: ["1m", "4h"], groupId: "grp_wire_contract" } as const;
 const stroke: FreehandStrokeV3 = {
   version: 3,
   sourceProjection: "renko",

@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyDutch, replayNoteDutch, tradeHistoryDutch, readonlyAccountDutch, continuousDutch, tradingAccountsNl, nativeDutch } from "./dutchFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
@@ -4168,6 +4169,7 @@ export const nl = {
   "chartTester.deleteDraft": "Verwijderen",
   "chartTester.deleteRetiredDraft": "Stopgezet concept {name} verwijderen",
   "chartTester.deleteRetiredDraftFailed": "Het stopgezette concept kon niet worden verwijderd. Probeer het opnieuw.",
+  ...drawingSelectionMessages["nl"],
   ...drawingCalculatedMessages["nl"],
   ...replayDrawingSaveMessages["nl"],
   ...chartTimeZoneMessages["nl"],
