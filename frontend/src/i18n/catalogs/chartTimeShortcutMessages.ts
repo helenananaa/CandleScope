@@ -1,4 +1,7 @@
-/** Relative jumps, Latest / First loaded bar / Last viewed, and the dates-hidden variant for Go to date (PL-8), for every registered locale. */
+/**
+ * Go to date beyond the typed time, for every registered locale: relative jumps, Latest / First loaded bar /
+ * Last viewed and the dates-hidden variant (PL-8), and the replay-cursor hint for quick and strategy-result replay (PL-6).
+ */
 const english = {
   "chartTime.move": "Move the view",
   "chartTime.back": "Back {amount}",
@@ -20,6 +23,7 @@ const english = {
   "chartTime.movedNearest": "Moved the view to the nearest bar.",
   "chartTime.firstLoadedHidden": "Showing the first loaded bar. Scroll left to load older history.",
   "chartTime.moving": "Moving the view…",
+  "chartTime.replayCursorHint": "Moves the replay itself to this time, not just the view. Candles, trades, notes and results are cut at the new position.",
 } as const;
 
 type ChartTimeShortcutMessages = Readonly<Record<keyof typeof english, string>>;
@@ -45,6 +49,7 @@ const traditional: ChartTimeShortcutMessages = {
   "chartTime.movedNearest": "已將視圖移到最近的 K 棒。",
   "chartTime.firstLoadedHidden": "正在顯示最早已載入的 K 棒。向左捲動可載入更早的歷史。",
   "chartTime.moving": "正在移動視圖…",
+  "chartTime.replayCursorHint": "將回放本身移到這個時間，而不只是移動視圖。K 棒、交易、筆記與結果都會截至新的位置。",
 };
 
 type CatalogLocale = "en" | "zh-CN" | "zh-TW" | "zh-Hant" | "zh-HK" | "zh-MO" | "ja" | "ko" | "ar" | "cs"
@@ -74,6 +79,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "已将视图移到最近的 K 线。",
     "chartTime.firstLoadedHidden": "正在显示最早已加载的 K 线。向左滚动可加载更早的历史。",
     "chartTime.moving": "正在移动视图…",
+    "chartTime.replayCursorHint": "将回放本身移到这个时间，而不只是移动视图。K 线、交易、笔记和结果都会截至新的位置。",
   },
   "zh-TW": traditional,
   "zh-Hant": traditional,
@@ -100,6 +106,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "最も近いバーに表示を移動しました。",
     "chartTime.firstLoadedHidden": "読み込み済みの最初のバーを表示しています。左にスクロールすると過去の履歴を読み込みます。",
     "chartTime.moving": "表示を移動しています…",
+    "chartTime.replayCursorHint": "表示だけでなく、リプレイ自体をこの時刻へ移動します。バー・取引・メモ・結果は新しい位置で区切られます。",
   },
   ko: {
     "chartTime.move": "보기 이동",
@@ -122,6 +129,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "가장 가까운 봉으로 보기를 이동했습니다.",
     "chartTime.firstLoadedHidden": "처음 로드된 봉을 표시하고 있습니다. 왼쪽으로 스크롤하면 이전 기록을 불러옵니다.",
     "chartTime.moving": "보기를 이동하는 중…",
+    "chartTime.replayCursorHint": "보기만이 아니라 리플레이 자체를 이 시간으로 옮깁니다. 봉, 거래, 노트, 결과가 새 위치에서 잘립니다.",
   },
   ar: {
     "chartTime.move": "تحريك العرض",
@@ -144,6 +152,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "تم تحريك العرض إلى أقرب شمعة.",
     "chartTime.firstLoadedHidden": "تُعرض الآن أول شمعة محمّلة. مرّر لليسار لتحميل سجل أقدم.",
     "chartTime.moving": "جارٍ تحريك العرض…",
+    "chartTime.replayCursorHint": "ينقل إعادة التشغيل نفسها إلى هذا الوقت، لا العرض فقط. تُقتطع الشموع والصفقات والملاحظات والنتائج عند الموضع الجديد.",
   },
   cs: {
     "chartTime.move": "Posunout zobrazení",
@@ -166,6 +175,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Zobrazení posunuto na nejbližší svíčku.",
     "chartTime.firstLoadedHidden": "Zobrazuje se první načtená svíčka. Posunem doleva načtete starší historii.",
     "chartTime.moving": "Posouvám zobrazení…",
+    "chartTime.replayCursorHint": "Přesune samotné přehrávání na tento čas, nejen zobrazení. Svíčky, obchody, poznámky a výsledky se oříznou k nové pozici.",
   },
   de: {
     "chartTime.move": "Ansicht verschieben",
@@ -188,6 +198,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Ansicht zur nächstgelegenen Kerze verschoben.",
     "chartTime.firstLoadedHidden": "Die erste geladene Kerze wird angezeigt. Nach links scrollen lädt ältere Historie.",
     "chartTime.moving": "Ansicht wird verschoben…",
+    "chartTime.replayCursorHint": "Verschiebt die Wiedergabe selbst zu dieser Zeit, nicht nur die Ansicht. Kerzen, Trades, Notizen und Ergebnisse enden an der neuen Position.",
   },
   es: {
     "chartTime.move": "Mover la vista",
@@ -210,6 +221,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vista movida a la vela más cercana.",
     "chartTime.firstLoadedHidden": "Se muestra la primera vela cargada. Desplázate a la izquierda para cargar historial anterior.",
     "chartTime.moving": "Moviendo la vista…",
+    "chartTime.replayCursorHint": "Mueve la propia repetición a esta hora, no solo la vista. Velas, operaciones, notas y resultados se cortan en la nueva posición.",
   },
   fr: {
     "chartTime.move": "Déplacer la vue",
@@ -232,6 +244,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vue déplacée vers la bougie la plus proche.",
     "chartTime.firstLoadedHidden": "Affichage de la première bougie chargée. Faites défiler vers la gauche pour charger l’historique plus ancien.",
     "chartTime.moving": "Déplacement de la vue…",
+    "chartTime.replayCursorHint": "Déplace la relecture elle-même à cette heure, pas seulement la vue. Bougies, transactions, notes et résultats s’arrêtent à la nouvelle position.",
   },
   he: {
     "chartTime.move": "הזזת התצוגה",
@@ -254,6 +267,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "התצוגה הוזזה לנר הקרוב ביותר.",
     "chartTime.firstLoadedHidden": "מוצג הנר הטעון הראשון. גללו שמאלה כדי לטעון היסטוריה ישנה יותר.",
     "chartTime.moving": "מזיז את התצוגה…",
+    "chartTime.replayCursorHint": "מעביר את ההפעלה החוזרת עצמה לזמן הזה, לא רק את התצוגה. נרות, עסקאות, הערות ותוצאות נחתכים במיקום החדש.",
   },
   hi: {
     "chartTime.move": "व्यू खिसकाएँ",
@@ -276,6 +290,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "व्यू को सबसे नज़दीकी बार पर खिसका दिया गया।",
     "chartTime.firstLoadedHidden": "पहला लोड हुआ बार दिखाया जा रहा है। पुराना इतिहास लोड करने के लिए बाईं ओर स्क्रॉल करें।",
     "chartTime.moving": "व्यू खिसकाया जा रहा है…",
+    "chartTime.replayCursorHint": "सिर्फ़ व्यू नहीं, रीप्ले को ही इस समय पर ले जाता है। बार, ट्रेड, नोट और परिणाम नई स्थिति पर कट जाते हैं।",
   },
   hu: {
     "chartTime.move": "Nézet mozgatása",
@@ -298,6 +313,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Nézet a legközelebbi gyertyára helyezve.",
     "chartTime.firstLoadedHidden": "Az első betöltött gyertya látható. Balra görgetve régebbi előzmények töltődnek be.",
     "chartTime.moving": "Nézet mozgatása…",
+    "chartTime.replayCursorHint": "Nem csak a nézetet, hanem magát a visszajátszást viszi erre az időpontra. A gyertyák, kötések, jegyzetek és eredmények az új pozíciónál érnek véget.",
   },
   id: {
     "chartTime.move": "Geser tampilan",
@@ -320,6 +336,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Tampilan digeser ke bar terdekat.",
     "chartTime.firstLoadedHidden": "Menampilkan bar pertama yang dimuat. Gulir ke kiri untuk memuat riwayat lebih lama.",
     "chartTime.moving": "Menggeser tampilan…",
+    "chartTime.replayCursorHint": "Memindahkan replay itu sendiri ke waktu ini, bukan hanya tampilan. Bar, transaksi, catatan, dan hasil dipotong di posisi baru.",
   },
   it: {
     "chartTime.move": "Sposta la vista",
@@ -342,6 +359,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vista spostata alla candela più vicina.",
     "chartTime.firstLoadedHidden": "Viene mostrata la prima candela caricata. Scorri a sinistra per caricare lo storico precedente.",
     "chartTime.moving": "Spostamento della vista…",
+    "chartTime.replayCursorHint": "Sposta il replay stesso a quest’ora, non solo la vista. Candele, operazioni, note e risultati si fermano alla nuova posizione.",
   },
   ms: {
     "chartTime.move": "Alihkan paparan",
@@ -364,6 +382,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Paparan dialihkan ke bar terdekat.",
     "chartTime.firstLoadedHidden": "Menunjukkan bar pertama dimuatkan. Tatal ke kiri untuk memuatkan sejarah yang lebih lama.",
     "chartTime.moving": "Mengalihkan paparan…",
+    "chartTime.replayCursorHint": "Mengalihkan main semula itu sendiri ke masa ini, bukan sekadar paparan. Bar, dagangan, nota dan keputusan dipotong pada kedudukan baharu.",
   },
   nl: {
     "chartTime.move": "Weergave verschuiven",
@@ -386,6 +405,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Weergave verschoven naar de dichtstbijzijnde kaars.",
     "chartTime.firstLoadedHidden": "De eerste geladen kaars wordt getoond. Scroll naar links om oudere geschiedenis te laden.",
     "chartTime.moving": "Weergave verschuiven…",
+    "chartTime.replayCursorHint": "Verplaatst de replay zelf naar dit tijdstip, niet alleen de weergave. Kaarsen, trades, notities en resultaten stoppen op de nieuwe positie.",
   },
   pl: {
     "chartTime.move": "Przesuń widok",
@@ -408,6 +428,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Przesunięto widok do najbliższej świecy.",
     "chartTime.firstLoadedHidden": "Widoczna jest pierwsza wczytana świeca. Przewiń w lewo, aby wczytać starszą historię.",
     "chartTime.moving": "Przesuwanie widoku…",
+    "chartTime.replayCursorHint": "Przenosi samą powtórkę na ten czas, nie tylko widok. Świece, transakcje, notatki i wyniki kończą się na nowej pozycji.",
   },
   "pt-BR": {
     "chartTime.move": "Mover a visualização",
@@ -430,6 +451,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Visualização movida para o candle mais próximo.",
     "chartTime.firstLoadedHidden": "Mostrando o primeiro candle carregado. Role para a esquerda para carregar o histórico anterior.",
     "chartTime.moving": "Movendo a visualização…",
+    "chartTime.replayCursorHint": "Move o próprio replay para este horário, não só a visualização. Candles, operações, notas e resultados são cortados na nova posição.",
   },
   "pt-PT": {
     "chartTime.move": "Mover a vista",
@@ -452,6 +474,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vista movida para a vela mais próxima.",
     "chartTime.firstLoadedHidden": "A mostrar a primeira vela carregada. Deslize para a esquerda para carregar histórico anterior.",
     "chartTime.moving": "A mover a vista…",
+    "chartTime.replayCursorHint": "Move a própria repetição para esta hora, não só a vista. Velas, operações, notas e resultados são cortados na nova posição.",
   },
   ro: {
     "chartTime.move": "Mută vizualizarea",
@@ -474,6 +497,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vizualizarea a fost mutată la cea mai apropiată lumânare.",
     "chartTime.firstLoadedHidden": "Se afișează prima lumânare încărcată. Derulează la stânga pentru istoric mai vechi.",
     "chartTime.moving": "Se mută vizualizarea…",
+    "chartTime.replayCursorHint": "Mută reluarea însăși la această oră, nu doar vizualizarea. Lumânările, tranzacțiile, notițele și rezultatele se opresc la noua poziție.",
   },
   ru: {
     "chartTime.move": "Сдвинуть вид",
@@ -496,6 +520,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Вид сдвинут к ближайшей свече.",
     "chartTime.firstLoadedHidden": "Показана первая загруженная свеча. Прокрутите влево, чтобы загрузить более раннюю историю.",
     "chartTime.moving": "Сдвигаем вид…",
+    "chartTime.replayCursorHint": "Переносит сам повтор на это время, а не только вид. Свечи, сделки, заметки и результаты обрезаются на новой позиции.",
   },
   sv: {
     "chartTime.move": "Flytta vyn",
@@ -518,6 +543,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Vyn flyttades till närmaste ljus.",
     "chartTime.firstLoadedHidden": "Visar det första inlästa ljuset. Rulla åt vänster för att läsa in äldre historik.",
     "chartTime.moving": "Flyttar vyn…",
+    "chartTime.replayCursorHint": "Flyttar själva uppspelningen till den här tiden, inte bara vyn. Ljus, affärer, anteckningar och resultat kapas vid den nya positionen.",
   },
   th: {
     "chartTime.move": "เลื่อนมุมมอง",
@@ -540,6 +566,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "เลื่อนมุมมองไปยังแท่งที่ใกล้ที่สุดแล้ว",
     "chartTime.firstLoadedHidden": "กำลังแสดงแท่งแรกที่โหลด เลื่อนไปทางซ้ายเพื่อโหลดประวัติเก่ากว่า",
     "chartTime.moving": "กำลังเลื่อนมุมมอง…",
+    "chartTime.replayCursorHint": "ย้ายการรีเพลย์ไปยังเวลานี้ ไม่ใช่แค่มุมมอง แท่ง การซื้อขาย บันทึก และผลลัพธ์จะถูกตัดที่ตำแหน่งใหม่",
   },
   tr: {
     "chartTime.move": "Görünümü kaydır",
@@ -562,6 +589,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Görünüm en yakın muma kaydırıldı.",
     "chartTime.firstLoadedHidden": "Yüklenen ilk mum gösteriliyor. Daha eski geçmişi yüklemek için sola kaydırın.",
     "chartTime.moving": "Görünüm kaydırılıyor…",
+    "chartTime.replayCursorHint": "Yalnızca görünümü değil, tekrarın kendisini bu zamana taşır. Mumlar, işlemler, notlar ve sonuçlar yeni konumda kesilir.",
   },
   uk: {
     "chartTime.move": "Зсунути вигляд",
@@ -584,6 +612,7 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Вигляд зсунуто до найближчої свічки.",
     "chartTime.firstLoadedHidden": "Показано першу завантажену свічку. Прокрутіть ліворуч, щоб завантажити давнішу історію.",
     "chartTime.moving": "Зсуваємо вигляд…",
+    "chartTime.replayCursorHint": "Переносить сам повтор на цей час, а не лише вигляд. Свічки, угоди, нотатки й результати обрізаються на новій позиції.",
   },
   vi: {
     "chartTime.move": "Dịch chuyển khung nhìn",
@@ -606,5 +635,6 @@ export const chartTimeShortcutMessages: Readonly<Record<CatalogLocale, ChartTime
     "chartTime.movedNearest": "Đã dịch khung nhìn tới nến gần nhất.",
     "chartTime.firstLoadedHidden": "Đang hiển thị nến đầu tiên đã tải. Cuộn sang trái để tải lịch sử cũ hơn.",
     "chartTime.moving": "Đang dịch chuyển khung nhìn…",
+    "chartTime.replayCursorHint": "Đưa chính phần phát lại tới thời điểm này, không chỉ khung nhìn. Nến, giao dịch, ghi chú và kết quả được cắt tại vị trí mới.",
   },
 };

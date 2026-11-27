@@ -3,6 +3,7 @@ import type { ChartSurfaceActions } from "../../chart-adapter/useChartSurfaceRun
 import type { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
 import type { MarketDataRuntimeContract } from "./marketDataRuntimeContract.js";
 import type { ChartTimeSeekResult } from "./chartTimeNavigation.js";
+import { useGoToDateHotkey } from "./useGoToDateHotkey.js";
 import {
   readLastViewed,
   relativeJumpTarget,
@@ -76,18 +77,7 @@ export function useChartTimeNavigation({
     return links.registerTimeNavigator(cellId, navigate, workspaceId);
   }, [cellId, enabled, links, navigate, seek, workspaceId]);
   useEffect(() => () => { sequence.current += 1; tracker.reset(); }, [sessionKey, enabled, workspaceId, cellId, seek, surface, tracker]);
-  useEffect(() => {
-    if (!active || !enabled || !seek) return undefined;
-    const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || event.isComposing || !event.altKey
-        || event.ctrlKey || event.metaKey || event.shiftKey || event.code !== "KeyG") return;
-      const element = event.target instanceof Element ? event.target : null;
-      if (element?.closest("input,textarea,select,[contenteditable=true],[role=dialog]")) return;
-      event.preventDefault(); setOpen(true);
-    };
-    window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  }, [active, enabled, seek]);
+  useGoToDateHotkey(active && enabled && !!seek, () => setOpen(true));
   const centerTimeMs = useCallback(() => visibleCenterTimeMs(surface.getVisibleRange()?.time as { from?: unknown; to?: unknown } | null), [surface]);
   const go = useCallback(async (timeMs: number): Promise<ChartTimeOutcomes> => {
     const before = centerTimeMs();

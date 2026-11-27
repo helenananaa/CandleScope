@@ -1,5 +1,6 @@
 @layer features {
-.chart-time-dialog { width: min(440px, calc(100vw - 32px)); margin: auto; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--surface-0); box-shadow: var(--shadow-lg); }
+/* Its own base size: the dialog opens inside chart cells, quick replay and strategy-result replay, whose fonts differ. */
+.chart-time-dialog { width: min(440px, calc(100vw - 32px)); margin: auto; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--surface-0); box-shadow: var(--shadow-lg); font-size: 14px; }
 .chart-time-dialog::backdrop { background: var(--backdrop); }
 .chart-time-dialog form { display: grid; gap: 12px; }
 .chart-time-dialog h2, .chart-time-dialog p { margin: 0; }
