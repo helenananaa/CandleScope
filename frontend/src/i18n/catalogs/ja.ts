@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
@@ -9,11 +10,14 @@ import type { MessageCatalog } from "../messageCatalog.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ja = {
   ...unifiedMessages["ja"],
+  ...drawingAnnotationMessages["ja"],
   ...syntheticEnglish,
   ...continuousJapanese,
   ...researchBatchJapanese,
@@ -4545,6 +4549,8 @@ export const ja = {
   "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
   ...drawingSelectionMessages["ja"],
+  ...drawingCalculatedMessages["ja"],
+  ...replayDrawingSaveMessages["ja"],
   ...chartTimeZoneMessages["ja"],
   ...chartTimeShortcutMessages["ja"],
 } as const satisfies MessageCatalog;

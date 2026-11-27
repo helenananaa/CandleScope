@@ -41,6 +41,8 @@ export type DrawingToolId =
   | "shape-rectangle"
   | "shape-ellipse"
   | "text"
+  | CalculatedToolId
+  | AnnotationToolId
   | "pen"
   | "highlighter";
 
@@ -58,6 +60,15 @@ export type FibonacciToolId = "fibonacci";
 export type PositionToolId = "position-long" | "position-short";
 export type ShapeToolId = "shape-rectangle" | "shape-ellipse";
 export type FreehandToolId = "pen" | "highlighter";
+/** Drawings whose lines come from the chart's bars (or, for the extension, from three anchors). */
+export type CalculatedToolId =
+  | "fib-extension"
+  | "anchored-vwap"
+  | "volume-profile"
+  | "regression-channel";
+export type CalculatedDrawingType = CalculatedToolId;
+/** Text annotations that point at a priced bar: a callout and a price label. */
+export type AnnotationToolId = "callout" | "price-label";
 
 export type DrawingKind =
   | "path"
@@ -71,11 +82,13 @@ export type DrawingKind =
   | "position"
   | "shape"
   | "freehand"
-  | "highlighter";
+  | "highlighter"
+  | "calculated";
 
 export type DrawingHitType =
   | "path"
   | "channel"
+  | "calculated"
   | "range-measure"
   | "line"
   | "axis-line"
@@ -347,6 +360,13 @@ export interface SavedRangeMeasureDrawing extends SavedDrawingBase<"range-measur
 
 export interface SavedTextDrawing extends SavedDrawingBase<"text"> {
   dataPoint?: DrawingDataPoint;
+  /**
+   * Callout target: the leader line runs from the box to this anchor. A price
+   * label has no target; it points at `dataPoint` and shows that price.
+   */
+  target?: DrawingDataPoint;
+  /** Show the anchor's price instead of `text`; the box sits beside the anchor. */
+  priceLabel?: boolean;
   text?: string;
   color?: string;
   fontSize?: number;
@@ -417,6 +437,23 @@ export interface SavedShapeDrawing extends SavedDrawingBase<"shape"> {
   label?: string;
 }
 
+/**
+ * Calculated drawing. Anchors by type: fib extension 3 (A, B, C), anchored
+ * VWAP 1 (the first bar), volume profile and regression channel 2 (the bar
+ * range). Values are recomputed from the bars on the chart at each frame and
+ * never stored, so a replay chart only ever feeds revealed bars.
+ */
+export interface SavedCalculatedDrawing extends SavedDrawingBase<"calculated"> {
+  calcType: CalculatedDrawingType;
+  dataPoints: DrawingDataPoint[];
+  color?: string;
+  lineWidth?: number;
+  /** Regression channel: rail distance in standard deviations of the residuals. */
+  deviation?: number;
+  /** Volume profile: number of price rows. */
+  rows?: number;
+}
+
 export type SavedFreehandDrawing = SavedDrawingBase<"freehand"> & SavedFreehandPayload & {
   color?: string;
   lineWidth?: number;
@@ -441,6 +478,7 @@ export type SavedDrawing =
   | SavedFibonacciDrawing
   | SavedPositionDrawing
   | SavedShapeDrawing
+  | SavedCalculatedDrawing
   | SavedFreehandDrawing
   | SavedHighlighterDrawing;
 

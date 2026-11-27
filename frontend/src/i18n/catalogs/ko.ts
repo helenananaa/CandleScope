@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
@@ -10,11 +11,14 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ko = {
   ...unifiedMessages["ko"],
+  ...drawingAnnotationMessages["ko"],
   ...syntheticEnglish,
   ...continuousKorean,
   ...tradeHistoryKorean,
@@ -4779,6 +4783,8 @@ export const ko = {
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
   ...drawingSelectionMessages["ko"],
+  ...drawingCalculatedMessages["ko"],
+  ...replayDrawingSaveMessages["ko"],
   ...chartTimeZoneMessages["ko"],
   ...chartTimeShortcutMessages["ko"],
 } as const satisfies MessageCatalog;

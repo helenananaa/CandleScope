@@ -9,6 +9,7 @@ import type {
   AxisLineType,
   BasicLineToolId,
   BrushShape,
+  CalculatedDrawingType,
   DrawingDataPoint,
   DrawingKind,
   FibonacciLevel,
@@ -46,6 +47,11 @@ export type CanonicalDrawingGeometry =
       dataPoints: readonly DrawingDataPoint[];
     }>
   | Readonly<{
+      kind: "calculated";
+      calcType: CalculatedDrawingType;
+      dataPoints: readonly DrawingDataPoint[];
+    }>
+  | Readonly<{
       kind: "range-measure";
       measureType: RangeMeasureType;
       dataPoints: readonly DrawingDataPoint[];
@@ -67,6 +73,7 @@ export type CanonicalDrawingGeometry =
   | Readonly<{
       kind: "text";
       dataPoint?: DrawingDataPoint;
+      target?: DrawingDataPoint;
     }>
   | Readonly<{
       kind: "fibonacci";
@@ -118,8 +125,16 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
       fillOpacity?: number;
     }>
   | Readonly<{
+      kind: "calculated";
+      color?: string;
+      lineWidth?: number;
+      deviation?: number;
+      rows?: number;
+    }>
+  | Readonly<{
       kind: "text";
       text?: string;
+      priceLabel?: boolean;
       color?: string;
       fontSize?: number;
       fontFamily?: string;

@@ -22,6 +22,7 @@ export const DRAWING_COMMON_STYLE_KEYS = ["groupId", "hidden", "locked", "visibl
 export const DRAWING_GEOMETRY_KEYS = {
   path: ["dataPoints", "kind"],
   channel: ["dataPoints", "kind"],
+  calculated: ["calcType", "dataPoints", "kind"],
   "range-measure": ["dataPoints", "kind", "measureType"],
   "angle-measure": ["dataPoints", "kind"],
   "axis-line": ["axisLineType", "dataPoint", "kind"],
@@ -31,13 +32,14 @@ export const DRAWING_GEOMETRY_KEYS = {
   line: ["dataPoints", "kind", "lineType"],
   position: ["direction", "entryPrice", "kind", "slPrice", "timeRange", "tpPrice"],
   shape: ["dataPoints", "extendRight", "kind", "shapeType"],
-  text: ["dataPoint", "kind"],
+  text: ["dataPoint", "kind", "target"],
 } as const satisfies Record<DrawingKind, readonly string[]>;
 
 /** Per-kind style keys; every kind also accepts DRAWING_COMMON_STYLE_KEYS. */
 export const DRAWING_STYLE_KEYS = {
   path: ["arrowEnd", "color", "kind", "lineWidth"],
   channel: ["color", "fillOpacity", "kind", "lineWidth"],
+  calculated: ["color", "deviation", "kind", "lineWidth", "rows"],
   "range-measure": ["color", "kind", "lineWidth"],
   "angle-measure": ["color", "kind", "lineWidth"],
   "axis-line": ["color", "kind", "lineWidth"],
@@ -52,7 +54,7 @@ export const DRAWING_STYLE_KEYS = {
   ],
   text: [
     "align", "bgColor", "bold", "borderColor", "borderWidth", "color", "fontFamily",
-    "fontSize", "italic", "kind", "padding", "text", "underline", "widthPx",
+    "fontSize", "italic", "kind", "padding", "priceLabel", "text", "underline", "widthPx",
   ],
 } as const satisfies Record<DrawingKind, readonly string[]>;
 

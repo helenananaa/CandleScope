@@ -1,14 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyPolish, replayNotePolish, tradeHistoryPolish, readonlyAccountPolish, continuousPolish, tradingAccountsPl, nativePolish } from "./polishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const pl = {
   ...unifiedMessages["pl"],
+  ...drawingAnnotationMessages["pl"],
   ...syntheticEnglish,
   ...continuousPolish,
   ...tradeHistoryPolish,
@@ -4176,6 +4180,8 @@ export const pl = {
   "chartTester.deleteRetiredDraft": "Usuń wycofany szkic {name}",
   "chartTester.deleteRetiredDraftFailed": "Nie udało się usunąć wycofanego szkicu. Spróbuj ponownie.",
   ...drawingSelectionMessages["pl"],
+  ...drawingCalculatedMessages["pl"],
+  ...replayDrawingSaveMessages["pl"],
   ...chartTimeZoneMessages["pl"],
   ...chartTimeShortcutMessages["pl"],
 } as const satisfies MessageCatalog;

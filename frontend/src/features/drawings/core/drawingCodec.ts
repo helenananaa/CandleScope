@@ -24,6 +24,7 @@ import type { DrawingKind, SavedDrawing } from "../drawingTypes.js";
 const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
   path: "path",
   channel: "ch",
+  calculated: "calc",
   "range-measure": "measure",
   line: "ln",
   "axis-line": "ax",
@@ -132,6 +133,16 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
         ...(item.fillOpacity === undefined ? {} : { fillOpacity: item.fillOpacity }),
       };
       break;
+    case "calculated":
+      geometry = { kind: "calculated", calcType: item.calcType, dataPoints: item.dataPoints };
+      style = {
+        kind: "calculated",
+        ...(item.color === undefined ? {} : { color: item.color }),
+        ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+        ...(item.deviation === undefined ? {} : { deviation: item.deviation }),
+        ...(item.rows === undefined ? {} : { rows: item.rows }),
+      };
+      break;
     case "range-measure":
       geometry = { kind: "range-measure", measureType: item.measureType, dataPoints: item.dataPoints };
       style = {
@@ -180,10 +191,12 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       geometry = {
         kind: "text",
         ...(item.dataPoint === undefined ? {} : { dataPoint: item.dataPoint }),
+        ...(item.target === undefined ? {} : { target: item.target }),
       };
       style = {
         kind: "text",
         ...(item.text === undefined ? {} : { text: item.text }),
+        ...(item.priceLabel === undefined ? {} : { priceLabel: item.priceLabel }),
         ...(item.color === undefined ? {} : { color: item.color }),
         ...(item.fontSize === undefined ? {} : { fontSize: item.fontSize }),
         ...(item.fontFamily === undefined ? {} : { fontFamily: item.fontFamily }),
@@ -308,6 +321,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
         copyDefinedFields(candidate, geometry, ["dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth", "fillOpacity"]);
         break;
+      case "calculated":
+        copyDefinedFields(candidate, geometry, ["calcType", "dataPoints"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth", "deviation", "rows"]);
+        break;
       case "range-measure":
         copyDefinedFields(candidate, geometry, ["measureType", "dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);
@@ -325,9 +342,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);
         break;
       case "text":
-        copyDefinedFields(candidate, geometry, ["dataPoint"]);
+        copyDefinedFields(candidate, geometry, ["dataPoint", "target"]);
         copyDefinedFields(candidate, style, [
           "text",
+          "priceLabel",
           "color",
           "fontSize",
           "fontFamily",

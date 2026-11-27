@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousPortuguese } from "./continuousMessages.js";
 import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
@@ -10,11 +11,14 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptBR = {
   ...unifiedMessages["pt-BR"],
+  ...drawingAnnotationMessages["pt-BR"],
   ...syntheticEnglish,
   ...continuousPortuguese,
   ...tradeHistoryBrazilian,
@@ -4844,6 +4848,8 @@ export const ptBR = {
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
   ...drawingSelectionMessages["pt-BR"],
+  ...drawingCalculatedMessages["pt-BR"],
+  ...replayDrawingSaveMessages["pt-BR"],
   ...chartTimeZoneMessages["pt-BR"],
   ...chartTimeShortcutMessages["pt-BR"],
 } as const satisfies MessageCatalog;

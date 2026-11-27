@@ -1,6 +1,12 @@
 import { validDrawingIntervals } from "./drawingVisibility.js";
 import { isDrawingGroupId } from "./drawingGroups.js";
-import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
+import { CALCULATED_ANCHOR_COUNT, isCalculatedToolId, MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
+import {
+  MAX_REGRESSION_DEVIATION,
+  MAX_VOLUME_PROFILE_ROWS,
+  MIN_REGRESSION_DEVIATION,
+  MIN_VOLUME_PROFILE_ROWS,
+} from "./geometry/calculatedDrawingMath.js";
 /**
  * drawingStorage.js — Persist chart drawings to localStorage.
  *
@@ -38,7 +44,9 @@ import type {
   AxisLineType,
   BasicLineToolId,
   BrushShape,
+  CalculatedDrawingType,
   DrawingKind,
+  DrawingToolId,
   FibonacciLevel,
   HorizontalDrawingAnchor,
   PersistableDrawingPrimitive,
@@ -62,6 +70,7 @@ export const MAX_SAVED_FREEHAND_SPANS = 16_384;
 const SAVED_DRAWING_TYPES = new Set<DrawingKind>([
   "path",
   "channel",
+  "calculated",
   "range-measure",
   "line",
   "axis-line",
@@ -261,6 +270,24 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ...(fillOpacity === undefined ? {} : { fillOpacity }),
       };
     }
+    case "calculated": {
+      const calcType = item.calcType;
+      if (typeof calcType !== "string" || !isCalculatedToolId(calcType as DrawingToolId)) return null;
+      const dataPoints = parseDrawingDataPoints(item.dataPoints);
+      if (!dataPoints || dataPoints.length !== CALCULATED_ANCHOR_COUNT[calcType as CalculatedDrawingType]
+        || dataPoints.some((point) => !Number.isFinite(point.time) || point.logical !== undefined)) return null;
+      const deviation = optionalFiniteNumber(item, "deviation", MIN_REGRESSION_DEVIATION, MAX_REGRESSION_DEVIATION);
+      const rows = optionalFiniteNumber(item, "rows", MIN_VOLUME_PROFILE_ROWS, MAX_VOLUME_PROFILE_ROWS);
+      return {
+        type: "calculated",
+        ...base,
+        ...style,
+        calcType: calcType as CalculatedDrawingType,
+        dataPoints,
+        ...(deviation === undefined ? {} : { deviation }),
+        ...(rows === undefined || !Number.isInteger(rows) ? {} : { rows }),
+      };
+    }
     case "range-measure": {
       const dataPoints = parseDrawingDataPoints(item.dataPoints);
       if (!dataPoints || dataPoints.length !== 2
@@ -319,6 +346,10 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ? parseDrawingDataPoint(item.dataPoint)
         : undefined;
       if (dataPoint === null) return null;
+      const target = item.target === undefined ? undefined : parseDrawingDataPoint(item.target);
+      const priceLabel = optionalBoolean(item, "priceLabel");
+      // A price label points at its own anchor; only a callout carries a target.
+      if (target === null || (priceLabel && target !== undefined)) return null;
       const align = TEXT_ALIGNS.has(item.align as TextAlign) ? item.align as TextAlign : undefined;
       const bgColor = item.bgColor === null ? null : optionalString(item, "bgColor", 128);
       const borderColor = item.borderColor === null
@@ -340,7 +371,9 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ...base,
         ...style,
         ...(dataPoint === undefined ? {} : { dataPoint }),
+        ...(target === undefined ? {} : { target }),
         ...(text === undefined ? {} : { text }),
+        ...(priceLabel === undefined ? {} : { priceLabel }),
         ...(fontSize === undefined ? {} : { fontSize }),
         ...(fontFamily === undefined ? {} : { fontFamily }),
         ...(bold === undefined ? {} : { bold }),
@@ -666,13 +699,14 @@ function serializePrimitiveFields(prim: PersistableDrawingPrimitive): UnknownRec
 const STRICT_SAVED_FIELDS: Readonly<Record<DrawingKind, readonly string[]>> = Object.freeze({
   path: Object.freeze(["id", "dataPoints", "color", "lineWidth", "arrowEnd"]),
   channel: Object.freeze(["id", "dataPoints", "color", "lineWidth", "fillOpacity"]),
+  calculated: Object.freeze(["id", "calcType", "dataPoints", "color", "lineWidth", "deviation", "rows"]),
   "range-measure": Object.freeze(["id", "measureType", "dataPoints", "color", "lineWidth"]),
   line: Object.freeze(["id", "lineType", "dataPoints", "color", "lineWidth", "arrowEnd"]),
   "axis-line": Object.freeze(["id", "axisLineType", "dataPoint", "color", "lineWidth"]),
   "angle-measure": Object.freeze(["id", "dataPoints", "color", "lineWidth"]),
   text: Object.freeze([
-    "id", "dataPoint", "text", "color", "fontSize", "fontFamily", "bold", "italic",
-    "underline", "align", "bgColor", "borderColor", "borderWidth", "widthPx", "padding",
+    "id", "dataPoint", "target", "text", "priceLabel", "color", "fontSize", "fontFamily", "bold",
+    "italic", "underline", "align", "bgColor", "borderColor", "borderWidth", "widthPx", "padding",
   ]),
   fibonacci: Object.freeze(["id", "dataPoints", "levels", "inverted", "color", "lineWidth"]),
   position: Object.freeze([
