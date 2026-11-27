@@ -5,6 +5,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
   ...continuousChinese,
@@ -184,6 +186,14 @@ export const zhCN = {
   "account.lastRead": "最近成功读取：{time}",
   "account.lastEvent": "最近收到私有账户事件：{time}",
   "account.snapshotTime": "快照接收时间：{time}",
+  "account.stale": "已过期",
+  "account.staleTitle": "账户数值已过期",
+  "account.staleAge": "最近更新：{age} · {time}",
+  "account.staleReason.localService": "与 CandleScope 本地服务的连接已断开，正在重连；显示的是最后收到的数值。",
+  "account.staleReason.service": "账户服务未运行，这些数值不会更新。",
+  "account.staleReason.paused": "同步已暂停，这些数值不再更新。点击“同步 / 重试”恢复。",
+  "account.staleReason.error": "同步失败，此后这些数值没有再更新。错误信息见下方。",
+  "account.staleReason.slow": "同步仍在运行，但近期没有更新这些数值。请检查网络或代理设置。",
   "account.unknown": "未知",
   "account.empty": "尚未读取到记录",
   "account.positions": "当前持仓",
@@ -4812,6 +4822,8 @@ export const zhCN = {
   "chartTester.deleteRetiredDraft": "删除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
+  ...chartTimeZoneMessages["zh-CN"],
+  ...chartTimeShortcutMessages["zh-CN"],
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

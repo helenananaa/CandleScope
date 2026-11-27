@@ -9,6 +9,8 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptBR = {
   ...unifiedMessages["pt-BR"],
@@ -195,6 +197,14 @@ export const ptBR = {
   "account.lastRead": "Última consulta bem-sucedida: {time}",
   "account.lastEvent": "Último evento privado recebido: {time}",
   "account.snapshotTime": "Retrato recebido: {time}",
+  "account.stale": "Desatualizado",
+  "account.staleTitle": "Os valores da conta estão desatualizados",
+  "account.staleAge": "Última atualização: {age} · {time}",
+  "account.staleReason.localService": "A conexão com o serviço local do CandleScope foi perdida. Reconectando; estes são os últimos valores recebidos.",
+  "account.staleReason.service": "O serviço de contas não está em execução, então estes valores não são atualizados.",
+  "account.staleReason.paused": "A sincronização está pausada, então estes valores não são mais atualizados. Escolha Sincronizar / tentar novamente para retomar.",
+  "account.staleReason.error": "A sincronização falhou e estes valores não foram atualizados desde então. O erro aparece abaixo.",
+  "account.staleReason.slow": "A sincronização está em andamento, mas estes valores não foram atualizados recentemente. Verifique a rede ou as configurações de proxy.",
   "account.unknown": "Desconhecido",
   "account.empty": "Nenhum registro retornado ainda",
   "account.positions": "Posições",
@@ -4821,4 +4831,6 @@ export const ptBR = {
   "chartTester.deleteRetiredDraft": "Excluir o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
+  ...chartTimeZoneMessages["pt-BR"],
+  ...chartTimeShortcutMessages["pt-BR"],
 } as const satisfies MessageCatalog;

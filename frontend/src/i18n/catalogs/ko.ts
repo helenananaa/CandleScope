@@ -9,6 +9,8 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ko = {
   ...unifiedMessages["ko"],
@@ -195,6 +197,14 @@ export const ko = {
   "account.lastRead": "최근 조회 성공: {time}",
   "account.lastEvent": "최근 비공개 이벤트 수신: {time}",
   "account.snapshotTime": "스냅샷 수신: {time}",
+  "account.stale": "오래된 값",
+  "account.staleTitle": "계좌 값이 최신이 아닙니다",
+  "account.staleAge": "마지막 업데이트: {age} · {time}",
+  "account.staleReason.localService": "CandleScope 로컬 서비스와의 연결이 끊어졌습니다. 다시 연결하는 중이며, 마지막으로 받은 값을 표시합니다.",
+  "account.staleReason.service": "계좌 서비스가 실행 중이 아니어서 이 값은 업데이트되지 않습니다.",
+  "account.staleReason.paused": "동기화가 일시 중지되어 이 값은 더 이상 업데이트되지 않습니다. 다시 시작하려면 동기화 / 다시 시도를 선택하세요.",
+  "account.staleReason.error": "동기화에 실패한 뒤로 이 값이 업데이트되지 않았습니다. 오류는 아래에 표시됩니다.",
+  "account.staleReason.slow": "동기화는 실행 중이지만 최근 이 값이 업데이트되지 않았습니다. 네트워크 또는 프록시 설정을 확인하세요.",
   "account.unknown": "알 수 없음",
   "account.empty": "아직 반환된 내역이 없습니다",
   "account.positions": "포지션",
@@ -4756,4 +4766,6 @@ export const ko = {
   "chartTester.deleteRetiredDraft": "지원 종료된 초안 {name} 삭제",
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
+  ...chartTimeZoneMessages["ko"],
+  ...chartTimeShortcutMessages["ko"],
 } as const satisfies MessageCatalog;

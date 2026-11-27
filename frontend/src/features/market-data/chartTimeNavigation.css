@@ -1,5 +1,6 @@
 @layer features {
-.chart-time-dialog { width: min(440px, calc(100vw - 32px)); margin: auto; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--surface-0); box-shadow: var(--shadow-lg); }
+/* Its own base size: the dialog opens inside chart cells, quick replay and strategy-result replay, whose fonts differ. */
+.chart-time-dialog { width: min(440px, calc(100vw - 32px)); margin: auto; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--surface-0); box-shadow: var(--shadow-lg); font-size: 14px; }
 .chart-time-dialog::backdrop { background: var(--backdrop); }
 .chart-time-dialog form { display: grid; gap: 12px; }
 .chart-time-dialog h2, .chart-time-dialog p { margin: 0; }
@@ -7,4 +8,8 @@
 .chart-time-dialog p { font-size: 13px; line-height: 1.5; }
 .chart-time-dialog input { width: 100%; box-sizing: border-box; padding: 10px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; }
 .chart-time-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }
+}
+@layer features {
+.chart-time-dialog .chart-time-shortcuts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chart-time-dialog .chart-time-shortcuts > span { flex: 0 0 100%; color: var(--text-secondary); font-size: 12px; }
 }

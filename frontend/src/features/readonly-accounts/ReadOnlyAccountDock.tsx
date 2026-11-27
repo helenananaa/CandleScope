@@ -2,7 +2,7 @@ import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ReadOnlyAccountDataManager } from "./accountDataManager.js";
 import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
-import { t, type MessageKey } from "../../i18n/index.js";
+import { getDateTimeLocale, t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, Input } from "../../components/ui/index.js";
@@ -11,6 +11,7 @@ import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTrade
 import AccountJournal from "./AccountJournal.js";
 import { accountErrorHelp } from "./accountErrors.js";
 import { balanceDetails, balanceMargin, positionMargin } from "./accountMargin.js";
+import { accountFreshness, formatAccountAge, type AccountSnapshotKind } from "./accountFreshness.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, getAccountFacts,
   record, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
@@ -39,6 +40,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const noteRequestHandled = useCallback(() => setNewNoteRequest(undefined), []);
   const factRequest = useRef(0);
   const available = !browserHost() && accountSession() !== null;
+  const [now, setNow] = useState(() => Date.now());
   const date = (ms: number | null | undefined) => typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toLocaleString(locale) : t("account.unknown", {}, locale);
 
   useEffect(() => {
@@ -46,6 +48,14 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     return accountManager.subscribe((value) => { setStatus(value); setReadError(null); },
       (code) => { setReadError(code); });
   }, [available, accountManager]);
+  const connected = status?.account != null;
+  useEffect(() => {
+    // Ages keep growing while nothing new arrives, so the panel ticks on its own.
+    if (!connected) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(timer);
+  }, [connected, status]);
   useEffect(() => {
     factRequest.current += 1;
     if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || !available) return;
@@ -93,7 +103,19 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     : status.account.status === "synced" ? "account.synced"
       : status.account.status === "syncing" ? "account.syncing"
         : status.account.status === "disconnected" ? "account.disconnected" : "account.error";
-  const failure = error ?? readError ?? status?.serviceError ?? status?.account?.error_code ?? null;
+  const freshness = accountFreshness(status, readError, now);
+  // A lost local connection is explained by the out-of-date notice instead.
+  const failure = error ?? (freshness?.reason === "localService" ? null : readError) ?? status?.serviceError ?? status?.account?.error_code ?? null;
+  const age = (ms: number) => formatAccountAge(ms, getDateTimeLocale(locale));
+  const snapshotLine = (kind: AccountSnapshotKind) => {
+    const item = freshness?.snapshots[kind];
+    return <p className="readonly-account-help readonly-account-snapshot" data-stale={item?.stale ? "true" : undefined}>
+      {t("account.snapshotTime", { time: date(status?.snapshots[kind]?.receivedMs) }, locale)}
+      {item?.ageMs != null && ` · ${age(item.ageMs)}`}
+      {item?.stale && <Badge tone="warning">{t("account.stale", {}, locale)}</Badge>}
+    </p>;
+  };
+  const staleCard = (kind: AccountSnapshotKind) => freshness?.snapshots[kind].stale ? "true" : undefined;
   const pair = (label: MessageKey, value: unknown, suffix = "") => <><dt>{t(label, {}, locale)}</dt><dd>{scalar(value)}{suffix && ` ${suffix}`}</dd></>;
   const factKindLabel = (kind: unknown) => kind === "fills" || kind === "orders" || kind === "bills" ? t(`account.${kind}`, {}, locale) : scalar(kind);
   const leg = (value: unknown) => value === "long" || value === "short" ? t(`account.${value}`, {}, locale) : t("account.unknown", {}, locale);
@@ -119,6 +141,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
       <p className="readonly-account-scope">{t("account.scope", {}, locale)}</p>
       <div className="readonly-account-identity">
         <span role="status"><Badge tone={stateTone}>{t(stateKey, {}, locale)}</Badge></span>
+        {freshness?.stale && <Badge tone="warning">{t("account.stale", {}, locale)}</Badge>}
         {status?.account && <span className="readonly-account-uid">UID {status.account.venue_uid}</span>}
       </div>
     </header>
@@ -126,6 +149,10 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
       <p className="readonly-account-help">{t("account.boundary", {}, locale)}</p>
       {!available || status?.available === false ? <EmptyState compact title={t("account.title", {}, locale)} description={t("account.desktopRequired", {}, locale)} /> : <>
         {status?.account && <p className="readonly-account-help">{t("account.lastRead", { time: date(status.account.last_success_ms) }, locale)}</p>}
+        {freshness?.stale && freshness.reason && <InlineAlert tone="warning" title={t("account.staleTitle", {}, locale)}>
+          <p>{t("account.staleAge", { age: freshness.ageMs === null ? t("account.unknown", {}, locale) : age(freshness.ageMs), time: date(freshness.oldestMs) }, locale)}</p>
+          <p>{t(`account.staleReason.${freshness.reason}`, {}, locale)}</p>
+        </InlineAlert>}
         {failure && <InlineAlert tone="danger">{t(accountErrorHelp(failure), {}, locale)} <code>{failure}</code></InlineAlert>}
         <div className="readonly-account-actions">
           <Button size="sm" variant={status?.account ? "secondary" : "primary"} disabled={busy} aria-expanded={credentialsOpen} onClick={() => setCredentialsOpen(!credentialsOpen)}>{t(status?.account ? "account.rotate" : "account.connect", {}, locale)}</Button>
@@ -147,9 +174,9 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
         {tab === "overview" && <>
           <p className="readonly-account-help">{t("account.reconciliation", {}, locale)}</p>
           <h4>{t("account.positions", {}, locale)}</h4>
-          <p className="readonly-account-help">{t("account.snapshotTime", { time: date(positionsSnapshot?.receivedMs) }, locale)}</p>
+          {snapshotLine("positions")}
           {!positionData.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
-          {positionData.map((item, index) => { const risk = positionMargin(item); return <article className="readonly-account-card" key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
+          {positionData.map((item, index) => { const risk = positionMargin(item); return <article className="readonly-account-card" data-stale={staleCard("positions")} key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
             {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, unit(item.settleCurrency))}
             {pair("account.marginMode", risk.marginMode && t(`account.marginMode.${risk.marginMode}`, {}, locale))}
             {pair("account.leverage", risk.leverage && `${risk.leverage}×`)}
@@ -158,13 +185,13 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
             {pair("account.settleCurrency", risk.settleCurrency)}
             {pair("account.exchangeTime", date(risk.updatedMs))}</dl></article>; })}
           <h4>{t("account.openOrders", {}, locale)}</h4>
-          <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.open_orders?.receivedMs) }, locale)}</p>
+          {snapshotLine("open_orders")}
           {!openOrders.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
-          {openOrders.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.orderId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</dl></article>)}
+          {openOrders.map((item, index) => <article className="readonly-account-card" data-stale={staleCard("open_orders")} key={`${scalar(item.orderId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</dl></article>)}
           <h4>{t("account.balance", {}, locale)}</h4><p className="readonly-account-help">{t("account.balanceHelp", {}, locale)}</p>
-          <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.balances?.receivedMs) }, locale)}</p>
+          {snapshotLine("balances")}
           {balances.length > 0 && <p className="readonly-account-help">{t("account.marginHelp", {}, locale)}</p>}
-          {balances.map((item, index) => { const margin = balanceMargin(item); return <article className="readonly-account-card" key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}
+          {balances.map((item, index) => { const margin = balanceMargin(item); return <article className="readonly-account-card" data-stale={staleCard("balances")} key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}
             {pair("account.availableMargin", margin.availableMargin, margin.availableMargin ? unit(margin.currency) : "")}
             {pair("account.exchangeTime", date(margin.updatedMs))}</dl></article>; })}
           <Disclosure className="readonly-account-coverage" summary={t("account.coverage", {}, locale)}><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
