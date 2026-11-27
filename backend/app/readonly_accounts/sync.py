@@ -23,6 +23,10 @@ TERMINAL_ERRORS = frozenset({"READONLY_KEY_REQUIRED", "HEDGE_ACCOUNT_REQUIRED",
                             "ACCOUNT_AUTHENTICATION_FAILED", "ACCOUNT_IDENTITY_CHANGED"}) | OKX_AUTH_ERRORS
 
 
+class RouteFailover(Exception):
+    """The proxy route kept failing; the owner reconnects through another route."""
+
+
 def three_months_before(now_ms: int) -> int:
     now = datetime.fromtimestamp(now_ms/1000,UTC)
     month_index = now.year*12 + now.month-1 - 3
@@ -71,8 +75,12 @@ def uncovered_ranges(start: int, end: int, coverage: list[dict]) -> list[tuple[i
 
 
 class AccountSynchronizer:
-    def __init__(self, repository: AccountRepository, client, *, now_ms=None, state_changed=None):
+    def __init__(self, repository: AccountRepository, client, *, now_ms=None, state_changed=None,
+                 network_result=None):
         self.state_changed = state_changed or (lambda: None)
+        # Called with None after a reconcile succeeds and with the error after a network
+        # failure; returning True ends run() with RouteFailover.
+        self.network_result = network_result or (lambda error: False)
         self.repository = repository
         self.client = client
         self.now_ms = now_ms or (lambda:int(time.time()*1000))
@@ -358,6 +366,7 @@ class AccountSynchronizer:
                 try:
                     complete = await self.reconcile()
                     delay = 30 if complete else 1
+                    self.network_result(None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -365,6 +374,8 @@ class AccountSynchronizer:
                     await asyncio.to_thread(self.repository.status,"error",error=code)
                     if code in TERMINAL_ERRORS:
                         raise
+                    if code == "ACCOUNT_NETWORK_UNAVAILABLE" and self.network_result(exc):
+                        raise RouteFailover() from exc
                     delay = min(max(delay*2,2),60)
                 try:
                     await asyncio.wait_for(self.changed.wait(),timeout=delay)
