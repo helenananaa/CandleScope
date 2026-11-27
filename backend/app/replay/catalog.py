@@ -281,13 +281,21 @@ def eligible_window(
     )
 
 
-def replay_calendar(calendar_id: str | None) -> object | None:
-    """A replay series' session calendar, or None for the continuous UTC grid."""
+def replay_calendar(calendar_id: str | None, *, strict: bool = False) -> object | None:
+    """A replay series' session calendar, or None for the continuous UTC grid.
+
+    Before ADR-DATA-002 D2 every replay ran on the minute grid, whatever id its
+    dataset recorded (``UTC``, ``continuous-24x7``...), so an existing dataset
+    with an unregistered id keeps the grid. ``strict`` refuses such an id, as
+    planning a new run always has.
+    """
     if not calendar_id or calendar_id == "crypto.24x7.utc":
         return None
     try:
         return calendar_by_id(calendar_id)
     except LookupError as exc:
+        if not strict:
+            return None
         raise ReplayDomainError(
             ReplayErrorCode.DATASET_MISMATCH,
             f"replay trading calendar is not registered: {calendar_id}",
@@ -1063,7 +1071,7 @@ class ReplayCatalog:
             end_ms=latest_closed,
         )
         try:
-            calendar = replay_calendar(gap_summary.calendar_id)
+            calendar = replay_calendar(gap_summary.calendar_id, strict=True)
         except ReplayDomainError as exc:
             self._candidate_error("non_continuous_calendar_not_supported", cause=exc)
         ranges = self._eligible_ranges(

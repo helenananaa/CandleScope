@@ -1,10 +1,11 @@
-"""Replay over a market that closes (ADR-DATA-002 D2b).
+"""Replay over a market that closes (ADR-DATA-002 D2b, D2b2).
 
 AAPL:NASDAQ on Twelve Data follows XNYS: 24-25 Nov 2026 are full sessions
 (14:30-21:00 UTC), 26 Nov is Thanksgiving.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import replace
 
 import httpx
@@ -19,12 +20,17 @@ from app.data_preparation.repository import PreparationRepository
 from app.data_preparation.service import PreparationService
 from app.exchanges.plugins.twelvedata.adapter import EXCHANGE_DATE_CALENDAR_ID
 from app.exchanges.plugins.twelvedata.plugin import _register_calendars
+from app.replay.bars.builder import ReplayDisplayBar
 from app.replay.constants import CommandType
 from app.replay.history_archive import ReplayHistoryRepository
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
+from app.indicator.warmup import replay_display_warmup_bars
+from app.replay.training.errors import TrainingRunError
+from app.replay.training.indicator_viewport import math_parameters
 from tests.fixtures.replay.service_fakes import replay_settings
 from tests.test_data_preparation import async_test, terminal
+from tests.test_replay_indicator_prefix import lines, reference
 from tests.test_replay_service import _command
 from tests.test_replay_v2_run_centric import _setup_payload
 
@@ -79,10 +85,13 @@ def _replay(tmp_path):
         native_intervals=lambda _: ("1m",))
 
 
-@async_test
-@pytest.mark.parametrize("progressive", [False, True])
-@pytest.mark.parametrize("disclosure", ["NONE", "HIDE_ALL"])
-async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, disclosure, progressive):
+@asynccontextmanager
+async def _stock_run(tmp_path, xnys, *, disclosure="NONE", progressive=False, origin=None):
+    """An AAPL run from five bars before Tuesday's close, stepped ten bars into Wednesday.
+
+    Yields (replay, preparation, session, shift, after): ``shift`` is the blind
+    clock's offset and ``after`` the state once stepped.
+    """
     replay = _replay(tmp_path)
     await replay.start()
     values = {}
@@ -97,6 +106,8 @@ async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, d
         calendar_for=lambda symbol, interval, **route: xnys)
     preparation = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await preparation.start()
+    if origin is not None:
+        replay.history_context = ReplayHistoryContext(preparation, origin_resolver=origin)
     try:
         # Five bars before Tuesday's close; 30 forward bars reach 25 into Wednesday.
         setup = {**_setup_payload(), "settlement_asset": "USD", "requested_start_ms": TUE_LAST - 4 * MINUTE,
@@ -126,8 +137,19 @@ async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, d
                                                revision=acquired["revision"], payload={"count": 10}))
         after = await replay.get_session_state(session)
         # Five bars finish Tuesday; the next five are Wednesday's first.
+        assert after["cursor"]["virtual_time_ms"] - shift == WED_OPEN + 5 * MINUTE - 1
+        yield replay, preparation, session, shift, after
+    finally:
+        await preparation.shutdown(); await replay.shutdown()
+
+
+@async_test
+@pytest.mark.parametrize("progressive", [False, True])
+@pytest.mark.parametrize("disclosure", ["NONE", "HIDE_ALL"])
+async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, disclosure, progressive):
+    async with _stock_run(tmp_path, xnys, disclosure=disclosure, progressive=progressive) as run:
+        replay, preparation, session, shift, after = run
         boundary = after["cursor"]["virtual_time_ms"]
-        assert boundary - shift == WED_OPEN + 5 * MINUTE - 1
 
         # The revealed chart: Wednesday's first minutes follow Tuesday's close directly.
         args = dict(track_id="track-1", revealed_boundary_ms=boundary, data_epoch=after["data_epoch"])
@@ -181,8 +203,6 @@ async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, d
             assert week["expected_components"] == xnys.count_expected(
                 week["open_time_ms"], week["close_time_ms"], "1m") < 5 * 390
         revision = after["revision"]
-    finally:
-        await preparation.shutdown(); await replay.shutdown()
 
     # A reopened run rebuilds the same calendar schedule and keeps stepping.
     replay = _replay(tmp_path)
@@ -198,6 +218,87 @@ async def test_a_stock_replay_steps_over_the_overnight_closure(tmp_path, xnys, d
         assert revision <= acquired["revision"]
     finally:
         await replay.shutdown()
+
+
+@async_test
+@pytest.mark.parametrize("display_math", ["canonical", "viewport-v1"])
+@pytest.mark.parametrize("interval", ["1m", "1h"])
+@pytest.mark.parametrize("disclosure", ["NONE", "HIDE_ALL"])
+async def test_indicators_carry_on_across_closures(tmp_path, xnys, interval, display_math, disclosure):
+    """ADR-DATA-002 D2b2: an RSI or MA over traded bars never restarts at a closure."""
+    async def monday_open(identity, frozen_start):
+        return TUE_OPEN - DAY
+
+    async with _stock_run(tmp_path, xnys, disclosure=disclosure, origin=monday_open) as run:
+        replay, _, session, shift, after = run
+        boundary = after["cursor"]["virtual_time_ms"]
+        args = dict(track_id="track-1", revealed_boundary_ms=boundary, data_epoch=after["data_epoch"],
+                    display_interval=interval)
+        cursor = boundary + 1
+        if interval == "1h":
+            projection = await replay.training.display_projection(session, limit=1, **args)
+            cursor = projection["bars"][-1]["open_time_ms"]
+        # The chart's window straddles a closure: Tuesday night for 1m, Monday night for 1h.
+        recent = await replay.training.history_page(session, before_ms=cursor, limit=20, history_epoch=None, **args)
+        window = recent["bars"][-13:] if interval == "1m" else recent["bars"][-9:]
+        steps = {later["open_time_ms"] - earlier["close_time_ms"] for earlier, later in zip(window, window[1:])}
+        assert len(steps) == 2 and 1 in steps
+        # The first computation pins the origin; the chart then reloads its history.
+        with pytest.raises(TrainingRunError) as reload:
+            await replay.training.canonical_indicator_compute(
+                session, name="RSI", params={"period": 5}, bars=window, display_math=display_math, **args)
+        assert reload.value.details["reload_history"] is True
+        recent = await replay.training.history_page(session, before_ms=cursor, limit=20, history_epoch=None, **args)
+        assert recent["history_epoch"] == reload.value.details["history_epoch"]
+        assert recent["bars"][-len(window):] == window
+        results = {}
+        for name, params in [("RSI", {"period": 5}), ("MA", {"period": 6})]:
+            async def compute():
+                return await replay.training.canonical_indicator_compute(
+                    session, name=name, params=params, bars=window, display_math=display_math,
+                    history_epoch=recent["history_epoch"], **args)
+            result = await compute()
+            for _ in range(16):
+                if result["status"] == "ready":
+                    break
+                result = await compute()
+            assert result["status"] == "ready", result
+            results[name] = (params, result)
+        # Canonical math seeds from the market's origin (Monday's open, pinned by
+        # computing); viewport math from a fixed warmup of traded bars. Either
+        # way the reference input is the chart's own closed bars, closures skipped.
+        canonical = display_math == "canonical"
+        warmup = max(replay_display_warmup_bars(name, math_parameters(name, params))
+                     for name, (params, _) in results.items())
+        history, epoch = [], None
+        for _ in range(8):
+            page = await replay.training.history_page(session, before_ms=cursor, limit=1000,
+                                                      history_epoch=epoch, **args)
+            epoch = page["history_epoch"]
+            history = page["bars"] + history
+            if not page["has_more"] or (not canonical and len(history) > len(window) + warmup):
+                break
+            assert page["next_before_ms"] < cursor
+            cursor = page["next_before_ms"]
+        else:
+            raise AssertionError("history did not reach its origin")
+        if canonical and (disclosure == "NONE" or interval == "1m"):
+            # Monday's 14:00 UTC hour holds the origin, so the first full hour is 15:00.
+            # (Blind hours map through their own bucket anchor, not the 1m clock shift.)
+            first = TUE_OPEN - DAY + (30 * MINUTE if interval == "1h" else 0)
+            assert history[0]["open_time_ms"] - shift == first
+        assert history[-len(window):] == window
+        times = {bar["open_time_ms"] // 1000 for bar in window}
+        for name, (params, result) in results.items():
+            inputs = history
+            if canonical:
+                assert result["seed"]["origin_ms"] == history[0]["open_time_ms"]
+            else:
+                inputs = history[-(len(window) + replay_display_warmup_bars(name, math_parameters(name, params))):]
+            expected = reference(name, params, [ReplayDisplayBar.from_dict(bar) for bar in inputs])
+            assert lines(result["payload"]) == [
+                (line, [point for point in points if point["time"] in times]) for line, points in lines(expected)
+            ], (name, params)
 
 
 # --- the pieces underneath -------------------------------------------------
