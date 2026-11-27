@@ -66,6 +66,38 @@ def test_positions_keep_two_positive_hedge_quantities_and_missing_marks_unknown(
     assert row['unrealizedPnl']=='-0.001'
 
 
+def test_positions_carry_leverage_liquidation_and_margin_with_their_units():
+    linear=Contract.from_okx(market())
+    raw={'instType':'SWAP','instId':linear.instrument,'posId':'5','posSide':'long','pos':'12','markPx':'92010.1','avgPx':'91234.5',
+         'upl':'93.072','uTime':'1709251200000','mgnMode':'cross','lever':'10','liqPx':'83512.7','imr':'110.412','margin':'','ccy':'USDT'}
+    row=position(raw,linear)
+    assert (row['marginMode'],row['leverage'],row['liquidationPrice'],row['priceCurrency'])==('cross','10','83512.7','USDT')
+    # Cross positions report the initial margin they use from the shared balance.
+    assert (row['margin'],row['marginCurrency'],row['settleCurrency'],row['eventTimeMs'])==('110.412','USDT','USDT',1709251200000)
+    inverse=Contract.from_okx(market(True))
+    isolated=position({**raw,'instId':inverse.instrument,'mgnMode':'isolated','margin':'0.01937','imr':'','ccy':'BTC','liqPx':'103702.95'},inverse)
+    assert (isolated['margin'],isolated['marginCurrency'],isolated['priceCurrency'],isolated['settleCurrency'])==('0.01937','BTC','USD','BTC')
+
+
+@pytest.mark.parametrize("liquidation", ["", "0", "-12.5"])
+def test_positions_without_a_reachable_liquidation_price_report_none(liquidation):
+    contract=Contract.from_okx(market())
+    raw={'instType':'SWAP','instId':contract.instrument,'posId':'6','posSide':'long','pos':'1','avgPx':'20000','uTime':'1709251200000',
+         'mgnMode':'cross','lever':'3','liqPx':liquidation,'imr':''}
+    row=position(raw,contract)
+    assert row['liquidationPrice'] is None and row['margin'] is None and row['marginCurrency']=='USDT'
+
+
+def test_position_margin_fields_stay_unknown_or_rejected_never_guessed():
+    contract=Contract.from_okx(market())
+    raw={'instType':'SWAP','instId':contract.instrument,'posId':'7','posSide':'short','pos':'1','avgPx':'20000','uTime':'1709251200000'}
+    row=position({**raw,'mgnMode':'unknown','margin':'5','imr':'5'},contract)
+    assert (row['marginMode'],row['margin'],row['leverage'])==(None,None,None)
+    for bad in [{'lever':'0'},{'lever':'1e3'},{'liqPx':'NaN'},{'mgnMode':'isolated','margin':'-1'}]:
+        with pytest.raises(AccountDataError):
+            position({**raw,'mgnMode':'cross',**bad},contract)
+
+
 def test_funding_and_transfers_are_not_trade_pnl_and_do_not_invent_leg_attribution():
     raw={'billId':'42','type':'8','ccy':'BTC','balChg':'-0.00001','fee':'','ts':'1709251200000','instId':'BTC-USD-SWAP'}
     assert bill(raw)['category']=='funding' and bill(raw)['positionSide'] is None
