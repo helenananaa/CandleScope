@@ -168,6 +168,7 @@ jobs:
             tests/test_continuous_manager_lifecycle.py \
             tests/test_continuous_strategy_access.py \
             tests/test_continuous_api.py \
+            tests/test_follow_calendar.py \
             tests/test_strategy_data_manager.py \
             tests/test_native_follow_results.py \
             tests/test_application_shutdown_failures.py \
