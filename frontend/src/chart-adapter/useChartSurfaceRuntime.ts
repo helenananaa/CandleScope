@@ -33,8 +33,8 @@ export interface ChartSurfaceHandle {
   setLinkedCrosshairTime(time: number | null): boolean;
   setLinkedVisibleTimeAnchor(time: number): boolean;
   centerVisibleTime(time: number, viewport?: ChartSurfaceVisibleRange): boolean;
-  /** The chart's own "Return to realtime" action. */
-  returnToLatest(): boolean;
+  /** The chart's own "Return to realtime" action; settles true once the view is at the latest bar. */
+  returnToLatest(): Promise<boolean>;
   /** Moves the oldest loaded bar to the left edge; its epoch seconds, or null when it could not. */
   showFirstLoadedBar(): number | null;
   setLinkedVisibleTimeRange(range: ChartSurfaceLinkedTimeRange): boolean;
@@ -68,7 +68,7 @@ export function useChartSurfaceRuntime() {
   const centerVisibleTime = useCallback((time: number, viewport?: ChartSurfaceVisibleRange) => (
     callChartSurface(ref, "centerVisibleTime", false, time, viewport)
   ), []);
-  const returnToLatest = useCallback(() => callChartSurface(ref, "returnToLatest", false) === true, []);
+  const returnToLatest = useCallback(async () => (await callChartSurface(ref, "returnToLatest", Promise.resolve(false))) === true, []);
   const showFirstLoadedBar = useCallback(() => callChartSurface(ref, "showFirstLoadedBar", null) ?? null, []);
 
   const setLinkedVisibleTimeRange = useCallback((range: ChartSurfaceLinkedTimeRange) => (
