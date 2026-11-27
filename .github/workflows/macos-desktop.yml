@@ -134,6 +134,7 @@ jobs:
             tests/test_calendar_completeness.py \
             tests/test_replay_calendar_sessions.py \
             tests/test_session_calendar_tail.py \
+            tests/test_session_calendar_neighbours.py \
             tests/test_stream_klines_event_filter.py \
             tests/test_kline_batch_stream.py \
             tests/test_backfill_coordinator.py \
