@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyTurkish, replayNoteTurkish, tradeHistoryTurkish, readonlyAccountTurkish, continuousTurkish, tradingAccountsTr, nativeTurkish } from "./turkishFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
   ...unifiedMessages["tr"],
+  ...drawingAnnotationMessages["tr"],
   ...syntheticEnglish,
   ...continuousTurkish,
   ...tradeHistoryTurkish,

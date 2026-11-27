@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
@@ -10,6 +11,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhMO = {
   ...unifiedMessages["zh-MO"],
+  ...drawingAnnotationMessages["zh-MO"],
   ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,

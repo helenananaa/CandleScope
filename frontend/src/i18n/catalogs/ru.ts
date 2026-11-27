@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRussian, replayNoteRussian, tradeHistoryRussian, readonlyAccountRussian, continuousRussian, tradingAccountsRu, nativeRussian } from "./russianFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
   ...unifiedMessages["ru"],
+  ...drawingAnnotationMessages["ru"],
   ...syntheticEnglish,
   ...continuousRussian,
   ...tradeHistoryRussian,

@@ -27,6 +27,8 @@ export function drawingName(type: string): string {
     highlighter: "drawing.variant.highlighter",
     "position-long": "drawing.variant.position-long",
     "position-short": "drawing.variant.position-short",
+    callout: "drawing.variant.callout",
+    "price-label": "drawing.variant.price-label",
   } as const)[type as "line"];
   return key ? t(key) : type;
 }

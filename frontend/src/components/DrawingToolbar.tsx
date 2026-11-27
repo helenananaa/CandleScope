@@ -40,7 +40,7 @@ import {
   MagnetIcon,
   POSITION_VARIANTS,
   SHAPE_VARIANTS,
-  TextIcon,
+  TEXT_VARIANTS,
 } from "./drawing/drawingToolbarDefinitions.js";
 import FibLevelsPanel from "./drawing/FibLevelsPanel.js";
 import PositionSettingsPanel from "./drawing/PositionSettingsPanel.js";
@@ -151,7 +151,8 @@ const DrawingToolbar = memo(function DrawingToolbar({
   }, [drawingAnchorMode, onToolChange]);
   const isVariantDisabled = useCallback(
     (variant: ToolbarVariant<DrawingToolId>) => !supportsDrawingTool(drawingAnchorMode, variant.id)
-      || (variant.id.startsWith("measure-") && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
+      || ((variant.id.startsWith("measure-") || variant.id === "callout" || variant.id === "price-label")
+        && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
     [drawingAnchorMode],
   );
 
@@ -203,6 +204,13 @@ const DrawingToolbar = memo(function DrawingToolbar({
     handleShapeContextMenu,
     handleShapeDblClick,
     handleTextClick,
+    handleTextContextMenu,
+    handleTextDblClick,
+    handleSelectTextVariant,
+    currentTextIcon,
+    currentTextId,
+    currentTextLabel,
+    textBtnRef,
     handleToggleFibonacciSettings,
     handleTogglePositionSettings,
     isCursorActive,
@@ -252,7 +260,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
   const shapeToolsDisabled = drawingGestureToolsDisabled
     || !hasSupportedDrawingVariant(drawingAnchorMode, SHAPE_VARIANTS);
   const textDisabled = drawingGestureToolsDisabled
-    || !supportsDrawingTool(drawingAnchorMode, "text");
+    || !hasSupportedDrawingVariant(drawingAnchorMode, TEXT_VARIANTS);
   const fibonacciDisabled = drawingGestureToolsDisabled
     || !supportsDrawingTool(drawingAnchorMode, "fibonacci");
   const positionToolsDisabled = drawingGestureToolsDisabled
@@ -403,13 +411,23 @@ const DrawingToolbar = memo(function DrawingToolbar({
         isVariantDisabled={isVariantDisabled}
       />
 
-      <DrawingToolButton
+      <DrawingVariantToolButton
         active={isTextActive}
-        dataDrawingTool="text"
+        anchorRef={textBtnRef}
+        currentId={currentTextId}
+        dataDrawingTool={currentTextId}
         disabled={textDisabled}
-        icon={TextIcon}
+        flyoutKey="text"
+        flyoutOpen={flyoutOpen}
+        icon={currentTextIcon}
         onClick={handleTextClick}
-        title={textDisabled ? drawingToolTitle : t("drawing.textNote")}
+        onCloseFlyout={closeFlyout}
+        onContextMenu={handleTextContextMenu}
+        onDoubleClick={handleTextDblClick}
+        onSelect={handleSelectTextVariant}
+        title={textDisabled ? drawingToolTitle : currentTextId === "text" ? t("drawing.textNote") : currentTextLabel}
+        variants={TEXT_VARIANTS}
+        isVariantDisabled={isVariantDisabled}
       />
 
       <DrawingToolButton

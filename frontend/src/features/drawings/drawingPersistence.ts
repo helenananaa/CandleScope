@@ -317,6 +317,10 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ? parseDrawingDataPoint(item.dataPoint)
         : undefined;
       if (dataPoint === null) return null;
+      const target = item.target === undefined ? undefined : parseDrawingDataPoint(item.target);
+      const priceLabel = optionalBoolean(item, "priceLabel");
+      // A price label points at its own anchor; only a callout carries a target.
+      if (target === null || (priceLabel && target !== undefined)) return null;
       const align = TEXT_ALIGNS.has(item.align as TextAlign) ? item.align as TextAlign : undefined;
       const bgColor = item.bgColor === null ? null : optionalString(item, "bgColor", 128);
       const borderColor = item.borderColor === null
@@ -338,7 +342,9 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ...base,
         ...style,
         ...(dataPoint === undefined ? {} : { dataPoint }),
+        ...(target === undefined ? {} : { target }),
         ...(text === undefined ? {} : { text }),
+        ...(priceLabel === undefined ? {} : { priceLabel }),
         ...(fontSize === undefined ? {} : { fontSize }),
         ...(fontFamily === undefined ? {} : { fontFamily }),
         ...(bold === undefined ? {} : { bold }),
@@ -669,8 +675,8 @@ const STRICT_SAVED_FIELDS: Readonly<Record<DrawingKind, readonly string[]>> = Ob
   "axis-line": Object.freeze(["id", "axisLineType", "dataPoint", "color", "lineWidth"]),
   "angle-measure": Object.freeze(["id", "dataPoints", "color", "lineWidth"]),
   text: Object.freeze([
-    "id", "dataPoint", "text", "color", "fontSize", "fontFamily", "bold", "italic",
-    "underline", "align", "bgColor", "borderColor", "borderWidth", "widthPx", "padding",
+    "id", "dataPoint", "target", "text", "priceLabel", "color", "fontSize", "fontFamily", "bold",
+    "italic", "underline", "align", "bgColor", "borderColor", "borderWidth", "widthPx", "padding",
   ]),
   fibonacci: Object.freeze(["id", "dataPoints", "levels", "inverted", "color", "lineWidth"]),
   position: Object.freeze([

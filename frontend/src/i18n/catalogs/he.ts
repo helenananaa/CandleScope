@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
@@ -12,6 +13,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
   ...unifiedMessages["he"],
+  ...drawingAnnotationMessages["he"],
   ...syntheticEnglish,
   ...continuousEnglish,
   ...tradeHistoryEnglish,

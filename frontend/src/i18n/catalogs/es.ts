@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
@@ -10,6 +11,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  */
 export const es = {
   ...unifiedMessages["es"],
+  ...drawingAnnotationMessages["es"],
   ...syntheticEnglish,
   ...continuousSpanish,
   ...tradeHistorySpanish,

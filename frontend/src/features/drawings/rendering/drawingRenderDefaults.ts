@@ -108,9 +108,12 @@ export type AngleDrawingRenderEntity = DrawingRenderEntityBase<"angle-measure", 
 export type TextDrawingRenderEntity = DrawingRenderEntityBase<"text", {
   kind: "text";
   dataPoint: DrawingDataPoint;
+  /** Callout leader target; absent for plain text and price labels. */
+  target: DrawingDataPoint | null;
 }, {
   kind: "text";
   text: string;
+  priceLabel: boolean;
   color: string;
   fontSize: number;
   fontFamily: string;
@@ -396,10 +399,12 @@ export function normalizeDrawingEntityForRender(
           dataPoint: geometry.dataPoint
             ? cloneFrozen(geometry.dataPoint)
             : Object.freeze({ logical: 0, price: 0 }),
+          target: geometry.target ? cloneFrozen(geometry.target) : null,
         }),
         style: Object.freeze({
           kind: "text" as const,
           text: style.text ?? "Text",
+          priceLabel: style.priceLabel === true,
           color: renderColor(style.color, DEFAULT_TEXT_RENDER_COLOR),
           fontSize: style.fontSize || DEFAULT_TEXT_RENDER_FONT_SIZE,
           fontFamily: style.fontFamily || DEFAULT_TEXT_RENDER_FONT_FAMILY,

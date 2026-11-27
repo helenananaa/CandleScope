@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyCzech, replayNoteCzech, tradeHistoryCzech, readonlyAccountCzech, continuousCzech, tradingAccountsCs, nativeCzech } from "./czechFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
   ...unifiedMessages["cs"],
+  ...drawingAnnotationMessages["cs"],
   ...syntheticEnglish,
   ...continuousCzech,
   ...tradeHistoryCzech,

@@ -93,6 +93,10 @@ export interface TextSavedDrawingOptions {
   readonly fontSize?: number;
   readonly italic?: boolean;
   readonly padding?: number;
+  /** Price labels show their anchor's price and carry no target. */
+  readonly priceLabel?: boolean;
+  /** Callout leader target. */
+  readonly target?: DrawingDataPoint;
   readonly text?: string;
   readonly underline?: boolean;
   readonly widthPx?: number | null;
@@ -278,6 +282,8 @@ export function createTextSavedDrawing({
   fontSize,
   italic,
   padding,
+  priceLabel,
+  target,
   text,
   underline,
   widthPx,
@@ -285,6 +291,8 @@ export function createTextSavedDrawing({
   return finalizedCreatedDrawing("tx", {
     type: "text",
     dataPoint: { ...dataPoint },
+    ...(target === undefined ? {} : { target: { ...target } }),
+    ...(priceLabel ? { priceLabel: true } : {}),
     text: text ?? "",
     color,
     fontSize: fontSize || 14,

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyFrench, replayNoteFrench, tradeHistoryFrench, readonlyAccountFrench, continuousFrench, tradingAccountsFr, nativeFrench } from "./frenchFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
   ...unifiedMessages["fr"],
+  ...drawingAnnotationMessages["fr"],
   ...syntheticEnglish,
   ...continuousFrench,
   ...tradeHistoryFrench,

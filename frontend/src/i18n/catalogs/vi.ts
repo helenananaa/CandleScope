@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyVietnamese, replayNoteVietnamese, tradeHistoryVietnamese, readonlyAccountVietnamese, continuousVietnamese, tradingAccountsVi, nativeVietnamese } from "./vietnameseFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
   ...unifiedMessages["vi"],
+  ...drawingAnnotationMessages["vi"],
   ...syntheticEnglish,
   ...continuousVietnamese,
   ...tradeHistoryVietnamese,

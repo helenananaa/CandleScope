@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyIndonesian, replayNoteIndonesian, tradeHistoryIndonesian, readonlyAccountIndonesian, continuousIndonesian, tradingAccountsId, nativeIndonesian } from "./indonesianFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
   ...unifiedMessages["id"],
+  ...drawingAnnotationMessages["id"],
   ...syntheticEnglish,
   ...continuousIndonesian,
   ...tradeHistoryIndonesian,

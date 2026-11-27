@@ -61,6 +61,7 @@ export type CanonicalDrawingGeometry =
   | Readonly<{
       kind: "text";
       dataPoint?: DrawingDataPoint;
+      target?: DrawingDataPoint;
     }>
   | Readonly<{
       kind: "fibonacci";
@@ -114,6 +115,7 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
   | Readonly<{
       kind: "text";
       text?: string;
+      priceLabel?: boolean;
       color?: string;
       fontSize?: number;
       fontFamily?: string;
@@ -280,7 +282,7 @@ function matchingKind(
     line: ["dataPoints", "kind", "lineType"],
     position: ["direction", "entryPrice", "kind", "slPrice", "timeRange", "tpPrice"],
     shape: ["dataPoints", "extendRight", "kind", "shapeType"],
-    text: ["dataPoint", "kind"],
+    text: ["dataPoint", "kind", "target"],
   };
   const styleKeys: Record<DrawingKind, readonly string[]> = {
     path: ["arrowEnd", "color", "kind", "lineWidth"],
@@ -299,7 +301,7 @@ function matchingKind(
     ],
     text: [
       "align", "bgColor", "bold", "borderColor", "borderWidth", "color", "fontFamily",
-      "fontSize", "italic", "kind", "padding", "text", "underline", "widthPx",
+      "fontSize", "italic", "kind", "padding", "priceLabel", "text", "underline", "widthPx",
     ],
   };
   const geometryAllowed = new Set(geometryKeys[kind]);

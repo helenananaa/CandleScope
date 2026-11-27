@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRomanian, replayNoteRomanian, tradeHistoryRomanian, readonlyAccountRomanian, continuousRomanian, tradingAccountsRo, nativeRomanian } from "./romanianFeatureMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
   ...unifiedMessages["ro"],
+  ...drawingAnnotationMessages["ro"],
   ...syntheticEnglish,
   ...continuousRomanian,
   ...tradeHistoryRomanian,

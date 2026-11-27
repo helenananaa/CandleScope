@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -13,6 +14,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
   ...unifiedMessages["en"],
+  ...drawingAnnotationMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
