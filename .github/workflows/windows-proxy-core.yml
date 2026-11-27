@@ -2,7 +2,7 @@ name: Windows proxy core
 
 # The pinned Mihomo build that the Windows app bundles, driven by the proxy
 # subscription tests on a real Windows runner (#575 PL-11b). The macOS desktop
-# job runs the same modules against the macOS build.
+# job runs the same modules (listed there) against the macOS build.
 
 on:
   pull_request:
@@ -66,9 +66,11 @@ jobs:
         run: |
           export CANDLESCOPE_MIHOMO="$RUNNER_TEMP/mihomo/mihomo.exe"
           test -f "$CANDLESCOPE_MIHOMO"
+          # Every proxy subscription module, so a new one runs here without a list edit.
+          modules=(tests/test_proxy_subscription*.py)
+          test "${#modules[@]}" -ge 2
           python -B -m pytest -q -rs -W error::pytest.PytestUnhandledCoroutineWarning \
-            tests/test_proxy_subscriptions.py \
-            tests/test_proxy_subscription_refresh.py \
+            "${modules[@]}" \
             --junitxml=../output/windows-proxy-core/junit.xml \
             --basetemp="$RUNNER_TEMP/proxy-core-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Require the native Mihomo cases to have run
