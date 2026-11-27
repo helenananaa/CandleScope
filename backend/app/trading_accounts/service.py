@@ -50,6 +50,7 @@ from app.simulation.practice_account import (
 from app.data_engine.series_identity import KlineSeriesIdentity
 
 from .series import market_series, requested_series, series_text, series_view, stored_series
+from .sessions import closed_between, market_calendar
 from .stats import TradeFacts, compute_stats, journal_tags
 from .journal_service import JournalService
 from .store import TradingStore
@@ -443,8 +444,9 @@ class TradingAccountService(JournalService):
                 bar = None
             if bar is not None:
                 at = int(bar["time"]) * 1000
-                if cursor is None or at >= cursor.observed_ms or now - at <= 2 * BAR_MS:
-                    return _bar_decimal(bar, "close"), at, "market" if now - at <= 2 * BAR_MS else "stale"
+                current = self._current_bar(instrument, series, at, now)
+                if cursor is None or at >= cursor.observed_ms or current:
+                    return _bar_decimal(bar, "close"), at, "market" if current else "stale"
         if cursor is not None:
             return cursor.last_close, cursor.observed_ms, "stale"
         return None, None, "none"
@@ -772,6 +774,15 @@ class TradingAccountService(JournalService):
             allow_short=market_type == "futures",
         )
 
+    def _current_bar(self, instrument: Instrument, series: KlineSeriesIdentity | None, at_ms: int, now: int) -> bool:
+        """Whether the candle opened at ``at_ms`` still carries the market's price.
+
+        A candle from the last two minutes does. So does an older one when the
+        market has been closed since (ADR-DATA-002 D2): it has no later price.
+        """
+        return now - at_ms <= 2 * BAR_MS or closed_between(
+            market_calendar(self.market, instrument, series), at_ms + BAR_MS, now - 2 * BAR_MS)
+
     def _reference_price(
         self, instrument: Instrument, series: KlineSeriesIdentity | None, client_price: Decimal | None,
     ) -> tuple[Decimal, str]:
@@ -784,7 +795,7 @@ class TradingAccountService(JournalService):
                 bar = self.market.latest_bar(*instrument, **market_series(series))
             except Exception:
                 bar = None
-            if bar is not None and now - int(bar["time"]) * 1000 <= 2 * BAR_MS:
+            if bar is not None and self._current_bar(instrument, series, int(bar["time"]) * 1000, now):
                 return _bar_decimal(bar, "close"), "market_feed"
         if client_price is not None and client_price > 0:
             return client_price, "chart"
