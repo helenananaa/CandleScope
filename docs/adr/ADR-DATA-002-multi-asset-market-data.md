@@ -165,12 +165,12 @@ entitlement、delay_seconds、redistribution、上市/到期时间。还需要�
 | `replay/training/display_service.py` 严格原生周期 | `history.native_archive`（契约 `binance-public-kline-v1`，Binance spot） | D3b |
 | `data_preparation/replay_origin.py`、`data_preparation/market_random.py` | `history.earliest_page`（契约 `binance.klines.start-time-ascending/1`：按 startTime 升序翻页，能探到最早一根；Binance spot、futures） | D3b |
 | 前端 `trainingHubModel.ts` 默认选中 | 优先选声明了 `hedge.public_history` 的市场；拿不到交易所目录时选第一个可用市场 | D3b |
-| `backtest/continuous_definition.py` 期货、前端 `strategy-research/researchSelectedVersion.ts`、`ContinuousStrategyPanel.tsx` | `contract_rules`（期货合约规则）；实时和日历已在 D2c3 改完 | D3c |
-| `backtest/pine_risk_stops.py` | 全天候 UTC 日历 | D3c |
-| `backtest/pine_requested_data.py`、`indicator/pine_host_inputs.py`（2 处） | Pine ticker 命名（`.P` 后缀）移到 provider 的 symbol normalizer（`pine_ticker()`） | D3c |
+| `backtest/continuous_definition.py` 期货、前端 `strategy-research/researchSelectedVersion.ts`、`ContinuousStrategyPanel.tsx` | `contract_rules`（契约 `BINANCE_USDM_LINEAR_BASE_QUANTITY`：线性、按基础资产数量，Binance futures）；实时和日历已在 D2c3 改完；前端在交易所目录未加载时交给后端判断 | D3c |
+| `backtest/pine_risk_stops.py` | 市场声明的日历是 `crypto.24x7.utc`（OKX 由此可用 Pine 日内风控；窗口契约 id `BINANCE_UTC_24_7_V1` 进 hash，保留原名） | D3c |
+| `backtest/pine_requested_data.py`、`indicator/pine_host_inputs.py`（2 处）、`backtest/strategy/pine_engine.py` | Pine ticker 命名（`.P` 后缀）移到 symbol normalizer：`pine_ticker()` / `storage_symbol_from_pine()`，默认原样返回，Binance 对 futures/usdm/swap 加减 `.P` | D3c |
 | 前端 `advanced-market-data/useAdvancedMarketDataRuntime.ts`（4 处）、`market_data/service.py`（2 处） | `funding.hybrid_history`、`open_interest.native_grid` | D3d |
 
-D3c–D3d 的角色名是计划，落地时按实际用途定，并更新这张表。错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
+D3d 的角色名是计划，落地时按实际用途定，并更新这张表。错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
 
 只读账户里的 OKX 判断（前端 `readonly-accounts/*`）属于账户领域，由 #176 处理；`utils/symbolKey.ts:35` 的
 Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功能开关。数据引擎内部（`ingestion`、`storage` 围栏、
