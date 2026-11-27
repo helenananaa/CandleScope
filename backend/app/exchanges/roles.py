@@ -37,6 +37,11 @@ BINANCE_PUBLIC_KLINE_ARCHIVE = "binance-public-kline-v1"
 HISTORY_EARLIEST_PAGE = "history.earliest_page"
 BINANCE_KLINES_START_TIME_ASCENDING = "binance.klines.start-time-ascending/1"
 
+# Futures contract rules continuous runs simulate: linear contracts quoted in
+# base-unit quantity, one unit per contract.
+CONTRACT_RULES = "contract_rules"
+BINANCE_USDM_LINEAR_BASE_QUANTITY = "BINANCE_USDM_LINEAR_BASE_QUANTITY"
+
 _BUILTIN_VENUES = ("binance", "okx")
 
 
@@ -63,6 +68,39 @@ def venue_role_contract(
 ) -> str | None:
     found = venue_role(exchange, market_type, role, registry=registry)
     return found.contract if found is not None else None
+
+
+def venue_market_calendar_id(
+    exchange: str,
+    market_type: str,
+    *,
+    registry: Any | None = None,
+) -> str | None:
+    """The calendar the venue declares for this market, or None."""
+
+    capabilities = _venue_capabilities(str(exchange or "").strip().lower(), registry)
+    market = str(market_type or "").strip().lower()
+    return next((getattr(item, "calendar_id", None)
+                 for item in (getattr(capabilities, "markets", ()) or ())
+                 if getattr(item, "market_type", None) == market), None)
+
+
+def venue_symbol_normalizer(exchange: str, *, registry: Any | None = None) -> Any:
+    """The venue's symbol normalizer (naming, not a feature switch)."""
+
+    from .plugin import DefaultSymbolNormalizer
+    from .registry import get_exchange_registry
+
+    venue = str(exchange or "").strip().lower()
+    registry = get_exchange_registry() if registry is None else registry
+    try:
+        return registry.get_plugin(venue).symbol_normalizer()
+    except KeyError:
+        if venue == "binance":
+            from .plugins.binance.symbols import BinanceSymbolNormalizer
+
+            return BinanceSymbolNormalizer()
+        return DefaultSymbolNormalizer()
 
 
 def _venue_capabilities(exchange: str, registry: Any | None) -> Any | None:
@@ -93,6 +131,8 @@ def _builtin_capabilities(exchange: str) -> Any | None:
 
 __all__ = [
     "BINANCE_KLINES_START_TIME_ASCENDING",
+    "BINANCE_USDM_LINEAR_BASE_QUANTITY",
+    "CONTRACT_RULES",
     "BINANCE_PUBLIC_KLINE_ARCHIVE",
     "BINANCE_USDM_AGG_TRADES_ARCHIVE",
     "BINANCE_USDM_DIFF_DEPTH_CAPTURE",
@@ -102,6 +142,8 @@ __all__ = [
     "HISTORY_EARLIEST_PAGE",
     "HISTORY_NATIVE_ARCHIVE",
     "TRADES_HISTORY_ARCHIVE",
+    "venue_market_calendar_id",
     "venue_role",
     "venue_role_contract",
+    "venue_symbol_normalizer",
 ]

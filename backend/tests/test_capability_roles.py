@@ -237,3 +237,87 @@ def test_market_random_probes_the_listing_only_on_earliest_first_pages(monkeypat
         payload().model_copy(update={"exchange": "acme"}), factory, now_ms=START + 20 * MINUTE,
         randbelow=lambda n: 0))
     assert setup["start_mode"] == "RANDOM" and factory.calls[0]["start_ms"] == 0
+
+
+# D3c: strategies.
+
+def test_continuous_futures_follow_declared_contract_rules(venues):
+    from app.exchanges import roles
+
+    assert venue_role_contract("binance", "futures", roles.CONTRACT_RULES) == roles.BINANCE_USDM_LINEAR_BASE_QUANTITY
+    for exchange in ("okx", "twelvedata", "binanceusdm"):
+        assert venue_role(exchange, "futures", roles.CONTRACT_RULES) is None
+
+
+def test_continuous_definition_refuses_futures_without_contract_rules(venues):
+    from app.backtest.continuous_definition import prepare_definition
+    from app.backtest.errors import BacktestError
+    from app.data_engine.data_manager.models import SeriesKey
+    from app.exchanges import roles
+    from tests.test_continuous_provider import spec
+
+    def refused(exchange):
+        try:
+            prepare_definition(spec(), {}, SeriesKey("BTCUSDT", "1m", market_type="futures", exchange=exchange),
+                               follow=True)
+        except BacktestError as failure:
+            return failure.code == "FIDELITY_UNSUPPORTED" and "contract rules" in str(failure)
+        return False
+
+    assert refused("okx")
+    assert not refused("binance")
+    venues["acme"] = _capabilities("acme", CapabilityRole(
+        roles.CONTRACT_RULES, ("futures",), roles.BINANCE_USDM_LINEAR_BASE_QUANTITY))
+    assert not refused("acme")
+
+
+def test_pine_daily_risk_windows_follow_the_market_calendar():
+    from app.backtest.errors import BacktestError
+    from app.backtest.pine_risk_stops import UTC_24_7_WINDOW_POLICY, window_contract
+
+    daily = {"strategy.risk.max_intraday_loss"}
+    for exchange, market in (("binance", "spot"), ("binance", "usdm"), ("binance", "futures"), ("okx", "futures")):
+        contract = window_contract({"exchange": exchange, "market_type": market, "interval": "1h"}, daily)
+        assert contract["policy"] == UTC_24_7_WINDOW_POLICY == "BINANCE_UTC_24_7_V1"
+    for exchange, market in (("twelvedata", "stock"), ("unknown", "spot"), ("binance", "option")):
+        with pytest.raises(BacktestError, match="around the clock"):
+            window_contract({"exchange": exchange, "market_type": market, "interval": "1h"}, daily)
+    assert window_contract({"exchange": "twelvedata", "market_type": "stock"}, {"strategy.risk.allow_entry_in"}) == {
+        "policy": "NON_WINDOWED_V1"}
+
+
+def test_pine_ticker_naming_comes_from_the_venue_normalizer():
+    from app.backtest.pine_ticker import venue_pine_ticker, venue_storage_symbol
+    from app.indicator.pine_host_inputs import chart_pine_symbol
+
+    assert venue_pine_ticker("binance", "futures", "BTCUSDT") == "BTCUSDT.P"
+    assert venue_pine_ticker("binance", "usdm", "BTCUSDT.P") == "BTCUSDT.P"
+    assert venue_pine_ticker("binance", "spot", "BTCUSDT") == "BTCUSDT"
+    assert venue_storage_symbol("binance", "swap", "ETHUSDT.P") == "ETHUSDT"
+    assert venue_storage_symbol("binance", "spot", "ETHUSDT.P") == "ETHUSDT.P"
+    for exchange, market, symbol in (("okx", "futures", "BTC-USDT-SWAP"), ("twelvedata", "stock", "AAPL:NASDAQ")):
+        assert venue_pine_ticker(exchange, market, symbol) == symbol
+        assert venue_storage_symbol(exchange, market, symbol + ".P") == symbol + ".P"
+    context = SimpleNamespace(exchange="binance", market_type="futures", symbol="BTCUSDT")
+    assert chart_pine_symbol(context) == "BINANCE:BTCUSDT.P"
+    assert chart_pine_symbol(SimpleNamespace(exchange="okx", market_type="futures", symbol="BTC-USDT-SWAP")) == (
+        "OKX:BTC-USDT-SWAP")
+
+
+def test_pine_engine_names_the_chart_through_the_venue():
+    from app.backtest.strategy.pine_engine import PineEngineProvider
+
+    engine = PineEngineProvider()
+    try:
+        for market, chart, expected in (
+            ("usdm", "BINANCE:BTCUSDT", "BINANCE:BTCUSDT.P"),
+            ("futures", "BINANCE:BTCUSDT.P", "BINANCE:BTCUSDT.P"),
+            ("spot", "BINANCE:BTCUSDT", "BINANCE:BTCUSDT"),
+            ("futures", "OKX:BTC-USDT-SWAP", "OKX:BTC-USDT-SWAP"),
+            ("stock", "AAPL:NASDAQ", "AAPL:NASDAQ"),
+            ("", "LOCAL:LOCAL", "LOCAL:LOCAL"),
+        ):
+            engine.context = {"pineChartMarketType": market}
+            assert engine._pine_chart_symbol(chart) == expected, (market, chart)
+    finally:
+        engine.close()

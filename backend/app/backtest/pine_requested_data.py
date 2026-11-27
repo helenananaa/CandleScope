@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from app.backtest.errors import BacktestError
 from app.backtest.native import timeframe
 from app.backtest.native_contracts import RequestedNativeData
-from app.backtest.pine_ticker import pine_ticker_symbol
+from app.backtest.pine_ticker import pine_ticker_symbol, venue_storage_symbol
 from app.data_engine.history.expected_bars import FIXED_UTC_CALENDAR_ID, bucket_end_ms, calendar_by_id, follows
 from app.data_engine.interval_policy import parse_interval_spec
 from app.local_data.service import LocalDatasetError, LocalDatasetService
@@ -51,9 +51,8 @@ def load_contexts(root, references):
     try:
         for item in references:
             manifest = local.revision_details(item["dataset_id"], item["data_epoch"])["manifest"]
-            ticker = pine_ticker_symbol(item["symbol"])
-            if item["exchange"].lower() == "binance" and item["market_type"] in {"usdm", "futures", "swap"}:
-                ticker = ticker.removesuffix(".P")
+            ticker = venue_storage_symbol(item["exchange"].lower(), item["market_type"],
+                                          pine_ticker_symbol(item["symbol"]))
             if ticker != manifest["symbol"]:
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Requested symbol differs from its frozen dataset.")
             venue, separator, _ = item["symbol"].partition(":")
