@@ -117,3 +117,42 @@ test("a disposed controller follows again once resumed (StrictMode remounts effe
   assert.equal(calls.length, 1);
   controller.dispose();
 });
+
+test("an extendable rebuild's start is kept until the window would exceed twice the budget", () => {
+  const budget = SCRIPT_FOLLOW_BAR_BUDGET;
+  const first = followRange(0, (budget + 99) * MINUTE, MINUTE);
+  const kept = followRange(0, (budget + 100) * MINUTE, MINUTE, budget, first.start_time_ms);
+  assert.equal(kept.start_time_ms, first.start_time_ms, "the next rebuild continues the previous input");
+  const longest = followRange(0, first.start_time_ms + (2 * budget - 1) * MINUTE, MINUTE, budget, first.start_time_ms);
+  assert.equal((longest.end_time_ms + 1 - longest.start_time_ms) / MINUTE, 2 * budget, "at most twice the budget");
+  const restarted = followRange(0, first.start_time_ms + 2 * budget * MINUTE, MINUTE, budget, first.start_time_ms);
+  assert.equal((restarted.end_time_ms + 1 - restarted.start_time_ms) / MINUTE, budget, "then the latest budget's bars again");
+  assert.equal(followRange(5 * MINUTE, 20 * MINUTE, MINUTE, budget, 0).start_time_ms, 5 * MINUTE,
+    "never before the user's start");
+});
+
+test("the start is kept only after a rebuild the engine can extend", async () => {
+  const budget = SCRIPT_FOLLOW_BAR_BUDGET;
+  const calls: FollowRange[] = [];
+  const extendable: string[] = [];
+  const controller = new ScriptFollowController<string>(() => undefined, (failure) => assert.fail(String(failure)));
+  const followed: ScriptFollowBase<string> = {
+    startMs: 0, coveredEndMs: (budget + 99) * MINUTE, intervalMs: MINUTE,
+    async rebuild(range) { calls.push(range); return calls.length === 2 ? "full-only" : "extendable"; },
+    extendable: (run) => { extendable.push(run); return run === "extendable"; },
+  };
+  controller.setBase(followed);
+  for (let bar = budget + 100; bar < budget + 104; bar += 1) {
+    controller.setClosedBar(bar * MINUTE);
+    await tick(); await tick();
+  }
+  const starts = calls.map((range) => range.start_time_ms / MINUTE);
+  // 1st: sliding window; 2nd keeps it; the 2nd could not be extended, so the 3rd slides; the 4th keeps the 3rd's.
+  assert.deepEqual(starts, [101, 101, 103, 103]);
+  assert.deepEqual(extendable, ["extendable", "full-only", "extendable", "extendable"]);
+  controller.setBase({ ...followed, coveredEndMs: (budget + 104) * MINUTE - 1 });
+  controller.setClosedBar((budget + 104) * MINUTE);
+  await tick();
+  assert.equal(calls.at(-1)!.start_time_ms / MINUTE, 105, "a new base starts with the sliding window");
+  controller.dispose();
+});
