@@ -45,3 +45,45 @@ jobs:
         run: |
           npm --prefix ../packages/candlescope-control ci --ignore-scripts
           npm --prefix ../packages/candlescope-control test
+
+  browser-suites:
+    # `npm test` only finds *.test.{ts,tsx}. The *.browser.ts(x) suites need a
+    # real Chrome, so scripts/run-browser-suites.mjs builds and runs each
+    # fixture here. Fixtures that need a Python fixture server (its "python"
+    # group) run in browser-suites-python.yml; the run prints which suites
+    # each group covers and any suite left out with its reason.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+      - name: Let Chrome start its sandbox
+        # Ubuntu 24.04 restricts unprivileged user namespaces, which Chrome's
+        # sandbox needs; the test harness does not pass --no-sandbox.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run browser suites in Chrome
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS: "60000"
+          CANDLESCOPE_TEST_CHECK_TIMEOUT_MS: "240000"
+        run: node scripts/run-browser-suites.mjs --group browser --out ../output/browser-suites
+      - name: Upload browser suite evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-suites-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/browser-suites
+          if-no-files-found: ignore

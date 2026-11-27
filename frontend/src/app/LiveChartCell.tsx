@@ -1298,6 +1298,7 @@ function LiveChartCell({
                 meta: sourceMarketData.view.meta,
               }, liveSourceSession)}
               continuousChartActive={active && !obscured && !study.masked && quickReplay === null}
+              liveBarsAvailable={chartSession.status.realtimeIntervalAvailable}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}

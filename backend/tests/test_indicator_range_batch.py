@@ -14,6 +14,7 @@ from app.api.v1.indicator_range_batch import (
 )
 from app.data_engine.data_manager.models import BarData
 from app.indicator.engine import indicator_code_hash
+from app.indicator.history_worker import shutdown_builtin_history
 from app.indicator.range_result_service import (
     IndicatorRangeResultService,
     IndicatorRangeRevisionChangedError,
@@ -21,6 +22,17 @@ from app.indicator.range_result_service import (
 from app.indicator.series_revision import SeriesRevisionRegistry
 from app.indicator.types import IndicatorKey
 from app.indicator.warmup import indicator_warmup_bars
+
+
+@pytest.fixture(autouse=True)
+def _close_shared_history_pool():
+    """Batches start the process-wide builtin history pool (enabled by default).
+
+    Close it after each case, so later modules in the same pytest process get a
+    fresh pool instead of this module's worker, lane and counters.
+    """
+    yield
+    asyncio.run(shutdown_builtin_history())
 
 
 class _CountingDataManager:
