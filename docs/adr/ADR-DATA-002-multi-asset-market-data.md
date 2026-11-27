@@ -161,16 +161,16 @@ entitlement、delay_seconds、redistribution、上市/到期时间。还需要�
 | --- | --- | --- |
 | `replay/trade_import.py`（2 处）、`replay/remote_trade_archive.py`（2 处）、`replay/official_trade_history.py`、`data_preparation/trade_adapter.py`、`market_data/trade_flow_service.py` 缺口修复、前端 `trade-flow/tradeFlowHistoryApi.ts` | `trades.history.archive`（契约 `binance.public-data.um-agg-trades.daily/1`，Binance futures） | D3a |
 | `replay/training/historical_book.py`（2 处）、`replay/training/admission_rules.py` 盘口辅助 | `book.history`（契约即归档来源 `BINANCE_USDM_DIFF_DEPTH_CAPTURE`） | D3b |
-| `replay/training/hedge_inputs.py`、`admission_rules.py` 双向持仓、前端 `replay/trainingHubModel.ts` 双向持仓 | `hedge.public_history`（规则、费率、标记价、资金费归档） | D3b |
-| `replay/training/display_service.py` 严格原生周期 | `history.native_archive`（Binance spot） | D3b |
-| `data_preparation/replay_origin.py`、`data_preparation/market_random.py` | `history.earliest_page`（按 startTime 升序翻页，能探到最早一根） | D3b |
-| 前端 `trainingHubModel.ts` 默认选中 | 按上面的角色挑默认市场 | D3b |
+| `replay/training/hedge_inputs.py`、`admission_rules.py` 双向持仓、前端 `replay/trainingHubModel.ts` 双向持仓（改看后端计划的拒绝原因） | `hedge.public_history`（契约 `binance.usdm.hedge-public-history/1`：规则、费率、标记价、资金费归档） | D3b |
+| `replay/training/display_service.py` 严格原生周期 | `history.native_archive`（契约 `binance-public-kline-v1`，Binance spot） | D3b |
+| `data_preparation/replay_origin.py`、`data_preparation/market_random.py` | `history.earliest_page`（契约 `binance.klines.start-time-ascending/1`：按 startTime 升序翻页，能探到最早一根；Binance spot、futures） | D3b |
+| 前端 `trainingHubModel.ts` 默认选中 | 优先选声明了 `hedge.public_history` 的市场；拿不到交易所目录时选第一个可用市场 | D3b |
 | `backtest/continuous_definition.py` 期货、前端 `strategy-research/researchSelectedVersion.ts`、`ContinuousStrategyPanel.tsx` | `contract_rules`（期货合约规则）；实时和日历已在 D2c3 改完 | D3c |
 | `backtest/pine_risk_stops.py` | 全天候 UTC 日历 | D3c |
 | `backtest/pine_requested_data.py`、`indicator/pine_host_inputs.py`（2 处） | Pine ticker 命名（`.P` 后缀）移到 provider 的 symbol normalizer（`pine_ticker()`） | D3c |
 | 前端 `advanced-market-data/useAdvancedMarketDataRuntime.ts`（4 处）、`market_data/service.py`（2 处） | `funding.hybrid_history`、`open_interest.native_grid` | D3d |
 
-D3b–D3d 的角色名是计划，落地时按实际用途定，并更新这张表。
+D3c–D3d 的角色名是计划，落地时按实际用途定，并更新这张表。错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
 
 只读账户里的 OKX 判断（前端 `readonly-accounts/*`）属于账户领域，由 #176 处理；`utils/symbolKey.ts:35` 的
 Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功能开关。数据引擎内部（`ingestion`、`storage` 围栏、

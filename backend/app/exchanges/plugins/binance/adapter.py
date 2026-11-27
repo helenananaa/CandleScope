@@ -532,10 +532,14 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
 
 
 def _capability_roles() -> list[CapabilityRole]:
-    from app.exchanges.roles import BINANCE_USDM_AGG_TRADES_ARCHIVE, TRADES_HISTORY_ARCHIVE
+    from app.exchanges import roles
 
     return [
-        CapabilityRole(TRADES_HISTORY_ARCHIVE, ("futures",), BINANCE_USDM_AGG_TRADES_ARCHIVE),
+        CapabilityRole(roles.TRADES_HISTORY_ARCHIVE, ("futures",), roles.BINANCE_USDM_AGG_TRADES_ARCHIVE),
+        CapabilityRole(roles.BOOK_HISTORY, ("futures",), roles.BINANCE_USDM_DIFF_DEPTH_CAPTURE),
+        CapabilityRole(roles.HEDGE_PUBLIC_HISTORY, ("futures",), roles.BINANCE_USDM_HEDGE_PUBLIC_HISTORY),
+        CapabilityRole(roles.HISTORY_NATIVE_ARCHIVE, ("spot",), roles.BINANCE_PUBLIC_KLINE_ARCHIVE),
+        CapabilityRole(roles.HISTORY_EARLIEST_PAGE, ("spot", "futures"), roles.BINANCE_KLINES_START_TIME_ASCENDING),
     ]
 
 

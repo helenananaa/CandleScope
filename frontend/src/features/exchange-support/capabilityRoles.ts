@@ -7,6 +7,7 @@ import type { ExchangeCapabilityPayload } from "../../services/apiPayloadParsers
  */
 export const TRADES_HISTORY_ARCHIVE = "trades.history.archive";
 export const BINANCE_USDM_AGG_TRADES_ARCHIVE = "binance.public-data.um-agg-trades.daily/1";
+export const HEDGE_PUBLIC_HISTORY = "hedge.public_history";
 
 type RoleSource = Pick<ExchangeCapabilityPayload, "roles"> | null | undefined;
 
@@ -18,3 +19,4 @@ export function capabilityRoleContract(capability: RoleSource, marketType: strin
   ));
   return found?.contract ?? null;
 }
+
