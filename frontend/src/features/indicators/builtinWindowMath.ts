@@ -10,12 +10,12 @@ function compensatedSum(values: readonly number[]): number {
   return sum + correction;
 }
 
-export function replayWindowMean(values: readonly number[]): number {
+export function windowMean(values: readonly number[]): number {
   const anchor = values[0]!;
   return anchor + compensatedSum(values.map(value => value - anchor)) / values.length;
 }
 
-export function replayWindowMoments(values: readonly number[]): [number, number] {
-  const mean = replayWindowMean(values);
+export function windowMoments(values: readonly number[]): [number, number] {
+  const mean = windowMean(values);
   return [mean, compensatedSum(values.map(value => (value - mean) * (value - mean)))];
 }
