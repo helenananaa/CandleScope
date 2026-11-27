@@ -171,6 +171,32 @@ def position(raw: Mapping[str, Any], contract: Contract) -> dict[str, Any]:
             "eventTimeMs": timestamp(raw.get("uTime")), "contract": contract.wire()}
 
 
+def _cost_rates(raw: Mapping[str, Any], maker: str, taker: str) -> dict[str, str] | None:
+    # OKX reports a charge as a negative rate and a rebate as a positive one.
+    # Stored as cost rates: positive is a fee, negative a rebate.
+    if raw.get(maker) in (None, "") and raw.get(taker) in (None, ""):
+        return None
+    with localcontext() as context:
+        context.prec = 80
+        # Subtracting from zero keeps a zero rate "0", never "-0".
+        return {"maker": exact(Decimal(0) - decimal(raw.get(maker))), "taker": exact(Decimal(0) - decimal(raw.get(taker)))}
+
+
+def fee_rates(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """The account's standard perpetual fee rates at its current tier.
+
+    These estimate costs only. Fills and bills record the fees actually charged,
+    and some contracts carry rates of their own.
+    """
+    if raw.get("instType") != "SWAP":
+        raise AccountDataError("FEE_RATE_SCOPE_INVALID")
+    tier = raw.get("level")
+    return {"tier": identifier(tier) if tier else None,
+            "usdtMargined": _cost_rates(raw, "makerU", "takerU"),
+            "coinMargined": _cost_rates(raw, "maker", "taker"),
+            "exchangeTimeMs": timestamp(raw.get("ts"))}
+
+
 def bill(raw: Mapping[str, Any]) -> dict[str, Any]:
     kind = identifier(raw.get("type"))
     currency = identifier(raw.get("ccy"))

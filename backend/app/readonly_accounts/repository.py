@@ -271,7 +271,8 @@ class AccountRepository:
                 self._raw(db,"ws:"+channel,key,row,received_ms,"WS")
 
     def save_snapshot(self, kind: str, payload: dict | list, received_ms: int) -> None:
-        if kind not in {"positions", "open_orders", "balances", "contracts", "position_history", "position_history_state"}:
+        if kind not in {"positions", "open_orders", "balances", "contracts", "position_history", "position_history_state",
+                        "fee_rates", "fee_rates_state"}:
             raise AccountDataError("SNAPSHOT_KIND_INVALID")
         with self.transaction() as db:
             if kind == "position_history":
