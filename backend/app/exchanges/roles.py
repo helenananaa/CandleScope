@@ -18,6 +18,25 @@ TRADES_HISTORY_ARCHIVE = "trades.history.archive"
 # daily aggTrades zips with CHECKSUM files.
 BINANCE_USDM_AGG_TRADES_ARCHIVE = "binance.public-data.um-agg-trades.daily/1"
 
+# Captured historical order-book archives; the contract is the archive's
+# recorded source.
+BOOK_HISTORY = "book.history"
+BINANCE_USDM_DIFF_DEPTH_CAPTURE = "BINANCE_USDM_DIFF_DEPTH_CAPTURE"
+
+# Public rule, fee, mark/index and funding history that hedge-mode replay
+# simulates against.
+HEDGE_PUBLIC_HISTORY = "hedge.public_history"
+BINANCE_USDM_HEDGE_PUBLIC_HISTORY = "binance.usdm.hedge-public-history/1"
+
+# Native-interval kline archives that replay charts must use as they are.
+HISTORY_NATIVE_ARCHIVE = "history.native_archive"
+BINANCE_PUBLIC_KLINE_ARCHIVE = "binance-public-kline-v1"
+
+# History pages from a start time return the earliest rows, so one page from
+# time zero finds the first bar (a listing boundary without metadata).
+HISTORY_EARLIEST_PAGE = "history.earliest_page"
+BINANCE_KLINES_START_TIME_ASCENDING = "binance.klines.start-time-ascending/1"
+
 _BUILTIN_VENUES = ("binance", "okx")
 
 
@@ -73,7 +92,15 @@ def _builtin_capabilities(exchange: str) -> Any | None:
 
 
 __all__ = [
+    "BINANCE_KLINES_START_TIME_ASCENDING",
+    "BINANCE_PUBLIC_KLINE_ARCHIVE",
     "BINANCE_USDM_AGG_TRADES_ARCHIVE",
+    "BINANCE_USDM_DIFF_DEPTH_CAPTURE",
+    "BINANCE_USDM_HEDGE_PUBLIC_HISTORY",
+    "BOOK_HISTORY",
+    "HEDGE_PUBLIC_HISTORY",
+    "HISTORY_EARLIEST_PAGE",
+    "HISTORY_NATIVE_ARCHIVE",
     "TRADES_HISTORY_ARCHIVE",
     "venue_role",
     "venue_role_contract",

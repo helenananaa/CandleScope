@@ -6,6 +6,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
 
+from app.exchanges.roles import (
+    BINANCE_USDM_DIFF_DEPTH_CAPTURE,
+    BINANCE_USDM_HEDGE_PUBLIC_HISTORY,
+    BOOK_HISTORY,
+    HEDGE_PUBLIC_HISTORY,
+    venue_role_contract,
+)
 from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
@@ -423,17 +430,17 @@ def setup_market_compatibility(
     market_type = (
         str(identity.get("market_type", "")) if isinstance(identity, Mapping) else ""
     )
-    if settings.get("position_mode") == "HEDGE" and (
-        exchange != "binance" or market_type != "futures"
-    ):
+    if settings.get("position_mode") == "HEDGE" and venue_role_contract(
+        exchange, market_type, HEDGE_PUBLIC_HISTORY,
+    ) != BINANCE_USDM_HEDGE_PUBLIC_HISTORY:
         return {
             "state": "UNSUPPORTED",
             "code": "HEDGE_BINANCE_USDM_REQUIRED",
             "message": "双向持仓当前只支持 Binance futures（USD-M 线性合约）。",
         }
-    if settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED" and (
-        exchange != "binance" or market_type != "futures"
-    ):
+    if settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED" and venue_role_contract(
+        exchange, market_type, BOOK_HISTORY,
+    ) != BINANCE_USDM_DIFF_DEPTH_CAPTURE:
         return {
             "state": "UNSUPPORTED",
             "code": "BOOK_BINANCE_USDM_REQUIRED",

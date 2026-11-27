@@ -23,6 +23,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from app.exchanges.roles import (
+    BINANCE_USDM_DIFF_DEPTH_CAPTURE,
+    BOOK_HISTORY,
+    venue_role_contract,
+)
 from app.replay.broker.models import canonical_decimal
 from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
@@ -271,8 +276,8 @@ def _meta(connection: sqlite3.Connection) -> sqlite3.Row:
         raise ValueError("historical book archive protocol is unsupported")
     if row["schema_version"] != ARCHIVE_SCHEMA_VERSION:
         raise ValueError("historical book archive schema is unsupported")
-    if row["exchange"] != "binance" or row["market_type"] != "futures":
-        raise ValueError("Phase 9 historical book source must be Binance USD-M")
+    if venue_role_contract(row["exchange"], row["market_type"], BOOK_HISTORY) != row["source"]:
+        raise ValueError("historical book archive venue does not declare this book source")
     if row["source"] != "BINANCE_USDM_DIFF_DEPTH_CAPTURE":
         raise ValueError("historical book source provenance is unsupported")
     if row["source_contract_url"] != ARCHIVE_SOURCE_CONTRACT_URL:
@@ -866,7 +871,8 @@ class HistoricalBookArchiveManager:
             )
         )
         if self.enabled:
-            if request.exchange != "binance" or request.market_type != "futures":
+            if venue_role_contract(request.exchange, request.market_type,
+                                   BOOK_HISTORY) != BINANCE_USDM_DIFF_DEPTH_CAPTURE:
                 state = CapabilityState.UNSUPPORTED_SOURCE_MODE.value
                 reason = "BINANCE_USDM_ONLY"
             elif request.start_mode is not StartMode.MANUAL or requested_start is None:

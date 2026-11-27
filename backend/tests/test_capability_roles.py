@@ -106,9 +106,11 @@ def test_registered_venues_keep_the_same_roles():
     from app.exchanges.registry import bootstrap_default_adapters
 
     registry = bootstrap_default_adapters()
-    assert registry.capabilities_view("binance").to_dict()["roles"] == [{
-        "role": TRADES_HISTORY_ARCHIVE, "market_types": ["futures"],
-        "contract": BINANCE_USDM_AGG_TRADES_ARCHIVE}]
+    registered = registry.capabilities_view("binance").to_dict()["roles"]
+    assert registered == capability_roles._builtin_capabilities("binance").to_dict()["roles"]
+    assert {"role": TRADES_HISTORY_ARCHIVE, "market_types": ["futures"],
+            "contract": BINANCE_USDM_AGG_TRADES_ARCHIVE} in registered
+    assert registry.capabilities_view("okx").to_dict()["roles"] == []
     assert venue_role_contract("binance", "futures", TRADES_HISTORY_ARCHIVE, registry=registry) == (
         BINANCE_USDM_AGG_TRADES_ARCHIVE)
     for exchange, market in (("okx", "futures"), ("binanceusdm", "swap.linear"),
@@ -171,3 +173,67 @@ def test_chart_history_lists_only_archive_series(tmp_path):
     listed = repository.list_all_series()
     assert len(listed) == 1
     assert "binance" in repr(listed[0]) and "futures" in repr(listed[0])
+
+
+# D3b: replay training and preparation.
+
+def test_binance_declares_the_replay_training_roles():
+    from app.exchanges import roles
+
+    expected = {
+        (roles.BOOK_HISTORY, "futures"): roles.BINANCE_USDM_DIFF_DEPTH_CAPTURE,
+        (roles.HEDGE_PUBLIC_HISTORY, "futures"): roles.BINANCE_USDM_HEDGE_PUBLIC_HISTORY,
+        (roles.HISTORY_NATIVE_ARCHIVE, "spot"): roles.BINANCE_PUBLIC_KLINE_ARCHIVE,
+        (roles.HISTORY_EARLIEST_PAGE, "spot"): roles.BINANCE_KLINES_START_TIME_ASCENDING,
+        (roles.HISTORY_EARLIEST_PAGE, "futures"): roles.BINANCE_KLINES_START_TIME_ASCENDING,
+    }
+    for (role, market), contract in expected.items():
+        assert venue_role_contract("binance", market, role) == contract
+    for role, market in ((roles.BOOK_HISTORY, "spot"), (roles.HEDGE_PUBLIC_HISTORY, "spot"),
+                         (roles.HISTORY_NATIVE_ARCHIVE, "futures")):
+        assert venue_role("binance", market, role) is None
+    for role, _market in expected:
+        for exchange, market in (("okx", "futures"), ("okx", "spot"), ("twelvedata", "stock")):
+            assert venue_role(exchange, market, role) is None
+
+
+def test_training_setup_admission_asks_for_hedge_and_book_roles(venues):
+    from app.exchanges import roles
+    from app.replay.training.admission_rules import setup_market_compatibility
+
+    def check(exchange, **settings):
+        entry = {"identity": {"exchange": exchange, "market_type": "futures", "symbol": "BTCUSDT"}}
+        return setup_market_compatibility(settings, entry, capability_admission={}, committed_start_ms=None)
+
+    assert check("okx", position_mode="HEDGE")["code"] == "HEDGE_BINANCE_USDM_REQUIRED"
+    assert check("okx", book_mode="BOOK_ASSISTED_REQUIRED")["code"] == "BOOK_BINANCE_USDM_REQUIRED"
+    assert check("binance", position_mode="HEDGE").get("code") != "HEDGE_BINANCE_USDM_REQUIRED"
+    assert check("binance", book_mode="BOOK_ASSISTED_REQUIRED")["code"] != "BOOK_BINANCE_USDM_REQUIRED"
+    venues["acme"] = _capabilities(
+        "acme",
+        CapabilityRole(roles.HEDGE_PUBLIC_HISTORY, ("futures",), roles.BINANCE_USDM_HEDGE_PUBLIC_HISTORY),
+        CapabilityRole(roles.BOOK_HISTORY, ("futures",), "acme.book/1"),
+    )
+    assert check("acme", position_mode="HEDGE").get("code") != "HEDGE_BINANCE_USDM_REQUIRED"
+    assert check("acme", book_mode="BOOK_ASSISTED_REQUIRED")["code"] == "BOOK_BINANCE_USDM_REQUIRED"
+
+
+def test_market_random_probes_the_listing_only_on_earliest_first_pages(monkeypatch, venues):
+    import asyncio
+
+    from app.exchanges import roles
+    from tests.test_market_random import START, MINUTE, Factory, payload
+    from app.data_preparation.market_random import resolve_market_random
+
+    monkeypatch.setattr("app.data_preparation.market_random.get_cached_symbol_metadata", lambda *a: None)
+    for exchange in ("okx", "twelvedata"):
+        with pytest.raises(PreparationError, match="上市边界"):
+            asyncio.run(resolve_market_random(
+                payload().model_copy(update={"exchange": exchange}), Factory(), now_ms=START + 20 * MINUTE))
+    venues["acme"] = _capabilities("acme", CapabilityRole(
+        roles.HISTORY_EARLIEST_PAGE, ("spot",), roles.BINANCE_KLINES_START_TIME_ASCENDING))
+    factory = Factory()
+    setup = asyncio.run(resolve_market_random(
+        payload().model_copy(update={"exchange": "acme"}), factory, now_ms=START + 20 * MINUTE,
+        randbelow=lambda n: 0))
+    assert setup["start_mode"] == "RANDOM" and factory.calls[0]["start_ms"] == 0
