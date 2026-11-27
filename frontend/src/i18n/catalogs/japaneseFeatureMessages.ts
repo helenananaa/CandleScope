@@ -153,7 +153,7 @@ export const readonlyAccountJapanese: Record<keyof typeof readonlyAccountEnglish
   "account.transfer": "振替",
   "account.chain": "ネットワーク",
   "account.withdrawalFee": "出金手数料",
-  "account.transferRoute": "{from} → {to}",
+  "account.transferRoute": "{from} から {to} へ",
   "account.fundingAccount": "資金アカウント",
   "account.tradingAccount": "取引アカウント",
   "account.otherAccount": "その他のアカウント",
