@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyVietnamese, replayNoteVietnamese, tradeHistoryVietnamese, readonlyAccountVietnamese, continuousVietnamese, tradingAccountsVi, nativeVietnamese } from "./vietnameseFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
@@ -4164,6 +4165,7 @@ export const vi = {
   "chartTester.deleteDraft": "Xóa",
   "chartTester.deleteRetiredDraft": "Xóa bản nháp đã ngừng hỗ trợ {name}",
   "chartTester.deleteRetiredDraftFailed": "Không xóa được bản nháp đã ngừng hỗ trợ. Hãy thử lại.",
+  ...replayDrawingSaveMessages["vi"],
   ...chartTimeZoneMessages["vi"],
   ...chartTimeShortcutMessages["vi"],
 } as const satisfies MessageCatalog;

@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyIndonesian, replayNoteIndonesian, tradeHistoryIndonesian, readonlyAccountIndonesian, continuousIndonesian, tradingAccountsId, nativeIndonesian } from "./indonesianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
@@ -4164,6 +4165,7 @@ export const id = {
   "chartTester.deleteDraft": "Hapus",
   "chartTester.deleteRetiredDraft": "Hapus draf yang dihentikan {name}",
   "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dihapus. Coba lagi.",
+  ...replayDrawingSaveMessages["id"],
   ...chartTimeZoneMessages["id"],
   ...chartTimeShortcutMessages["id"],
 } as const satisfies MessageCatalog;

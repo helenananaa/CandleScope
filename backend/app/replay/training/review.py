@@ -332,13 +332,178 @@ def _validate_drawing_bounds(value: object, *, path: str) -> None:
         raise ValueError(f"{path} has inverted bounds")
 
 
+# At most this many rejected drawings are listed in one error response.
+REVIEW_DRAWING_REJECTION_LIMIT = 32
+_DRAWING_REJECTION_FIELD_LIMIT = 16
+
+
+class _DrawingEntityRejected(ValueError):
+    """One drawing fails on its own; the rest of its document may be valid."""
+
+    def __init__(self, reason: str, message: str, *, fields: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.fields = fields
+
+
+class _DrawingEntitiesRejected(ValueError):
+    """Every document-level check passed, but these drawings did not."""
+
+    def __init__(self, rejected: list[dict[str, object]]) -> None:
+        super().__init__("drawing entities are invalid")
+        self.rejected = rejected
+
+
+def _drawing_rejection(
+    entity: Mapping[str, object], reason: str, fields: tuple[str, ...]
+) -> dict[str, object]:
+    kind = entity.get("kind")
+    return {
+        "id": entity["id"],
+        "kind": kind if isinstance(kind, str) and 1 <= len(kind) <= 64 else None,
+        "reason": reason,
+        "fields": [field[:160] for field in fields[:_DRAWING_REJECTION_FIELD_LIMIT]],
+    }
+
+
+def _validate_drawing_entity(entity: Mapping[str, object], *, path: str) -> tuple[int, int]:
+    """Check one drawing on its own and return its freehand point and span counts."""
+
+    if set(entity) != _DRAWING_ENTITY_KEYS:
+        raise ValueError(f"{path} keys are invalid")
+    kind = entity["kind"]
+    if not isinstance(kind, str) or kind not in _DRAWING_GEOMETRY_KEYS:
+        raise _DrawingEntityRejected("UNSUPPORTED_KIND", f"{path}.kind is unsupported")
+    if not _drawing_safe_integer(entity["geometryRevision"]):
+        raise ValueError(f"{path}.geometryRevision is invalid")
+    if not _drawing_safe_integer(entity["styleRevision"]):
+        raise ValueError(f"{path}.styleRevision is invalid")
+    geometry = entity["geometry"]
+    style = entity["style"]
+    if not _drawing_plain_object(geometry) or geometry.get("kind") != kind:
+        raise ValueError(f"{path}.geometry does not match its kind")
+    if not _drawing_plain_object(style) or style.get("kind") != kind:
+        raise ValueError(f"{path}.style does not match its kind")
+    unsupported = tuple(
+        [f"geometry.{key}" for key in sorted(set(geometry) - _DRAWING_GEOMETRY_KEYS[kind])]
+        + [f"style.{key}" for key in sorted(set(style) - _DRAWING_STYLE_KEYS[kind])]
+    )
+    if unsupported:
+        raise _DrawingEntityRejected(
+            "UNSUPPORTED_FIELD", f"{path} has unsupported fields", fields=unsupported
+        )
+    points = 0
+    spans = 0
+    if kind in {"freehand", "highlighter"}:
+        has_points = "dataPoints" in geometry
+        has_stroke = "stroke" in geometry
+        if has_points == has_stroke:
+            raise ValueError(f"{path}.geometry needs exactly one freehand payload")
+        if has_points:
+            data_points = geometry["dataPoints"]
+            if not isinstance(data_points, list):
+                raise ValueError(f"{path}.geometry.dataPoints must be a list")
+            points = len(data_points)
+        else:
+            stroke = geometry["stroke"]
+            if (
+                not _drawing_plain_object(stroke)
+                or not isinstance(stroke.get("points"), list)
+                or not isinstance(stroke.get("spans"), list)
+            ):
+                raise ValueError(f"{path}.geometry.stroke is invalid")
+            points = len(stroke["points"])
+            spans = len(stroke["spans"])
+    _validate_drawing_bounds(entity["bounds"], path=f"{path}.bounds")
+    _validate_drawing_json_value(entity, path=path, depth=0, node_count=[0])
+    return points, spans
+
+
+def _validate_drawing_record(
+    document: Mapping[str, object],
+    *,
+    run_id: str,
+    entity_count: int,
+) -> str:
+    """Validate one v1 chart record and return its canonical JSON.
+
+    Document-level failures raise ValueError. When only some drawings fail,
+    every drawing is still checked and _DrawingEntitiesRejected lists them.
+    """
+
+    if not _drawing_plain_object(document) or set(document) != _DRAWING_ROOT_KEYS:
+        raise ValueError("drawing document root keys are invalid")
+    if document["documentSchemaVersion"] != 1:
+        raise ValueError("drawing document schema is unsupported")
+    if document["scopeKey"] != f"replay-run:{run_id}":
+        raise ValueError("drawing document scope does not match the run")
+    if not _drawing_safe_integer(document["documentRevision"]):
+        raise ValueError("drawing document revision is invalid")
+    if not _drawing_safe_integer(document["updatedAt"]):
+        raise ValueError("drawing document timestamp is invalid")
+    entities = document["entities"]
+    if (
+        isinstance(entity_count, bool)
+        or not isinstance(entity_count, int)
+        or not 0 <= entity_count <= REVIEW_DRAWING_ENTITY_LIMIT
+        or not isinstance(entities, list)
+        or len(entities) != entity_count
+    ):
+        raise ValueError("drawing document entity count is invalid")
+
+    seen_ids: set[str] = set()
+    rejected: list[dict[str, object]] = []
+    freehand_points = 0
+    freehand_spans = 0
+    for index, entity in enumerate(entities):
+        path = f"$.entities[{index}]"
+        if not _drawing_plain_object(entity):
+            raise ValueError(f"{path} must be an object")
+        entity_id = entity.get("id")
+        if (
+            not isinstance(entity_id, str)
+            or not 1 <= len(entity_id) <= 256
+            or entity_id == "__preview__"
+            or entity_id in seen_ids
+        ):
+            raise ValueError(f"{path}.id is invalid or duplicated")
+        seen_ids.add(entity_id)
+        try:
+            points, spans = _validate_drawing_entity(entity, path=path)
+        except _DrawingEntityRejected as exc:
+            rejected.append(_drawing_rejection(entity, exc.reason, exc.fields))
+            continue
+        except (RecursionError, TypeError, ValueError):
+            rejected.append(_drawing_rejection(entity, "INVALID", ()))
+            continue
+        freehand_points += points
+        freehand_spans += spans
+        if (
+            freehand_points > REVIEW_DRAWING_FREEHAND_POINT_LIMIT
+            or freehand_spans > REVIEW_DRAWING_FREEHAND_SPAN_LIMIT
+        ):
+            raise ValueError("drawing freehand aggregate budget is exceeded")
+    if rejected:
+        raise _DrawingEntitiesRejected(rejected)
+
+    document_json = canonical_json(document)
+    if len(document_json.encode("utf-8")) > REVIEW_DRAWING_DOCUMENT_BYTES_LIMIT:
+        raise ValueError("drawing document byte budget is exceeded")
+    return document_json
+
+
 def validate_drawing_document(
     document: Mapping[str, object],
     *,
     run_id: str,
     entity_count: int,
 ) -> tuple[str, str]:
-    """Validate and canonicalize the cross-runtime drawing evidence record."""
+    """Validate and canonicalize the cross-runtime drawing evidence record.
+
+    A document whose only problems are individual drawings fails with
+    ``details.rejected`` naming each one (chart scope, id, kind, reason and
+    unsupported fields), so the client can save the others without them.
+    """
 
     try:
         if _drawing_plain_object(document) and document.get("documentSchemaVersion") == 2:
@@ -350,6 +515,7 @@ def validate_drawing_document(
             if not isinstance(charts, dict) or len(charts) > 256:
                 raise ValueError("workspace drawing chart budget exceeded")
             entities = []
+            rejected: list[dict[str, object]] = []
             for scope, chart in charts.items():
                 if not isinstance(scope, str) or not 1 <= len(scope) <= 1024:
                     raise ValueError("workspace drawing scope is invalid")
@@ -358,118 +524,44 @@ def validate_drawing_document(
                 child_entities = chart.get("entities")
                 if not isinstance(child_entities, list):
                     raise ValueError("workspace drawing entities are invalid")
-                validate_drawing_document(chart, run_id=run_id, entity_count=len(child_entities))
+                try:
+                    _validate_drawing_record(
+                        chart, run_id=run_id, entity_count=len(child_entities)
+                    )
+                except _DrawingEntitiesRejected as exc:
+                    rejected += [{"chart": scope, **item} for item in exc.rejected]
+                    continue
                 # Validate aggregate geometry budgets through the existing v1 contract.
                 for entity in child_entities:
                     entities.append({**entity, "id": f"workspace-{len(entities)}"})
+            if rejected:
+                raise _DrawingEntitiesRejected(rejected)
             aggregate = {
                 "documentSchemaVersion": 1, "scopeKey": f"replay-run:{run_id}",
                 "documentRevision": 0, "updatedAt": 0, "entities": entities,
             }
-            validate_drawing_document(aggregate, run_id=run_id, entity_count=entity_count)
+            _validate_drawing_record(aggregate, run_id=run_id, entity_count=entity_count)
             document_json = canonical_json(document)
             if len(document_json.encode("utf-8")) > REVIEW_DRAWING_DOCUMENT_BYTES_LIMIT:
                 raise ValueError("workspace drawing byte budget exceeded")
             return document_json, canonical_sha256(document)
-        if not _drawing_plain_object(document) or set(document) != _DRAWING_ROOT_KEYS:
-            raise ValueError("drawing document root keys are invalid")
-        if document["documentSchemaVersion"] != 1:
-            raise ValueError("drawing document schema is unsupported")
-        if document["scopeKey"] != f"replay-run:{run_id}":
-            raise ValueError("drawing document scope does not match the run")
-        if not _drawing_safe_integer(document["documentRevision"]):
-            raise ValueError("drawing document revision is invalid")
-        if not _drawing_safe_integer(document["updatedAt"]):
-            raise ValueError("drawing document timestamp is invalid")
-        entities = document["entities"]
-        if (
-            isinstance(entity_count, bool)
-            or not isinstance(entity_count, int)
-            or not 0 <= entity_count <= REVIEW_DRAWING_ENTITY_LIMIT
-            or not isinstance(entities, list)
-            or len(entities) != entity_count
-        ):
-            raise ValueError("drawing document entity count is invalid")
-
-        seen_ids: set[str] = set()
-        freehand_points = 0
-        freehand_spans = 0
-        for index, entity in enumerate(entities):
-            path = f"$.entities[{index}]"
-            if not _drawing_plain_object(entity) or set(entity) != _DRAWING_ENTITY_KEYS:
-                raise ValueError(f"{path} keys are invalid")
-            entity_id = entity["id"]
-            if (
-                not isinstance(entity_id, str)
-                or not 1 <= len(entity_id) <= 256
-                or entity_id == "__preview__"
-                or entity_id in seen_ids
-            ):
-                raise ValueError(f"{path}.id is invalid or duplicated")
-            seen_ids.add(entity_id)
-            kind = entity["kind"]
-            if not isinstance(kind, str) or kind not in _DRAWING_GEOMETRY_KEYS:
-                raise ValueError(f"{path}.kind is unsupported")
-            if not _drawing_safe_integer(entity["geometryRevision"]):
-                raise ValueError(f"{path}.geometryRevision is invalid")
-            if not _drawing_safe_integer(entity["styleRevision"]):
-                raise ValueError(f"{path}.styleRevision is invalid")
-            geometry = entity["geometry"]
-            style = entity["style"]
-            if (
-                not _drawing_plain_object(geometry)
-                or "kind" not in geometry
-                or geometry["kind"] != kind
-                or not set(geometry).issubset(_DRAWING_GEOMETRY_KEYS[kind])
-            ):
-                raise ValueError(f"{path}.geometry does not match its kind")
-            if (
-                not _drawing_plain_object(style)
-                or "kind" not in style
-                or style["kind"] != kind
-                or not set(style).issubset(_DRAWING_STYLE_KEYS[kind])
-            ):
-                raise ValueError(f"{path}.style does not match its kind")
-            if kind in {"freehand", "highlighter"}:
-                has_points = "dataPoints" in geometry
-                has_stroke = "stroke" in geometry
-                if has_points == has_stroke:
-                    raise ValueError(
-                        f"{path}.geometry needs exactly one freehand payload"
-                    )
-                if has_points:
-                    points = geometry["dataPoints"]
-                    if not isinstance(points, list):
-                        raise ValueError(f"{path}.geometry.dataPoints must be a list")
-                    freehand_points += len(points)
-                else:
-                    stroke = geometry["stroke"]
-                    if (
-                        not _drawing_plain_object(stroke)
-                        or not isinstance(stroke.get("points"), list)
-                        or not isinstance(stroke.get("spans"), list)
-                    ):
-                        raise ValueError(f"{path}.geometry.stroke is invalid")
-                    freehand_points += len(stroke["points"])
-                    freehand_spans += len(stroke["spans"])
-                if (
-                    freehand_points > REVIEW_DRAWING_FREEHAND_POINT_LIMIT
-                    or freehand_spans > REVIEW_DRAWING_FREEHAND_SPAN_LIMIT
-                ):
-                    raise ValueError("drawing freehand aggregate budget is exceeded")
-            _validate_drawing_bounds(entity["bounds"], path=f"{path}.bounds")
-            _validate_drawing_json_value(
-                entity,
-                path=path,
-                depth=0,
-                node_count=[0],
-            )
-
-        document_json = canonical_json(document)
-        document_bytes = len(document_json.encode("utf-8"))
-        if document_bytes > REVIEW_DRAWING_DOCUMENT_BYTES_LIMIT:
-            raise ValueError("drawing document byte budget is exceeded")
+        document_json = _validate_drawing_record(
+            document, run_id=run_id, entity_count=entity_count
+        )
         return document_json, canonical_sha256(document)
+    except _DrawingEntitiesRejected as exc:
+        raise TrainingRunError(
+            "REVIEW_DRAWING_INVALID",
+            "drawing document is not a bounded run-scoped canonical record",
+            status_code=422,
+            details={
+                "rejected": [
+                    {"chart": None, **item} if "chart" not in item else item
+                    for item in exc.rejected[:REVIEW_DRAWING_REJECTION_LIMIT]
+                ],
+                "rejected_count": len(exc.rejected),
+            },
+        ) from exc
     except (RecursionError, TypeError, ValueError) as exc:
         raise TrainingRunError(
             "REVIEW_DRAWING_INVALID",

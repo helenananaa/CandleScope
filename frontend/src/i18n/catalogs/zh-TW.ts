@@ -7,6 +7,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } from "./traditionalFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
@@ -4254,6 +4255,7 @@ export const zhTW = {
   "chartTester.deleteRetiredDraft": "刪除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
+  ...replayDrawingSaveMessages["zh-TW"],
   ...chartTimeZoneMessages["zh-TW"],
   ...chartTimeShortcutMessages["zh-TW"],
 } as const satisfies MessageCatalog;
