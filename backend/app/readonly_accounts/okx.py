@@ -15,10 +15,12 @@ from .normalization import AccountDataError
 REST_PATHS = {
     "public": frozenset({"public/instruments", "public/time"}),
     "private": frozenset({"account/config", "account/balance", "account/positions", "account/positions-history",
+                           "account/trade-fee",
                            "account/bills-archive", "trade/fills-history", "trade/orders-pending",
                            "trade/orders-history-archive"}),
 }
-SWAP_PATHS = frozenset({"public/instruments", "account/positions", "account/positions-history", "trade/fills-history",
+SWAP_PATHS = frozenset({"public/instruments", "account/positions", "account/positions-history", "account/trade-fee",
+                        "trade/fills-history",
                         "trade/orders-pending", "trade/orders-history-archive"})
 CHANNELS = frozenset({"orders", "positions", "account"})
 # Keep only documented, bounded provider codes. Raw OKX messages can contain

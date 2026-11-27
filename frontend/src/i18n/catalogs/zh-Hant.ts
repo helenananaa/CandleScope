@@ -8,6 +8,8 @@ import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } from "./traditionalFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhHant = {
   ...unifiedMessages["zh-Hant"],
@@ -4215,4 +4217,6 @@ export const zhHant = {
   "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
   ...drawingSelectionMessages["zh-Hant"],
+  ...chartTimeZoneMessages["zh-Hant"],
+  ...chartTimeShortcutMessages["zh-Hant"],
 } as const satisfies MessageCatalog;

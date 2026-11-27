@@ -1,5 +1,5 @@
 import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
 import { seriesPricePrecision } from "../../chart-adapter/mainSeriesPriceFormat.js";
@@ -16,6 +16,8 @@ import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
+import type { ChartTimeOutcomes } from "../market-data/chartTimeShortcuts.js";
+import { useGoToDateHotkey } from "../market-data/useGoToDateHotkey.js";
 import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
 import { createManagedReplayHistoryReader, loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
@@ -27,6 +29,7 @@ import {
   positionAt,
   previousEventCursor,
   protectionOrdersAt,
+  quickReplayCursorAt,
   replayEvents,
   replayWindow,
   visibleBars,
@@ -48,7 +51,11 @@ export interface QuickReplayChartStyle {
   customBg: string;
 }
 
+const ChartTimeNavigationDialog = lazy(() => import("../market-data/ChartTimeNavigationDialog.js"));
+
 const PLAY_DELAY_MS = [700, 250] as const;
+/** The dialog reports per chart; quick replay is one. */
+const DATE_TARGET = "quick-replay";
 const SETUP_BARS = 20;
 
 function stepSeconds(step: string, fallback: number): number {
@@ -380,6 +387,20 @@ export default function QuickReplayOverlay({
     const previous = previousEventCursor(events, cursor, stepSec);
     seek(clamp(previous ?? initialCursor(trade, intervalSec)));
   }, [canNavigate, clamp, cursor, events, intervalSec, seek, stepSec, trade]);
+  // ── go to date (PL-6): moves the cursor, through the same cut as stepping ──
+  const [dateOpen, setDateOpen] = useState(false);
+  useGoToDateHotkey(active && canNavigate, () => setDateOpen(true));
+  const goToTime = useCallback((timeMs: number): Promise<ChartTimeOutcomes> => {
+    const placed = canNavigate ? quickReplayCursorAt(timeMs, { stepSec, minCursor, maxCursor }) : null;
+    if (!placed) {
+      return Promise.resolve([{ cellId: DATE_TARGET, result: { status: canNavigate ? "invalid" : "unavailable", requestedTimeMs: timeMs } }]);
+    }
+    setPlaying(0);
+    seek(placed.cursor);
+    return Promise.resolve([{ cellId: DATE_TARGET, result: {
+      status: "located", requestedTimeMs: timeMs, actualTimeMs: placed.lastStepSec * 1000, exact: !placed.clamped,
+    } }]);
+  }, [canNavigate, maxCursor, minCursor, seek, stepSec]);
   useEffect(() => {
     if (playing === 0 || !canNavigate) return undefined;
     const timer = window.setTimeout(() => {
@@ -606,8 +627,14 @@ export default function QuickReplayOverlay({
             {stepOptions.map((item) => <option key={item} value={item}>{item}</option>)}
           </Select>
         </label>
+        <Button size="sm" disabled={!canNavigate} onClick={() => setDateOpen(true)} title={t("chartTime.replayCursorHint")}>
+          {t("chartTime.title")}
+        </Button>
         <span className="trading-help">{t("trading.replay.keys")}</span>
       </footer>
+      {dateOpen && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={DATE_TARGET}
+        onClose={() => setDateOpen(false)} onSubmit={goToTime} initialTimeMs={cursor * 1000}
+        hint={t("chartTime.replayCursorHint")} /></Suspense>}
     </div>
   );
 }

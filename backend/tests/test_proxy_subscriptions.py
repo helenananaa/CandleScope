@@ -209,7 +209,9 @@ def test_real_core_two_independent_upstreams_and_no_direct_fallback():
 # --- PL-11a: occupied listener ports and process reaping -------------------------------------
 
 BACKEND = Path(__file__).resolve().parents[1]
-posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX fake core and SIGKILL; Windows Mihomo CI is PL-11b")
+# The fake core is a shell script and the checks below signal its PID. Windows
+# runs the real-core cases instead (windows-proxy-core.yml).
+posix_only = pytest.mark.skipif(os.name != "posix", reason="shell-script fake core and POSIX signals")
 
 
 def _mihomo():
@@ -287,6 +289,15 @@ def _closed(port):
     except OSError:
         return True
     return False
+
+
+def _private_temp(monkeypatch, tmp_path):
+    """Point the guard's temporary directory at an empty folder this test owns."""
+    folder = tmp_path / "core-temp"
+    folder.mkdir()
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        monkeypatch.setenv(name, str(folder))
+    return folder
 
 
 def _gone(pid):
@@ -479,10 +490,32 @@ def test_guard_without_a_config_never_starts_the_core(fake_core):
     assert not record.exists()
 
 
-@posix_only
-def test_real_core_exits_when_its_backend_is_killed():
+def test_real_core_close_stops_it_and_removes_its_working_directory(monkeypatch, tmp_path):
+    from urllib.parse import urlsplit
+
+    from app.proxy_subscriptions.core import Core
+
     if not _mihomo():
         pytest.skip("Mihomo required for native listener integration")
+    temp = _private_temp(monkeypatch, tmp_path)
+    with _serve(_PlainServer) as upstream:
+        core = Core({"node": {"type": "http", "server": "127.0.0.1", "port": upstream.server_port}})
+        try:
+            controller, listener = urlsplit(core.controller).port, urlsplit(core.endpoints["node"]).port
+            # Mihomo runs in a private working directory of its own.
+            assert [path.name.startswith("candlescope-proxy-") for path in temp.iterdir()] == [True]
+        finally:
+            core.close()
+        assert core.process.poll() is not None and not core.alive
+        assert _until(lambda: _closed(controller) and _closed(listener))
+        # Windows refuses to delete files a running process still holds open.
+        assert _until(lambda: not any(temp.iterdir()))
+
+
+def test_real_core_exits_when_its_backend_is_killed(monkeypatch, tmp_path):
+    if not _mihomo():
+        pytest.skip("Mihomo required for native listener integration")
+    temp = _private_temp(monkeypatch, tmp_path)
     with _serve(_PlainServer) as upstream:
         backend = subprocess.Popen([sys.executable, "-c", f"""
 import sys, time
@@ -496,9 +529,13 @@ time.sleep(600)
         try:
             controller, listener = map(int, backend.stdout.readline().split())
             assert not _closed(controller) and not _closed(listener)
-            os.kill(backend.pid, signal.SIGKILL)
+            assert any(temp.iterdir())
+            # SIGKILL on POSIX, TerminateProcess on Windows: no close(), no atexit.
+            # Only the closing pipe tells the guard.
+            backend.kill()
             backend.wait(timeout=5)
             assert _until(lambda: _closed(controller) and _closed(listener))
+            assert _until(lambda: not any(temp.iterdir()))
         finally:
             if backend.poll() is None:
                 backend.kill()
