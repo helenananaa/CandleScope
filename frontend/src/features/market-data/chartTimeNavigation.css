@@ -8,3 +8,7 @@
 .chart-time-dialog input { width: 100%; box-sizing: border-box; padding: 10px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; }
 .chart-time-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }
 }
+@layer features {
+.chart-time-dialog .chart-time-shortcuts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chart-time-dialog .chart-time-shortcuts > span { flex: 0 0 100%; color: var(--text-secondary); font-size: 12px; }
+}

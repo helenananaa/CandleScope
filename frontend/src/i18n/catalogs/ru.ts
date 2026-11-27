@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRussian, replayNoteRussian, tradeHistoryRussian, readonlyAccountRussian, continuousRussian, tradingAccountsRu, nativeRussian } from "./russianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ru = {
   ...unifiedMessages["ru"],
@@ -4175,4 +4176,5 @@ export const ru = {
   "chartTester.deleteRetiredDraft": "Удалить снятый с поддержки черновик {name}",
   "chartTester.deleteRetiredDraftFailed": "Не удалось удалить снятый с поддержки черновик. Повторите попытку.",
   ...chartTimeZoneMessages["ru"],
+  ...chartTimeShortcutMessages["ru"],
 } as const satisfies MessageCatalog;

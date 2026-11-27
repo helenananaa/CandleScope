@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHindi, replayNoteHindi, tradeHistoryHindi, readonlyAccountHindi, continuousHindi, tradingAccountsHi, nativeHindi } from "./hindiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hi = {
   ...unifiedMessages["hi"],
@@ -4164,4 +4165,5 @@ export const hi = {
   "chartTester.deleteRetiredDraft": "बंद ड्राफ़्ट {name} हटाएँ",
   "chartTester.deleteRetiredDraftFailed": "बंद ड्राफ़्ट हटाया नहीं जा सका। फिर से कोशिश करें।",
   ...chartTimeZoneMessages["hi"],
+  ...chartTimeShortcutMessages["hi"],
 } as const satisfies MessageCatalog;

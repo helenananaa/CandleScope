@@ -10,6 +10,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptBR = {
   ...unifiedMessages["pt-BR"],
@@ -4813,4 +4814,5 @@ export const ptBR = {
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
   ...chartTimeZoneMessages["pt-BR"],
+  ...chartTimeShortcutMessages["pt-BR"],
 } as const satisfies MessageCatalog;
