@@ -91,7 +91,10 @@ export async function checkBackendSynthetic() {
   try {
     render();
     await until(() => messages.some(message => isSnapshot(message) && message["status"] === "ready"),
-      "real backend synthetic snapshot did not arrive", 60_000);
+      "real backend synthetic snapshot did not arrive", 60_000).catch((error: Error) => {
+      // Name what the stream did send, e.g. a stale status and its reason.
+      throw new Error(`${error.message}; messages: ${JSON.stringify(messages.map(({ type, status, reason, revision }) => ({ type, status, reason, revision })))}`);
+    });
     await until(() => Boolean((surface as ReturnType<typeof useChartSurfaceRuntime> | null)?.actions.captureViewportTransfer()),
       "backend bricks did not render on ordinal chart");
     const first = messages.find(isSnapshot)!;

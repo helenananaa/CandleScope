@@ -153,6 +153,13 @@ class _RecordingDataManager:
             complete=True,
         )
 
+    def query_before(self, symbol: str, interval: str, before_ms: int, **kwargs: Any) -> SimpleNamespace:
+        # Closed-only snapshots read the window ending at their close event (77358341a).
+        self.query_calls.append({"args": (symbol, interval, before_ms), "kwargs": dict(kwargs)})
+        limit = int(kwargs.get("limit", 500))
+        bars = [bar for bar in self.bars if int(bar.time) * 1000 < before_ms][-limit:]
+        return SimpleNamespace(bars=bars, missing_ranges=[], retryable=False, complete=True)
+
     def subscribe(self, **kwargs: Any) -> str:
         handle = f"handle-{len(self.subscriptions) + 1}"
         self.subscriptions.append({"handle": handle, **kwargs})

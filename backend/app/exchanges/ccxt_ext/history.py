@@ -10,7 +10,7 @@ from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType,
 from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
 from .catalog import BYBIT_METRIC_HISTORY_LIMIT, market_selection_parts
-from .unified import make_unified_payload
+from .unified import make_unified_payload, next_order_book_revision
 
 async def fetch_unified_history(
     context,
@@ -217,12 +217,11 @@ async def fetch_unified_history(
             value = await exchange.fetch_order_book(
                 symbol,
             )
-            context.rest_book_revision += 1
             rows = [
                 make_unified_payload(
                     "order_book",
                     dict(value),
-                    local_revision=context.rest_book_revision,
+                    local_revision=next_order_book_revision(),
                 )
             ]
         elif descriptor.stream_type in {StreamType.TICKER, StreamType.MINI_TICKER}:
