@@ -1,14 +1,19 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteChinese } from "./replayNoteMessages.js";
 import { continuousChinese } from "./continuousMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
+  ...drawingAnnotationMessages["zh-CN"],
   ...continuousChinese,
   ...tradeHistoryChinese,
   ...replayNoteChinese,
@@ -185,6 +190,9 @@ export const zhCN = {
   "account.identityHelp": "已有数据属于另一个 OKX 账户，请使用独立的应用数据配置。",
   "account.lastRead": "最近成功读取：{time}",
   "account.lastEvent": "最近收到私有账户事件：{time}",
+  "account.proxyRoute": "代理线路：{name}。",
+  "account.proxyRouteFailover": "这条线路持续失败时，账户会换到下一条允许 OKX 的线路。如果此密钥设置了 IP 白名单，所有这些线路的出口 IP 都需要在白名单中。",
+  "account.proxyRouteHelp": "没有已启用且允许 OKX 的代理线路。请在 设置 → 网络连接 中启用一条交易所列表为空或包含 okx 的线路。",
   "account.snapshotTime": "快照接收时间：{time}",
   "account.stale": "已过期",
   "account.staleTitle": "账户数值已过期",
@@ -1835,6 +1843,15 @@ export const zhCN = {
   "settings.proxy.previewNodes": "预览节点",
   "settings.proxy.useNodes": "使用所选节点",
   "settings.proxy.skippedNodes": "已跳过 {count} 个不支持的节点",
+  "settings.proxy.autoRefresh": "自动刷新",
+  "settings.proxy.autoRefreshOff": "关闭",
+  "settings.proxy.autoRefreshEvery": "每{duration}",
+  "settings.proxy.autoRefreshHelp": "按此间隔检查已保存的订阅。正在使用的节点会采用服务商当前的参数；不会自动添加新节点，服务商已移除的节点保留最后一次的参数。",
+  "settings.proxy.refreshPending": "尚未自动检查",
+  "settings.proxy.refreshChecked": "上次检查：{time}",
+  "settings.proxy.refreshFailed": "自动刷新失败：{time}",
+  "settings.proxy.refreshUpdated": "已更新节点：{count} · {time}",
+  "settings.proxy.refreshMissing": "订阅中已不存在：{count}",
   "settings.proxy.address": "代理地址",
   "settings.proxy.egressGroup": "出口组",
   "settings.proxy.concurrency": "并发请求上限",
@@ -4862,6 +4879,9 @@ export const zhCN = {
   "chartTester.deleteRetiredDraft": "删除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
+  ...drawingSelectionMessages["zh-CN"],
+  ...drawingCalculatedMessages["zh-CN"],
+  ...replayDrawingSaveMessages["zh-CN"],
   ...chartTimeZoneMessages["zh-CN"],
   ...chartTimeShortcutMessages["zh-CN"],
 } as const;

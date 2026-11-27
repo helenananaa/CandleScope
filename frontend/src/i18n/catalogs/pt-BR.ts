@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousPortuguese } from "./continuousMessages.js";
 import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
@@ -9,11 +10,15 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptBR = {
   ...unifiedMessages["pt-BR"],
+  ...drawingAnnotationMessages["pt-BR"],
   ...syntheticEnglish,
   ...continuousPortuguese,
   ...tradeHistoryBrazilian,
@@ -196,6 +201,9 @@ export const ptBR = {
   "account.identityHelp": "Estes registros pertencem a outra conta da OKX. Use um perfil separado de dados do aplicativo.",
   "account.lastRead": "Última consulta bem-sucedida: {time}",
   "account.lastEvent": "Último evento privado recebido: {time}",
+  "account.proxyRoute": "Rota de proxy: {name}.",
+  "account.proxyRouteFailover": "Se esta rota continuar falhando, a conta passa para a próxima rota que permite a OKX. Se esta chave permite só IPs de uma lista, o IP de saída de cada uma dessas rotas precisa estar nela.",
+  "account.proxyRouteHelp": "Nenhuma rota de proxy ativada permite a OKX. Em Configurações → Rede, ative uma rota cuja lista de exchanges esteja vazia ou inclua okx.",
   "account.snapshotTime": "Retrato recebido: {time}",
   "account.stale": "Desatualizado",
   "account.staleTitle": "Os valores da conta estão desatualizados",
@@ -1841,6 +1849,15 @@ export const ptBR = {
   "settings.proxy.previewNodes": "Visualizar nós",
   "settings.proxy.useNodes": "Usar nós selecionados",
   "settings.proxy.skippedNodes": "Nós incompatíveis ignorados: {count}",
+  "settings.proxy.autoRefresh": "Atualização automática",
+  "settings.proxy.autoRefreshOff": "Desativada",
+  "settings.proxy.autoRefreshEvery": "A cada {duration}",
+  "settings.proxy.autoRefreshHelp": "Verifica as assinaturas salvas nesse intervalo. Os nós em uso passam a usar as configurações atuais do provedor. Nós novos não são adicionados, e um nó que o provedor removeu mantém as últimas configurações.",
+  "settings.proxy.refreshPending": "Ainda não verificado automaticamente",
+  "settings.proxy.refreshChecked": "Última verificação: {time}",
+  "settings.proxy.refreshFailed": "Falha na atualização automática: {time}",
+  "settings.proxy.refreshUpdated": "Nós atualizados: {count} · {time}",
+  "settings.proxy.refreshMissing": "Não estão mais na assinatura: {count}",
   "settings.proxy.address": "Endereço do proxy",
   "settings.proxy.egressGroup": "Grupo de saída",
   "settings.proxy.concurrency": "Requisições simultâneas",
@@ -4871,6 +4888,9 @@ export const ptBR = {
   "chartTester.deleteRetiredDraft": "Excluir o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
+  ...drawingSelectionMessages["pt-BR"],
+  ...drawingCalculatedMessages["pt-BR"],
+  ...replayDrawingSaveMessages["pt-BR"],
   ...chartTimeZoneMessages["pt-BR"],
   ...chartTimeShortcutMessages["pt-BR"],
 } as const satisfies MessageCatalog;

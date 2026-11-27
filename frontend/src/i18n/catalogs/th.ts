@@ -1,13 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyThai, replayNoteThai, tradeHistoryThai, readonlyAccountThai, continuousThai, tradingAccountsTh, nativeThai } from "./thaiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const th = {
   ...unifiedMessages["th"],
+  ...drawingAnnotationMessages["th"],
   ...syntheticEnglish,
   ...continuousThai,
   ...tradeHistoryThai,
@@ -1248,6 +1253,15 @@ export const th = {
   "settings.proxy.previewNodes": "ดูตัวอย่างโหนด",
   "settings.proxy.useNodes": "ใช้โหนดที่เลือก",
   "settings.proxy.skippedNodes": "ข้ามโหนดที่ไม่รองรับ {count} โหนด",
+  "settings.proxy.autoRefresh": "รีเฟรชอัตโนมัติ",
+  "settings.proxy.autoRefreshOff": "ปิด",
+  "settings.proxy.autoRefreshEvery": "ทุก {duration}",
+  "settings.proxy.autoRefreshHelp": "ตรวจสอบการสมัครใช้ที่บันทึกไว้ตามช่วงเวลานี้ โหนดที่คุณใช้จะใช้การตั้งค่าปัจจุบันของผู้ให้บริการ ไม่มีการเพิ่มโหนดใหม่ และโหนดที่ผู้ให้บริการนำออกจะคงการตั้งค่าล่าสุดไว้",
+  "settings.proxy.refreshPending": "ยังไม่ได้ตรวจสอบอัตโนมัติ",
+  "settings.proxy.refreshChecked": "ตรวจสอบล่าสุด: {time}",
+  "settings.proxy.refreshFailed": "รีเฟรชอัตโนมัติไม่สำเร็จ: {time}",
+  "settings.proxy.refreshUpdated": "โหนดที่อัปเดต: {count} · {time}",
+  "settings.proxy.refreshMissing": "ไม่อยู่ในการสมัครใช้แล้ว: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID ตลาด (คั่นด้วยจุลภาค ว่างไว้หมายถึงทั้งหมด)",
   "settings.proxy.enabled": "เปิดใช้",
@@ -4164,6 +4178,9 @@ export const th = {
   "chartTester.deleteDraft": "ลบ",
   "chartTester.deleteRetiredDraft": "ลบฉบับร่างที่เลิกใช้แล้ว {name}",
   "chartTester.deleteRetiredDraftFailed": "ลบฉบับร่างที่เลิกใช้แล้วไม่ได้ ลองอีกครั้ง",
+  ...drawingSelectionMessages["th"],
+  ...drawingCalculatedMessages["th"],
+  ...replayDrawingSaveMessages["th"],
   ...chartTimeZoneMessages["th"],
   ...chartTimeShortcutMessages["th"],
 } as const satisfies MessageCatalog;

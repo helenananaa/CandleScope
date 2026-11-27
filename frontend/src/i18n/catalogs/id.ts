@@ -1,13 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyIndonesian, replayNoteIndonesian, tradeHistoryIndonesian, readonlyAccountIndonesian, continuousIndonesian, tradingAccountsId, nativeIndonesian } from "./indonesianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const id = {
   ...unifiedMessages["id"],
+  ...drawingAnnotationMessages["id"],
   ...syntheticEnglish,
   ...continuousIndonesian,
   ...tradeHistoryIndonesian,
@@ -1247,6 +1252,15 @@ export const id = {
   "settings.proxy.previewNodes": "Pratinjau simpul",
   "settings.proxy.useNodes": "Gunakan simpul terpilih",
   "settings.proxy.skippedNodes": "Simpul yang tidak didukung dilewati: {count}",
+  "settings.proxy.autoRefresh": "Penyegaran otomatis",
+  "settings.proxy.autoRefreshOff": "Mati",
+  "settings.proxy.autoRefreshEvery": "Setiap {duration}",
+  "settings.proxy.autoRefreshHelp": "Memeriksa langganan tersimpan dengan jadwal ini. Simpul yang Anda gunakan mengikuti pengaturan penyedia saat ini. Simpul baru tidak ditambahkan, dan simpul yang dihapus penyedia mempertahankan pengaturan terakhirnya.",
+  "settings.proxy.refreshPending": "Belum diperiksa otomatis",
+  "settings.proxy.refreshChecked": "Terakhir diperiksa: {time}",
+  "settings.proxy.refreshFailed": "Penyegaran otomatis gagal: {time}",
+  "settings.proxy.refreshUpdated": "Simpul diperbarui: {count} · {time}",
+  "settings.proxy.refreshMissing": "Tidak ada lagi di langganan: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID bursa (dipisahkan koma; kosong berarti semua)",
   "settings.proxy.enabled": "Aktif",
@@ -4164,6 +4178,9 @@ export const id = {
   "chartTester.deleteDraft": "Hapus",
   "chartTester.deleteRetiredDraft": "Hapus draf yang dihentikan {name}",
   "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dihapus. Coba lagi.",
+  ...drawingSelectionMessages["id"],
+  ...drawingCalculatedMessages["id"],
+  ...replayDrawingSaveMessages["id"],
   ...chartTimeZoneMessages["id"],
   ...chartTimeShortcutMessages["id"],
 } as const satisfies MessageCatalog;

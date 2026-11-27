@@ -23,5 +23,6 @@ export function accountErrorHelp(code: string): MessageKey {
   if (code === "HEDGE_ACCOUNT_REQUIRED") return "account.hedgeHelp";
   if (code.includes("KEYCHAIN")) return "account.keychainHelp";
   if (code.includes("DIFFERENT_ACCOUNT") || code === "ACCOUNT_IDENTITY_CHANGED") return "account.identityHelp";
+  if (code === "ACCOUNT_PROXY_ROUTE_UNAVAILABLE") return "account.proxyRouteHelp";
   return "account.errorHelp";
 }

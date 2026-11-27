@@ -21,7 +21,7 @@ const SAMPLE_CHART_SCOPE = "chart:wire-contract";
 const SAMPLE_UPDATED_AT = 1_795_000_000_000;
 
 const at = (time: number, price: number) => ({ time, price });
-const common = { hidden: false, locked: true, visibleIntervals: ["1m", "4h"] } as const;
+const common = { hidden: false, locked: true, visibleIntervals: ["1m", "4h"], groupId: "grp_wire_contract" } as const;
 const stroke: FreehandStrokeV3 = {
   version: 3,
   sourceProjection: "renko",
@@ -40,7 +40,9 @@ const stroke: FreehandStrokeV3 = {
 /**
  * One entity per drawing kind with every contract key set, built and encoded the
  * way replay training saves them. Freehand and highlighter carry either points or
- * a stroke, never both, so each appears twice.
+ * a stroke, never both, and a text is either a callout (target) or a price label,
+ * so each appears twice. Calculated drawings appear as a regression channel
+ * (deviation) and a volume profile (rows).
  */
 const SAMPLES: readonly DrawingEntityInput[] = [
   {
@@ -52,6 +54,16 @@ const SAMPLES: readonly DrawingEntityInput[] = [
     id: "channel", kind: "channel",
     geometry: { kind: "channel", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_120, 60_160), at(1_795_000_060, 60_090.5)] },
     style: { kind: "channel", color: "#089981", fillOpacity: 0.15, lineWidth: 1, ...common },
+  },
+  {
+    id: "regression-channel", kind: "calculated",
+    geometry: { kind: "calculated", calcType: "regression-channel", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_600, 60_180)] },
+    style: { kind: "calculated", color: "#2962ff", lineWidth: 1, deviation: 2.5, ...common },
+  },
+  {
+    id: "volume-profile", kind: "calculated",
+    geometry: { kind: "calculated", calcType: "volume-profile", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_600, 60_180)] },
+    style: { kind: "calculated", color: "#787b86", lineWidth: 1, rows: 24 },
   },
   {
     id: "range-measure", kind: "range-measure",
@@ -74,13 +86,18 @@ const SAMPLES: readonly DrawingEntityInput[] = [
     style: { kind: "angle-measure", color: "#787b86", lineWidth: 1, ...common },
   },
   {
-    id: "text", kind: "text",
-    geometry: { kind: "text", dataPoint: at(1_795_000_000, 60_100) },
+    id: "callout", kind: "text",
+    geometry: { kind: "text", dataPoint: at(1_795_000_000, 60_100), target: at(1_795_000_060, 60_120.5) },
     style: {
       kind: "text", text: "Note", color: "#131722", fontSize: 14, fontFamily: "Inter", bold: true,
       italic: true, underline: true, align: "center", bgColor: "#ffffff", borderColor: "#2962ff",
       borderWidth: 1, widthPx: 160, padding: 6, ...common,
     },
+  },
+  {
+    id: "price-label", kind: "text",
+    geometry: { kind: "text", dataPoint: at(1_795_000_120, 60_133.25) },
+    style: { kind: "text", text: "", priceLabel: true, color: "#2962ff" },
   },
   {
     id: "fibonacci", kind: "fibonacci",

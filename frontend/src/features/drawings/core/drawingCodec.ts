@@ -24,6 +24,7 @@ import type { DrawingKind, SavedDrawing } from "../drawingTypes.js";
 const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
   path: "path",
   channel: "ch",
+  calculated: "calc",
   "range-measure": "measure",
   line: "ln",
   "axis-line": "ax",
@@ -35,6 +36,11 @@ const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
   freehand: "fh",
   highlighter: "hl",
 });
+
+/** Id prefix new drawings of this kind use (`ln_12`, `fib_3`, …). */
+export function drawingIdPrefix(kind: DrawingKind): string {
+  return ID_PREFIX[kind];
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -127,6 +133,16 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
         ...(item.fillOpacity === undefined ? {} : { fillOpacity: item.fillOpacity }),
       };
       break;
+    case "calculated":
+      geometry = { kind: "calculated", calcType: item.calcType, dataPoints: item.dataPoints };
+      style = {
+        kind: "calculated",
+        ...(item.color === undefined ? {} : { color: item.color }),
+        ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+        ...(item.deviation === undefined ? {} : { deviation: item.deviation }),
+        ...(item.rows === undefined ? {} : { rows: item.rows }),
+      };
+      break;
     case "range-measure":
       geometry = { kind: "range-measure", measureType: item.measureType, dataPoints: item.dataPoints };
       style = {
@@ -175,10 +191,12 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       geometry = {
         kind: "text",
         ...(item.dataPoint === undefined ? {} : { dataPoint: item.dataPoint }),
+        ...(item.target === undefined ? {} : { target: item.target }),
       };
       style = {
         kind: "text",
         ...(item.text === undefined ? {} : { text: item.text }),
+        ...(item.priceLabel === undefined ? {} : { priceLabel: item.priceLabel }),
         ...(item.color === undefined ? {} : { color: item.color }),
         ...(item.fontSize === undefined ? {} : { fontSize: item.fontSize }),
         ...(item.fontFamily === undefined ? {} : { fontFamily: item.fontFamily }),
@@ -267,7 +285,7 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       break;
   }
 
-  return createDrawingEntity({ id, kind: item.type, geometry, style: { ...style, ...(item.hidden === undefined ? {} : { hidden: item.hidden }), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals }), ...(item.locked === undefined ? {} : { locked: item.locked }) } });
+  return createDrawingEntity({ id, kind: item.type, geometry, style: { ...style, ...(item.hidden === undefined ? {} : { hidden: item.hidden }), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals }), ...(item.locked === undefined ? {} : { locked: item.locked }), ...(item.groupId === undefined ? {} : { groupId: item.groupId }) } });
 }
 
 function copyDefinedFields(
@@ -292,7 +310,7 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     const geometry = canonical.geometry as unknown as Record<string, unknown>;
     const style = canonical.style as unknown as Record<string, unknown>;
     const candidate: Record<string, unknown> = { type: canonical.kind, id: canonical.id };
-    copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
+    copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals", "groupId"]);
 
     switch (canonical.kind) {
       case "path":
@@ -302,6 +320,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
       case "channel":
         copyDefinedFields(candidate, geometry, ["dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth", "fillOpacity"]);
+        break;
+      case "calculated":
+        copyDefinedFields(candidate, geometry, ["calcType", "dataPoints"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth", "deviation", "rows"]);
         break;
       case "range-measure":
         copyDefinedFields(candidate, geometry, ["measureType", "dataPoints"]);
@@ -320,9 +342,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);
         break;
       case "text":
-        copyDefinedFields(candidate, geometry, ["dataPoint"]);
+        copyDefinedFields(candidate, geometry, ["dataPoint", "target"]);
         copyDefinedFields(candidate, style, [
           "text",
+          "priceLabel",
           "color",
           "fontSize",
           "fontFamily",

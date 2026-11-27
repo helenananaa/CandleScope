@@ -1,13 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyMalay, replayNoteMalay, tradeHistoryMalay, readonlyAccountMalay, continuousMalay, tradingAccountsMs, nativeMalay } from "./malayFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ms = {
   ...unifiedMessages["ms"],
+  ...drawingAnnotationMessages["ms"],
   ...syntheticEnglish,
   ...continuousMalay,
   ...tradeHistoryMalay,
@@ -1248,6 +1253,15 @@ export const ms = {
   "settings.proxy.previewNodes": "Pratonton nod",
   "settings.proxy.useNodes": "Gunakan nod yang dipilih",
   "settings.proxy.skippedNodes": "Nod tidak disokong yang dilangkau: {count}",
+  "settings.proxy.autoRefresh": "Segar semula automatik",
+  "settings.proxy.autoRefreshOff": "Mati",
+  "settings.proxy.autoRefreshEvery": "Setiap {duration}",
+  "settings.proxy.autoRefreshHelp": "Menyemak langganan tersimpan mengikut jadual ini. Nod yang anda gunakan mengikut tetapan semasa pembekal. Nod baharu tidak ditambah, dan nod yang dibuang oleh pembekal mengekalkan tetapan terakhirnya.",
+  "settings.proxy.refreshPending": "Belum disemak secara automatik",
+  "settings.proxy.refreshChecked": "Kali terakhir disemak: {time}",
+  "settings.proxy.refreshFailed": "Segar semula automatik gagal: {time}",
+  "settings.proxy.refreshUpdated": "Nod dikemas kini: {count} · {time}",
+  "settings.proxy.refreshMissing": "Tiada lagi dalam langganan: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID bursa (dipisahkan koma; kosong bermaksud semua)",
   "settings.proxy.enabled": "Didayakan",
@@ -4164,6 +4178,9 @@ export const ms = {
   "chartTester.deleteDraft": "Padam",
   "chartTester.deleteRetiredDraft": "Padam draf yang dihentikan {name}",
   "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dipadam. Cuba lagi.",
+  ...drawingSelectionMessages["ms"],
+  ...drawingCalculatedMessages["ms"],
+  ...replayDrawingSaveMessages["ms"],
   ...chartTimeZoneMessages["ms"],
   ...chartTimeShortcutMessages["ms"],
 } as const satisfies MessageCatalog;

@@ -1,8 +1,12 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
@@ -12,6 +16,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
  */
 export const es = {
   ...unifiedMessages["es"],
+  ...drawingAnnotationMessages["es"],
   ...syntheticEnglish,
   ...continuousSpanish,
   ...tradeHistorySpanish,
@@ -1253,6 +1258,15 @@ export const es = {
   "settings.proxy.previewNodes": "Ver nodos",
   "settings.proxy.useNodes": "Usar nodos seleccionados",
   "settings.proxy.skippedNodes": "Nodos no compatibles omitidos: {count}",
+  "settings.proxy.autoRefresh": "Actualización automática",
+  "settings.proxy.autoRefreshOff": "Desactivada",
+  "settings.proxy.autoRefreshEvery": "Cada {duration}",
+  "settings.proxy.autoRefreshHelp": "Comprueba las suscripciones guardadas con esta frecuencia. Los nodos en uso adoptan la configuración actual del proveedor. No se añaden nodos nuevos, y un nodo que el proveedor eliminó conserva su última configuración.",
+  "settings.proxy.refreshPending": "Aún no se ha comprobado automáticamente",
+  "settings.proxy.refreshChecked": "Última comprobación: {time}",
+  "settings.proxy.refreshFailed": "Error en la actualización automática: {time}",
+  "settings.proxy.refreshUpdated": "Nodos actualizados: {count} · {time}",
+  "settings.proxy.refreshMissing": "Ya no están en la suscripción: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID de exchanges (separados por comas; vacío significa todos)",
   "settings.proxy.enabled": "Activado",
@@ -4174,6 +4188,9 @@ export const es = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar el borrador retirado {name}",
   "chartTester.deleteRetiredDraftFailed": "No se pudo eliminar el borrador retirado. Inténtalo de nuevo.",
+  ...drawingSelectionMessages["es"],
+  ...drawingCalculatedMessages["es"],
+  ...replayDrawingSaveMessages["es"],
   ...chartTimeZoneMessages["es"],
   ...chartTimeShortcutMessages["es"],
 } as const satisfies MessageCatalog;

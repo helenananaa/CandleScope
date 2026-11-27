@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
@@ -9,11 +10,15 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ko = {
   ...unifiedMessages["ko"],
+  ...drawingAnnotationMessages["ko"],
   ...syntheticEnglish,
   ...continuousKorean,
   ...tradeHistoryKorean,
@@ -196,6 +201,9 @@ export const ko = {
   "account.identityHelp": "이 내역은 다른 OKX 계좌의 것입니다. 별도의 앱 데이터 프로필을 사용하세요.",
   "account.lastRead": "최근 조회 성공: {time}",
   "account.lastEvent": "최근 비공개 이벤트 수신: {time}",
+  "account.proxyRoute": "프록시 경로: {name}.",
+  "account.proxyRouteFailover": "이 경로에서 계속 실패하면 계정은 OKX를 허용하는 다음 경로로 옮겨 갑니다. 이 키에 IP 허용 목록이 있으면 해당 경로들의 외부 IP가 모두 목록에 있어야 합니다.",
+  "account.proxyRouteHelp": "OKX를 허용하는 활성 프록시 경로가 없습니다. 설정 → 네트워크에서 거래소 목록이 비어 있거나 okx를 포함하는 경로를 활성화하세요.",
   "account.snapshotTime": "스냅샷 수신: {time}",
   "account.stale": "오래된 값",
   "account.staleTitle": "계좌 값이 최신이 아닙니다",
@@ -1820,6 +1828,15 @@ export const ko = {
   "settings.proxy.previewNodes": "노드 미리 보기",
   "settings.proxy.useNodes": "선택한 노드 사용",
   "settings.proxy.skippedNodes": "지원되지 않는 노드 {count}개를 건너뛰었습니다",
+  "settings.proxy.autoRefresh": "자동 새로고침",
+  "settings.proxy.autoRefreshOff": "끔",
+  "settings.proxy.autoRefreshEvery": "{duration}마다",
+  "settings.proxy.autoRefreshHelp": "저장된 구독을 이 간격으로 확인합니다. 사용 중인 노드는 제공업체의 현재 설정을 따릅니다. 새 노드는 추가되지 않으며, 제공업체가 제거한 노드는 마지막 설정을 유지합니다.",
+  "settings.proxy.refreshPending": "아직 자동으로 확인하지 않았습니다",
+  "settings.proxy.refreshChecked": "마지막 확인: {time}",
+  "settings.proxy.refreshFailed": "자동 새로고침 실패: {time}",
+  "settings.proxy.refreshUpdated": "업데이트된 노드: {count} · {time}",
+  "settings.proxy.refreshMissing": "구독에서 사라진 노드: {count}",
   "settings.proxy.address": "프록시 주소",
   "settings.proxy.egressGroup": "출구 그룹",
   "settings.proxy.concurrency": "동시 요청 한도",
@@ -4806,6 +4823,9 @@ export const ko = {
   "chartTester.deleteRetiredDraft": "지원 종료된 초안 {name} 삭제",
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
+  ...drawingSelectionMessages["ko"],
+  ...drawingCalculatedMessages["ko"],
+  ...replayDrawingSaveMessages["ko"],
   ...chartTimeZoneMessages["ko"],
   ...chartTimeShortcutMessages["ko"],
 } as const satisfies MessageCatalog;

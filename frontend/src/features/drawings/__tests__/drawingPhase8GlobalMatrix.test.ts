@@ -501,6 +501,7 @@ function dragDescriptor(
     case "range-measure":
     case "path":
     case "channel":
+    case "calculated":
     case "line":
       return drawing.dataPoints?.length
         ? {

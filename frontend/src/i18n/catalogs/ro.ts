@@ -1,13 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRomanian, replayNoteRomanian, tradeHistoryRomanian, readonlyAccountRomanian, continuousRomanian, tradingAccountsRo, nativeRomanian } from "./romanianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ro = {
   ...unifiedMessages["ro"],
+  ...drawingAnnotationMessages["ro"],
   ...syntheticEnglish,
   ...continuousRomanian,
   ...tradeHistoryRomanian,
@@ -1248,6 +1253,15 @@ export const ro = {
   "settings.proxy.previewNodes": "Previzualizare noduri",
   "settings.proxy.useNodes": "Folosește nodurile selectate",
   "settings.proxy.skippedNodes": "Noduri incompatibile omise: {count}",
+  "settings.proxy.autoRefresh": "Reîmprospătare automată",
+  "settings.proxy.autoRefreshOff": "Dezactivată",
+  "settings.proxy.autoRefreshEvery": "La fiecare {duration}",
+  "settings.proxy.autoRefreshHelp": "Verifică abonamentele salvate la acest interval. Nodurile folosite preiau setările actuale ale furnizorului. Nu se adaugă noduri noi, iar un nod eliminat de furnizor își păstrează ultimele setări.",
+  "settings.proxy.refreshPending": "Nu a fost încă verificat automat",
+  "settings.proxy.refreshChecked": "Ultima verificare: {time}",
+  "settings.proxy.refreshFailed": "Reîmprospătarea automată a eșuat: {time}",
+  "settings.proxy.refreshUpdated": "Noduri actualizate: {count} · {time}",
+  "settings.proxy.refreshMissing": "Nu mai sunt în abonament: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID-uri de burse (separate prin virgulă; gol înseamnă toate)",
   "settings.proxy.enabled": "Activată",
@@ -4169,6 +4183,9 @@ export const ro = {
   "chartTester.deleteDraft": "Ștergeți",
   "chartTester.deleteRetiredDraft": "Ștergeți schița retrasă {name}",
   "chartTester.deleteRetiredDraftFailed": "Schița retrasă nu a putut fi ștearsă. Încercați din nou.",
+  ...drawingSelectionMessages["ro"],
+  ...drawingCalculatedMessages["ro"],
+  ...replayDrawingSaveMessages["ro"],
   ...chartTimeZoneMessages["ro"],
   ...chartTimeShortcutMessages["ro"],
 } as const satisfies MessageCatalog;

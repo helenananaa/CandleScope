@@ -538,6 +538,13 @@ async def startup_event() -> None:
             except SubscriptionError as exc:
                 logger.warning("Subscription routes unavailable: %s", exc)
             app.state.proxy_supervisor = asyncio.create_task(managed.supervise(), name="managed-proxy-recovery")
+            from app.api.v1.settings import apply_refreshed_routes
+            from app.proxy_subscriptions.refresh import refresher
+
+            async def apply_refresh(replacements):
+                return await apply_refreshed_routes(app, replacements)
+
+            app.state.proxy_refresher = asyncio.create_task(refresher.run(apply_refresh), name="proxy-subscription-refresh")
         await _startup_event_impl()
     except BaseException as failure:
         if isinstance(failure, Exception):
@@ -907,10 +914,10 @@ async def _stop_managed_proxy() -> None:
     if sys.platform == "emscripten":
         return
     from app.proxy_subscriptions.runtime import managed
-    supervisor = getattr(app.state, "proxy_supervisor", None)
-    if supervisor is not None:
-        supervisor.cancel()
-        await asyncio.gather(supervisor, return_exceptions=True)
+    tasks = [getattr(app.state, name, None) for name in ("proxy_refresher", "proxy_supervisor")]
+    for task in filter(None, tasks):
+        task.cancel()
+    await asyncio.gather(*filter(None, tasks), return_exceptions=True)
     await asyncio.to_thread(managed.close)
 
 
