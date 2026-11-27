@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyArabic, replayNoteArabic, tradeHistoryArabic, readonlyAccountArabic, continuousArabic, tradingAccountsAr, nativeArabic } from "./arabicFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 
 export const ar = {
   ...unifiedMessages["ar"],
@@ -4182,4 +4183,5 @@ export const ar = {
   "chartTester.deleteDraft": "حذف",
   "chartTester.deleteRetiredDraft": "حذف المسودة المتوقفة {name}",
   "chartTester.deleteRetiredDraftFailed": "تعذّر حذف المسودة المتوقفة. حاول مرة أخرى.",
+  ...drawingSelectionMessages["ar"],
 } as const satisfies MessageCatalog;

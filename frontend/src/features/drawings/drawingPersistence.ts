@@ -1,4 +1,5 @@
 import { validDrawingIntervals } from "./drawingVisibility.js";
+import { isDrawingGroupId } from "./drawingGroups.js";
 import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
 /**
  * drawingStorage.js — Persist chart drawings to localStorage.
@@ -134,9 +135,9 @@ function optionalBoolean(item: UnknownRecord, key: string): boolean | undefined 
   return typeof item[key] === "boolean" ? item[key] : undefined;
 }
 
-function savedBase(item: UnknownRecord): { id?: string; hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null } {
+function savedBase(item: UnknownRecord): { id?: string; hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null; groupId?: string } {
   const id = optionalString(item, "id", 256);
-  return { ...(typeof item.hidden === "boolean" ? { hidden: item.hidden } : {}), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals as readonly string[] | null }), ...(id === undefined ? {} : { id }), ...(typeof item.locked === "boolean" ? { locked: item.locked } : {}) };
+  return { ...(isDrawingGroupId(item.groupId) ? { groupId: item.groupId } : {}), ...(typeof item.hidden === "boolean" ? { hidden: item.hidden } : {}), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals as readonly string[] | null }), ...(id === undefined ? {} : { id }), ...(typeof item.locked === "boolean" ? { locked: item.locked } : {}) };
 }
 
 function savedStyle(item: UnknownRecord): { color?: string; lineWidth?: number } {
@@ -231,6 +232,7 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
   if (!validDrawingIntervals(item.visibleIntervals)) return null;
   if (item.hidden !== undefined && typeof item.hidden !== "boolean") return null;
   if (item.locked !== undefined && typeof item.locked !== "boolean") return null;
+  if (item.groupId !== undefined && !isDrawingGroupId(item.groupId)) return null;
   if (item.type === "freehand" || item.type === "highlighter") {
     return normalizeSavedFreehandItem({ ...item, type: item.type });
   }

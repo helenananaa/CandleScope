@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyIndonesian, replayNoteIndonesian, tradeHistoryIndonesian, readonlyAccountIndonesian, continuousIndonesian, tradingAccountsId, nativeIndonesian } from "./indonesianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 
 export const id = {
   ...unifiedMessages["id"],
@@ -4162,5 +4163,6 @@ export const id = {
   "chartTester.deleteDraft": "Hapus",
   "chartTester.deleteRetiredDraft": "Hapus draf yang dihentikan {name}",
   "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dihapus. Coba lagi.",
+  ...drawingSelectionMessages["id"],
 } as const satisfies MessageCatalog;
 

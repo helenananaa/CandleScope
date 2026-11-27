@@ -30,6 +30,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -120,6 +121,11 @@ import type { DrawingDomPointerEvent } from "./drawingPointerController.js";
 import { useDrawingTextEdit } from "./drawingTextEditController.js";
 import type { TextEditingOptions } from "./drawingTextEditController.js";
 import { useDrawingKeyboard } from "./drawingKeyboardController.js";
+import type { DrawingMultiSelectionActions } from "./DrawingMultiSelectionBar.js";
+import {
+  useDrawingMultiSelection,
+  type DrawingMultiSelectionDeps,
+} from "./interaction/useDrawingMultiSelection.js";
 import { drawingPatchChangesGeometry, drawingPropertiesCandidate, type DrawingCoordinate } from "./drawingProperties.js";
 import {
   applyTextAndPositionDrag,
@@ -1271,6 +1277,36 @@ function drawingInteractionHitId(hit: DrawingInteractionHit): string {
   return isDrawingEntityHit(hit) ? hit.id : hit.prim.id;
 }
 
+// Axis lines report the line they were pressed on; range measures their label.
+const BODY_HIT_ZONES: ReadonlySet<string> = new Set(["body", "center", "entry", "line", "horizontal", "vertical", "label"]);
+
+/** A press on the drawing itself rather than on one of its handles. */
+export function isDrawingBodyHit(hit: { readonly pointIndex?: number; readonly zone?: string; readonly handle?: string; readonly body?: boolean }): boolean {
+  if (hit.body === true) return true;
+  if (hit.handle !== undefined) return false;
+  if (typeof hit.pointIndex === "number" && hit.pointIndex >= 0) return false;
+  return hit.zone === undefined || BODY_HIT_ZONES.has(hit.zone);
+}
+
+const INACTIVE_MULTI_SELECTION_DEPS: DrawingMultiSelectionDeps = Object.freeze({
+  enabled: false,
+  interval: "",
+  getDocument: () => { throw new Error("drawing multi-selection is not ready"); },
+  getSavedDrawing: () => null,
+  selectPrimitive: () => {},
+  deselectAll: () => {},
+  prepareMutation: () => false,
+  persist: () => null,
+  moveContext: () => { throw new Error("drawing multi-selection is not ready"); },
+  snapEnabled: () => false,
+  invalidateScene: () => {},
+  requestRender: () => {},
+  getScreenBox: () => null,
+  draftDecorations: () => [],
+  isTextEditing: () => false,
+  selectionColor: "#3b82f6",
+});
+
 function savedDrawingFromInteractionHit(
   hit: DrawingInteractionHit,
 ): SavedDrawing | null {
@@ -1497,6 +1533,8 @@ export interface DrawingInteractionRuntime extends DrawingObjectApi {
   canUndo: boolean;
   canRedo: boolean;
   replayHistory(direction: "undo" | "redo"): boolean;
+  /** Two or more selected drawings (PL-4); count is 0 or 1 otherwise. */
+  multiSelection: DrawingMultiSelectionActions;
   clearAll(): void;
   deselectAll(): void;
   completeSurfaceDispose(): void;
@@ -2081,6 +2119,14 @@ export function useDrawing({
     };
   }, [getChartAdapter, interactionSurfaceMode]);
 
+  // Multi-select, groups and copy/paste (PL-4). Its deps are assigned once
+  // every controller function exists, further down this hook.
+  const multiSelectionDepsRef = useRef<DrawingMultiSelectionDeps>(INACTIVE_MULTI_SELECTION_DEPS);
+  const multiSelection = useDrawingMultiSelection(
+    multiSelectionDepsRef,
+    interactionSurfaceMode === "overlay" && !readOnly,
+  );
+
   const {
     clearDrawings,
     canUndo,
@@ -2120,6 +2166,7 @@ export function useDrawing({
     getDrawingSceneAdapter: getChartAdapter,
     hiddenRef,
     activeOverlayEntityIdRef,
+    companionOverlayEntityIdsRef: multiSelection.companionIdsRef,
     dynamicOverlayEnabled: interactionSurfaceMode === "overlay",
     drawingInterval,
     sceneDocumentOnly: interactionSurfaceMode === "overlay",
@@ -2627,9 +2674,10 @@ export function useDrawing({
       hover,
       selectedId,
     }));
+    decorations.push(...multiSelection.decorations());
     if (decorations.length === 0) dynamicOverlayControllerRef.current?.clear();
     else dynamicOverlayControllerRef.current?.render({ decorations });
-  }, [projectStroke, dataToScreen, getDynamicFramePresentation, getDynamicScreenBox, getPrimitiveById, getSavedDrawing, getSceneScreenHandles, interactionSurfaceMode, selectedIdRef, drawingInterval]);
+  }, [projectStroke, dataToScreen, getDynamicFramePresentation, getDynamicScreenBox, getPrimitiveById, getSavedDrawing, getSceneScreenHandles, interactionSurfaceMode, multiSelection, selectedIdRef, drawingInterval]);
   renderDynamicFeedbackRef.current = renderDynamicFeedback;
 
   const startDynamicOverlayOwnershipSession = useCallback(({
@@ -3627,6 +3675,7 @@ export function useDrawing({
       const pos = getChartPos(e, capturePointerRect());
       if (!pos) return;
       if (!isInsideDrawingPanePlot(pos)) return;
+      multiSelection.markActive();
       if (isPassiveCursorTool(tool) && !drawingAutoSelectEnabledRef.current && !editingTextIdRef.current) {
         if (selectedIdRef.current) deselectAll();
         clearHoverFeedback();
@@ -3713,6 +3762,16 @@ export function useDrawing({
           // pointerdown as a new anchor, text box, position or freehand stroke.
           return;
         }
+      }
+
+      // Shift-click toggles a drawing in the selection; a group or a
+      // multi-selection is selected and dragged as one.
+      if (interactionSurfaceMode === "overlay" && automaticHit && !anchorDataRef.current
+        && multiSelection.pointerDown(drawingInteractionHitId(automaticHit), pos, e.shiftKey === true, isDrawingBodyHit(automaticHit))) {
+        clearHoverFeedback();
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
 
       // Locked objects remain selectable; no drag descriptor or resize draft is created.
@@ -4402,7 +4461,7 @@ export function useDrawing({
         }
       }
     },
-    [completePlacement, projectStroke, exitAutomaticObjectEditing, enterObjectTool, flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
+    [multiSelection, completePlacement, projectStroke, exitAutomaticObjectEditing, enterObjectTool, flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
   );
 
   // ════════════════════════════════════════════════════
@@ -4456,6 +4515,13 @@ export function useDrawing({
 
   const handleMouseMove = useCallback(
     (e: DrawingDomPointerEvent) => {
+      if (multiSelection.isDragging()) {
+        const pos = getChartPos(e, getCachedPointerRect());
+        if (pos && prepareUserMutationScope()) multiSelection.pointerMove(pos, e.altKey === true);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const tool = activeToolRef.current;
       const hasFreehandMove = (tool === "pen" || tool === "highlighter")
         && isDrawingFreehandRef.current
@@ -4529,7 +4595,7 @@ export function useDrawing({
         scheduleHoverFeedback({ tool, x: pos.x, y: pos.y });
       }
     },
-    [getCachedPointerRect, getChartPos, makePointerEventSnapshot, prepareUserMutationScope, scheduleActiveDrawingMove, scheduleHoverFeedback],
+    [multiSelection, getCachedPointerRect, getChartPos, makePointerEventSnapshot, prepareUserMutationScope, scheduleActiveDrawingMove, scheduleHoverFeedback],
   );
 
   // ════════════════════════════════════════════════════
@@ -4537,6 +4603,11 @@ export function useDrawing({
   // ════════════════════════════════════════════════════
 
   const handleMouseUp = useCallback(() => {
+    if (multiSelection.isDragging()) {
+      if (!prepareUserMutationScope()) multiSelection.cancelDrag();
+      else multiSelection.pointerUp();
+      return;
+    }
     // Do not flush a B-side pointer sample into an A-side gesture. The retrying
     // scope effect owns the old gesture and flushes its last legal A sample via
     // the private active-scope persistence path.
@@ -4807,7 +4878,7 @@ export function useDrawing({
     const durationMs = Math.max(0, drawingPerfNow() - mouseupStartedAt);
     drawingPerfCounters.recordMouseupSyncDuration(durationMs);
     drawingPerfCounters.gestureEnded();
-  }, [cancelActiveFreehandStroke, flushActiveDrawingMove, interactionSurfaceMode, invalidateVisibleScene, persistDetachedDrawings, persistDrawings, persistSceneCommands, prepareUserMutationScope, dataToScreen, refreshSelectedTextUi, releaseOverlayDrag, retainDynamicOverlayUntilPaint, selectPrimitive, selectedIdRef, setSelectedDrawingMeta, subscribeVisibleScenePaint, exitDrawingToolAfterCreation]);
+  }, [multiSelection, cancelActiveFreehandStroke, flushActiveDrawingMove, interactionSurfaceMode, invalidateVisibleScene, persistDetachedDrawings, persistDrawings, persistSceneCommands, prepareUserMutationScope, dataToScreen, refreshSelectedTextUi, releaseOverlayDrag, retainDynamicOverlayUntilPaint, selectPrimitive, selectedIdRef, setSelectedDrawingMeta, subscribeVisibleScenePaint, exitDrawingToolAfterCreation]);
 
   const terminalizeExportInteraction = useCallback((): boolean => {
     if (editingTextIdRef.current) {
@@ -4902,6 +4973,7 @@ export function useDrawing({
       && (overlayDragEntityDraftRef.current !== null
         || overlayDragPrimitiveRef.current !== null
         || dynamicOwnershipSessionRef.current !== null);
+    multiSelection.cancelDrag();
     cancelActiveDrawingMove();
     cancelActiveFreehandStroke();
     removePreview();
@@ -4914,7 +4986,7 @@ export function useDrawing({
       cancelDynamicPaintHandoff();
       releaseOverlayDrag(true);
     }
-  }, [cancelActiveDrawingMove, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, clearHoverFeedback, handleMouseUp, interactionSurfaceMode, releaseOverlayDrag, removePreview, retainDynamicOverlayUntilPaint]);
+  }, [cancelActiveDrawingMove, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, clearHoverFeedback, handleMouseUp, interactionSurfaceMode, multiSelection, releaseOverlayDrag, removePreview, retainDynamicOverlayUntilPaint]);
 
   const handleMouseLeave = useCallback((e: DrawingDomPointerEvent) => {
     // Text overlays are siblings of the chart canvas container. Moving the
@@ -4993,6 +5065,46 @@ export function useDrawing({
     return committed;
   }, [editingTextIdRef, interactionSurfaceMode, handlePointerCancel, prepareTerminalTextMutation, replayDocumentHistory, deselectAll]);
 
+  // ── MULTI-SELECTION (PL-4): read fresh by the hook on every use ──
+  multiSelectionDepsRef.current = {
+    enabled: interactionSurfaceMode === "overlay" && !readOnly,
+    interval: drawingInterval,
+    getDocument: getObjectDocument,
+    getSavedDrawing,
+    selectPrimitive,
+    deselectAll,
+    prepareMutation: prepareUserMutationScope,
+    persist: persistSceneCommands,
+    moveContext: () => ({
+      dataToScreen,
+      screenToData,
+      screenToDrawingData,
+      captureStroke: captureOverlayFreehandBatch,
+      freehandDescriptor: (saved, startMouse) => {
+        if ((saved.type !== "freehand" && saved.type !== "highlighter") || !saved.id) return null;
+        const points = projectStroke(saved);
+        const batch = points && captureOverlayFreehandBatch(points);
+        return points && batch
+          ? { type: saved.type, id: saved.id, startMouse, original: saved, origScreenPoints: points, captureIdentity: batch.captureIdentity }
+          : null;
+      },
+    }),
+    snapEnabled: () => drawingSnapEnabledRef.current,
+    invalidateScene: () => { invalidateVisibleScene(); },
+    requestRender: () => renderDynamicFeedbackRef.current(),
+    getScreenBox: getDynamicScreenBox,
+    draftDecorations: (saved) => {
+      const presentation = getDynamicFramePresentation();
+      return dynamicDecorationsForSavedDrawingDraft(saved, dataToScreen, presentation.themePalette, presentation.currentPrice, projectStroke);
+    },
+    isTextEditing: () => editingTextIdRef.current !== null,
+    selectionColor: "#3b82f6",
+  };
+
+  useEffect(() => {
+    multiSelection.syncPrimary(selectedPrimId);
+  }, [multiSelection, selectedPrimId]);
+
   // ── KEYBOARD: Escape / Delete (extracted) ──
 
   useDrawingKeyboard({
@@ -5013,7 +5125,7 @@ export function useDrawing({
       || freehandDraftRef.current !== null,
     cancelActiveFreehandStroke,
     hasActiveInteractionGesture: () => interactionSurfaceMode === "overlay"
-      && (draggingRef.current !== null || dynamicHoverDecorationRef.current !== null),
+      && (draggingRef.current !== null || dynamicHoverDecorationRef.current !== null || multiSelection.isDragging()),
     cancelActiveInteractionGesture: () => {
       handlePointerCancel();
       return true;
@@ -5572,6 +5684,7 @@ export function useDrawing({
   const deleteSelected = useCallback(() => {
     const id = selectedIdRef.current;
     if (!id) return;
+    if (interactionSurfaceMode === "overlay" && multiSelection.deleteSelection()) return;
     if (interactionSurfaceMode === "overlay") {
       if (!getSavedDrawing(id) || !prepareTerminalTextMutation()) return;
       const receipt = persistSceneCommands([Object.freeze({ type: "delete", id })]);
@@ -5611,7 +5724,7 @@ export function useDrawing({
     selectedIdRef.current = null;
     setSelectedPrimId(null);
     setSelectedTextUi(EMPTY_SELECTED_TEXT_UI);
-  }, [attachPrim, detachPrim, getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, persistDrawings, selectedIdRef, setSelectedDrawingMeta, setSelectedPrimId, setSelectedTextUi]);
+  }, [multiSelection, attachPrim, detachPrim, getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, persistDrawings, selectedIdRef, setSelectedDrawingMeta, setSelectedPrimId, setSelectedTextUi]);
 
   useEffect(() => {
     deleteSelectedRef.current = deleteSelected;
@@ -5803,8 +5916,18 @@ export function useDrawing({
 
   const selectedTextSnapshot = selectedTextUi.snapshot;
   const selectedTextBox = selectedTextUi.box;
+  const multiSelectionActions = useMemo<DrawingMultiSelectionActions>(() => ({
+    count: multiSelection.view.count,
+    grouped: multiSelection.view.grouped,
+    group: multiSelection.group,
+    ungroup: multiSelection.ungroup,
+    copy: multiSelection.copy,
+    duplicate: multiSelection.duplicate,
+    deleteSelection: () => (prepareTerminalTextMutation() ? multiSelection.deleteSelection() : false),
+  }), [multiSelection, prepareTerminalTextMutation]);
 
   return {
+    multiSelection: multiSelectionActions,
     clearAll,
     canUndo,
     canRedo,

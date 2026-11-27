@@ -1,4 +1,5 @@
 import { validDrawingIntervals } from "../drawingVisibility.js";
+import { isDrawingGroupId } from "../drawingGroups.js";
 import type {
   AxisLineType,
   BasicLineToolId,
@@ -87,7 +88,7 @@ export type CanonicalDrawingGeometry =
       dataPoints?: readonly DrawingDataPoint[];
     }>;
 
-export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null }> & (
+export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null; groupId?: string }> & (
   | Readonly<{
       kind: "axis-line" | "angle-measure" | "range-measure";
       color?: string;
@@ -303,8 +304,9 @@ function matchingKind(
     ],
   };
   const geometryAllowed = new Set(geometryKeys[kind]);
-  const styleAllowed = new Set([...styleKeys[kind], "hidden", "locked", "visibleIntervals"]);
+  const styleAllowed = new Set([...styleKeys[kind], "groupId", "hidden", "locked", "visibleIntervals"]);
   if (!validDrawingIntervals(style.visibleIntervals)) return false;
+  if (style.groupId !== undefined && !isDrawingGroupId(style.groupId)) return false;
   if (style.hidden !== undefined && typeof style.hidden !== "boolean") return false;
   if (style.locked !== undefined && typeof style.locked !== "boolean") return false;
   if (Object.keys(geometry).some((key) => !geometryAllowed.has(key))

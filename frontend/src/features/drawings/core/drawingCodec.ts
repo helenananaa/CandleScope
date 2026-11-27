@@ -36,6 +36,11 @@ const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
   highlighter: "hl",
 });
 
+/** Id prefix new drawings of this kind use (`ln_12`, `fib_3`, …). */
+export function drawingIdPrefix(kind: DrawingKind): string {
+  return ID_PREFIX[kind];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -267,7 +272,7 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       break;
   }
 
-  return createDrawingEntity({ id, kind: item.type, geometry, style: { ...style, ...(item.hidden === undefined ? {} : { hidden: item.hidden }), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals }), ...(item.locked === undefined ? {} : { locked: item.locked }) } });
+  return createDrawingEntity({ id, kind: item.type, geometry, style: { ...style, ...(item.hidden === undefined ? {} : { hidden: item.hidden }), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals }), ...(item.locked === undefined ? {} : { locked: item.locked }), ...(item.groupId === undefined ? {} : { groupId: item.groupId }) } });
 }
 
 function copyDefinedFields(
@@ -292,7 +297,7 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     const geometry = canonical.geometry as unknown as Record<string, unknown>;
     const style = canonical.style as unknown as Record<string, unknown>;
     const candidate: Record<string, unknown> = { type: canonical.kind, id: canonical.id };
-    copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
+    copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals", "groupId"]);
 
     switch (canonical.kind) {
       case "path":

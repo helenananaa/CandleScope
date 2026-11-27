@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyThai, replayNoteThai, tradeHistoryThai, readonlyAccountThai, continuousThai, tradingAccountsTh, nativeThai } from "./thaiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
 
 export const th = {
   ...unifiedMessages["th"],
@@ -4162,4 +4163,5 @@ export const th = {
   "chartTester.deleteDraft": "ลบ",
   "chartTester.deleteRetiredDraft": "ลบฉบับร่างที่เลิกใช้แล้ว {name}",
   "chartTester.deleteRetiredDraftFailed": "ลบฉบับร่างที่เลิกใช้แล้วไม่ได้ ลองอีกครั้ง",
+  ...drawingSelectionMessages["th"],
 } as const satisfies MessageCatalog;

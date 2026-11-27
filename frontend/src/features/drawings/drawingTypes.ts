@@ -290,6 +290,8 @@ interface SavedDrawingBase<TKind extends DrawingKind> {
   visibleIntervals?: readonly string[] | null;
   hidden?: boolean;
   locked?: boolean;
+  /** Members of one group share this id (PL-4). */
+  groupId?: string;
   type: TKind;
   id?: string;
 }
