@@ -5919,6 +5919,7 @@ export function useDrawing({
   const multiSelectionActions = useMemo<DrawingMultiSelectionActions>(() => ({
     count: multiSelection.view.count,
     grouped: multiSelection.view.grouped,
+    canGroup: multiSelection.view.canGroup,
     group: multiSelection.group,
     ungroup: multiSelection.ungroup,
     copy: multiSelection.copy,

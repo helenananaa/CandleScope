@@ -45,6 +45,7 @@ export function clearDrawingClipboard(): void {
 export function pastedDrawings(
   source: DrawingClipboardContents,
   place: (drawing: SavedDrawing) => SavedDrawing | null,
+  { keepGroups = true }: Readonly<{ keepGroups?: boolean }> = {},
 ): readonly SavedDrawing[] | null {
   const groups = new Map<string, string>();
   const created: SavedDrawing[] = [];
@@ -53,7 +54,7 @@ export function pastedDrawings(
     const moved = place(rest as SavedDrawing);
     if (!moved) return null;
     let nextGroup: string | undefined;
-    if (groupId) {
+    if (groupId && keepGroups) {
       nextGroup = groups.get(groupId) ?? nextDrawingGroupId();
       groups.set(groupId, nextGroup);
     }

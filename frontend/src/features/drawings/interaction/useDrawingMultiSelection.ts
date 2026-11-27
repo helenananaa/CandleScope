@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type { DrawingCommand } from "../core/drawingCommands.js";
 import type { DrawingDocument } from "../core/drawingDocument.js";
 import { drawingCommandsForSavedDrawing } from "../core/drawingDocumentRuntime.js";
+import { drawingScopeAllowsGroups } from "../drawingScopeCapabilities.js";
 import type { SavedDrawing, ScreenBox, ScreenPoint } from "../drawingTypes.js";
 import { copyDrawingSelection, pastedDrawings, readDrawingClipboard } from "./drawingClipboard.js";
 import {
@@ -56,6 +57,8 @@ interface GroupDrag {
 export interface DrawingMultiSelectionView {
   readonly count: number;
   readonly grouped: boolean;
+  /** False where groups cannot be saved (replay training). */
+  readonly canGroup: boolean;
 }
 
 /** Pasting onto the chart the copy came from offsets it so both stay visible. */
@@ -77,7 +80,7 @@ function editableTarget(target: EventTarget | null): boolean {
  */
 export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiSelectionDeps>, keyboardActive: boolean) {
   const selectionRef = useRef<DrawingSelection>(EMPTY_DRAWING_SELECTION);
-  const [view, setView] = useState<DrawingMultiSelectionView>({ count: 0, grouped: false });
+  const [view, setView] = useState<DrawingMultiSelectionView>({ count: 0, grouped: false, canGroup: true });
   const groupDragRef = useRef<GroupDrag | null>(null);
   const handoffRef = useRef<readonly SavedDrawing[] | null>(null);
   /** Members detached from the static scene while the group drag paints them. */
@@ -94,8 +97,14 @@ export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiS
     selectionRef.current = selection;
     const deps = depsRef.current;
     setView((current) => {
-      const next = { count: selection.ids.length, grouped: selection.ids.length > 0 && selectionIsGrouped(deps.getDocument(), selection) };
-      return current.count === next.count && current.grouped === next.grouped ? current : next;
+      if (selection.ids.length === 0) return current.count === 0 ? current : { count: 0, grouped: false, canGroup: current.canGroup };
+      const document = deps.getDocument();
+      const next = {
+        count: selection.ids.length,
+        grouped: selectionIsGrouped(document, selection),
+        canGroup: drawingScopeAllowsGroups(document.scopeKey),
+      };
+      return current.count === next.count && current.grouped === next.grouped && current.canGroup === next.canGroup ? current : next;
     });
     deps.requestRender();
   }, [depsRef]);
@@ -226,6 +235,7 @@ export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiS
 
   const group = useCallback((): boolean => {
     const deps = depsRef.current;
+    if (!deps.enabled || !drawingScopeAllowsGroups(deps.getDocument().scopeKey)) return false;
     const done = commit(groupSelectionCommands(deps.getDocument(), selectionRef.current));
     if (done) publish(drawingSelection(deps.getDocument(), selectionRef.current.primary, selectionRef.current.ids));
     return done;
@@ -278,7 +288,7 @@ export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiS
       // Drawings that cannot be offset (none in practice) keep their anchors.
       const moved = descriptor ? groupMoveDrafts([{ original: temporary, descriptor }], { dx: offset, dy: offset }, context)?.[0] : null;
       return moved ?? drawing;
-    });
+    }, { keepGroups: drawingScopeAllowsGroups(document.scopeKey) });
     if (!created || created.length === 0) return false;
     const commands = created.flatMap((drawing) => drawingCommandsForSavedDrawing(drawing, { type: "create" }) ?? []);
     if (commands.length !== created.length || !commit(commands)) return false;
