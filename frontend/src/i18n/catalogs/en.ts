@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
@@ -13,6 +14,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
   ...unifiedMessages["en"],
+  ...syntheticPagingMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,

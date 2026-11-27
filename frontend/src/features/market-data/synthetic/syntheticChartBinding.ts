@@ -1,7 +1,7 @@
 import type { DisplayRow } from "../../chart-representation/chartRepresentationTypes.js";
 import type { SeriesWindowView } from "../window/seriesWindowView.js";
 import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
-import { EMPTY_SYNTHETIC, syntheticRequest, type SyntheticSnapshot, type SyntheticSettings, type SyntheticTransform, type BackendSyntheticSource } from "./syntheticSeries.js";
+import { EMPTY_SYNTHETIC, firstSyntheticSourceTime, syntheticRequest, type SyntheticSnapshot, type SyntheticSettings, type SyntheticTransform, type BackendSyntheticSource } from "./syntheticSeries.js";
 import type { SyntheticSeriesManager, SyntheticView } from "./syntheticSeriesManager.js";
 
 let nextBindingId = 1;
@@ -17,6 +17,8 @@ export class SyntheticChartBinding {
   private error: string | null = null;
   private captureAbort: AbortController | null = null;
   private epoch = 0;
+  /** First source time (seconds) this chart last showed; a new definition covers it before it paints. */
+  private visibleSourceTime: number | null = null;
 
   constructor(private manager: SyntheticSeriesManager, private source: BackendSyntheticSource,
     private reader: SeriesWindowView, private transform: SyntheticTransform,
@@ -44,16 +46,20 @@ export class SyntheticChartBinding {
       try {
         const request = syntheticRequest(this.source, this.transform, this.settings, first.time, last.time);
         const capture = this.source.syntheticCapture;
+        // A source window that grew to the left still shows the same place:
+        // page the new definition back to it instead of painting its tail.
+        const seen = this.visibleSourceTime;
+        const cover = seen !== null && seen >= first.time && seen <= last.time ? seen : null;
         if (capture) {
           const controller = new AbortController(), epoch = this.epoch; this.captureAbort = controller;
-          void this.manager.acquireCaptured(request, this.reader.snapshot(), capture.scope, capture.cutoff_ms, controller.signal).then(view => {
+          void this.manager.acquireCaptured(request, this.reader.snapshot(), capture.scope, capture.cutoff_ms, controller.signal, cover).then(view => {
             if (controller.signal.aborted || epoch !== this.epoch) { view.release(); return; }
             this.view = view; this.releaseView = view.subscribe(() => this.notify()); this.notify();
           }).catch(error => {
             if (!controller.signal.aborted && epoch === this.epoch) { this.error = String(error); this.notify(); }
           });
         } else {
-          this.view = this.manager.acquire(request);
+          this.view = this.manager.acquire(request, { cover });
           this.releaseView = this.view.subscribe(() => this.notify());
         }
       } catch (error) {
@@ -85,4 +91,25 @@ export class SyntheticChartBinding {
     return `backend:${this.bindingId}:${JSON.stringify([this.source, this.transform, this.settings])}:${this.rangeKey}:${snapshot.generation}`;
   }
   status = () => this.error ?? this.snapshot().status;
+  /** Why older outputs stopped loading, or null. */
+  pageLimit = () => this.snapshot().pageLimit ?? null;
+  /** True while outputs of this definition exist before the first retained one. */
+  hasOlderOutputs() {
+    const snapshot = this.snapshot();
+    return snapshot.status === "ready" && snapshot.from > 0 && !snapshot.pageLimit;
+  }
+  /** False while `sourceTime` (seconds) lies before the retained outputs and older ones can still load. */
+  coversSourceTime(sourceTime: number) {
+    if (!this.hasOlderOutputs()) return true;
+    const first = firstSyntheticSourceTime(this.snapshot());
+    return first === null || first <= sourceTime;
+  }
+  /** Loads the previous page of outputs; the chart calls this at its left edge. */
+  loadOlder() { this.view?.loadOlder(); }
+  /** Loads older outputs until they reach `sourceTime` (seconds), e.g. for Go to date. */
+  cover(sourceTime: number) { this.view?.cover(sourceTime); }
+  /** The chart reports the first source time (seconds) it shows. */
+  noteVisibleSourceTime(sourceTime: number | null | undefined) {
+    if (typeof sourceTime === "number" && Number.isFinite(sourceTime)) this.visibleSourceTime = sourceTime;
+  }
 }

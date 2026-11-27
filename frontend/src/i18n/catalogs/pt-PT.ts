@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -6,6 +7,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
   ...unifiedMessages["pt-PT"],
+  ...syntheticPagingMessages["pt-PT"],
   ...syntheticEnglish,
   ...continuousEuropeanPortuguese,
   ...tradeHistoryEuropeanPortuguese,

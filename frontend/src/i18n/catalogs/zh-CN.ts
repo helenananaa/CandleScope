@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { replayNoteChinese } from "./replayNoteMessages.js";
 import { continuousChinese } from "./continuousMessages.js";
@@ -7,6 +8,7 @@ import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
+  ...syntheticPagingMessages["zh-CN"],
   ...continuousChinese,
   ...tradeHistoryChinese,
   ...replayNoteChinese,

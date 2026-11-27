@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
@@ -11,6 +12,7 @@ import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
   ...unifiedMessages["ja"],
+  ...syntheticPagingMessages["ja"],
   ...syntheticEnglish,
   ...continuousJapanese,
   ...researchBatchJapanese,
