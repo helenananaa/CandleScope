@@ -29,6 +29,9 @@ FOLLOW_CONTRACT = "candlescope.pine-follow/1"
 # requests, whose frozen data would have to grow with the chart's bars.
 _HORIZON = re.compile(r"\b(?:barstate\s*\.\s*islast(?:confirmedhistory)?|session\s*\.\s*islastbar(?:_regular)?"
                       r"|last_bar_index|last_bar_time|timenow|chart\s*\.\s*right_visible_bar_time|request\s*\.)")
+# Host inputs that travel with requested data but do not grow with the bars: the chart's
+# price grid, requested symbols' metadata and currency rates (compared like any other input).
+_STATIC_REQUEST_INPUTS = frozenset({"$chart", "$symbolMetadata", "$currencyRates"})
 # Request fields that may grow between rebuilds; everything else must be identical.
 _GROWING = frozenset({"bars", "execution_times", "operation", "identity", "identity_ref", "protocol"})
 
@@ -69,10 +72,11 @@ class FollowSession:
         _libraries, options = native_inputs(request)
         supplied = options.pop("request_bars") or {}
         supplied.update(requested_bars(request))
-        if supplied:
+        if set(supplied) - _STATIC_REQUEST_INPUTS:
             raise ValueError("NATIVE_FOLLOW_UNSUPPORTED: requested data is frozen with the bars")
         self.engine = program.historical_session(engine_bars(request["bars"]), input_overrides=overrides or None,
-            chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"], **options)
+            chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
+            request_bars=supplied or None, **options)
 
     def advance(self, target):
         if target != len(self.request["bars"]) or self.engine.cursor != 0:

@@ -247,10 +247,15 @@ plot(ta.sma(close, 5))
 
     def real_wire(count):
         clocks = [row["time"] * 1000 + 59_999 for row in rows[:count]]
+        # Shaped like a chart run's wire: the price grid and contract are frozen from the catalog.
         return {"protocol": PROTOCOL, "identity": identity, "source": source, "parameters": {}, "bars": rows[:count],
                 "contexts": [], "interval": "1m", "libraries": {}, "magnifier": None,
-                "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1"}, "execution_times": clocks,
-                "host_inputs": {"executionTimes": clocks}, "clock_policy": "historical-bar-close"}
+                "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1",
+                            "contract_profile": {"model": "linear", "quantityModel": "fixed_step"},
+                            "metadata": {"currency": "USDT", "minContract": "1e-05", "pointValue": 1.0,
+                                         "priceTickSize": "0.01", "quantityStep": "1e-05"}},
+                "execution_times": clocks, "clock_policy": "historical-bar-close",
+                "host_inputs": {"executionTimes": clocks, "chartMetadata": {"priceTickSize": "0.01"}, "symbolMetadata": {}}}
 
     follows = FollowSessions()
     cancel = threading.Event()

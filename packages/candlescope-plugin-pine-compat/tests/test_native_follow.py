@@ -45,10 +45,15 @@ def rows(count, seed=0):
 def request(bars, source=ORDERS, **extra):
     """A request shaped like the host's native wire for a chart Pine strategy."""
     clocks = [bar["time"] * 1000 + 59_999 for bar in bars]
+    # The chart's price grid and contract travel with every native run (the host freezes them from the catalog).
     return {"source": source, "parameters": {}, "bars": bars, "contexts": [], "interval": "1m", "libraries": {},
-            "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1"}, "magnifier": None,
-            "execution_times": clocks, "host_inputs": {"executionTimes": clocks}, "clock_policy": "historical-bar-close",
-            **extra}
+            "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1",
+                        "contract_profile": {"model": "linear", "quantityModel": "fixed_step"},
+                        "metadata": {"currency": "USDT", "minContract": "1e-05", "pointValue": 1.0,
+                                     "priceTickSize": "0.01", "quantityStep": "1e-05"}},
+            "magnifier": None, "execution_times": clocks,
+            "host_inputs": {"executionTimes": clocks, "chartMetadata": {"priceTickSize": "0.01"}, "symbolMetadata": {}},
+            "clock_policy": "historical-bar-close", **extra}
 
 
 def test_each_rebuild_equals_the_fixed_run_of_its_request():
