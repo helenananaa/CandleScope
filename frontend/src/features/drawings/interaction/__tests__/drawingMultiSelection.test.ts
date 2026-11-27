@@ -173,8 +173,6 @@ test("copy and paste make new drawings with new ids and new groups, unlocked", (
   const creates = pasted!.flatMap((drawing) => drawingCreateCommandsForSavedDrawing(drawing) ?? []);
   document = apply(document, creates);
   assert.equal(document.zOrder.length, 4);
-  // Where groups cannot be saved (replay training), copies come in ungrouped.
-  assert.deepEqual(pastedDrawings(clipboard!, (drawing) => drawing, { keepGroups: false })?.map((drawing) => drawing.groupId), [undefined, undefined]);
   // A paste whose placement fails creates nothing.
   assert.equal(pastedDrawings(clipboard!, () => null), null);
   clearDrawingClipboard();

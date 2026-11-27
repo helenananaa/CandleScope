@@ -7,7 +7,6 @@ import { StyleIcon } from "./DrawingStyleInputs.js";
 export interface DrawingMultiSelectionActions {
   readonly count: number;
   readonly grouped: boolean;
-  readonly canGroup: boolean;
   group(): boolean;
   ungroup(): boolean;
   copy(): number;
@@ -43,8 +42,7 @@ export default function DrawingMultiSelectionBar({ selection }: { selection: Dra
       <span className="drawing-toolbar-divider" />
       {selection.grouped
         ? <IconButton label={shortcut(t("drawing.multi.ungroup"), "Shift G")} icon={UNGROUP_ICON} onClick={() => selection.ungroup()} />
-        : <IconButton label={selection.canGroup ? shortcut(t("drawing.multi.group"), "G") : t("drawing.multi.groupUnavailable")}
-          icon={GROUP_ICON} disabled={!selection.canGroup} onClick={() => selection.group()} />}
+        : <IconButton label={shortcut(t("drawing.multi.group"), "G")} icon={GROUP_ICON} onClick={() => selection.group()} />}
       <IconButton label={shortcut(t("drawing.multi.copy"), "C")} icon={COPY_ICON} onClick={() => selection.copy()} />
       <IconButton label={shortcut(t("drawing.multi.duplicate"), "D")} icon={DUPLICATE_ICON} onClick={() => selection.duplicate()} />
       <span className="drawing-toolbar-divider" />
