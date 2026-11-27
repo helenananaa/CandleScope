@@ -130,7 +130,9 @@ class StrategyDataManager:
         # Host event subscriptions and run-facade watches share one capacity.
         self._subscriptions: set[Any] = set()
         self._closed = False
-        self.external_providers = ExternalProviderAccess(self.control_plane, runtime, check_owner=self._require_open)
+        from .continuous_strategy import ForwardExternalRuns
+        self.external_providers = ExternalProviderAccess(self.control_plane, runtime, check_owner=self._require_open,
+                                                         forward_runs=ForwardExternalRuns(self))
 
     def bind_continuous(self, runtime):
         """Adopt one backend owner; observing/unmounting a view never adopts it."""

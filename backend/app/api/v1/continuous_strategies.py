@@ -124,9 +124,13 @@ def _request_key(request):
 async def capabilities(request:Request):
     try:
         access=_access(request);controller=access.controller()
+        settings=access.owner.service.settings
+        # External models only where the Host enables their connections (B-333c).
+        external=settings.enabled and settings.external_provider_enabled
         return _reply({"available":True,"execution_enabled":controller.execution_enabled,
             "runtime_mode":controller.runtime_mode,"protocol":PROTOCOL,
-            "modes":["HISTORY_LIVE","LIVE_ONLY"],"languages":list(LANGUAGES),
+            "modes":["HISTORY_LIVE","LIVE_ONLY"],
+            "languages":[language for language in LANGUAGES if language!="external" or external],
             # Any fixed-length interval of whole minutes (B-333): no list to enumerate.
             "intervals":None,"fixed_intervals_only":True,"account_models":list(ACCOUNT_MODELS),
             "python_editor_authorized":is_trusted_operator_origin(origin_from(request.headers)),

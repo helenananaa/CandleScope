@@ -78,6 +78,8 @@ def main() -> int:
         "test_continuous_grid.py",
         # B-333b: Pine forward runs, close-bar ORDER_INTENT only (runtime equality runs in pine-host-contracts).
         "test_continuous_pine.py",
+        # B-333c: external models in forward runs (forward connections, restart equality, revocation).
+        "test_continuous_external.py",
         "test_execution_data_market.py",
         # Replay: no future data before reveal (launch non-negotiable) and revealed indicator columns.
         "test_replay_no_lookahead.py", "test_replay_indexed_indicator_closes.py",

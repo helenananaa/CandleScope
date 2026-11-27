@@ -60,14 +60,29 @@ def _fixed_interval(interval):
     return spec is not None and not spec.timezone and spec.alignment is not IntervalAlignment.CALENDAR_MONTH
 
 
-def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, follow=False, calendar=None):
+def _refuse_external(execution, *, follow, bind_external):
+    """B-333c: an external model's forward run reads its own bars on the plain bar account."""
+    if follow:
+        raise BacktestError("FIDELITY_UNSUPPORTED", "The chart follows builtin and Python strategies; run an external model forward instead")
+    for name, feature in (("signal_chart", "a signal chart"), ("account_rules", "practice account rules"),
+                          ("execution_model_revision", "execution realism")):
+        if execution.get(name) is not None:
+            raise BacktestError("FIDELITY_UNSUPPORTED",
+                f"Forward runs of an external model read the run's own bars on the bar account, without {feature}")
+    if bind_external is None:
+        raise BacktestError("FIDELITY_UNSUPPORTED", "External models need this Host's external connections")
+
+
+def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, follow=False, calendar=None,
+                       bind_external=None):
     """Own current code and normalized fees/account before acquiring any data.
 
     ``follow`` (ADR-BACKTEST-015 P4b): a FOLLOW run consumes the chart's own closed
     bars, so any fixed-length chart interval qualifies. A forward run does too
     (B-333): it advances on closed bars of its series' interval, whole minutes long.
     ``calendar`` is the series' trading calendar (ADR-DATA-002 D2c): forward
-    runs do not cross market closures yet.
+    runs do not cross market closures yet. ``bind_external`` binds an external
+    model to its connected forward connection (B-333c).
     """
     if not isinstance(execution, Mapping) or set(execution)-(BASE_FIELDS|POLICY_FIELDS|REALISM_FIELDS):
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown continuing execution fields")
@@ -101,6 +116,8 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     from .continuous_pine import refuse_before_compile
     refuse_before_compile(provider, execution, follow=follow)
     provider = prepare_provider(provider)
+    if provider["language"] == "external":
+        _refuse_external(execution, follow=follow, bind_external=bind_external)
     payload = {**execution,"output_mode":provider["output_mode"],"market_type":key.market_type}
     try:
         (account_model, contract_mode, funding_mode, leverage, funding_rate, funding_hours,
@@ -150,6 +167,9 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     if provider["language"] == "pine":
         from .continuous_pine import pine_definition_config
         config.update(pine_definition_config(provider, realism_enabled=realism.enabled))
+    if provider["language"] == "external":
+        # Last: every refusal above is answered before the connection is read.
+        provider = {**provider, "external": bind_external(provider, config, warmup_bars=warmup_bars)}
     series = [key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values]
     return {"engine_version":ENGINE_VERSION,"language":provider["language"],"provider":provider,
         "configuration":config,"input_plan":{"roles":["BARS"]},

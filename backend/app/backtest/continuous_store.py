@@ -270,6 +270,19 @@ class ContinuousStrategyStore:
             row = self.db.execute("SELECT "+SUMMARY_COLUMNS+",definition_json FROM runs WHERE id=?",(run_id,)).fetchone()
             return {"run":_summary(row),"definition":self.epochs.definition(run_id,row["definition_json"])}
 
+    def external_connection_runs(self, connection_id):
+        """Runs not yet cancelled whose external model is served by ``connection_id`` (B-333c)."""
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            rows = self.db.execute("SELECT id,definition_json FROM runs WHERE phase!='CANCELLED' ORDER BY id").fetchall()
+        result = []
+        for row in rows:
+            provider = json.loads(row["definition_json"]).get("provider") or {}
+            if provider.get("language") == "external" and provider.get("external_connection_id") == connection_id:
+                result.append(row["id"])
+        return result
+
     def list_summaries(self):
         with self.lock:
             if self.closed:

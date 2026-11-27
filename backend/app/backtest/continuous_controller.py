@@ -310,7 +310,7 @@ class ContinuousStrategyController:
     async def create(self,key,*,provider,execution,series,mode,from_ms=None,warmup_bars=0):
         self._live()
         definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars,
-            calendar=self._calendar(series))
+            calendar=self._calendar(series),bind_external=getattr(self.runtime.provider_factory,"bind_external",None))
         grid=bar_grid(series.interval)
         now=self.clock_ms()
         if type(now) is not int or now<STEP:raise BacktestError("CONTINUOUS_INPUT_INVALID","Backend UTC clock is unavailable")
@@ -474,6 +474,19 @@ class ContinuousStrategyController:
             await run_storage(self._collect_cancelled,row)
             row=await run_storage(self.store.creations.clear_cancelled_input,key,revision=row["revision"])
         return row
+
+    async def cancel_external(self,connection_id):
+        """Cancel the forward runs a revoked external connection served (B-333c).
+
+        Their committed accounts and results stay. A creation still preparing fails at its
+        first model call, which a revoked connection no longer admits.
+        """
+        self._ready()
+        cancelled=[]
+        for run_id in await run_storage(self.store.external_connection_runs,connection_id):
+            await self.runtime.cancel(run_id)
+            cancelled.append(run_id)
+        return cancelled
 
     def _collect_cancelled(self,row):
         proof=row["input"]["proof"] if row["input"] else row["watch"]

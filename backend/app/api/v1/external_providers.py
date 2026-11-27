@@ -17,6 +17,7 @@ from app.backtest.external_provider.requests import (
     ClientReplyRequest,
     ConnectionCreateRequest,
     ConnectionSmokeRequest,
+    ForwardConnectionCreateRequest,
 )
 from app.backtest.external_provider.wire import MAX_MESSAGE_BYTES, decode
 from app.backtest.strategy.protocol import StrategyProviderError
@@ -77,6 +78,15 @@ async def _body(request: Request, contract: type[BaseModel]) -> dict[str, Any]:
 def create_connection(request: Request, payload: ConnectionCreateRequest):
     try:
         return _access(request).create(payload.model_dump())
+    except (BacktestError, StrategyProviderError) as exc:
+        return _error(exc)
+
+
+@router.post("/forward")
+def create_forward_connection(request: Request, payload: ForwardConnectionCreateRequest):
+    """A connection for forward runs of one market series (B-333c)."""
+    try:
+        return _access(request).create_forward(payload.model_dump())
     except (BacktestError, StrategyProviderError) as exc:
         return _error(exc)
 
