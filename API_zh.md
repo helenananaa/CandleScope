@@ -268,7 +268,7 @@ GET /api/v1/market/snapshot?exchange=binance&market_type=futures&symbol=BTCUSDT&
 
 ### `GET /market/history`
 
-读取一个有界历史页面。P1 只开放 `funding_rate` 与 `open_interest`；OI 必须传 `period`（`5m`、`15m`、`30m`、`1h`、`2h`、`4h`、`6h`、`12h`、`1d`）。可选 `start_ms`、`end_ms`，`limit` 为 1 到 1000。Funding 不传 `view` 时继续保持旧的稀疏结算契约；Binance 合约可使用 `view=hybrid`，并且必须传图表 `period`。每根已关闭 K 最多返回一个点：有交易所结算就返回权威结算，否则使用本地缓存的 Binance Premium Index 1m 数据做不偷看未来的近似估算。
+读取一个有界历史页面。P1 只开放 `funding_rate` 与 `open_interest`；OI 必须传 `period`（`5m`、`15m`、`30m`、`1h`、`2h`、`4h`、`6h`、`12h`、`1d`）。可选 `start_ms`、`end_ms`，`limit` 为 1 到 1000。Funding 不传 `view` 时继续保持旧的稀疏结算契约；声明了能力角色 `funding.hybrid_history` 的市场（目前是 Binance 合约）可使用 `view=hybrid`，并且必须传图表 `period`。每根已关闭 K 最多返回一个点：有交易所结算就返回权威结算，否则使用本地缓存的 Binance Premium Index 1m 数据做不偷看未来的近似估算。
 
 ```http
 GET /api/v1/market/history?exchange=binance&market_type=futures&symbol=BTCUSDT&channel=open_interest&period=5m&limit=500

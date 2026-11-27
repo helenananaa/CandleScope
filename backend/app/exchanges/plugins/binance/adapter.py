@@ -541,6 +541,9 @@ def _capability_roles() -> list[CapabilityRole]:
         CapabilityRole(roles.HISTORY_NATIVE_ARCHIVE, ("spot",), roles.BINANCE_PUBLIC_KLINE_ARCHIVE),
         CapabilityRole(roles.HISTORY_EARLIEST_PAGE, ("spot", "futures"), roles.BINANCE_KLINES_START_TIME_ASCENDING),
         CapabilityRole(roles.CONTRACT_RULES, ("futures",), roles.BINANCE_USDM_LINEAR_BASE_QUANTITY),
+        CapabilityRole(roles.FUNDING_HYBRID_HISTORY, ("futures",), roles.BINANCE_PREMIUM_INDEX_CUMAVG),
+        CapabilityRole(roles.FUNDING_SETTLEMENT_HISTORY, ("futures",), roles.BINANCE_USDM_REGULAR_SETTLEMENT),
+        CapabilityRole(roles.OPEN_INTEREST_NATIVE_GRID, ("futures",), roles.BINANCE_OI_GRID),
     ]
 
 
