@@ -28,7 +28,6 @@ from app.core.executors import run_storage
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.market import MarketType
 from app.core.config import (
-    get_effective_proxy,
     load_proxy_settings,
     normalize_proxy_settings,
     save_proxy_settings,
@@ -554,12 +553,16 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
         return await finish_cleanup(_apply_proxy_settings(request, body))
 
 
-def _available_account_proxy():
+def _account_network_changed(readonly_accounts) -> bool:
+    """Whether the running account session would connect differently under the saved settings."""
+    in_use = getattr(readonly_accounts, "network_in_use", None)
+    if in_use is None:
+        return True  # Not connected: (re)starting it is harmless.
     try:
-        return get_effective_proxy()
+        return readonly_accounts.network_options_now() != in_use
     except ValueError:
         # A pool with no usable route must still be able to save a recovery.
-        return None
+        return True
 
 
 async def _blocking(func, *args):
@@ -613,20 +616,15 @@ async def _apply_proxy_settings(request, body):
             any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core):
         require_local_research_access(request)
     readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
-    # The account service binds to the first usable route, independently of
-    # the public-market pool. Restart it when that concrete endpoint changes.
-    previous_account_proxy = None
-    if readonly_accounts is not None and previous_core and mode == "pool":
-        previous_account_proxy = _available_account_proxy()
     try:
         await _blocking(managed.activate, selected, lambda: save_proxy_settings(
             mode, custom_proxy, routes=body.routes, strategy=body.strategy))
     except SubscriptionError as exc:
         raise HTTPException(400, str(exc)) from None
 
-    restart_account = readonly_accounts is not None and (
-        previous_account_proxy is None or previous_account_proxy != _available_account_proxy()
-    )
+    # The account session keeps one pool route while it works (see saved_network_options).
+    # Restart it only when the saved settings would connect it differently.
+    restart_account = readonly_accounts is not None and _account_network_changed(readonly_accounts)
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
         if restart_account:

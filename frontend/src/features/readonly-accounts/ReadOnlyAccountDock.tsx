@@ -201,6 +201,9 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
             {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {factKindLabel(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
           </Disclosure>
           <p className="readonly-account-help">{t("account.lastEvent", { time: date(status?.stream.lastReceivedMs) }, locale)}</p>
+          {status?.proxyRoute && <p className="readonly-account-help">
+            {t("account.proxyRoute", { name: status.proxyRoute.name }, locale)} {t("account.proxyRouteFailover", {}, locale)}
+          </p>}
           {status?.stream.error && <InlineAlert tone="warning">{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></InlineAlert>}
         </>}
         {factsTab && <>

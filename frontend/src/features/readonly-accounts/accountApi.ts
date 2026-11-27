@@ -13,6 +13,8 @@ export interface AccountStatus {
   snapshots: Record<string, { receivedMs: number; data: unknown }>;
   stream: { state: string; lastReceivedMs: number | null; error: string | null };
   reconciliation: string;
+  /** The proxy pool route the private session uses; absent or null outside pool mode. */
+  proxyRoute?: { id: string; name: string } | null;
 }
 export interface JournalVersion {
   noteId: string;
@@ -104,6 +106,8 @@ export function validateAccountStatus(value: unknown): AccountStatus {
   if (!record(value) || value.schemaVersion !== 1 || value.readOnly !== true || value.venue !== "okx"
     || typeof value.available !== "boolean" || !record(value.snapshots) || !record(value.counts)
     || (value.serviceError !== undefined && !nullableString(value.serviceError))
+    || (value.proxyRoute !== undefined && value.proxyRoute !== null
+      && (!record(value.proxyRoute) || typeof value.proxyRoute.id !== "string" || typeof value.proxyRoute.name !== "string"))
     || !Array.isArray(value.scans) || !Array.isArray(value.coverage) || !Array.isArray(value.gaps)
     || !value.scans.every((scan: unknown) => range(scan) && record(scan) && typeof scan.pages === "number" && (scan.complete === 0 || scan.complete === 1))
     || !value.coverage.every(range) || !value.gaps.every((gap: unknown) => range(gap) && record(gap) && typeof gap.reason === "string")
