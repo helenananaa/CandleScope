@@ -137,20 +137,37 @@ def fill(raw: Mapping[str, Any], contract: Contract) -> dict[str, Any]:
             "exchangeRealizedPnl": realized, "contract": contract.wire()}
 
 
+def _optional(raw: Mapping[str, Any], key: str, **sign: bool) -> Decimal | None:
+    return None if raw.get(key) in (None, "") else decimal(raw.get(key), **sign)
+
+
 def position(raw: Mapping[str, Any], contract: Contract) -> dict[str, Any]:
     if raw.get("instId") != contract.instrument or raw.get("instType") != "SWAP":
         raise AccountDataError("POSITION_MARKET_MISMATCH")
     leg = position_side(raw)
     quantity = decimal(raw.get("pos"), nonnegative=True)
-    mark = None if raw.get("markPx") in (None, "") else decimal(raw.get("markPx"), positive=True)
-    avg = None if raw.get("avgPx") in (None, "") else decimal(raw.get("avgPx"), nonnegative=True)
+    mark = _optional(raw, "markPx", positive=True)
+    avg = _optional(raw, "avgPx", nonnegative=True)
     unrealized = None if raw.get("upl") in (None, "") else exact(decimal(raw.get("upl")))
+    mode = raw.get("mgnMode") if raw.get("mgnMode") in {"cross", "isolated"} else None
+    leverage = _optional(raw, "lever", positive=True)
+    # OKX sends no price when liquidation is out of reach; a non-positive
+    # estimate is equally not a price a position can be liquidated at.
+    liquidation = _optional(raw, "liqPx")
+    # Isolated positions hold their own margin; cross positions report the
+    # initial margin they use from the shared balance.
+    margin = _optional(raw, "margin" if mode == "isolated" else "imr", nonnegative=True) if mode else None
+    margin_currency = identifier(raw["ccy"]) if raw.get("ccy") else contract.settle
     return {"positionId": identifier(raw.get("posId")), "instrument": contract.instrument,
-            "positionSide": leg, "contracts": exact(quantity), "marginMode": raw.get("mgnMode"),
+            "positionSide": leg, "contracts": exact(quantity), "marginMode": mode,
             "entryPrice": exact(avg) if avg is not None else None,
             "markPrice": exact(mark) if mark is not None else None,
             "baseQuantity": contract.quantities(quantity, mark)["baseQuantity"] if mark else None,
             "unrealizedPnl": unrealized, "settleCurrency": contract.settle,
+            "leverage": exact(leverage) if leverage is not None else None,
+            "liquidationPrice": exact(liquidation) if liquidation is not None and liquidation > 0 else None,
+            "priceCurrency": contract.quote,
+            "margin": exact(margin) if margin is not None else None, "marginCurrency": margin_currency,
             "eventTimeMs": timestamp(raw.get("uTime")), "contract": contract.wire()}
 
 

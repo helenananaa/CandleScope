@@ -1370,7 +1370,7 @@ function LiveChartCell({
           <LazyFeatureSurfaces surfaces={featureSurfaces} />
           {timeNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog
             key={chartSession.view.sessionKey} cellId={cell.id} onClose={() => timeNavigation.setOpen(false)}
-            onSubmit={timeNavigation.submit} /></Suspense>}
+            onSubmit={timeNavigation.submit} shortcuts={timeNavigation.shortcuts} /></Suspense>}
           {studySetup && marketWorkspaceResources && <Suspense fallback={null}><HistoryStudySetupPopover key={`${workspaceId}:${cell.id}`}
             anchorRef={studyButtonRef}
             owner={studyOwner} manager={marketWorkspaceResources.dataManager.historyStudy} onSelect={selectStudy}

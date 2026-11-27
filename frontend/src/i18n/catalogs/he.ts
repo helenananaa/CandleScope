@@ -3,6 +3,8 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHebrew, replayNoteHebrew, tradeHistoryHebrew, readonlyAccountHebrew, continuousHebrew, tradingAccountsHe, nativeHebrew } from "./hebrewFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const he = {
   ...unifiedMessages["he"],
@@ -4167,4 +4169,6 @@ export const he = {
   "chartTester.deleteRetiredDraft": "מחיקת הטיוטה שהופסקה {name}",
   "chartTester.deleteRetiredDraftFailed": "לא ניתן למחוק את הטיוטה שהופסקה. נסו שוב.",
   ...tradingAccountsHe,
+  ...chartTimeZoneMessages["he"],
+  ...chartTimeShortcutMessages["he"],
 } as const satisfies MessageCatalog;
