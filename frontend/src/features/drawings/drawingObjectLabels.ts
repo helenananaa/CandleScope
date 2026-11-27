@@ -31,6 +31,8 @@ export function drawingName(type: string): string {
     "anchored-vwap": "drawing.variant.anchored-vwap",
     "volume-profile": "drawing.variant.volume-profile",
     "regression-channel": "drawing.variant.regression-channel",
+    callout: "drawing.variant.callout",
+    "price-label": "drawing.variant.price-label",
   } as const)[type as "line"];
   return key ? t(key) : type;
 }

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
@@ -8,11 +9,13 @@ import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } from "./traditionalFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhHant = {
   ...unifiedMessages["zh-Hant"],
+  ...drawingAnnotationMessages["zh-Hant"],
   ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,
@@ -4217,6 +4220,7 @@ export const zhHant = {
   "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
   ...drawingCalculatedMessages["zh-Hant"],
+  ...replayDrawingSaveMessages["zh-Hant"],
   ...chartTimeZoneMessages["zh-Hant"],
   ...chartTimeShortcutMessages["zh-Hant"],
 } as const satisfies MessageCatalog;

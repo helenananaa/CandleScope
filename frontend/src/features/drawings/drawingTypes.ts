@@ -42,6 +42,7 @@ export type DrawingToolId =
   | "shape-ellipse"
   | "text"
   | CalculatedToolId
+  | AnnotationToolId
   | "pen"
   | "highlighter";
 
@@ -66,6 +67,8 @@ export type CalculatedToolId =
   | "volume-profile"
   | "regression-channel";
 export type CalculatedDrawingType = CalculatedToolId;
+/** Text annotations that point at a priced bar: a callout and a price label. */
+export type AnnotationToolId = "callout" | "price-label";
 
 export type DrawingKind =
   | "path"
@@ -355,6 +358,13 @@ export interface SavedRangeMeasureDrawing extends SavedDrawingBase<"range-measur
 
 export interface SavedTextDrawing extends SavedDrawingBase<"text"> {
   dataPoint?: DrawingDataPoint;
+  /**
+   * Callout target: the leader line runs from the box to this anchor. A price
+   * label has no target; it points at `dataPoint` and shows that price.
+   */
+  target?: DrawingDataPoint;
+  /** Show the anchor's price instead of `text`; the box sits beside the anchor. */
+  priceLabel?: boolean;
   text?: string;
   color?: string;
   fontSize?: number;

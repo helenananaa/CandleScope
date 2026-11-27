@@ -226,8 +226,9 @@ function canonicalDrawingEntityPointCount(entity: DrawingEntity): number {
     case "shape":
       return geometry.dataPoints?.length ?? 0;
     case "axis-line":
-    case "text":
       return geometry.dataPoint === undefined ? 0 : 1;
+    case "text":
+      return (geometry.dataPoint === undefined ? 0 : 1) + (geometry.target === undefined ? 0 : 1);
     case "freehand":
     case "highlighter":
       return geometry.stroke?.points.length ?? geometry.dataPoints?.length ?? 0;

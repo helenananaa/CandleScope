@@ -72,6 +72,7 @@ export type CanonicalDrawingGeometry =
   | Readonly<{
       kind: "text";
       dataPoint?: DrawingDataPoint;
+      target?: DrawingDataPoint;
     }>
   | Readonly<{
       kind: "fibonacci";
@@ -132,6 +133,7 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
   | Readonly<{
       kind: "text";
       text?: string;
+      priceLabel?: boolean;
       color?: string;
       fontSize?: number;
       fontFamily?: string;

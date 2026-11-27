@@ -1,14 +1,17 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyItalian, replayNoteItalian, tradeHistoryItalian, readonlyAccountItalian, continuousItalian, tradingAccountsIt, nativeItalian } from "./italianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const it = {
   ...unifiedMessages["it"],
+  ...drawingAnnotationMessages["it"],
   ...syntheticEnglish,
   ...continuousItalian,
   ...tradeHistoryItalian,
@@ -4171,6 +4174,7 @@ export const it = {
   "chartTester.deleteRetiredDraft": "Elimina la bozza ritirata {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossibile eliminare la bozza ritirata. Riprova.",
   ...drawingCalculatedMessages["it"],
+  ...replayDrawingSaveMessages["it"],
   ...chartTimeZoneMessages["it"],
   ...chartTimeShortcutMessages["it"],
 } as const satisfies MessageCatalog;

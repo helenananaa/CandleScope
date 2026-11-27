@@ -1,14 +1,17 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySwedish, replayNoteSwedish, tradeHistorySwedish, readonlyAccountSwedish, continuousSwedish, tradingAccountsSv, nativeSwedish } from "./swedishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const sv = {
   ...unifiedMessages["sv"],
+  ...drawingAnnotationMessages["sv"],
   ...syntheticEnglish,
   ...continuousSwedish,
   ...tradeHistorySwedish,
@@ -4166,6 +4169,7 @@ export const sv = {
   "chartTester.deleteRetiredDraft": "Ta bort det avvecklade utkastet {name}",
   "chartTester.deleteRetiredDraftFailed": "Det avvecklade utkastet kunde inte tas bort. Försök igen.",
   ...drawingCalculatedMessages["sv"],
+  ...replayDrawingSaveMessages["sv"],
   ...chartTimeZoneMessages["sv"],
   ...chartTimeShortcutMessages["sv"],
 } as const satisfies MessageCatalog;

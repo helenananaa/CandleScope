@@ -143,10 +143,11 @@ test("render normalization fills every optional default for all ten kinds", () =
   const text = defaults.get("text");
   assert.equal(text?.kind, "text");
   if (text?.kind === "text") {
-    assert.deepEqual(text.geometry, { kind: "text", dataPoint: { logical: 0, price: 0 } });
+    assert.deepEqual(text.geometry, { kind: "text", dataPoint: { logical: 0, price: 0 }, target: null });
     assert.deepEqual(text.style, {
       kind: "text",
       text: "Text",
+      priceLabel: false,
       color: DEFAULT_TEXT_RENDER_COLOR,
       fontSize: DEFAULT_TEXT_RENDER_FONT_SIZE,
       fontFamily: DEFAULT_TEXT_RENDER_FONT_FAMILY,

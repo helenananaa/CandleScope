@@ -186,10 +186,12 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       geometry = {
         kind: "text",
         ...(item.dataPoint === undefined ? {} : { dataPoint: item.dataPoint }),
+        ...(item.target === undefined ? {} : { target: item.target }),
       };
       style = {
         kind: "text",
         ...(item.text === undefined ? {} : { text: item.text }),
+        ...(item.priceLabel === undefined ? {} : { priceLabel: item.priceLabel }),
         ...(item.color === undefined ? {} : { color: item.color }),
         ...(item.fontSize === undefined ? {} : { fontSize: item.fontSize }),
         ...(item.fontFamily === undefined ? {} : { fontFamily: item.fontFamily }),
@@ -335,9 +337,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);
         break;
       case "text":
-        copyDefinedFields(candidate, geometry, ["dataPoint"]);
+        copyDefinedFields(candidate, geometry, ["dataPoint", "target"]);
         copyDefinedFields(candidate, style, [
           "text",
+          "priceLabel",
           "color",
           "fontSize",
           "fontFamily",

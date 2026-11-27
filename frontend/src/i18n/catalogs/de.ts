@@ -1,14 +1,17 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyGerman, replayNoteGerman, tradeHistoryGerman, readonlyAccountGerman, continuousGerman, tradingAccountsDe, nativeGerman } from "./germanFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const de = {
   ...unifiedMessages["de"],
+  ...drawingAnnotationMessages["de"],
   ...syntheticEnglish,
   ...continuousGerman,
   ...tradeHistoryGerman,
@@ -4166,6 +4169,7 @@ export const de = {
   "chartTester.deleteRetiredDraft": "Eingestellten Entwurf {name} löschen",
   "chartTester.deleteRetiredDraftFailed": "Der eingestellte Entwurf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
   ...drawingCalculatedMessages["de"],
+  ...replayDrawingSaveMessages["de"],
   ...chartTimeZoneMessages["de"],
   ...chartTimeShortcutMessages["de"],
 } as const satisfies MessageCatalog;

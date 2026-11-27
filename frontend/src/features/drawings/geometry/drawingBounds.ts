@@ -420,7 +420,9 @@ export function createDrawingEntityGeometryBounds(
       bounds = dataPointBounds(entity.geometry.dataPoints);
       break;
     case "text":
-      bounds = dataPointBounds(entity.geometry.dataPoint ? [entity.geometry.dataPoint] : undefined);
+      bounds = dataPointBounds(entity.geometry.dataPoint
+        ? [entity.geometry.dataPoint, ...(entity.geometry.target ? [entity.geometry.target] : [])]
+        : undefined);
       break;
     case "position":
       bounds = positionBounds(entity);

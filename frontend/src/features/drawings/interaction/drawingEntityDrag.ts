@@ -1,4 +1,5 @@
 import { translateStroke, type CaptureStroke } from "./freehandDrag.js";
+import { applyTextAnnotationDrag } from "./drawingTextAnnotations.js";
 import {
   parseDrawingAnchor,
   parseDrawingDataPoint,
@@ -255,6 +256,13 @@ function applyTextHandleDrag(
 function applyTextDrag(options: DrawingEntityDragOptions): SavedDrawing | null {
   const { descriptor, drawing, pos, dataToScreen, screenToDrawingData, snap } = options;
   if (descriptor.type !== "text" || drawing.type !== "text") return null;
+  if (descriptor.part && descriptor.part !== "box") {
+    return applyTextAnnotationDrag({
+      drawing, part: descriptor.part, origDataPoint: descriptor.origDataPoint,
+      ...(descriptor.origTarget ? { origTarget: descriptor.origTarget } : {}),
+      startMouse: descriptor.startMouse, pos, dataToScreen, screenToDrawingData, snap,
+    });
+  }
   const originalPoint = immutableDataPoint(descriptor.origDataPoint);
   if (!originalPoint || !finiteScreenPoint(descriptor.startMouse)) return null;
   const originalScreen = dataToScreen(originalPoint);

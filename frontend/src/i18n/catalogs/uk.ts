@@ -1,14 +1,17 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyUkrainian, replayNoteUkrainian, tradeHistoryUkrainian, readonlyAccountUkrainian, continuousUkrainian, tradingAccountsUk, nativeUkrainian } from "./ukrainianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const uk = {
   ...unifiedMessages["uk"],
+  ...drawingAnnotationMessages["uk"],
   ...syntheticEnglish,
   ...continuousUkrainian,
   ...tradeHistoryUkrainian,
@@ -4176,6 +4179,7 @@ export const uk = {
   "chartTester.deleteRetiredDraft": "Видалити зняту з підтримки чернетку {name}",
   "chartTester.deleteRetiredDraftFailed": "Не вдалося видалити зняту з підтримки чернетку. Спробуйте ще раз.",
   ...drawingCalculatedMessages["uk"],
+  ...replayDrawingSaveMessages["uk"],
   ...chartTimeZoneMessages["uk"],
   ...chartTimeShortcutMessages["uk"],
 } as const satisfies MessageCatalog;

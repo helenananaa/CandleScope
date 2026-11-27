@@ -60,6 +60,9 @@ interface TextHandleDrag extends DragBase {
 interface TextDrag extends DragBase {
   type: "text";
   origDataPoint: DrawingDataPoint;
+  /** Callout part being dragged; plain text and price labels move the box. */
+  part?: "box" | "target" | "callout";
+  origTarget?: DrawingDataPoint;
 }
 
 interface PositionPriceDrag extends DragBase {

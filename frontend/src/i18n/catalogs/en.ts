@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -11,11 +12,13 @@ import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const en = {
   ...unifiedMessages["en"],
+  ...drawingAnnotationMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
@@ -4575,6 +4578,7 @@ export const en = {
   "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
   ...drawingCalculatedMessages["en"],
+  ...replayDrawingSaveMessages["en"],
   ...chartTimeZoneMessages["en"],
   ...chartTimeShortcutMessages["en"],
 } as const satisfies MessageCatalog;

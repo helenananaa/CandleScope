@@ -1,14 +1,17 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyDutch, replayNoteDutch, tradeHistoryDutch, readonlyAccountDutch, continuousDutch, tradingAccountsNl, nativeDutch } from "./dutchFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const nl = {
   ...unifiedMessages["nl"],
+  ...drawingAnnotationMessages["nl"],
   ...syntheticEnglish,
   ...continuousDutch,
   ...tradeHistoryDutch,
@@ -4166,6 +4169,7 @@ export const nl = {
   "chartTester.deleteRetiredDraft": "Stopgezet concept {name} verwijderen",
   "chartTester.deleteRetiredDraftFailed": "Het stopgezette concept kon niet worden verwijderd. Probeer het opnieuw.",
   ...drawingCalculatedMessages["nl"],
+  ...replayDrawingSaveMessages["nl"],
   ...chartTimeZoneMessages["nl"],
   ...chartTimeShortcutMessages["nl"],
 } as const satisfies MessageCatalog;

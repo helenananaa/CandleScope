@@ -186,6 +186,9 @@ export type DrawingDisplayRenderSpec =
       paddingCssPx: number;
       lineHeightCssPx: number;
       selectionColor: string;
+      /** Callout/price-label leader: points at this offset run from the box to the target. */
+      leaderPointOffset?: number;
+      leaderColor?: string;
     }>
   | Readonly<{
       op: "position";
@@ -744,7 +747,13 @@ function validRenderSpec(
       && spec.paddingCssPx >= 0
       && Number.isFinite(spec.lineHeightCssPx)
       && spec.lineHeightCssPx > 0
-      && typeof spec.selectionColor === "string";
+      && typeof spec.selectionColor === "string"
+      && (spec.leaderPointOffset === undefined
+        ? spec.leaderColor === undefined
+        : Number.isSafeInteger(spec.leaderPointOffset)
+          && spec.leaderPointOffset >= spec.boxPointOffset + 2
+          && spec.leaderPointOffset + 2 <= pointCount
+          && typeof spec.leaderColor === "string");
   }
   if (spec.op === "position") {
     const pointCount = entity.points.length / 2;
