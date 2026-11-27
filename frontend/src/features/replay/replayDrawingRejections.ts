@@ -143,7 +143,9 @@ export function replayDrawingSaveDocument(
   return {
     document: { documentSchemaVersion: 2, scopeKey: `replay-run:${runId}`, charts: kept },
     count,
-    excluded: [...exclusions.values()].map(({ chart, id, kind, reason, variant }) => ({ chart, id, kind, reason, variant })),
+    excluded: [...exclusions.values()].map(({ chart, id, kind, reason, variant }) => ({
+      chart, id, kind, reason, variant: variant ?? null,
+    })),
   };
 }
 
