@@ -10,6 +10,7 @@ import AccountReconciliation from "./AccountReconciliation.js";
 import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTradeReview.js";
 import AccountJournal from "./AccountJournal.js";
 import { accountErrorHelp } from "./accountErrors.js";
+import { balanceDetails, balanceMargin, positionMargin } from "./accountMargin.js";
 import { accountFreshness, formatAccountAge, type AccountSnapshotKind } from "./accountFreshness.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, getAccountFacts,
@@ -97,7 +98,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const positionsSnapshot = status?.snapshots.positions;
   const positionData = record(positionsSnapshot?.data) ? rows(positionsSnapshot.data.positions) : [];
   const openOrders = rows(status?.snapshots.open_orders?.data).map((item) => record(item.order) ? item.order : {});
-  const balances = rows(status?.snapshots.balances?.data).flatMap((item) => rows(item.details));
+  const balances = balanceDetails(status?.snapshots.balances?.data);
   const stateKey: MessageKey = !status?.account ? "account.unconnected"
     : status.account.status === "synced" ? "account.synced"
       : status.account.status === "syncing" ? "account.syncing"
@@ -175,15 +176,24 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
           <h4>{t("account.positions", {}, locale)}</h4>
           {snapshotLine("positions")}
           {!positionData.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
-          {positionData.map((item, index) => <article className="readonly-account-card" data-stale={staleCard("positions")} key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
-            {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, unit(item.settleCurrency))}</dl></article>)}
+          {positionData.map((item, index) => { const risk = positionMargin(item); return <article className="readonly-account-card" data-stale={staleCard("positions")} key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
+            {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, unit(item.settleCurrency))}
+            {pair("account.marginMode", risk.marginMode && t(`account.marginMode.${risk.marginMode}`, {}, locale))}
+            {pair("account.leverage", risk.leverage && `${risk.leverage}×`)}
+            {pair("account.liquidationPrice", risk.liquidationPrice, risk.liquidationPrice ? unit(risk.priceCurrency) : "")}
+            {pair("account.positionMargin", risk.margin, risk.margin ? unit(risk.marginCurrency) : "")}
+            {pair("account.settleCurrency", risk.settleCurrency)}
+            {pair("account.exchangeTime", date(risk.updatedMs))}</dl></article>; })}
           <h4>{t("account.openOrders", {}, locale)}</h4>
           {snapshotLine("open_orders")}
           {!openOrders.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
           {openOrders.map((item, index) => <article className="readonly-account-card" data-stale={staleCard("open_orders")} key={`${scalar(item.orderId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</dl></article>)}
           <h4>{t("account.balance", {}, locale)}</h4><p className="readonly-account-help">{t("account.balanceHelp", {}, locale)}</p>
           {snapshotLine("balances")}
-          {balances.map((item, index) => <article className="readonly-account-card" data-stale={staleCard("balances")} key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}</dl></article>)}
+          {balances.length > 0 && <p className="readonly-account-help">{t("account.marginHelp", {}, locale)}</p>}
+          {balances.map((item, index) => { const margin = balanceMargin(item); return <article className="readonly-account-card" data-stale={staleCard("balances")} key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}
+            {pair("account.availableMargin", margin.availableMargin, margin.availableMargin ? unit(margin.currency) : "")}
+            {pair("account.exchangeTime", date(margin.updatedMs))}</dl></article>; })}
           <Disclosure className="readonly-account-coverage" summary={t("account.coverage", {}, locale)}><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
             {status?.scans.map((scan) => <p key={scan.kind}>{t(`account.${scan.kind as FactKind}`, {}, locale)} · {date(scan.start_ms)} – {date(scan.end_ms)}<br />{t(scan.complete ? "account.queryComplete" : "account.queryPending", { pages: scan.pages }, locale)}</p>)}
             {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {factKindLabel(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
