@@ -516,14 +516,16 @@ def _recorded_replay_series(replay, scope) -> dict[str, str] | None:
 class TradeFlowHistoryPreparationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
-    exchange: Literal["binance"] = "binance"
-    market_type: Literal["futures"] = "futures"
+    # The venue must declare the verified trade archive (checked by the route).
+    exchange: str = Field(default="binance", min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    market_type: str = Field(default="futures", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
     symbol: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9]+$")
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=0)
 
     @model_validator(mode="after")
     def validate_minute_window(self):
+        self.exchange, self.market_type = self.exchange.lower(), self.market_type.lower()
         if self.start_ms % 60_000 or self.end_ms % 60_000:
             raise ValueError("TradeFlow history boundaries must be minute opens")
         if self.end_ms < self.start_ms or (self.end_ms - self.start_ms) // 60_000 >= 5001:
@@ -544,6 +546,11 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     from app.data_engine.market_data.trade_flow import BUCKET_INTERVAL_MS
     from app.data_preparation.models import fingerprint
     from app.data_preparation.trade_adapter import DAY_MS
+    from app.exchanges.roles import (
+        BINANCE_USDM_AGG_TRADES_ARCHIVE,
+        TRADES_HISTORY_ARCHIVE,
+        venue_role_contract,
+    )
 
     instance = service(request)
     start, end = payload.start_ms, payload.end_ms
@@ -580,6 +587,12 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     old = await existing()
     if old is not None:
         return result(old, old["request"]["intent"]["unavailable_ranges"])
+    if venue_role_contract(scope["exchange"], scope["market_type"],
+                           TRADES_HISTORY_ARCHIVE) != BINANCE_USDM_AGG_TRADES_ARCHIVE:
+        raise HTTPException(422, detail={
+            "code": "TRADE_PROVIDER_UNSUPPORTED",
+            "message": f"{scope['exchange']} {scope['market_type']} publishes no verified trade archive",
+        })
 
     dm = getattr(request.app.state, "data_manager", None)
     if not getattr(dm, "trade_flow_ready", False):

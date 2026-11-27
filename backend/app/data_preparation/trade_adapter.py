@@ -9,6 +9,7 @@ import zipfile
 from weakref import WeakValueDictionary
 
 from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef, ParquetRawAggTradeArchive
+from app.exchanges.roles import BINANCE_USDM_AGG_TRADES_ARCHIVE, TRADES_HISTORY_ARCHIVE, venue_role_contract
 from app.replay.trade_import import (
     import_official_date_range, ReplayTradeImportError, TradeArchiveAcquisitionBusy,
     official_trade_object_missing, trade_archive_day_acquisition,
@@ -47,9 +48,12 @@ class TradePreparationAdapter:
             raise PreparationError("TRADE_ARCHIVE_UNAVAILABLE", "Verified trade archive is unavailable")
         if not self.can_import_official:
             raise PreparationError("TRADE_ARCHIVE_READ_ONLY", "Automatic trade imports require a local archive")
-        if (requirement.exchange != "binance" or requirement.market_type != "futures"
-                or not requirement.symbol.isalnum()):
-            raise PreparationError("TRADE_PROVIDER_UNSUPPORTED", "Automatic verified trades support Binance USD-M futures")
+        if venue_role_contract(requirement.exchange, requirement.market_type,
+                               TRADES_HISTORY_ARCHIVE) != BINANCE_USDM_AGG_TRADES_ARCHIVE:
+            raise PreparationError("TRADE_PROVIDER_UNSUPPORTED",
+                f"{requirement.exchange} {requirement.market_type} publishes no verified trade archive")
+        if not requirement.symbol.isalnum():
+            raise PreparationError("TRADE_PROVIDER_UNSUPPORTED", "Verified trade archives name alphanumeric symbols")
         if requirement.end_ms > now_ms // DAY_MS * DAY_MS:
             raise PreparationError("TRADE_DAY_UNPUBLISHED", "Select completed UTC days for official trade history")
 

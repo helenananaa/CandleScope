@@ -355,6 +355,32 @@ class MarketChannelCapability:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class CapabilityRole:
+    """A named data role a venue supplies beyond its channel matrix.
+
+    Consumers ask for a role, never for an exchange name (ADR-DATA-002 §5).
+    ``contract`` names the implementation that supplies it, so a consumer with
+    one implementation can still refuse any other contract explicitly.
+    """
+
+    role: str
+    market_types: tuple[str, ...]
+    contract: str
+
+    def __post_init__(self) -> None:
+        role = str(self.role or "").strip().lower()
+        contract = str(self.contract or "").strip()
+        if not role or not contract:
+            raise ValueError("capability roles require a role name and a contract")
+        object.__setattr__(self, "role", role)
+        object.__setattr__(self, "contract", contract)
+        object.__setattr__(self, "market_types", _unique_strings(self.market_types, lower=True))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"role": self.role, "market_types": list(self.market_types), "contract": self.contract}
+
+
 @dataclass(slots=True)
 class ExchangeCapabilities:
     """Static capabilities advertised by an exchange adapter."""
@@ -377,6 +403,14 @@ class ExchangeCapabilities:
     # Explicit per-channel boundary declarations. Old plugins have unknown
     # boundaries until they provide this contract; UTC metadata is not proof.
     native_bar_specs: list[Any] = field(default_factory=list)
+    # Named data roles (ADR-DATA-002 D3). Kept last for positional sources.
+    roles: list[CapabilityRole] = field(default_factory=list)
+
+    def role(self, name: str, market_type: str) -> CapabilityRole | None:
+        role_name = str(name or "").strip().lower()
+        market = str(market_type or "").strip().lower()
+        return next((item for item in self.roles
+                     if item.role == role_name and market in item.market_types), None)
 
     def bar_spec(self, market_type: str, interval: str, purpose: str):
         from app.data_engine.bar_basis import native_bar_spec
@@ -405,6 +439,7 @@ class ExchangeCapabilities:
             "protocol_features": list(self.protocol_features),
             "limits": dict(self.limits),
             "known_limitations": list(self.known_limitations),
+            "roles": [item.to_dict() for item in self.roles],
         }
 
     def channel_capability(
@@ -501,6 +536,10 @@ def serialize_exchange_capabilities(capabilities: Any) -> dict[str, Any]:
         payload["channels"] = [
             channel.to_dict()
             for channel in (getattr(capabilities, "channels", ()) or ())
+        ]
+    if "roles" not in payload:
+        payload["roles"] = [
+            role.to_dict() for role in (getattr(capabilities, "roles", ()) or ())
         ]
     return payload
 

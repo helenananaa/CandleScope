@@ -125,7 +125,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -386,7 +387,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -584,7 +586,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -636,7 +639,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -754,7 +758,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -862,7 +867,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -1109,7 +1115,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {
@@ -1210,7 +1217,8 @@
         "ws_connection_model": "path_per_stream",
         "protocol_features": [],
         "limits": {},
-        "known_limitations": []
+        "known_limitations": [],
+        "roles": []
       },
       "checks": [
         {

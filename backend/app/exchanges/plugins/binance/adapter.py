@@ -17,6 +17,7 @@ from app.data_engine.market_data.kline_metrics import KLINE_DERIVED_FIELDS
 from app.exchanges.catalog_http import fetch_catalog_json
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
+    CapabilityRole,
     ExchangeCapabilities,
     ExchangeMarket,
     HistoryAvailabilityPolicy,
@@ -530,6 +531,14 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
     ]
 
 
+def _capability_roles() -> list[CapabilityRole]:
+    from app.exchanges.roles import BINANCE_USDM_AGG_TRADES_ARCHIVE, TRADES_HISTORY_ARCHIVE
+
+    return [
+        CapabilityRole(TRADES_HISTORY_ARCHIVE, ("futures",), BINANCE_USDM_AGG_TRADES_ARCHIVE),
+    ]
+
+
 class BinanceExchangeAdapter:
     """Legacy facade for Binance exchange integration.
 
@@ -582,6 +591,7 @@ class BinanceExchangeAdapter:
                 "rest.kline.max_limit": 1000,
                 "rest.depth.max_limit": 5000,
             },
+            roles=_capability_roles(),
         )
 
     async def list_symbols(self, market_type: str = "") -> list[SymbolInfo]:
