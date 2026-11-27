@@ -10,6 +10,7 @@ import AccountReconciliation from "./AccountReconciliation.js";
 import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTradeReview.js";
 import AccountJournal from "./AccountJournal.js";
 import AccountFeeRates from "./AccountFeeRates.js";
+import AccountFunding from "./AccountFunding.js";
 import { accountErrorHelp } from "./accountErrors.js";
 import { balanceDetails, balanceMargin, positionMargin } from "./accountMargin.js";
 import { accountFreshness, formatAccountAge, type AccountSnapshotKind } from "./accountFreshness.js";
@@ -18,8 +19,8 @@ import { AccountApiError, accountSession, getAccountFacts,
   record, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
 import { browserHost } from "../../app/browserHost.js";
 
-type Tab = "overview" | FactKind | "journal" | "reconcile" | "trades";
-const TABS: Tab[] = ["overview", "fills", "orders", "bills", "reconcile", "trades", "journal"];
+type Tab = "overview" | FactKind | "journal" | "reconcile" | "trades" | "funding";
+const TABS: Tab[] = ["overview", "fills", "orders", "bills", "funding", "reconcile", "trades", "journal"];
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" ? String(value) : "—"; }
 function unit(value: unknown): string { return typeof value === "string" ? value : ""; }
 function rows(value: unknown): Fact[] { return Array.isArray(value) ? value.filter(record) : []; }
@@ -59,7 +60,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   }, [connected, status]);
   useEffect(() => {
     factRequest.current += 1;
-    if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || !available) return;
+    if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || tab === "funding" || !available) return;
     const controller = new AbortController();
     setPage({ items: [], next: null }); setLoadingFacts(true);
     void getAccountFacts(tab, null, controller.signal).then((value) => { if (!controller.signal.aborted) setPage(value); })
@@ -87,7 +88,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     });
   };
   const loadFacts = async (more: boolean) => {
-    if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || loadingFacts) return;
+    if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || tab === "funding" || loadingFacts) return;
     setLoadingFacts(true);
     const requestId = ++factRequest.current;
     try {
@@ -123,7 +124,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
 
   const stateTone = !status?.account ? "neutral" : status.account.status === "synced" ? "success"
     : status.account.status === "syncing" ? "accent" : status.account.status === "disconnected" ? "neutral" : "danger";
-  const factsTab = tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades";
+  const factsTab = tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades" && tab !== "funding";
 
   if (browserHost()) {
     return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title")}>
@@ -220,6 +221,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
           </article>)}
           {page.next && <Button size="sm" disabled={loadingFacts} onClick={() => { void loadFacts(true); }}>{t("account.more", {}, locale)}</Button>}
         </>}
+        {tab === "funding" && status && <AccountFunding snapshots={status.snapshots} locale={locale} date={date} />}
         {tab === "reconcile" && <AccountReconciliation />}
         {tab === "trades" && <ReadOnlyTradeReview binding={trading} />}
         {tab === "journal" && <AccountJournal {...(newNoteRequest ? { newNoteRequest } : {})} onRequestHandled={noteRequestHandled} />}

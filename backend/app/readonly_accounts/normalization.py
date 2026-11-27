@@ -182,6 +182,65 @@ def _cost_rates(raw: Mapping[str, Any], maker: str, taker: str) -> dict[str, str
         return {"maker": exact(Decimal(0) - decimal(raw.get(maker))), "taker": exact(Decimal(0) - decimal(raw.get(taker)))}
 
 
+# Funding account (#575 PL-6). Exchange states collapse to five the panel can explain;
+# a state OKX adds later reads "unknown" rather than being guessed.
+_DEPOSIT_STATES = {"0": "pending", "8": "pending", "1": "completed", "2": "completed",
+                   "11": "held", "12": "held", "13": "held", "14": "held"}
+_WITHDRAWAL_STATES = {"2": "completed", "-1": "failed", "-2": "canceled",
+                      **{state: "pending" for state in ("-3", "0", "1", "3", "4", "5", "6", "7", "8", "9",
+                                                         "10", "12", "15", "16", "17")}}
+# OKX transfer bills name the accounts on each side: 6 funding, 18 trading.
+_TRANSFER_ACCOUNTS = {"6": "funding", "18": "trading"}
+
+
+def _label(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if not isinstance(value, str) or len(value) > 64 or any(ord(c) < 32 or ord(c) > 126 for c in value):
+        raise AccountDataError("INVALID_LABEL")
+    return value
+
+
+def funding_balance(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return {"currency": identifier(raw.get("ccy")),
+            "total": exact(decimal(raw.get("bal"), nonnegative=True)),
+            "available": exact(decimal(raw.get("availBal"), nonnegative=True)),
+            "frozen": exact(decimal(raw.get("frozenBal"), nonnegative=True))}
+
+
+def deposit(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Addresses and transaction ids stay in the exchange's records; the panel needs neither."""
+    return {"id": identifier(raw.get("depId")), "currency": identifier(raw.get("ccy")), "chain": _label(raw.get("chain")),
+            "amount": exact(decimal(raw.get("amt"), nonnegative=True)),
+            "state": _DEPOSIT_STATES.get(raw.get("state"), "unknown"), "eventTimeMs": timestamp(raw.get("ts"))}
+
+
+def withdrawal(raw: Mapping[str, Any]) -> dict[str, Any]:
+    currency = identifier(raw.get("ccy"))
+    fee = raw.get("fee")
+    return {"id": identifier(raw.get("wdId")), "currency": currency, "chain": _label(raw.get("chain")),
+            "amount": exact(decimal(raw.get("amt"), nonnegative=True)),
+            "fee": None if fee in (None, "") else exact(decimal(fee, nonnegative=True)),
+            "feeCurrency": identifier(raw["feeCcy"]) if raw.get("feeCcy") else currency,
+            "state": _WITHDRAWAL_STATES.get(raw.get("state"), "unknown"), "eventTimeMs": timestamp(raw.get("ts"))}
+
+
+def transfer(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """A trading-account transfer bill (type 1): which accounts, which way, how much.
+
+    The bill is the trading account's, so ``direction`` is its side: "in" when
+    the trading account received the amount. ``from`` and ``to`` are the
+    accounts the exchange names.
+    """
+    if raw.get("type") != "1":
+        raise AccountDataError("TRANSFER_RECORD_INVALID")
+    change = decimal(raw.get("balChg"))
+    return {"id": identifier(raw.get("billId")), "currency": identifier(raw.get("ccy")),
+            "amount": exact(abs(change)), "direction": "in" if change >= 0 else "out",
+            "from": _TRANSFER_ACCOUNTS.get(raw.get("from"), "other"), "to": _TRANSFER_ACCOUNTS.get(raw.get("to"), "other"),
+            "eventTimeMs": timestamp(raw.get("ts"))}
+
+
 def fee_rates(raw: Mapping[str, Any]) -> dict[str, Any]:
     """The account's standard perpetual fee rates at its current tier.
 
