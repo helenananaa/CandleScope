@@ -38,6 +38,7 @@ from app.data_engine.storage.trade_flow_store import (
     TradeFlowRollupStore,
 )
 from app.data_engine.storage.trade_flow_writer import TradeFlowRollupWriter
+from app.exchanges.roles import BINANCE_USDM_AGG_TRADES_ARCHIVE, TRADES_HISTORY_ARCHIVE, venue_role_contract
 from .append_hub import AppendBatchHub, AppendBatchSubscription
 from .continuity import ingestion_options
 from .trade_continuity import TradeContinuitySubscription
@@ -1674,7 +1675,9 @@ class TradeFlowService:
         deadline: float,
     ) -> dict[int, NormalizedAggTrade]:
         root = self._verified_archive_root
-        if (root is None or identity[:2] != ("binance", "futures")
+        if (root is None
+                or venue_role_contract(identity[0], identity[1], TRADES_HISTORY_ARCHIVE)
+                != BINANCE_USDM_AGG_TRADES_ARCHIVE
                 or time_bounds[1] // _UTC_DAY_MS - time_bounds[0] // _UTC_DAY_MS > 1):
             return {}
         first, last = gap.start_id, gap.end_id

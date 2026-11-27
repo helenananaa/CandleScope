@@ -420,6 +420,7 @@ test("exchange endpoints validate the list and capabilities shapes", async (cont
       realtime: true,
       params: { interval: ["1m", "1h"] },
     }],
+    roles: [{ role: "trades.history.archive", market_types: ["spot"], contract: "acme.trades/1" }],
   });
   globalThis.fetch = async (url) => (
     String(url).endsWith("/capabilities")
@@ -460,6 +461,9 @@ test("exchange endpoints validate the list and capabilities shapes", async (cont
   assert.deepEqual(parsedCapability.native_intervals, ["1m", "1h"]);
   assert.equal(parsedCapability.capability_schema_version, 3);
   assert.deepEqual(parsedCapability.channels?.[0]?.params.interval, ["1m", "1h"]);
+  assert.deepEqual(parsedCapability.roles, [
+    { role: "trades.history.archive", market_types: ["spot"], contract: "acme.trades/1" },
+  ]);
 
   resetSharedControlReadsForTests();
   globalThis.fetch = async () => jsonResponse({ count: 1, exchanges: [{}] });
@@ -470,6 +474,12 @@ test("exchange endpoints validate the list and capabilities shapes", async (cont
     exchanges: [exchangeCapability({ channels: [{ channel: "kline" }] })],
   });
   await assert.rejects(() => fetchExchanges(), ApiPayloadError);
+
+  for (const roles of [{}, [{ role: "trades.history.archive", market_types: ["spot"], contract: "" }]]) {
+    resetSharedControlReadsForTests();
+    globalThis.fetch = async () => jsonResponse({ count: 1, exchanges: [exchangeCapability({ roles })] });
+    await assert.rejects(() => fetchExchanges(), ApiPayloadError);
+  }
 });
 
 test("symbol catalog reads encode exact CCXT markets and forward cancellation", async (context) => {

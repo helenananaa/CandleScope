@@ -1,6 +1,12 @@
 import { API_BASE } from "../../services/apiConfig.js";
 import { PreparationApiError, preparationRequest, waitForPreparation } from "../data-preparation/api.js";
 import type { PreparationJob } from "../data-preparation/api.js";
+import {
+  BINANCE_USDM_AGG_TRADES_ARCHIVE,
+  capabilityRoleContract,
+  TRADES_HISTORY_ARCHIVE,
+} from "../exchange-support/capabilityRoles.js";
+import type { ExchangeCapabilityPayload } from "../../services/apiPayloadParsers.js";
 import type { TradeFlowIdentity } from "./tradeFlowTypes.js";
 
 const MINUTE_MS = 60_000;
@@ -27,8 +33,13 @@ interface TradeHistoryPreparation {
   unavailable_ranges?: Array<{ reason: string; retry_at_ms?: number }>;
 }
 
-export function supportsTradeHistoryArchive(identity: TradeFlowIdentity): boolean {
-  return identity.exchange === "binance" && identity.marketType === "futures";
+/** Whether the venue declares the verified trade archive that history downloads read. */
+export function supportsTradeHistoryArchive(
+  identity: TradeFlowIdentity,
+  capability: Pick<ExchangeCapabilityPayload, "roles"> | null | undefined,
+): boolean {
+  return capabilityRoleContract(capability, identity.marketType, TRADES_HISTORY_ARCHIVE)
+    === BINANCE_USDM_AGG_TRADES_ARCHIVE;
 }
 
 function scope(identity: TradeFlowIdentity, startMs: number) {
