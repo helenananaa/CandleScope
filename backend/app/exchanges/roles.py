@@ -42,6 +42,22 @@ BINANCE_KLINES_START_TIME_ASCENDING = "binance.klines.start-time-ascending/1"
 CONTRACT_RULES = "contract_rules"
 BINANCE_USDM_LINEAR_BASE_QUANTITY = "BINANCE_USDM_LINEAR_BASE_QUANTITY"
 
+# Funding history between settlements rebuilt from the minute premium index
+# with the venue's published funding formula.
+FUNDING_HYBRID_HISTORY = "funding.hybrid_history"
+BINANCE_PREMIUM_INDEX_CUMAVG = "binance-premium-index-cumavg-v2"
+
+# Settled funding history on a regular settlement schedule, so a bounded page
+# can prove which settlements it holds.
+FUNDING_SETTLEMENT_HISTORY = "funding.settlement_history"
+BINANCE_USDM_REGULAR_SETTLEMENT = "binance-usdm-regular-settlement-v1"
+
+# Open-interest history on a fixed sample grid, so a bounded page can prove
+# which samples are missing.
+OPEN_INTEREST_NATIVE_GRID = "open_interest.native_grid"
+BINANCE_OI_GRID = "binance-oi-grid-v2"
+GATE_OI_GRID = "gate-oi-grid-v1"
+
 _BUILTIN_VENUES = ("binance", "okx")
 
 
@@ -131,16 +147,23 @@ def _builtin_capabilities(exchange: str) -> Any | None:
 
 __all__ = [
     "BINANCE_KLINES_START_TIME_ASCENDING",
-    "BINANCE_USDM_LINEAR_BASE_QUANTITY",
-    "CONTRACT_RULES",
+    "BINANCE_OI_GRID",
+    "BINANCE_PREMIUM_INDEX_CUMAVG",
     "BINANCE_PUBLIC_KLINE_ARCHIVE",
     "BINANCE_USDM_AGG_TRADES_ARCHIVE",
     "BINANCE_USDM_DIFF_DEPTH_CAPTURE",
     "BINANCE_USDM_HEDGE_PUBLIC_HISTORY",
+    "BINANCE_USDM_LINEAR_BASE_QUANTITY",
+    "BINANCE_USDM_REGULAR_SETTLEMENT",
     "BOOK_HISTORY",
+    "CONTRACT_RULES",
+    "FUNDING_HYBRID_HISTORY",
+    "FUNDING_SETTLEMENT_HISTORY",
+    "GATE_OI_GRID",
     "HEDGE_PUBLIC_HISTORY",
     "HISTORY_EARLIEST_PAGE",
     "HISTORY_NATIVE_ARCHIVE",
+    "OPEN_INTEREST_NATIVE_GRID",
     "TRADES_HISTORY_ARCHIVE",
     "venue_market_calendar_id",
     "venue_role",

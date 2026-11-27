@@ -321,3 +321,102 @@ def test_pine_engine_names_the_chart_through_the_venue():
             assert engine._pine_chart_symbol(chart) == expected, (market, chart)
     finally:
         engine.close()
+
+
+def test_advanced_market_data_roles_are_declared_by_the_venues_that_supply_them():
+    from app.exchanges import roles
+    from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
+    from app.exchanges.ccxt_ext.generic import CcxtUnifiedPlugin
+
+    expected = {
+        roles.FUNDING_HYBRID_HISTORY: roles.BINANCE_PREMIUM_INDEX_CUMAVG,
+        roles.FUNDING_SETTLEMENT_HISTORY: roles.BINANCE_USDM_REGULAR_SETTLEMENT,
+        roles.OPEN_INTEREST_NATIVE_GRID: roles.BINANCE_OI_GRID,
+    }
+    for role, contract in expected.items():
+        assert venue_role_contract("binance", "futures", role) == contract
+        assert venue_role("binance", "spot", role) is None
+        # OKX's funding and OI history come from CCXT channels, without a role.
+        assert venue_role("okx", "futures", role) is None
+
+    gate = CcxtUnifiedPlugin(get_ccxt_catalog_entry("gate")).capabilities()
+    assert [(item.role, item.market_types, item.contract) for item in gate.roles] == [
+        (roles.OPEN_INTEREST_NATIVE_GRID, ("swap.linear", "swap.inverse"), roles.GATE_OI_GRID)]
+    assert _role_issues(gate) == set()
+    okx = CcxtUnifiedPlugin(get_ccxt_catalog_entry("okx")).capabilities()
+    assert okx.roles == []
+
+
+def _route_history(monkeypatch, tmp_path, document, channel, *, market_type="futures", **kwargs):
+    """Which bounded history path the market data service takes for ``document``."""
+    import asyncio
+
+    from app.data_engine.market_data.models import MarketStreamKey
+    from app.data_engine.market_data.service import MarketDataService
+    from app.data_engine.storage.market_metrics_repo import MarketMetricsRepository
+
+    service = MarketDataService(
+        SimpleNamespace(), metrics_repository=MarketMetricsRepository(tmp_path / "metrics.sqlite"))
+    monkeypatch.setattr(MarketDataService, "_validate_key", staticmethod(lambda key, *, history: document))
+    monkeypatch.setattr(service, "_history_refresh_plan", lambda key, **_: None)
+
+    async def settlement(*_, **__):
+        return ("settlement", None)
+
+    async def grid(*_, revision, **__):
+        return ("grid", revision)
+
+    async def hybrid(*_, **__):
+        return ("hybrid", None)
+
+    monkeypatch.setattr(service, "_sparse_funding_history_page", settlement)
+    monkeypatch.setattr(service, "_shared_oi_history", grid)
+    monkeypatch.setattr(service, "_hybrid_funding_history_page", hybrid)
+    key = MarketStreamKey.build(document.exchange, market_type, "BTCUSDT", channel)
+
+    async def read():
+        try:
+            return await service.history_page(key, start_ms=0, end_ms=3_000_000, **kwargs)
+        finally:
+            await service.shutdown()
+
+    return asyncio.run(read())
+
+
+def test_market_history_paths_follow_the_declared_roles(monkeypatch, tmp_path):
+    from app.data_engine.market_data.models import MarketChannel as Channel
+    from app.exchanges import roles
+
+    declared = _capabilities(
+        "okx",
+        CapabilityRole(roles.FUNDING_HYBRID_HISTORY, ("futures",), roles.BINANCE_PREMIUM_INDEX_CUMAVG),
+        CapabilityRole(roles.FUNDING_SETTLEMENT_HISTORY, ("futures",), roles.BINANCE_USDM_REGULAR_SETTLEMENT),
+        CapabilityRole(roles.OPEN_INTEREST_NATIVE_GRID, ("futures",), roles.BINANCE_OI_GRID),
+    )
+    route = lambda document, channel, **kw: _route_history(monkeypatch, tmp_path, document, channel, **kw)
+    assert route(declared, Channel.FUNDING_RATE, view="hybrid", period="1h") == ("hybrid", None)
+    assert route(declared, Channel.FUNDING_RATE, mode="fill_missing") == ("settlement", None)
+    assert route(declared, Channel.OPEN_INTEREST, period="15m", mode="fill_missing") == (
+        "grid", roles.BINANCE_OI_GRID)
+
+    undeclared = _capabilities("okx")
+    with pytest.raises(ValueError, match="premium index funding formula"):
+        route(undeclared, Channel.FUNDING_RATE, view="hybrid", period="1h")
+    for channel, period in ((Channel.FUNDING_RATE, None), (Channel.OPEN_INTEREST, "15m")):
+        with pytest.raises(ValueError, match="verified funding or OI policy"):
+            route(undeclared, channel, period=period, mode="fill_missing")
+
+    # A contract the service does not implement is the same as no role.
+    unknown = _capabilities(
+        "okx", CapabilityRole(roles.FUNDING_HYBRID_HISTORY, ("futures",), "acme-funding/1"))
+    with pytest.raises(ValueError, match="premium index funding formula"):
+        route(unknown, Channel.FUNDING_RATE, view="hybrid", period="1h")
+
+    # Gate's grid covers only 5m samples.
+    gate = _capabilities(
+        "gate", CapabilityRole(roles.OPEN_INTEREST_NATIVE_GRID, ("swap.linear",), roles.GATE_OI_GRID),
+        markets=("swap.linear",))
+    assert route(gate, Channel.OPEN_INTEREST, market_type="swap.linear", period="5m", mode="fill_missing") == (
+        "grid", roles.GATE_OI_GRID)
+    with pytest.raises(ValueError, match="verified funding or OI policy"):
+        route(gate, Channel.OPEN_INTEREST, market_type="swap.linear", period="15m", mode="fill_missing")

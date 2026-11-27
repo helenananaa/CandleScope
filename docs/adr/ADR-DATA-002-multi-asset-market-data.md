@@ -153,7 +153,7 @@ entitlement、delay_seconds、redistribution、上市/到期时间。还需要�
 不再比较交易所名字。`contract` 写明具体实现，所以只有一种实现的功能仍可以拒绝其他契约。
 
 不能直接用通道代替：OKX、Bybit 等从 CCXT 通道合并得到资金费、持仓量历史，按通道放开会改变 OKX 的现有行为。
-所以这些判断都改成显式角色，目前只由原生 Binance 声明；CCXT 的 `binanceusdm` 等场所不声明。
+所以这些判断都改成显式角色，目前由原生 Binance 声明（Gate 只声明 5m 持仓量网格）；CCXT 的 `binanceusdm`、OKX 等场所不声明。
 查询走交易所注册表；命令行工具和测试未初始化注册表时，内置的 Binance、OKX 直接读静态能力文档
 （`app/exchanges/roles.py`，前端 `features/exchange-support/capabilityRoles.ts`）。
 
@@ -168,9 +168,11 @@ entitlement、delay_seconds、redistribution、上市/到期时间。还需要�
 | `backtest/continuous_definition.py` 期货、前端 `strategy-research/researchSelectedVersion.ts`、`ContinuousStrategyPanel.tsx` | `contract_rules`（契约 `BINANCE_USDM_LINEAR_BASE_QUANTITY`：线性、按基础资产数量，Binance futures）；实时和日历已在 D2c3 改完；前端在交易所目录未加载时交给后端判断 | D3c |
 | `backtest/pine_risk_stops.py` | 市场声明的日历是 `crypto.24x7.utc`（OKX 由此可用 Pine 日内风控；窗口契约 id `BINANCE_UTC_24_7_V1` 进 hash，保留原名） | D3c |
 | `backtest/pine_requested_data.py`、`indicator/pine_host_inputs.py`（2 处）、`backtest/strategy/pine_engine.py` | Pine ticker 命名（`.P` 后缀）移到 symbol normalizer：`pine_ticker()` / `storage_symbol_from_pine()`，默认原样返回，Binance 对 futures/usdm/swap 加减 `.P` | D3c |
-| 前端 `advanced-market-data/useAdvancedMarketDataRuntime.ts`（4 处）、`market_data/service.py`（2 处） | `funding.hybrid_history`、`open_interest.native_grid` | D3d |
+| `market_data/service.py` 混合资金费、前端 `useAdvancedMarketDataRuntime.ts` 请求 `view=hybrid` | `funding.hybrid_history`（契约 `binance-premium-index-cumavg-v2`：结算之间按 1m 溢价指数估算，Binance futures） | D3d |
+| `market_data/service.py` 有界资金费结算页 | `funding.settlement_history`（契约 `binance-usdm-regular-settlement-v1`：固定结算周期，能证明哪些结算已覆盖，Binance futures） | D3d |
+| `market_data/service.py` 持仓量网格（Binance 全部周期、Gate 5m 名字判断）、前端 `useAdvancedMarketDataRuntime.ts`（3 处） | `open_interest.native_grid`（契约 `binance-oi-grid-v2`，Binance futures，所有周期；`gate-oi-grid-v1`，Gate `swap.linear`/`swap.inverse`，只有 5m，由 CCXT 目录声明）；前端只对覆盖所有周期的 `binance-oi-grid-v2` 走网格，Gate 前端行为不变 | D3d |
 
-D3d 的角色名是计划，落地时按实际用途定，并更新这张表。错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
+错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
 
 只读账户里的 OKX 判断（前端 `readonly-accounts/*`）属于账户领域，由 #176 处理；`utils/symbolKey.ts:35` 的
 Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功能开关。数据引擎内部（`ingestion`、`storage` 围栏、

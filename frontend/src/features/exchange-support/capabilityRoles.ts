@@ -12,16 +12,27 @@ export const HEDGE_PUBLIC_HISTORY = "hedge.public_history";
 export const CONTRACT_RULES = "contract_rules";
 export const BINANCE_USDM_LINEAR_BASE_QUANTITY = "BINANCE_USDM_LINEAR_BASE_QUANTITY";
 
+/** Funding between settlements rebuilt from the minute premium index. */
+export const FUNDING_HYBRID_HISTORY = "funding.hybrid_history";
+export const BINANCE_PREMIUM_INDEX_CUMAVG = "binance-premium-index-cumavg-v2";
+/** Open-interest history on a fixed sample grid. */
+export const OPEN_INTEREST_NATIVE_GRID = "open_interest.native_grid";
+/** The grid that covers every chart period (Gate's `gate-oi-grid-v1` covers only 5m). */
+export const BINANCE_OI_GRID = "binance-oi-grid-v2";
+
 /** A venue's capability document; `undefined` while the exchange catalog is unknown. */
 export type RoleSource = Pick<ExchangeCapabilityPayload, "roles"> | null | undefined;
 
 /** The contract that supplies `role` for this market, or null when the venue declares none. */
 export function capabilityRoleContract(capability: RoleSource, marketType: string, role: string): string | null {
   const market = marketType.trim().toLowerCase();
-  const found = capability?.roles?.find((item) => (
-    item.role === role && item.market_types.some((value) => value.toLowerCase() === market)
+  const roles: unknown = capability?.roles;
+  if (!Array.isArray(roles)) return null;
+  const found = roles.find((item) => (
+    item?.role === role && Array.isArray(item.market_types)
+    && item.market_types.some((value: unknown) => String(value).toLowerCase() === market)
   ));
-  return found?.contract ?? null;
+  return typeof found?.contract === "string" ? found.contract : null;
 }
 
 /**
