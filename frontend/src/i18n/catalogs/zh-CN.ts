@@ -6,6 +6,7 @@ import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
   ...continuousChinese,
@@ -4804,6 +4805,7 @@ export const zhCN = {
   "chartTester.deleteRetiredDraftFailed": "无法删除已停用的草稿，请重试。",
   ...tradingAccountsZhCN,
   ...chartTimeZoneMessages["zh-CN"],
+  ...chartTimeShortcutMessages["zh-CN"],
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

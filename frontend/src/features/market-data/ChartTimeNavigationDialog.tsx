@@ -13,11 +13,19 @@ import {
   type ChartTimeZoneMode,
 } from "./chartTimeZoneMode.js";
 import type { ChartTimeSeekResult } from "./chartTimeNavigation.js";
+import {
+  CHART_TIME_AMOUNT_SECONDS,
+  CHART_TIME_RELATIVE_JUMPS,
+  type ChartTimeOutcomes,
+  type ChartTimeShortcuts,
+} from "./chartTimeShortcuts.js";
 import "./chartTimeNavigation.css";
 
-export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, initialTimeMs, hint }: {
+export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, initialTimeMs, hint, shortcuts = null }: {
   cellId: string; onClose(): void;
   initialTimeMs?: number; hint?: string;
+  /** Relative jumps and Latest / First loaded bar / Last viewed (PL-8), where the chart offers them. */
+  shortcuts?: ChartTimeShortcuts | null;
   onSubmit(timeMs: number): Promise<Array<{ cellId: string; result: ChartTimeSeekResult }>>;
 }) {
   useLocale();
@@ -66,10 +74,16 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, i
     const resolved = parsed.resolution === "gap"
       ? `${t("chartTime.gap", { zone, time: chartTimeLabel(timeMs, zone) })} `
       : parsed.resolution === "overlap" ? `${t("chartTime.overlap", { zone, time: chartTimeLabel(timeMs, zone) })} ` : "";
+    await run(() => onSubmit(timeMs), resolved);
+  }
+  /** One seek at a time; a newer one supersedes the message of an older one. */
+  async function run(start: () => Promise<ChartTimeOutcomes> | null, prefix = "", syncInput = false) {
+    const pending = start();
+    if (pending === null) { setMessage(t("chartTime.unavailable")); return; }
     const ticket = ++sequence.current;
     setBusy(true); setMessage(t("chartTime.loading"));
     try {
-      const outcomes = await onSubmit(timeMs);
+      const outcomes = await pending;
       if (ticket !== sequence.current) return;
       const own = outcomes.find((item) => item.cellId === cellId)?.result;
       const status = own?.status ?? "unavailable";
@@ -79,7 +93,9 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, i
           : t(own.exact ? "chartTime.located" : "chartTime.nearest", { time: formatUtcDateTimeInput(own.actualTimeMs).replace("T", " ") })
         : t(status === "empty" ? "chartTime.empty" : status === "invalid" ? "chartTime.invalid" : "chartTime.unavailable");
       if (outcomes.some((item) => item.cellId !== cellId && item.result.status !== "located")) text += ` ${t("chartTime.linkFailed")}`;
-      setMessage(resolved + text);
+      setMessage(prefix + text);
+      // A shortcut fills the field with where it went, so it can be adjusted from there.
+      if (syncInput && own?.status === "located") setValue(formatZonedDateTimeInput(own.actualTimeMs, zone));
     } catch { if (ticket === sequence.current) setMessage(t("chartTime.unavailable")); }
     finally { if (ticket === sequence.current) setBusy(false); }
   }
@@ -92,6 +108,37 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, i
       <input id={`${id}-input`} type="datetime-local" step="1" required value={value}
         onChange={(event) => setValue(event.target.value)} autoFocus />
       <p>{hint ?? t("chartTime.hint")}</p>
+      {shortcuts && <>
+        <div className="chart-time-shortcuts" role="group" aria-label={t("chartTime.move")}>
+          <span>{t("chartTime.move")}</span>
+          {CHART_TIME_RELATIVE_JUMPS.map(({ amount, direction }) => {
+            const amountLabel = t(amount === "hour" ? "chartTime.amount.hour" : amount === "day" ? "chartTime.amount.day" : "chartTime.amount.week");
+            return <Button key={`${direction}${amount}`} size="sm" variant="secondary"
+              aria-label={t(direction < 0 ? "chartTime.back" : "chartTime.forward", { amount: amountLabel })}
+              onClick={() => { void run(() => shortcuts.jumpBy(direction * CHART_TIME_AMOUNT_SECONDS[amount]), "", true); }}>
+              {`${direction < 0 ? "\u2212" : "+"}${amountLabel}`}
+            </Button>;
+          })}
+        </div>
+        <div className="chart-time-shortcuts" role="group" aria-label={t("chartTime.jumpTo")}>
+          <span>{t("chartTime.jumpTo")}</span>
+          <Button size="sm" variant="secondary" onClick={() => {
+            sequence.current += 1; setBusy(false);
+            const done = shortcuts.latest();
+            if (done) setValue(formatZonedDateTimeInput(Date.now(), zone));
+            setMessage(t(done ? "chartTime.latestDone" : "chartTime.unavailable"));
+          }}>{t("chartTime.latest")}</Button>
+          <Button size="sm" variant="secondary" onClick={() => {
+            sequence.current += 1; setBusy(false);
+            const first = shortcuts.firstLoaded();
+            if (first !== null) setValue(formatZonedDateTimeInput(first, zone));
+            setMessage(first === null ? t("chartTime.unavailable") : t("chartTime.firstLoadedDone", { time: chartTimeLabel(first, zone) }));
+          }}>{t("chartTime.firstLoaded")}</Button>
+          <Button size="sm" variant="secondary" disabled={shortcuts.lastViewedMs === null}
+            title={shortcuts.lastViewedMs === null ? t("chartTime.noLastViewed") : t("chartTime.lastViewedAt", { time: chartTimeLabel(shortcuts.lastViewedMs, zone) })}
+            onClick={() => { void run(() => shortcuts.jumpLastViewed(), "", true); }}>{t("chartTime.lastViewed")}</Button>
+        </div>
+      </>}
       <p role="status" aria-live="polite" aria-busy={busy}>{message}</p>
       <footer><Button variant="ghost" onClick={onClose}>{t("chartTime.close")}</Button>
         <Button type="submit" variant="primary">{t("chartTime.go")}</Button></footer>

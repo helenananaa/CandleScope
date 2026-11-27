@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyPolish, replayNotePolish, tradeHistoryPolish, readonlyAccountPolish, continuousPolish, tradingAccountsPl, nativePolish } from "./polishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const pl = {
   ...unifiedMessages["pl"],
@@ -4174,5 +4175,6 @@ export const pl = {
   "chartTester.deleteRetiredDraft": "Usuń wycofany szkic {name}",
   "chartTester.deleteRetiredDraftFailed": "Nie udało się usunąć wycofanego szkicu. Spróbuj ponownie.",
   ...chartTimeZoneMessages["pl"],
+  ...chartTimeShortcutMessages["pl"],
 } as const satisfies MessageCatalog;
 

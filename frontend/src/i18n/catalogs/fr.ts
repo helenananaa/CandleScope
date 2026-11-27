@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyFrench, replayNoteFrench, tradeHistoryFrench, readonlyAccountFrench, continuousFrench, tradingAccountsFr, nativeFrench } from "./frenchFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const fr = {
   ...unifiedMessages["fr"],
@@ -4170,4 +4171,5 @@ export const fr = {
   "chartTester.deleteRetiredDraft": "Supprimer le brouillon retiré {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossible de supprimer le brouillon retiré. Réessayez.",
   ...chartTimeZoneMessages["fr"],
+  ...chartTimeShortcutMessages["fr"],
 } as const satisfies MessageCatalog;

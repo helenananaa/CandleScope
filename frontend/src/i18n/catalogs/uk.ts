@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyUkrainian, replayNoteUkrainian, tradeHistoryUkrainian, readonlyAccountUkrainian, continuousUkrainian, tradingAccountsUk, nativeUkrainian } from "./ukrainianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const uk = {
   ...unifiedMessages["uk"],
@@ -4174,4 +4175,5 @@ export const uk = {
   "chartTester.deleteRetiredDraft": "Видалити зняту з підтримки чернетку {name}",
   "chartTester.deleteRetiredDraftFailed": "Не вдалося видалити зняту з підтримки чернетку. Спробуйте ще раз.",
   ...chartTimeZoneMessages["uk"],
+  ...chartTimeShortcutMessages["uk"],
 } as const satisfies MessageCatalog;

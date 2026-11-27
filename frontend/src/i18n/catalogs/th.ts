@@ -4,6 +4,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyThai, replayNoteThai, tradeHistoryThai, readonlyAccountThai, continuousThai, tradingAccountsTh, nativeThai } from "./thaiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const th = {
   ...unifiedMessages["th"],
@@ -4164,4 +4165,5 @@ export const th = {
   "chartTester.deleteRetiredDraft": "ลบฉบับร่างที่เลิกใช้แล้ว {name}",
   "chartTester.deleteRetiredDraftFailed": "ลบฉบับร่างที่เลิกใช้แล้วไม่ได้ ลองอีกครั้ง",
   ...chartTimeZoneMessages["th"],
+  ...chartTimeShortcutMessages["th"],
 } as const satisfies MessageCatalog;

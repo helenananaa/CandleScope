@@ -10,6 +10,7 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ko = {
   ...unifiedMessages["ko"],
@@ -4748,4 +4749,5 @@ export const ko = {
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
   ...chartTimeZoneMessages["ko"],
+  ...chartTimeShortcutMessages["ko"],
 } as const satisfies MessageCatalog;

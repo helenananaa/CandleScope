@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChartSurfaceActions } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
 import type { MarketDataRuntimeContract } from "./marketDataRuntimeContract.js";
 import type { ChartTimeSeekResult } from "./chartTimeNavigation.js";
+import { relativeJumpTarget, visibleCenterTimeMs, type ChartTimeOutcomes, type ChartTimeShortcuts } from "./chartTimeShortcuts.js";
 
 export function useChartTimeNavigation({
   active, enabled, cellId, workspaceId, sessionKey, marketData, surface, links,
@@ -12,6 +13,8 @@ export function useChartTimeNavigation({
 }) {
   const [open, setOpen] = useState(false);
   const sequence = useRef(0);
+  // Where the view was before the last jump, for "Last viewed" (PL-8).
+  const [lastViewedMs, setLastViewedMs] = useState<number | null>(null);
   const seek = marketData.actions.seekToTime;
   const navigate = useCallback(async (requestedTimeMs: number): Promise<ChartTimeSeekResult> => {
     const ticket = ++sequence.current;
@@ -56,7 +59,37 @@ export function useChartTimeNavigation({
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [active, enabled, seek]);
-  const submit = useCallback((timeMs: number) => links ? links.seekToTime(cellId, timeMs)
-    : navigate(timeMs).then(result => [{ cellId, result }]), [cellId, links, navigate]);
-  return { open: open && active && enabled, setOpen, submit, available: enabled && !!seek };
+  const centerTimeMs = useCallback(() => visibleCenterTimeMs(surface.getVisibleRange()?.time as { from?: unknown; to?: unknown } | null), [surface]);
+  const submit = useCallback(async (timeMs: number): Promise<ChartTimeOutcomes> => {
+    const before = centerTimeMs();
+    const outcomes = await (links ? links.seekToTime(cellId, timeMs)
+      : navigate(timeMs).then(result => [{ cellId, result }]));
+    if (before !== null && outcomes.find((item) => item.cellId === cellId)?.result.status === "located") setLastViewedMs(before);
+    return outcomes;
+  }, [cellId, centerTimeMs, links, navigate]);
+  // A new market or interval has its own history; an old position means nothing there.
+  useEffect(() => { setLastViewedMs(null); }, [sessionKey, workspaceId, cellId]);
+  const shortcuts = useMemo<ChartTimeShortcuts>(() => ({
+    centerTimeMs,
+    jumpBy: (seconds) => {
+      const target = relativeJumpTarget(centerTimeMs(), seconds, Date.now());
+      return target === null ? null : submit(target);
+    },
+    latest: () => {
+      const before = centerTimeMs();
+      const done = surface.returnToLatest();
+      if (done && before !== null) setLastViewedMs(before);
+      return done;
+    },
+    firstLoaded: () => {
+      const before = centerTimeMs();
+      const first = surface.showFirstLoadedBar();
+      if (first === null) return null;
+      if (before !== null) setLastViewedMs(before);
+      return first * 1000;
+    },
+    lastViewedMs,
+    jumpLastViewed: () => (lastViewedMs === null ? null : submit(lastViewedMs)),
+  }), [centerTimeMs, lastViewedMs, submit, surface]);
+  return { open: open && active && enabled, setOpen, submit, shortcuts, available: enabled && !!seek };
 }

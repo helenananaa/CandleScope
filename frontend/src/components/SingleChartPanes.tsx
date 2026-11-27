@@ -5619,6 +5619,17 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useImperativeHandle(ref, () => ({
     getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
+    returnToLatest: () => { returnToLatest(); return true; },
+    // Centres the bar half a view in, so the oldest loaded bar sits at the left edge.
+    showFirstLoadedBar: () => {
+      const rows = seriesStoreRef.current?.snapshot() ?? [];
+      const first = Number(rows[0]?.time);
+      const logical = captureVisibleRange()?.logical;
+      if (!Number.isFinite(first) || !logical) return null;
+      const half = Math.max(0, Math.floor((logical.to - logical.from) / 2));
+      const anchor = Number(rows[Math.min(rows.length - 1, half)]?.time);
+      return Number.isFinite(anchor) && centerVisibleTime(anchor) ? first : null;
+    },
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
     centerVisibleTime,
@@ -5708,6 +5719,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     setLinkedDrawingRevision,
     setDrawingsHidden,
     updateSelectedDrawingStyle,
+    returnToLatest,
   ]);
 
   const latestWindowMissing = rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated);
