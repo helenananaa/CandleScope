@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyEuropeanPortuguese, replayNoteEuropeanPortuguese, tradeHistoryEuropeanPortuguese, readonlyAccountEuropeanPortuguese, continuousEuropeanPortuguese, tradingAccountsPtPT, nativeEuropeanPortuguese } from "./europeanPortugueseFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 
 export const ptPT = {
   ...unifiedMessages["pt-PT"],
@@ -4167,4 +4168,5 @@ export const ptPT = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível eliminar o rascunho descontinuado. Tente novamente.",
+  ...replayDrawingSaveMessages["pt-PT"],
 } as const satisfies MessageCatalog;

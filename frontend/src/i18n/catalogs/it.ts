@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyItalian, replayNoteItalian, tradeHistoryItalian, readonlyAccountItalian, continuousItalian, tradingAccountsIt, nativeItalian } from "./italianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 
 export const it = {
   ...unifiedMessages["it"],
@@ -4167,5 +4168,6 @@ export const it = {
   "chartTester.deleteDraft": "Elimina",
   "chartTester.deleteRetiredDraft": "Elimina la bozza ritirata {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossibile eliminare la bozza ritirata. Riprova.",
+  ...replayDrawingSaveMessages["it"],
 } as const satisfies MessageCatalog;
 
