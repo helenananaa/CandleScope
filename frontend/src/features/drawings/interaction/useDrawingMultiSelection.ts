@@ -350,8 +350,11 @@ export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiS
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [keyboardActive, copy, depsRef, duplicate, group, paste, selectAll, ungroup]);
 
-  return useMemo(() => ({
-    view,
+  // The actions keep their identity when the selection changes. The
+  // controller's pointer handlers and render callbacks are built on them, and
+  // re-creating those mid-gesture (a press selects the drawing, which updates
+  // the view) broke the drag that press started.
+  const actions = useMemo(() => ({
     selectionRef,
     companionIdsRef,
     isCompanion,
@@ -371,7 +374,8 @@ export function useDrawingMultiSelection(depsRef: MutableRefObject<DrawingMultiS
     paste,
     duplicate,
     decorations,
-  }), [cancelDrag, clear, copy, decorations, deleteSelection, duplicate, group, isCompanion, markActive, paste, pointerDown, pointerMove, pointerUp, selectAll, syncPrimary, ungroup, view]);
+  }), [cancelDrag, clear, copy, decorations, deleteSelection, duplicate, group, isCompanion, markActive, paste, pointerDown, pointerMove, pointerUp, selectAll, syncPrimary, ungroup]);
+  return { actions, view };
 }
 
 export type DrawingMultiSelectionRuntime = ReturnType<typeof useDrawingMultiSelection>;

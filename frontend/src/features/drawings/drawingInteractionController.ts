@@ -2122,7 +2122,7 @@ export function useDrawing({
   // Multi-select, groups and copy/paste (PL-4). Its deps are assigned once
   // every controller function exists, further down this hook.
   const multiSelectionDepsRef = useRef<DrawingMultiSelectionDeps>(INACTIVE_MULTI_SELECTION_DEPS);
-  const multiSelection = useDrawingMultiSelection(
+  const { actions: multiSelection, view: multiSelectionView } = useDrawingMultiSelection(
     multiSelectionDepsRef,
     interactionSurfaceMode === "overlay" && !readOnly,
   );
@@ -5917,15 +5917,15 @@ export function useDrawing({
   const selectedTextSnapshot = selectedTextUi.snapshot;
   const selectedTextBox = selectedTextUi.box;
   const multiSelectionActions = useMemo<DrawingMultiSelectionActions>(() => ({
-    count: multiSelection.view.count,
-    grouped: multiSelection.view.grouped,
-    canGroup: multiSelection.view.canGroup,
+    count: multiSelectionView.count,
+    grouped: multiSelectionView.grouped,
+    canGroup: multiSelectionView.canGroup,
     group: multiSelection.group,
     ungroup: multiSelection.ungroup,
     copy: multiSelection.copy,
     duplicate: multiSelection.duplicate,
     deleteSelection: () => (prepareTerminalTextMutation() ? multiSelection.deleteSelection() : false),
-  }), [multiSelection, prepareTerminalTextMutation]);
+  }), [multiSelection, multiSelectionView, prepareTerminalTextMutation]);
 
   return {
     multiSelection: multiSelectionActions,
