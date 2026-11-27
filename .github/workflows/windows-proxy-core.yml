@@ -1,0 +1,89 @@
+name: Windows proxy core
+
+# The pinned Mihomo build that the Windows app bundles, driven by the proxy
+# subscription tests on a real Windows runner (#575 PL-11b). The macOS desktop
+# job runs the same modules against the macOS build.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - "backend/app/proxy_subscriptions/**"
+      - "backend/app/core/proxy_pool.py"
+      - "backend/tests/test_proxy_subscription*.py"
+      - "backend/requirements*.txt"
+      - "frontend/scripts/prepare-mihomo.py"
+      - ".github/scripts/verify_windows_proxy_core.py"
+      - ".github/workflows/windows-proxy-core.yml"
+      - "!**/*.md"
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/proxy_subscriptions/**"
+      - "backend/app/core/proxy_pool.py"
+      - "backend/tests/test_proxy_subscription*.py"
+      - "backend/requirements*.txt"
+      - "frontend/scripts/prepare-mihomo.py"
+      - ".github/scripts/verify_windows_proxy_core.py"
+      - ".github/workflows/windows-proxy-core.yml"
+      - "!**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-proxy-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mihomo:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: Mihomo on Windows (x64)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          # The desktop runtime bundles Python 3.12 (prepare-desktop-runtime.mjs).
+          python-version: "3.12"
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - name: Fetch the pinned Mihomo build and check its SHA-256
+        run: python -I frontend/scripts/prepare-mihomo.py --output "$RUNNER_TEMP/mihomo" --cache "$RUNNER_TEMP/mihomo-downloads"
+      - name: Run proxy subscription and Mihomo process tests
+        working-directory: backend
+        run: |
+          export CANDLESCOPE_MIHOMO="$RUNNER_TEMP/mihomo/mihomo.exe"
+          test -f "$CANDLESCOPE_MIHOMO"
+          python -B -m pytest -q -rs -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_proxy_subscriptions.py \
+            tests/test_proxy_subscription_refresh.py \
+            --junitxml=../output/windows-proxy-core/junit.xml \
+            --basetemp="$RUNNER_TEMP/proxy-core-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Require the native Mihomo cases to have run
+        if: success() || failure()
+        run: python -B .github/scripts/verify_windows_proxy_core.py output/windows-proxy-core/junit.xml
+      - name: Leave no Mihomo process behind
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          $left = Get-Process -Name mihomo -ErrorAction SilentlyContinue
+          if ($left) { $left | Format-Table Id, Path; throw "Mihomo processes outlived the tests" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-proxy-core-${{ github.run_attempt }}
+          path: output/windows-proxy-core/**
+          if-no-files-found: warn
+          retention-days: 14
