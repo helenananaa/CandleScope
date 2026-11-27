@@ -68,6 +68,12 @@ on legacy flat fields.
   transaction and can never supply missing command data.
 - `core/drawingCodec.ts` owns fail-closed conversion between the canonical
   document and the unchanged legacy `SavedDrawing[]` wire contract.
+- `core/drawingWireContract.ts` lists every geometry and style key per kind.
+  Replay training saves canonical documents to the backend, whose allowlist in
+  `backend/app/replay/training/review.py` must accept them all. After adding a
+  kind or key, regenerate `frontend/contracts/drawing-wire.json` (the command is
+  in the module) and extend the backend allowlist; the backend test
+  `test_replay_drawing_wire_contract.py` fails until both agree.
 - `persistence/drawingDocumentRepository.ts` owns the canonical scope-keyed
   IndexedDB record, manifest validation, bounded encode/decode, and v2-first
   load policy. `drawingPersistenceCoordinator.ts` owns debounced single-flight

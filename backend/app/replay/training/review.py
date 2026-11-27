@@ -116,13 +116,22 @@ _DRAWING_ENTITY_KEYS = frozenset(
         "bounds",
     }
 )
+# Every drawing kind and key the chart can create. Mirrors the frontend contract
+# frontend/src/features/drawings/core/drawingWireContract.ts (JSON copy in
+# frontend/contracts/drawing-wire.json);
+# tests/test_replay_drawing_wire_contract.py fails when the frontend can create a
+# kind or key this allowlist rejects. A rejected key fails the whole save.
+_DRAWING_COMMON_STYLE_KEYS = frozenset({"groupId", "hidden", "locked", "visibleIntervals"})
 _DRAWING_GEOMETRY_KEYS: dict[str, frozenset[str]] = {
     "angle-measure": frozenset({"dataPoints", "kind"}),
     "axis-line": frozenset({"axisLineType", "dataPoint", "kind"}),
+    "calculated": frozenset({"calcType", "dataPoints", "kind"}),
+    "channel": frozenset({"dataPoints", "kind"}),
     "fibonacci": frozenset({"dataPoints", "inverted", "kind"}),
     "freehand": frozenset({"dataPoints", "kind", "stroke"}),
     "highlighter": frozenset({"dataPoints", "kind", "stroke"}),
     "line": frozenset({"dataPoints", "kind", "lineType"}),
+    "path": frozenset({"dataPoints", "kind"}),
     "position": frozenset(
         {
             "direction",
@@ -133,12 +142,15 @@ _DRAWING_GEOMETRY_KEYS: dict[str, frozenset[str]] = {
             "tpPrice",
         }
     ),
-    "shape": frozenset({"dataPoints", "kind", "shapeType"}),
-    "text": frozenset({"dataPoint", "kind"}),
+    "range-measure": frozenset({"dataPoints", "kind", "measureType"}),
+    "shape": frozenset({"dataPoints", "extendRight", "kind", "shapeType"}),
+    "text": frozenset({"dataPoint", "kind", "target"}),
 }
-_DRAWING_STYLE_KEYS: dict[str, frozenset[str]] = {
+_DRAWING_KIND_STYLE_KEYS: dict[str, frozenset[str]] = {
     "angle-measure": frozenset({"color", "kind", "lineWidth"}),
     "axis-line": frozenset({"color", "kind", "lineWidth"}),
+    "calculated": frozenset({"color", "deviation", "kind", "lineWidth", "rows"}),
+    "channel": frozenset({"color", "fillOpacity", "kind", "lineWidth"}),
     "fibonacci": frozenset({"color", "kind", "levels", "lineWidth"}),
     "freehand": frozenset({"color", "kind", "lineWidth"}),
     "highlighter": frozenset(
@@ -151,16 +163,21 @@ _DRAWING_STYLE_KEYS: dict[str, frozenset[str]] = {
             "opacity",
         }
     ),
-    "line": frozenset({"color", "kind", "lineWidth"}),
+    "line": frozenset({"arrowEnd", "color", "kind", "lineWidth"}),
+    "path": frozenset({"arrowEnd", "color", "kind", "lineWidth"}),
     "position": frozenset({"infoPanelOffset", "kind", "positionSize"}),
+    "range-measure": frozenset({"color", "kind", "lineWidth"}),
     "shape": frozenset(
         {
             "color",
             "fillColor",
             "fillOpacity",
             "kind",
+            "label",
             "lineStyle",
             "lineWidth",
+            "midline",
+            "priceLabels",
         }
     ),
     "text": frozenset(
@@ -176,11 +193,16 @@ _DRAWING_STYLE_KEYS: dict[str, frozenset[str]] = {
             "italic",
             "kind",
             "padding",
+            "priceLabel",
             "text",
             "underline",
             "widthPx",
         }
     ),
+}
+_DRAWING_STYLE_KEYS: dict[str, frozenset[str]] = {
+    kind: keys | _DRAWING_COMMON_STYLE_KEYS
+    for kind, keys in _DRAWING_KIND_STYLE_KEYS.items()
 }
 
 
