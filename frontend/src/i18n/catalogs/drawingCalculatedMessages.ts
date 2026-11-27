@@ -15,6 +15,7 @@ const english = {
   "drawing.calculated.noBars": "No bars in this range",
   "drawing.calculated.deviation": "Channel width (standard deviations)",
   "drawing.calculated.rows": "Profile rows",
+  "drawing.calculated.replayUnavailable": "Calculated drawings can't be saved in replay training yet",
 } as const;
 
 type DrawingCalculatedMessages = Readonly<Record<keyof typeof english, string>>;
@@ -35,6 +36,7 @@ const traditional: DrawingCalculatedMessages = {
   "drawing.calculated.noBars": "此範圍內沒有 K 線",
   "drawing.calculated.deviation": "通道寬度（標準差）",
   "drawing.calculated.rows": "分佈行數",
+  "drawing.calculated.replayUnavailable": "重播訓練暫時無法儲存計算類繪圖",
 };
 
 type CatalogLocale = "en" | "zh-CN" | "zh-TW" | "zh-Hant" | "zh-HK" | "zh-MO" | "ja" | "ko" | "ar" | "cs"
@@ -59,6 +61,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "此范围内没有 K 线",
     "drawing.calculated.deviation": "通道宽度（标准差）",
     "drawing.calculated.rows": "分布行数",
+    "drawing.calculated.replayUnavailable": "回放训练暂时无法保存计算类绘图",
   },
   "zh-TW": {
     "drawing.variant.fib-extension": "斐波那契延伸",
@@ -76,6 +79,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "此區間沒有 K 棒",
     "drawing.calculated.deviation": "通道寬度（標準差）",
     "drawing.calculated.rows": "分布列數",
+    "drawing.calculated.replayUnavailable": "重播訓練暫時無法儲存計算類繪圖",
   },
   "zh-Hant": traditional,
   "zh-HK": traditional,
@@ -96,6 +100,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "この範囲に足がありません",
     "drawing.calculated.deviation": "チャネル幅（標準偏差）",
     "drawing.calculated.rows": "プロファイルの行数",
+    "drawing.calculated.replayUnavailable": "リプレイトレーニングでは計算系の描画をまだ保存できません",
   },
   ko: {
     "drawing.variant.fib-extension": "피보나치 확장",
@@ -113,6 +118,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "이 범위에 봉이 없습니다",
     "drawing.calculated.deviation": "채널 폭(표준편차)",
     "drawing.calculated.rows": "프로필 행 수",
+    "drawing.calculated.replayUnavailable": "리플레이 훈련에서는 아직 계산 그리기를 저장할 수 없습니다",
   },
   ar: {
     "drawing.variant.fib-extension": "امتداد فيبوناتشي",
@@ -130,6 +136,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "لا توجد شموع في هذا النطاق",
     "drawing.calculated.deviation": "عرض القناة (انحرافات معيارية)",
     "drawing.calculated.rows": "صفوف الملف",
+    "drawing.calculated.replayUnavailable": "لا يمكن حفظ الرسومات المحسوبة في تدريب الإعادة بعد",
   },
   cs: {
     "drawing.variant.fib-extension": "Fibonacciho extenze",
@@ -147,6 +154,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "V tomto rozsahu nejsou žádné svíčky",
     "drawing.calculated.deviation": "Šířka kanálu (směrodatné odchylky)",
     "drawing.calculated.rows": "Řádky profilu",
+    "drawing.calculated.replayUnavailable": "Vypočítané kresby zatím nelze v tréninku přehrávání uložit",
   },
   de: {
     "drawing.variant.fib-extension": "Fibonacci-Extension",
@@ -164,6 +172,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Keine Kerzen in diesem Bereich",
     "drawing.calculated.deviation": "Kanalbreite (Standardabweichungen)",
     "drawing.calculated.rows": "Profilzeilen",
+    "drawing.calculated.replayUnavailable": "Berechnete Zeichnungen lassen sich im Replay-Training noch nicht speichern",
   },
   es: {
     "drawing.variant.fib-extension": "Extensión de Fibonacci",
@@ -181,6 +190,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "No hay velas en este rango",
     "drawing.calculated.deviation": "Ancho del canal (desviaciones estándar)",
     "drawing.calculated.rows": "Filas del perfil",
+    "drawing.calculated.replayUnavailable": "Los dibujos calculados aún no se pueden guardar en el entrenamiento de repetición",
   },
   fr: {
     "drawing.variant.fib-extension": "Extension de Fibonacci",
@@ -198,6 +208,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Aucune bougie dans cette plage",
     "drawing.calculated.deviation": "Largeur du canal (écarts-types)",
     "drawing.calculated.rows": "Lignes du profil",
+    "drawing.calculated.replayUnavailable": "Les tracés calculés ne peuvent pas encore être enregistrés en entraînement replay",
   },
   he: {
     "drawing.variant.fib-extension": "הרחבת פיבונאצ'י",
@@ -215,6 +226,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "אין נרות בטווח הזה",
     "drawing.calculated.deviation": "רוחב הערוץ (סטיות תקן)",
     "drawing.calculated.rows": "שורות הפרופיל",
+    "drawing.calculated.replayUnavailable": "עדיין אי אפשר לשמור שרטוטים מחושבים באימון הריפליי",
   },
   hi: {
     "drawing.variant.fib-extension": "फिबोनाची एक्सटेंशन",
@@ -232,6 +244,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "इस रेंज में कोई बार नहीं है",
     "drawing.calculated.deviation": "चैनल की चौड़ाई (मानक विचलन)",
     "drawing.calculated.rows": "प्रोफ़ाइल पंक्तियाँ",
+    "drawing.calculated.replayUnavailable": "रीप्ले प्रशिक्षण में गणना वाली ड्रॉइंग अभी सहेजी नहीं जा सकतीं",
   },
   hu: {
     "drawing.variant.fib-extension": "Fibonacci-kiterjesztés",
@@ -249,6 +262,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Ebben a tartományban nincs gyertya",
     "drawing.calculated.deviation": "Csatornaszélesség (szórás)",
     "drawing.calculated.rows": "Profilsorok",
+    "drawing.calculated.replayUnavailable": "Számított rajzok még nem menthetők a visszajátszásos edzésben",
   },
   id: {
     "drawing.variant.fib-extension": "Ekstensi Fibonacci",
@@ -266,6 +280,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Tidak ada bar dalam rentang ini",
     "drawing.calculated.deviation": "Lebar kanal (deviasi standar)",
     "drawing.calculated.rows": "Baris profil",
+    "drawing.calculated.replayUnavailable": "Gambar terhitung belum bisa disimpan di latihan replay",
   },
   it: {
     "drawing.variant.fib-extension": "Estensione di Fibonacci",
@@ -283,6 +298,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Nessuna candela in questo intervallo",
     "drawing.calculated.deviation": "Larghezza del canale (deviazioni standard)",
     "drawing.calculated.rows": "Righe del profilo",
+    "drawing.calculated.replayUnavailable": "I disegni calcolati non si possono ancora salvare nell'allenamento replay",
   },
   ms: {
     "drawing.variant.fib-extension": "Lanjutan Fibonacci",
@@ -300,6 +316,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Tiada bar dalam julat ini",
     "drawing.calculated.deviation": "Lebar saluran (sisihan piawai)",
     "drawing.calculated.rows": "Baris profil",
+    "drawing.calculated.replayUnavailable": "Lukisan terkira belum boleh disimpan dalam latihan main semula",
   },
   nl: {
     "drawing.variant.fib-extension": "Fibonacci-extensie",
@@ -317,6 +334,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Geen kaarsen in dit bereik",
     "drawing.calculated.deviation": "Kanaalbreedte (standaarddeviaties)",
     "drawing.calculated.rows": "Profielrijen",
+    "drawing.calculated.replayUnavailable": "Berekende tekeningen kunnen nog niet worden opgeslagen in replaytraining",
   },
   pl: {
     "drawing.variant.fib-extension": "Rozszerzenie Fibonacciego",
@@ -334,6 +352,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Brak świec w tym zakresie",
     "drawing.calculated.deviation": "Szerokość kanału (odchylenia standardowe)",
     "drawing.calculated.rows": "Wiersze profilu",
+    "drawing.calculated.replayUnavailable": "Rysunków obliczeniowych nie można jeszcze zapisać w treningu powtórki",
   },
   "pt-BR": {
     "drawing.variant.fib-extension": "Extensão de Fibonacci",
@@ -351,6 +370,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Nenhum candle neste intervalo",
     "drawing.calculated.deviation": "Largura do canal (desvios-padrão)",
     "drawing.calculated.rows": "Linhas do perfil",
+    "drawing.calculated.replayUnavailable": "Desenhos calculados ainda não podem ser salvos no treino de replay",
   },
   "pt-PT": {
     "drawing.variant.fib-extension": "Extensão de Fibonacci",
@@ -368,6 +388,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Nenhuma vela neste intervalo",
     "drawing.calculated.deviation": "Largura do canal (desvios-padrão)",
     "drawing.calculated.rows": "Linhas do perfil",
+    "drawing.calculated.replayUnavailable": "Desenhos calculados ainda não podem ser guardados no treino de replay",
   },
   ro: {
     "drawing.variant.fib-extension": "Extensie Fibonacci",
@@ -385,6 +406,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Nicio lumânare în acest interval",
     "drawing.calculated.deviation": "Lățimea canalului (abateri standard)",
     "drawing.calculated.rows": "Rândurile profilului",
+    "drawing.calculated.replayUnavailable": "Desenele calculate nu pot fi încă salvate în antrenamentul de reluare",
   },
   ru: {
     "drawing.variant.fib-extension": "Расширение Фибоначчи",
@@ -402,6 +424,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "В этом диапазоне нет свечей",
     "drawing.calculated.deviation": "Ширина канала (стандартные отклонения)",
     "drawing.calculated.rows": "Строки профиля",
+    "drawing.calculated.replayUnavailable": "Расчётные рисунки пока нельзя сохранить в тренировке воспроизведения",
   },
   sv: {
     "drawing.variant.fib-extension": "Fibonacci-förlängning",
@@ -419,6 +442,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Inga staplar i det här intervallet",
     "drawing.calculated.deviation": "Kanalbredd (standardavvikelser)",
     "drawing.calculated.rows": "Profilrader",
+    "drawing.calculated.replayUnavailable": "Beräknade ritningar kan ännu inte sparas i repristräning",
   },
   th: {
     "drawing.variant.fib-extension": "ฟีโบนัชชีส่วนขยาย",
@@ -436,6 +460,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "ไม่มีแท่งในช่วงนี้",
     "drawing.calculated.deviation": "ความกว้างช่อง (ส่วนเบี่ยงเบนมาตรฐาน)",
     "drawing.calculated.rows": "จำนวนแถวโปรไฟล์",
+    "drawing.calculated.replayUnavailable": "ยังบันทึกภาพวาดแบบคำนวณในการฝึกรีเพลย์ไม่ได้",
   },
   tr: {
     "drawing.variant.fib-extension": "Fibonacci uzantısı",
@@ -453,6 +478,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Bu aralıkta mum yok",
     "drawing.calculated.deviation": "Kanal genişliği (standart sapma)",
     "drawing.calculated.rows": "Profil satırları",
+    "drawing.calculated.replayUnavailable": "Hesaplanan çizimler tekrar oynatma eğitiminde henüz kaydedilemiyor",
   },
   uk: {
     "drawing.variant.fib-extension": "Розширення Фібоначчі",
@@ -470,6 +496,7 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "У цьому діапазоні немає свічок",
     "drawing.calculated.deviation": "Ширина каналу (стандартні відхилення)",
     "drawing.calculated.rows": "Рядки профілю",
+    "drawing.calculated.replayUnavailable": "Розрахункові малюнки поки не можна зберегти в тренуванні відтворення",
   },
   vi: {
     "drawing.variant.fib-extension": "Mở rộng Fibonacci",
@@ -487,5 +514,6 @@ export const drawingCalculatedMessages: Readonly<Record<CatalogLocale, DrawingCa
     "drawing.calculated.noBars": "Không có nến trong phạm vi này",
     "drawing.calculated.deviation": "Độ rộng kênh (độ lệch chuẩn)",
     "drawing.calculated.rows": "Số hàng hồ sơ",
+    "drawing.calculated.replayUnavailable": "Chưa thể lưu hình vẽ tính toán trong luyện tập phát lại",
   },
 };

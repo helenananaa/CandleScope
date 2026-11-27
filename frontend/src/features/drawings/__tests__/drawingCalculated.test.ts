@@ -5,6 +5,7 @@ import { exportDrawingDocument, importSavedDrawings } from "../core/drawingCodec
 import { isTwoPointCreationTool } from "../interaction/drawingToolPredicates.js";
 import {
   calculatedDraftDecorations,
+  calculatedSelectionHandles,
   createCalculatedSavedDrawing,
   isThreeClickCreationTool,
 } from "../interaction/drawingCalculatedInteraction.js";
@@ -140,4 +141,14 @@ test("calculated tools are offered on ordinary time charts only", () => {
     assert.equal(supportsDrawingTool(CHART_DRAWING_ANCHOR_MODES.SOURCE_TIME, tool), true, tool);
     assert.equal(supportsDrawingTool(CHART_DRAWING_ANCHOR_MODES.SOURCE_LINEAGE, tool), false, tool);
   }
+});
+
+test("selection handles follow the scene projection, mapped back to the stored anchors", () => {
+  const scene = [{ x: 10, y: 50 }, { x: 90, y: 20 }];
+  const forward = calculatedSelectionHandles(saved("regression-channel", 2), scene);
+  assert.deepEqual(forward.map((handle) => [handle.point.x, handle.hit.pointIndex]), [[10, 0], [90, 1]]);
+  const reversed = calculatedSelectionHandles(saved("regression-channel", 2, { dataPoints: [POINTS[1]!, POINTS[0]!] }), scene);
+  assert.deepEqual(reversed.map((handle) => handle.hit.pointIndex), [1, 0], "the earlier bar is the second anchor");
+  assert.deepEqual(calculatedSelectionHandles(saved("fib-extension", 3), scene), [], "a stale scene with the wrong handle count shows none");
+  assert.deepEqual(calculatedSelectionHandles(saved("anchored-vwap", 1), null), []);
 });

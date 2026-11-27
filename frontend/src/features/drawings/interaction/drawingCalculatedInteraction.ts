@@ -20,6 +20,30 @@ import {
 } from "../geometry/calculatedDrawingMath.js";
 import type { DynamicOverlayDecoration } from "./dynamicOverlayController.js";
 
+export interface CalculatedSelectionHandle {
+  readonly point: ScreenPoint;
+  readonly hit: Readonly<{ pointIndex: number }>;
+  readonly radius: number;
+}
+
+/**
+ * Selection handles from the scene projection. Range drawings put their start
+ * handle on the earlier bar, which may be the second stored anchor.
+ */
+export function calculatedSelectionHandles(
+  saved: SavedCalculatedDrawing,
+  sceneHandles: readonly ScreenPoint[] | null,
+): readonly CalculatedSelectionHandle[] {
+  if (!sceneHandles || sceneHandles.length !== saved.dataPoints.length) return [];
+  const [first, second] = saved.dataPoints;
+  const swapped = sceneHandles.length === 2 && Number(first?.time) > Number(second?.time);
+  return Object.freeze(sceneHandles.map((point, index) => Object.freeze({
+    point: Object.freeze({ x: point.x, y: point.y }),
+    hit: Object.freeze({ pointIndex: swapped ? 1 - index : index }),
+    radius: 10,
+  })));
+}
+
 /** Tools whose creation takes a third click after the first two anchors. */
 export function isThreeClickCreationTool(
   tool: DrawingToolId | null | undefined,

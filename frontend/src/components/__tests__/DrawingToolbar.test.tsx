@@ -138,3 +138,13 @@ test("calculated drawing variants share one toolbar button with their own identi
     onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
   assert.ok(buttonTag(idle, 'data-drawing-tool="fib-extension"'), "the group shows its first variant before any choice");
 });
+
+test("a host can disable the calculated drawing group with its reason", () => {
+  const html = renderInEnglish(<DrawingToolbar activeTool={null} penColor="#f59e0b" penSize={2}
+    calculatedToolsUnavailableReason="Calculated drawings can't be saved in replay training yet"
+    onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+  const button = buttonTag(html, 'data-drawing-tool="fib-extension"');
+  assert.match(button, /disabled=""/);
+  assert.ok(button.includes("can&#x27;t be saved in replay training yet") || button.includes("can't be saved in replay training yet"));
+  assert.doesNotMatch(buttonTag(html, 'data-drawing-tool="line-segment"'), /disabled=""/);
+});

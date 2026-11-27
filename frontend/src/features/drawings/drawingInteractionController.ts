@@ -218,6 +218,7 @@ import {
 } from "./interaction/drawingToolPredicates.js";
 import {
   calculatedDraftDecorations,
+  calculatedSelectionHandles,
   createCalculatedSavedDrawing,
   isThreeClickCreationTool,
 } from "./interaction/drawingCalculatedInteraction.js";
@@ -1070,6 +1071,11 @@ export function dynamicSelectionHandlesForSavedDrawing(
       hit: Object.freeze({ zone: "center", pointIndex: 0 }),
       radius: 10,
     })] : [];
+  }
+  if (saved.type === "calculated") {
+    // Handles sit where the projection puts them (fitted line ends, profile
+    // corners, first VWAP value), not on the stored anchors.
+    return calculatedSelectionHandles(saved, sceneHandles);
   }
   if ("dataPoints" in saved && Array.isArray(saved.dataPoints)) {
     const projected = saved.dataPoints
