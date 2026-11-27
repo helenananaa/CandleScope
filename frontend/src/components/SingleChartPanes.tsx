@@ -1893,18 +1893,31 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     let settleFrame: number | null = null;
     let followLatestResizeFrame: number | null = null;
     let observedWidth = wrapper.getBoundingClientRect().width;
+    // The bar at a view's center, by source time. Ticks append bars without
+    // emitting a range change, so a store version is no proof that a remembered
+    // logical view moved; a prepend or recalibration moves this bar's index.
+    const resizeViewAnchor = (logical: VisibleLogicalRange | null) => {
+      const rows = displayRowsRef.current;
+      if (!logical || rows.length === 0) return null;
+      const index = Math.min(rows.length - 1, Math.max(0, Math.round((logical.from + logical.to) / 2)));
+      return { index, time: sourceTimeFromAxisTime(rows[index]?.time) };
+    };
+    const resizeViewAnchored = (anchor: ReturnType<typeof resizeViewAnchor>) => anchor !== null
+      && anchor.time !== null && sourceTimeFromAxisTime(displayRowsRef.current[anchor.index]?.time) === anchor.time;
+    const initialResizeLogical = chart.timeScale().getVisibleLogicalRange();
     let stableResizeView = {
-      logical: chart.timeScale().getVisibleLogicalRange(),
+      logical: initialResizeLogical,
+      anchor: resizeViewAnchor(initialResizeLogical),
+      scaleWidth: chart.timeScale().width(),
       store: seriesStoreRef.current,
-      version: seriesStoreRef.current?.version,
       datasetKey: datasetKeyRef.current,
     };
-    const rememberResizeView = (logical: VisibleLogicalRange) => {
+    const rememberResizeView = (logical: VisibleLogicalRange | null) => {
       // LWC emits the resized range before our observer runs. Keep the last
       // view at the old width so a split cannot retain only future padding.
       if (Math.abs(wrapper.getBoundingClientRect().width - observedWidth) >= 0.5) return;
-      stableResizeView = { logical, store: seriesStoreRef.current,
-        version: seriesStoreRef.current?.version, datasetKey: datasetKeyRef.current };
+      stableResizeView = { logical, anchor: resizeViewAnchor(logical), scaleWidth: chart.timeScale().width(),
+        store: seriesStoreRef.current, datasetKey: datasetKeyRef.current };
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(rememberResizeView);
     const syncSize = () => {
@@ -1924,7 +1937,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         transferredHistoryRef.current = null;
       }
       frameLifecycle.cancel(followLatestResizeFrame);
-      followLatestResizeFrame = frameLifecycle.schedule(() => {
+      let widthFrames = 0;
+      const resizeFrame = () => {
         followLatestResizeFrame = null;
         const displayRows = displayRowsRef.current;
         if (!followLatestRef.current
@@ -1933,12 +1947,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (followLatestDisabledRef.current) {
           // A restored or panned replay remains fixed in time. Resize around
           // its previous center at the same zoom, without resuming following.
-          if (!previousView.logical || previousView.store !== seriesStoreRef.current
-            || previousView.version !== seriesStoreRef.current?.version
+          const logical = previousView.logical;
+          if (!logical || previousView.store !== seriesStoreRef.current
+            || !resizeViewAnchored(previousView.anchor)
             || previousView.datasetKey !== datasetKeyRef.current) return;
+          // LWC applies its own observed size in its next paint, which can come
+          // after this frame. A range sized for the old width would change zoom.
+          if (chart.timeScale().width() === previousView.scaleWidth && widthFrames < 3) {
+            widthFrames += 1;
+            followLatestResizeFrame = frameLifecycle.schedule(resizeFrame);
+            return;
+          }
           const range = logicalRangeForLatestBarPosition({
             barSpacing: chart.timeScale().options().barSpacing,
-            contentLastLogical: (previousView.logical.from + previousView.logical.to) / 2,
+            contentLastLogical: (logical.from + logical.to) / 2,
             width: chart.timeScale().width(), position: 0.5,
           });
           if (range) viewportControllerRef.current?.restoreProjectionRange(range);
@@ -1954,7 +1976,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         )) {
           boundSurfaceViewportAnchorRef.current = null;
         }
-      });
+      };
+      followLatestResizeFrame = frameLifecycle.schedule(resizeFrame);
     };
     const trackPaneResize = () => {
       syncOverlays();

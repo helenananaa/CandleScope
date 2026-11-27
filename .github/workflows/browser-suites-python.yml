@@ -1,0 +1,92 @@
+name: Browser suites with Python fixtures
+
+# The *.browser.ts(x) suites whose fixture page talks to a Python fixture
+# server (replay notes, backend synthetic series, chart indicator input, owned
+# chart calculation). frontend/scripts/run-browser-suites.mjs --group python
+# starts each server from backend/tests on a free loopback port, runs the
+# fixture in Chrome against it, and stops it. The other suites run in the
+# browser-suites job of frontend-checks.yml. These suites exercise backend
+# routes as much as frontend code, so backend changes trigger them too.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-suites-python.yml", "!**/*.md"]
+  push:
+    branches: [main]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/browser-suites-python.yml", "!**/*.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-suites-python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-suites-python:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATA_DIR: ${{ github.workspace }}/output/browser-suites-python/data
+      CANDLE_DATA_DIR: ${{ github.workspace }}/output/browser-suites-python/data
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - name: Restore the pinned Pine engine build
+        uses: actions/cache@v4
+        with:
+          path: output/pine-build-cache
+          key: pine-engine-${{ runner.os }}-py3.12-${{ hashFiles('frontend/scripts/desktop-plugin-sources.json', 'packages/candlescope-plugin-pine-compat/engine-patches/**') }}
+      - name: Build and install the pinned Pine engine
+        # The chart calculation fixtures run the repository Pine plugin, which
+        # imports the pinned pine-compat-runtime engine from this interpreter.
+        # prepare-desktop-plugins.py verifies the source archive and patch, and
+        # reuses a cached wheel only when its recorded digest matches.
+        run: |
+          python frontend/scripts/prepare-desktop-plugins.py --output output/pine-build --cache output/pine-build-cache --uv uv
+          wheels=(output/pine-build-cache/wheels/*/pine_compat_runtime-*.whl)
+          test "${#wheels[@]}" -eq 1
+          python -m pip install --no-index --no-deps "${wheels[0]}"
+          python -I -c "import pine_compat"
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: Let Chrome start its sandbox
+        # Ubuntu 24.04 restricts unprivileged user namespaces, which Chrome's
+        # sandbox needs; the test harness does not pass --no-sandbox.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run Python-backed browser suites in Chrome
+        working-directory: frontend
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS: "60000"
+          CANDLESCOPE_TEST_CHECK_TIMEOUT_MS: "240000"
+        run: node scripts/run-browser-suites.mjs --group python --python python --out ../output/browser-suites-python/runs
+      - name: Upload browser suite evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-suites-python-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/browser-suites-python/runs
+          if-no-files-found: ignore
