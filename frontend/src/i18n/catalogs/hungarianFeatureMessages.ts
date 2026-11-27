@@ -715,6 +715,7 @@ export const tradingAccountsHu: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Eladás beadása",
   "trading.ticket.filled": "Teljesült ezen az áron: {price}",
   "trading.ticket.working": "A megbízás aktív",
+  "trading.ticket.waitsForOpen": "A piac zárva van; a megbízás a következő nyitáskor teljesül",
   "trading.ticket.model": "Szimulált teljesítés. Semmi nem kerül tőzsdére.",
   "trading.manual.title": "Teljesítés bevitele",
   "trading.manual.help": "Rögzítsen egy teljesítést ehhez: {symbol}. A teljesítések automatikusan ügyletekbe csoportosulnak nulla pozíciótól nulla pozícióig.",

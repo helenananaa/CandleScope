@@ -715,6 +715,7 @@ export const tradingAccountsHe: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "ביצוע מכירה",
   "trading.ticket.filled": "בוצע ב־{price}",
   "trading.ticket.working": "הפקודה פעילה",
+  "trading.ticket.waitsForOpen": "השוק סגור; הפקודה תבוצע בפתיחה הבאה",
   "trading.ticket.model": "ביצוע מדומה. שום דבר אינו נשלח לבורסה.",
   "trading.manual.title": "הזנת ביצוע",
   "trading.manual.help": "תיעוד ביצוע עבור {symbol}. ביצועים מקובצים אוטומטית לעסקאות, מפוזיציה אפס ועד פוזיציה אפס.",

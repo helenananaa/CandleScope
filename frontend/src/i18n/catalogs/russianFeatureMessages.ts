@@ -715,6 +715,7 @@ export const tradingAccountsRu: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Выставить продажу",
   "trading.ticket.filled": "Исполнено по {price}",
   "trading.ticket.working": "Ордер активен",
+  "trading.ticket.waitsForOpen": "Рынок закрыт; ордер исполнится при следующем открытии",
   "trading.ticket.model": "Смоделированное исполнение. На биржу ничего не отправляется.",
   "trading.manual.title": "Ввести исполнение",
   "trading.manual.help": "Запишите исполнение по {symbol}. Исполнения автоматически группируются в сделки от нулевой позиции до нулевой.",

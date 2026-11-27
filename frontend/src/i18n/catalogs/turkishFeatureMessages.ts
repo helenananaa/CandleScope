@@ -715,6 +715,7 @@ export const tradingAccountsTr: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Satış emri ver",
   "trading.ticket.filled": "Gerçekleşme fiyatı: {price}",
   "trading.ticket.working": "Emir bekliyor",
+  "trading.ticket.waitsForOpen": "Piyasa kapalı; emir bir sonraki açılışta gerçekleşir",
   "trading.ticket.model": "Simüle edilmiş gerçekleşme. Borsaya hiçbir şey gönderilmez.",
   "trading.manual.title": "Gerçekleşme gir",
   "trading.manual.help": "{symbol} için bir gerçekleşme kaydedin. Gerçekleşmeler sıfırdan sıfıra otomatik olarak işlemlere gruplanır.",

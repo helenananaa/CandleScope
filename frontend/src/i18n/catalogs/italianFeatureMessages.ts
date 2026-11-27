@@ -715,6 +715,7 @@ export const tradingAccountsIt: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Invia vendita",
   "trading.ticket.filled": "Eseguito a {price}",
   "trading.ticket.working": "Ordine attivo",
+  "trading.ticket.waitsForOpen": "Il mercato è chiuso; l’ordine verrà eseguito alla prossima apertura",
   "trading.ticket.model": "Fill simulato. Nulla viene inviato a un exchange.",
   "trading.manual.title": "Inserisci un fill",
   "trading.manual.help": "Registra un fill per {symbol}. I fill vengono raggruppati automaticamente in trade, da posizione nulla a posizione nulla.",

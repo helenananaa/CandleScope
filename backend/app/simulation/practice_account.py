@@ -18,6 +18,12 @@ forming candle only add the extremes that were not seen before. Limit orders
 fill only when price trades through the limit (a touch is not a fill); stop
 orders fill at the stop or the first price beyond it, plus slippage. There is
 no funding, liquidation or order-book depth.
+
+Market sessions (ADR-DATA-002 D5a): nothing trades while a market on a session
+calendar is closed. The first candle after a closure starts at its open, not at
+the previous close: orders the open gaps through fill at the open (a limit at
+the open when it is better, a stop at the open plus slippage), and market
+orders placed while the market was closed fill there too.
 """
 from __future__ import annotations
 
@@ -85,11 +91,17 @@ class MatchResult:
 
 @dataclass(slots=True)
 class PathChunk:
-    """Ordered price points observed between ``start_ms`` and ``ts_ms``."""
+    """Ordered price points observed between ``start_ms`` and ``ts_ms``.
+
+    ``after_closure`` marks the first candle after the market was closed: the
+    first point is that candle's open and nothing traded between the previous
+    close and it.
+    """
 
     points: list[Decimal]
     start_ms: int
     ts_ms: int
+    after_closure: bool = False
 
 
 @dataclass(slots=True)
@@ -125,8 +137,13 @@ def advance_cursor(
     close: Decimal,
     *,
     observed_ms: int,
+    after_closure: bool = False,
 ) -> tuple[Cursor, PathChunk | None]:
-    """Return the path implied by one candle observation and the next cursor."""
+    """Return the path implied by one candle observation and the next cursor.
+
+    ``after_closure``: the market was closed between the cursor's candle and
+    this new one, so its path starts at the open (a gap, not a move).
+    """
     if bar_time < cursor.bar_time:
         return cursor, None
     if bar_time == cursor.bar_time:
@@ -152,7 +169,8 @@ def advance_cursor(
             )
         chunk = PathChunk(_dedupe(points), cursor.observed_ms, max(cursor.observed_ms, observed_ms))
         return nxt, chunk
-    points = [cursor.last_close, *new_bar_path(open_, high, low, close)]
+    path = new_bar_path(open_, high, low, close)
+    points = path if after_closure else [cursor.last_close, *path]
     bar_start_ms = bar_time * 1000
     nxt = Cursor(
         bar_time=bar_time,
@@ -162,7 +180,7 @@ def advance_cursor(
         observed_ms=max(observed_ms, bar_start_ms),
         closes_only=False,
     )
-    return nxt, PathChunk(_dedupe(points), bar_start_ms, nxt.observed_ms)
+    return nxt, PathChunk(_dedupe(points), bar_start_ms, nxt.observed_ms, after_closure)
 
 
 def market_leverage(leverage: Decimal, market_type: str) -> Decimal:
@@ -204,8 +222,11 @@ def _trigger(order: WorkingOrder, a: Decimal, b: Decimal) -> Decimal | None:
 
 
 def reachable(order: WorkingOrder, low: Decimal, high: Decimal) -> bool:
-    """Whether a path spanning ``low``..``high`` could trigger ``order`` at all."""
-    return _trigger(order, low, high) is not None
+    """Whether a path spanning ``low``..``high`` could trigger ``order`` at all.
+
+    A market order waiting for the market to open fills at the first price.
+    """
+    return order.type == "market" or _trigger(order, low, high) is not None
 
 
 @dataclass(slots=True)
@@ -353,11 +374,31 @@ class PracticeMatcher:
         points = chunk.points
         if not points:
             return
+        self._run_point(points[0], chunk, gapped=chunk.after_closure)
         for index in range(1, len(points)):
             a, b = points[index - 1], points[index]
             if a == b:
                 continue
             self._run_move(a, b, chunk)
+
+    def _eligible(self, order: WorkingOrder, chunk: PathChunk) -> bool:
+        return (order.id in self._born_here
+                or chunk.start_ms >= order.created_at_ms - ELIGIBILITY_TOLERANCE_MS)
+
+    def _run_point(self, price: Decimal, chunk: PathChunk, *, gapped: bool) -> None:
+        """Fill what trades at one price: waiting market orders, and when the
+        market opens after a closure, every order the open gapped through."""
+        for _ in range(64):
+            pending = [
+                order for order in self.working()
+                if self._eligible(order, chunk) and (
+                    order.type == "market" or (gapped and _trigger(order, price, price) is not None))
+            ]
+            if not pending:
+                return
+            order = pending[0]
+            liquidity = "maker" if order.type == "limit" else "taker"
+            self.execute(order, price, max(chunk.start_ms, order.created_at_ms), liquidity=liquidity)
 
     def _run_move(self, a: Decimal, b: Decimal, chunk: PathChunk) -> None:
         upward = b > a
@@ -367,10 +408,7 @@ class PracticeMatcher:
         for _ in range(64):
             candidates: list[tuple[Decimal, int, str, WorkingOrder]] = []
             for order in self.working():
-                if (
-                    order.id not in self._born_here
-                    and chunk.start_ms < order.created_at_ms - ELIGIBILITY_TOLERANCE_MS
-                ):
+                if not self._eligible(order, chunk):
                     continue
                 level = _trigger(order, start, b)
                 if level is not None:

@@ -65,6 +65,14 @@ subscriptions signals their storage tasks to stop; physical reads already in a
 thread remain owned until completion. Cancelling the shutdown waiter also drains
 those reads before propagating cancellation. `close_trading()` only signals stop.
 
+A market on a session calendar (ADR-DATA-002 D2/D5a) does not trade while it is
+closed. A market order, or a limit already through the price, placed while it is
+closed stays working (`waitsForOpen` in the response) and fills at the next
+open. The first candle after a closure starts at its open rather than at the
+previous close, so orders the open gapped through fill at the open: a limit at
+the open when that is better, a stop at the open plus slippage. Always-open
+markets have no session calendar and keep moving from the last close.
+
 A step replays the 1m candles of one instrument with working orders, from its
 cursor to now, in one storage-executor job (query, match, persist). Live
 matching and catch-up after the app was closed are the same walk. A history gap

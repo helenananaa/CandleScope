@@ -715,6 +715,7 @@ export const tradingAccountsHi: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "बिक्री ऑर्डर दें",
   "trading.ticket.filled": "{price} पर फ़िल हुआ",
   "trading.ticket.working": "ऑर्डर सक्रिय है",
+  "trading.ticket.waitsForOpen": "बाज़ार बंद है; ऑर्डर अगली ओपनिंग पर भरेगा",
   "trading.ticket.model": "सिम्युलेटेड फ़िल। किसी एक्सचेंज को कुछ नहीं भेजा जाता।",
   "trading.manual.title": "फ़िल दर्ज करें",
   "trading.manual.help": "{symbol} के लिए फ़िल दर्ज करें। फ़िल अपने आप ट्रेड में समूहित होते हैं, शून्य पोजीशन से शून्य पोजीशन तक।",
