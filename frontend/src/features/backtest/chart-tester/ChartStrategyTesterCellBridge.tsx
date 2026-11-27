@@ -89,6 +89,8 @@ export interface ChartStrategyTesterCellBridgeProps {
    */
   chartDataReady?: boolean;
   continuousChartActive: boolean;
+  /** The chart's market has live bars at its interval; a history-only source cannot run forward (ADR-DATA-002 D2c). */
+  liveBarsAvailable?: boolean | undefined;
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
@@ -118,6 +120,7 @@ export default function ChartStrategyTesterCellBridge({
   panelOpen,
   chartDataReady = true,
   continuousChartActive,
+  liveBarsAvailable,
   bottomPanelHost,
   seriesStore,
   getCurrentVisibleRange,
@@ -821,6 +824,7 @@ export default function ChartStrategyTesterCellBridge({
       onCloseExplanation={() => setSelectedExplanation(null)}
       onLocateTrade={onLocateTrade}
       continuousChartActive={continuousChartActive}
+      liveBarsAvailable={liveBarsAvailable}
       continuousMarketWindow={seriesStore}
       onContinuousOverlayRunChange={setContinuousOverlayRun}
       candleScopeOverlayRun={candleScopeOverlayRun}
