@@ -68,6 +68,12 @@ on legacy flat fields.
   transaction and can never supply missing command data.
 - `core/drawingCodec.ts` owns fail-closed conversion between the canonical
   document and the unchanged legacy `SavedDrawing[]` wire contract.
+- `core/drawingWireContract.ts` lists every geometry and style key per kind.
+  Replay training saves canonical documents to the backend, whose allowlist in
+  `backend/app/replay/training/review.py` must accept them all. After adding a
+  kind or key, regenerate `frontend/contracts/drawing-wire.json` (the command is
+  in the module) and extend the backend allowlist; the backend test
+  `test_replay_drawing_wire_contract.py` fails until both agree.
 - `persistence/drawingDocumentRepository.ts` owns the canonical scope-keyed
   IndexedDB record, manifest validation, bounded encode/decode, and v2-first
   load policy. `drawingPersistenceCoordinator.ts` owns debounced single-flight
@@ -195,4 +201,4 @@ Rectangles gain optional zone options: `extendRight` (geometry, because it chang
 
 ## Calculated drawings
 
-Fib extension, anchored VWAP, fixed-range volume profile and regression channel are one `calculated` entity kind with a `calcType` and 3, 1, 2 or 2 time anchors (`geometry/calculatedDrawingMath.ts` holds the maths; `engine/drawingCalculatedProjection.ts` the projection). Only the anchors are stored. Values are recomputed on every projection from `DrawingFrameSnapshot.seriesData`, the bars the chart is showing, so a replay chart (which shows only revealed bars) can never feed them a later bar, and the world revision already changes with `dataRevision`. Bars are taken by position: a market closure has no bars and nothing fills it, a range anchored inside a closure starts at the next bar, and the regression slope is per bar, not per second. The volume profile spreads each bar's volume evenly over its high–low range and says "Estimated from N bars" on the chart. Like channels these are scene-path only, offered on ordinary time-axis charts with the overlay surface; the fib extension uses the three-click flow, the anchored VWAP a single click. Replay training saves its drawing record through a backend allowlist that does not accept the `calculated` kind yet, so its toolbar passes `calculatedToolsUnavailableReason` and the group is disabled there. Selection handles come from the scene projection (fitted line ends, profile corners, first VWAP value) and map back to the stored anchors.
+Fib extension, anchored VWAP, fixed-range volume profile and regression channel are one `calculated` entity kind with a `calcType` and 3, 1, 2 or 2 time anchors (`geometry/calculatedDrawingMath.ts` holds the maths; `engine/drawingCalculatedProjection.ts` the projection). Only the anchors are stored. Values are recomputed on every projection from `DrawingFrameSnapshot.seriesData`, the bars the chart is showing, so a replay chart (which shows only revealed bars) can never feed them a later bar, and the world revision already changes with `dataRevision`. Bars are taken by position: a market closure has no bars and nothing fills it, a range anchored inside a closure starts at the next bar, and the regression slope is per bar, not per second. The volume profile spreads each bar's volume evenly over its high–low range and says "Estimated from N bars" on the chart. Like channels these are scene-path only, offered on ordinary time-axis charts with the overlay surface; the fib extension uses the three-click flow, the anchored VWAP a single click. Replay training offers them too and saves them in the run record like other drawings (the backend allowlist accepts the `calculated` kind). Selection handles come from the scene projection (fitted line ends, profile corners, first VWAP value) and map back to the stored anchors.

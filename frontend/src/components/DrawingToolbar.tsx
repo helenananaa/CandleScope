@@ -89,8 +89,6 @@ export interface DrawingToolbarProps {
   onToggleExportPanel?: () => void;
   chartType?: MainChartType;
   onChartTypeChange?: (chartType: MainChartType) => void;
-  /** When set, the calculated drawing group is disabled and shows this reason. */
-  calculatedToolsUnavailableReason?: string | null;
 }
 
 const DEFAULT_LINE_VARIANT = (() => {
@@ -136,7 +134,6 @@ const DrawingToolbar = memo(function DrawingToolbar({
   onToggleExportPanel,
   chartType = "candlestick",
   onChartTypeChange,
-  calculatedToolsUnavailableReason = null,
 }: DrawingToolbarProps) {
   useLocale();
   useEffect(() => {
@@ -266,7 +263,6 @@ const DrawingToolbar = memo(function DrawingToolbar({
     || !hasSupportedDrawingVariant(drawingAnchorMode, POSITION_VARIANTS);
   // Calculated drawings are painted only by the scene overlay.
   const calculatedToolsDisabled = drawingGestureToolsDisabled
-    || calculatedToolsUnavailableReason !== null
     || !hasSupportedDrawingVariant(drawingAnchorMode, CALCULATED_VARIANTS)
     || resolveDrawingHostInteractionSurfaceMode() !== "overlay";
   const lineVariantSupported = supportsDrawingTool(drawingAnchorMode, lineVariant);
@@ -466,8 +462,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         onContextMenu={calculatedGroup.onContextMenu}
         onDoubleClick={calculatedGroup.onDoubleClick}
         onSelect={calculatedGroup.onSelect}
-        title={calculatedToolsUnavailableReason
-          ?? (calculatedToolsDisabled ? drawingToolTitle : t("drawing.switch.calculated", { tool: calculatedGroup.label }))}
+        title={calculatedToolsDisabled ? drawingToolTitle : t("drawing.switch.calculated", { tool: calculatedGroup.label })}
         variants={CALCULATED_VARIANTS}
         isVariantDisabled={isVariantDisabled}
       />

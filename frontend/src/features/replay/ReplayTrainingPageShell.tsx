@@ -1215,8 +1215,6 @@ export default function ReplayTrainingPageShell({
       onToggleExportPanel={exportFlow.actions.togglePanel}
       chartType={settings.chartType}
       onChartTypeChange={(chartType) => setSettings((current) => ({ ...current, chartType }))}
-      // The run's drawing record does not accept calculated drawings yet.
-      calculatedToolsUnavailableReason={t("drawing.calculated.replayUnavailable")}
     />
   );
 

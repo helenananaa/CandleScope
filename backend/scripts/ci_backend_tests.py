@@ -32,7 +32,7 @@ STAGES = {
         "test_replay_catalog_shutdown.py", "test_replay_checkpoint_delta.py",
         "test_replay_checkpoints.py", "test_replay_clock.py", "test_replay_commands.py",
         "test_replay_dependency_boundaries.py", "test_replay_determinism.py",
-        "test_replay_events.py", "test_replay_execution_bar.py",
+        "test_replay_drawing_wire_contract.py", "test_replay_events.py", "test_replay_execution_bar.py",
         "test_replay_execution_tape.py", "test_replay_fork_market_catalog.py",
         "test_replay_hedge_acceptance_matrix.py",
         "test_replay_hedge_dormant_account_inputs.py", "test_replay_hedge_hub_summary.py",
