@@ -8,7 +8,7 @@
 
 保存刷新结果后，端点和协议参数未变的节点会保留已有连接。已移除、停用或参数发生变化的节点会关闭旧入口上的连接；后续请求由代理池在当前启用的线路中选路。如果保存配置失败，后端会恢复原入口的端口和认证信息。如果内核无法确认旧连接已关闭，后端会停止该内核，并按已保存的配置恢复。
 
-首版读取直接返回 Clash/Mihomo YAML 的 HTTPS 链接，提取顶层 `proxies` 列表。支持常用的 VLESS、VMess、Trojan、Shadowsocks、Hysteria2、AnyTLS、HTTP 和 SOCKS5 节点字段。预览会显示跳过的节点数。Base64、分享 URI 列表、仅引用远端 provider 的配置以及需要 HTTP 跳转的链接目前需要服务商提供 Clash YAML 格式的直链。订阅里的路由规则、监听端口和 TUN 设置由 CandleScope 自己配置。
+订阅链接需为 HTTPS。内容可以是 Clash/Mihomo YAML（顶层 `proxies` 列表和 `proxy-providers`）、每行一条的分享链接列表（`ss://`、`vmess://`、`vless://`、`trojan://`、`hysteria2://` 或 `hy2://`、`anytls://`、`socks://` 或 `socks5://`），或上述任一格式的 Base64 编码（标准或 URL 安全字母表，可无填充、可换行）。`proxy-providers` 中的 inline provider 直接读取；HTTPS provider 各下载一次，最多 8 个，provider 里再引用的 provider 不展开；`override` 只应用 `additional-prefix` 和 `additional-suffix`，`filter` 与其他 override 字段忽略；`file` provider 指向服务商自己的磁盘，忽略。任一 provider 下载失败时整个预览失败，不会只导入其中一部分。HTTP 跳转最多跟随 5 次，每一跳都必须是 HTTPS。跳转目标和 provider 地址由服务商决定，只能解析到公网地址；用户填写的订阅主机本身不受此限制，可以在局域网内。检查作用于连接实际使用的解析结果。支持常用的 VLESS、VMess、Trojan、Shadowsocks、Hysteria2、AnyTLS、HTTP 和 SOCKS5 节点字段，分享链接转换后同样经过这份字段白名单。带插件的 Shadowsocks、加密方式不是 none 的 VLESS、WebSocket 和 gRPC 以外的传输（如 h2、TCP HTTP 伪装）、端口范围写在地址里的 Hysteria2，以及 SSR、TUIC 等其他协议无法转换，计入跳过数，不会猜测字段。预览会显示跳过的节点数。节点 ID 由用户填写的订阅地址和节点名决定，与跳转后的地址和内容格式无关，服务商更换格式后已选节点保持不变；两个 provider 列出完全相同的同名节点时合并为一个，同名但参数不同时预览失败。订阅里的路由规则、监听端口和 TUN 设置由 CandleScope 自己配置。
 
 桌面包携带固定版本的 Mihomo，每个启用节点使用独立的本机认证入口。已有 TUN 可以继续运行。订阅链接和节点参数以加密快照保存在用户数据目录，密钥存入 macOS 钥匙串或 Windows 凭据管理器。普通代理设置保存节点引用。源码运行时可用 `CANDLESCOPE_MIHOMO` 指定内核可执行文件，或在 PATH 提供 `mihomo`。
 

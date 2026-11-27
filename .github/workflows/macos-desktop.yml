@@ -123,6 +123,7 @@ jobs:
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
             tests/test_proxy_subscriptions.py \
             tests/test_proxy_subscription_refresh.py \
+            tests/test_proxy_subscription_formats.py \
             tests/test_market_stream_version.py \
             tests/test_oi_local_history.py \
             tests/test_market_metrics_storage.py \
