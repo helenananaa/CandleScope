@@ -413,6 +413,7 @@ export function createDrawingEntityGeometryBounds(
     }
     case "path":
     case "channel":
+    case "calculated":
     case "range-measure":
     case "angle-measure":
     case "fibonacci":

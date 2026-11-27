@@ -16,6 +16,14 @@ import DrawingStyleTemplates from "./DrawingStyleTemplates.js";
 import { coordinateDraft, parseCoordinateDraft, sameCoordinates, type CoordinateDraft, type DrawingCoordinate } from "./drawingProperties.js";
 import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
 import { DEFAULT_DRAWING_RENDER_COLOR } from "./rendering/drawingRenderDefaults.js";
+import {
+  DEFAULT_REGRESSION_DEVIATION,
+  DEFAULT_VOLUME_PROFILE_ROWS,
+  MAX_REGRESSION_DEVIATION,
+  MAX_VOLUME_PROFILE_ROWS,
+  MIN_REGRESSION_DEVIATION,
+  MIN_VOLUME_PROFILE_ROWS,
+} from "./geometry/calculatedDrawingMath.js";
 
 function CommitNumberInput({ value, min, max, step, onCommit }: {
   value: number;
@@ -258,6 +266,16 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       {isPosition && <label>{t("drawing.settings.positionSize")}
         <CommitNumberInput key={resetRevision} value={drawing.positionSize ?? 1000} min={1} step={100}
           onCommit={(positionSize) => onPatch({ positionSize })} />
+      </label>}
+      {drawing.type === "regression-channel" && <label>{t("drawing.calculated.deviation")}
+        <CommitNumberInput key={resetRevision} value={drawing.deviation ?? DEFAULT_REGRESSION_DEVIATION}
+          min={MIN_REGRESSION_DEVIATION} max={MAX_REGRESSION_DEVIATION} step={0.5}
+          onCommit={(deviation) => onPatch({ deviation })} />
+      </label>}
+      {drawing.type === "volume-profile" && <label>{t("drawing.calculated.rows")}
+        <CommitNumberInput key={resetRevision} value={drawing.rows ?? DEFAULT_VOLUME_PROFILE_ROWS}
+          min={MIN_VOLUME_PROFILE_ROWS} max={MAX_VOLUME_PROFILE_ROWS} step={1}
+          onCommit={(rows) => onPatch({ rows: Math.round(rows) })} />
       </label>}
       </div>
       {canEditCoordinates && points && <div id={`${editorId}-panel-coordinates`} role="tabpanel" aria-labelledby={`${editorId}-tab-coordinates`} hidden={tab !== "coordinates"}>

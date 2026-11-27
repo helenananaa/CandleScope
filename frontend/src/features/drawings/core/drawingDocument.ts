@@ -3,6 +3,7 @@ import type {
   AxisLineType,
   BasicLineToolId,
   BrushShape,
+  CalculatedDrawingType,
   DrawingDataPoint,
   DrawingKind,
   FibonacciLevel,
@@ -37,6 +38,11 @@ export type CanonicalDrawingGeometry =
     }>
   | Readonly<{
       kind: "channel";
+      dataPoints: readonly DrawingDataPoint[];
+    }>
+  | Readonly<{
+      kind: "calculated";
+      calcType: CalculatedDrawingType;
       dataPoints: readonly DrawingDataPoint[];
     }>
   | Readonly<{
@@ -110,6 +116,13 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
       color?: string;
       lineWidth?: number;
       fillOpacity?: number;
+    }>
+  | Readonly<{
+      kind: "calculated";
+      color?: string;
+      lineWidth?: number;
+      deviation?: number;
+      rows?: number;
     }>
   | Readonly<{
       kind: "text";
@@ -271,6 +284,7 @@ function matchingKind(
   const geometryKeys: Record<DrawingKind, readonly string[]> = {
     path: ["dataPoints", "kind"],
     channel: ["dataPoints", "kind"],
+    calculated: ["calcType", "dataPoints", "kind"],
     "range-measure": ["dataPoints", "measureType", "kind"],
     "angle-measure": ["dataPoints", "kind"],
     "axis-line": ["axisLineType", "dataPoint", "kind"],
@@ -285,6 +299,7 @@ function matchingKind(
   const styleKeys: Record<DrawingKind, readonly string[]> = {
     path: ["arrowEnd", "color", "kind", "lineWidth"],
     channel: ["color", "fillOpacity", "kind", "lineWidth"],
+    calculated: ["color", "deviation", "kind", "lineWidth", "rows"],
     "range-measure": ["color", "kind", "lineWidth"],
     "angle-measure": ["color", "kind", "lineWidth"],
     "axis-line": ["color", "kind", "lineWidth"],

@@ -209,12 +209,26 @@ import type { DrawingEntityHit } from "./interaction/drawingEntityHit.js";
 import { useDrawingEntityTextEdit } from "./interaction/useDrawingEntityTextEdit.js";
 import type { DrawingEntityTextCommitReceipt } from "./interaction/useDrawingEntityTextEdit.js";
 import {
+  isAxisLineToolId,
+  isFibonacciToolId,
+  isLineToolId,
+  isPositionToolId,
+  isShapeToolId,
+  isTwoPointCreationTool,
+} from "./interaction/drawingToolPredicates.js";
+import {
+  calculatedDraftDecorations,
+  createCalculatedSavedDrawing,
+  isThreeClickCreationTool,
+} from "./interaction/drawingCalculatedInteraction.js";
+import {
   createAxisLineSavedDrawing,
   createFinalizedFreehandSavedDrawing,
   createPositionSavedDrawing,
   createTextSavedDrawing,
   createTwoPointSavedDrawing,
   drawingCreateCommandsForSavedDrawing,
+  type TwoPointCreationTool,
 } from "./interaction/drawingEntityCreation.js";
 import {
   applyDrawingEntityDrag,
@@ -274,72 +288,6 @@ type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
   | FibonacciDrawingPrimitive
   | ShapeDrawingPrimitive;
-type LineToolId = RangeMeasureToolId
-  | BasicLineToolId
-  | ArrowToolId
-  | PathToolId
-  | ChannelToolId
-  | AxisLineToolId
-  | AngleToolId;
-type TwoPointCreationTool = RangeMeasureToolId
-  | BasicLineToolId
-  | ArrowToolId
-  | PathToolId
-  | ChannelToolId
-  | AngleToolId
-  | FibonacciToolId
-  | ShapeToolId;
-
-function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolId {
-  return tool === "line-segment"
-    || tool === "line-ray"
-    || tool === "line-infinite"
-    || tool === "line-horizontal"
-    || tool === "line-vertical"
-    || tool === "line-cross"
-    || tool === "line-arrow"
-    || tool === "path-line" || tool === "path-arrow"
-    || tool === "channel-parallel"
-    || tool === "measure-price"
-    || tool === "measure-time"
-    || tool === "measure-price-time"
-    || tool === "angle-measure";
-}
-
-function isAxisLineToolId(tool: DrawingToolId | null | undefined): tool is AxisLineToolId {
-  return tool === "line-horizontal" || tool === "line-vertical" || tool === "line-cross";
-}
-
-function isFibonacciToolId(tool: DrawingToolId | null | undefined): tool is FibonacciToolId {
-  return tool === "fibonacci";
-}
-
-function isPositionToolId(tool: DrawingToolId | null | undefined): tool is PositionToolId {
-  return tool === "position-long" || tool === "position-short";
-}
-
-function isShapeToolId(tool: DrawingToolId | null | undefined): tool is ShapeToolId {
-  return tool === "shape-rectangle" || tool === "shape-ellipse";
-}
-
-function isTwoPointCreationTool(
-  tool: DrawingToolId | null | undefined,
-): tool is TwoPointCreationTool {
-  return tool === "line-segment"
-    || tool === "line-ray"
-    || tool === "line-infinite"
-    || tool === "line-arrow"
-    || tool === "path-line" || tool === "path-arrow"
-    || tool === "channel-parallel"
-    || tool === "measure-price"
-    || tool === "measure-time"
-    || tool === "measure-price-time"
-    || tool === "angle-measure"
-    || tool === "fibonacci"
-    || tool === "shape-rectangle"
-    || tool === "shape-ellipse";
-}
-
 interface ScreenToDataOptions extends DrawingCoordinateOptions {
   includeLogical?: boolean;
 }
@@ -1319,6 +1267,10 @@ export interface DrawingStylePatch {
   lineStyle?: ShapeLineStyle;
   levels?: FibonacciLevel[];
   positionSize?: number;
+  /** Regression channel rail distance in standard deviations. */
+  deviation?: number;
+  /** Volume profile price rows. */
+  rows?: number;
   /** Segment arrowhead. */
   arrowEnd?: boolean;
   /** Rectangle zone options; extendRight is geometry and commits as a resize. */
@@ -1679,6 +1631,8 @@ export function useDrawing({
   const getDynamicFramePresentation = useCallback((): Readonly<{
     barSpacing: number | null;
     currentPrice: number | null;
+    /** The chart's bars, for previews of calculated drawings. */
+    seriesData: readonly unknown[] | null;
     themePalette: DrawingFrameThemePalette;
   }> => {
     try {
@@ -1686,12 +1640,14 @@ export function useDrawing({
       return Object.freeze({
         barSpacing: frame?.barSpacing ?? null,
         currentPrice: frame ? drawingPositionCurrentPrice(frame) : null,
+        seriesData: frame?.seriesData ?? null,
         themePalette: frame?.themePalette ?? DEFAULT_DRAWING_POSITION_THEME_PALETTE,
       });
     } catch {
       return Object.freeze({
         barSpacing: null,
         currentPrice: null,
+        seriesData: null,
         themePalette: DEFAULT_DRAWING_POSITION_THEME_PALETTE,
       });
     }
@@ -2576,7 +2532,9 @@ export function useDrawing({
     const transient = overlayDragPrimitiveRef.current ?? previewRef.current;
     if (entityTransient || transient) {
       const presentation = getDynamicFramePresentation();
-      const transientDecorations = entityTransient
+      const transientDecorations = entityTransient?.type === "calculated"
+        ? calculatedDraftDecorations(entityTransient, dataToScreen, presentation.seriesData)
+        : entityTransient
         ? dynamicDecorationsForSavedDrawingDraft(
             entityTransient,
             dataToScreen,
@@ -3162,7 +3120,7 @@ export function useDrawing({
             const baselineEnd = channelBaselineEndRef.current;
             previewEntityRef.current = Object.freeze({
               ...previewEntityRef.current,
-              dataPoints: Object.freeze(previewEntityRef.current.type === "path" ? [...pathPointsRef.current, pointer] : tool !== "channel-parallel"
+              dataPoints: Object.freeze(previewEntityRef.current.type === "path" ? [...pathPointsRef.current, pointer] : !isThreeClickCreationTool(tool)
                 ? [anchor, pointer]
                 : baselineEnd
                   ? [anchor, Object.freeze({ ...baselineEnd }), pointer]
@@ -4150,8 +4108,9 @@ export function useDrawing({
               return;
             }
             const baselineEnd = channelBaselineEndRef.current;
-            if (tool === "channel-parallel" && !baselineEnd) {
-              // Second channel click fixes the baseline; the third sets the width.
+            if (isThreeClickCreationTool(tool) && !baselineEnd) {
+              // Second click fixes the baseline (channel) or the move's end (fib
+              // extension); the third sets the width or the pullback.
               channelBaselineEndRef.current = Object.freeze({ ...dataB });
               previewEntityRef.current = Object.freeze({
                 ...previewEntityRef.current,
@@ -4166,7 +4125,7 @@ export function useDrawing({
             }
             const finalDrawing = Object.freeze({
               ...previewEntityRef.current,
-              dataPoints: Object.freeze(tool === "channel-parallel" && baselineEnd
+              dataPoints: Object.freeze(isThreeClickCreationTool(tool) && baselineEnd
                 ? [
                     Object.freeze({ ...anchor }),
                     Object.freeze({ ...baselineEnd }),
@@ -4204,7 +4163,7 @@ export function useDrawing({
 
         // Hit existing element?
         const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
-        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "path" || hit.type === "channel" || hit.type === "fibonacci" || hit.type === "shape")) {
+        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "path" || hit.type === "channel" || hit.type === "calculated" || hit.type === "fibonacci" || hit.type === "shape")) {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
           if (!saved || !id) return;
@@ -4344,6 +4303,25 @@ export function useDrawing({
             }
             return;
           }
+        }
+
+        // Anchored VWAP needs only its first bar: one click places it.
+        if (tool === "anchored-vwap" && interactionSurfaceMode === "overlay") {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!removePreview()) return;
+          const dataPoint = screenToDrawingData(pos.x, pos.y, {
+            snap: drawingSnapEnabledRef.current && !e.altKey,
+          });
+          if (!dataPoint) return;
+          const saved = createCalculatedSavedDrawing({
+            tool,
+            dataPoints: [dataPoint],
+            color: penColorRef.current,
+            lineWidth: penSizeRef.current,
+          });
+          if (saved) completePlacement(saved, tool);
+          return;
         }
 
         // First click — set anchor

@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySwedish, replayNoteSwedish, tradeHistorySwedish, readonlyAccountSwedish, continuousSwedish, tradingAccountsSv, nativeSwedish } from "./swedishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 
 export const sv = {
   ...unifiedMessages["sv"],
@@ -4162,4 +4163,5 @@ export const sv = {
   "chartTester.deleteDraft": "Ta bort",
   "chartTester.deleteRetiredDraft": "Ta bort det avvecklade utkastet {name}",
   "chartTester.deleteRetiredDraftFailed": "Det avvecklade utkastet kunde inte tas bort. Försök igen.",
+  ...drawingCalculatedMessages["sv"],
 } as const satisfies MessageCatalog;

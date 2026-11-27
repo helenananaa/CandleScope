@@ -1,7 +1,7 @@
 /**
  * Drawing toolbar sits on the left side of the chart area.
  *
- * Buttons: Mouse cursor, Pen/Highlighter, Eraser, Line, Shape, Text, Fibonacci, Position (Long/Short).
+ * Buttons: Mouse cursor, Pen/Highlighter, Eraser, Line, Shape, Text, Fibonacci, Calculated, Position (Long/Short).
  * Left-click toggles the tool on/off.
  * Right-click or double-click on Cursor / Pen / Line / Shape opens a flyout to switch variants.
  *
@@ -21,6 +21,7 @@ import {
 } from "../features/drawings/drawingCapabilities.js";
 import { t } from "../i18n/index.js";
 import { resolveDrawingHostInteractionSurfaceMode } from "../features/drawings/interactionSurfaceMode.js";
+import { isCalculatedToolId } from "../features/drawings/drawingModel.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { markPerfOnce } from "../runtime/performance/perfMarks";
 import DrawingActionButtons from "./drawing/DrawingActionButtons.js";
@@ -29,6 +30,7 @@ import DrawingToolButton from "./drawing/DrawingToolButton.js";
 import DrawingVariantToolButton from "./drawing/DrawingVariantToolButton.js";
 import { drawingVariantLabel } from "./drawing/drawingToolbarI18n.js";
 import {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
   AutoSelectIcon,
@@ -151,12 +153,14 @@ const DrawingToolbar = memo(function DrawingToolbar({
   }, [drawingAnchorMode, onToolChange]);
   const isVariantDisabled = useCallback(
     (variant: ToolbarVariant<DrawingToolId>) => !supportsDrawingTool(drawingAnchorMode, variant.id)
-      || (variant.id.startsWith("measure-") && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
+      || ((variant.id.startsWith("measure-") || isCalculatedToolId(variant.id))
+        && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
     [drawingAnchorMode],
   );
 
   const {
     chartTypeBtnRef,
+    calculatedGroup,
     closeFlyout,
     currentChartType,
     currentCursorIcon,
@@ -257,6 +261,10 @@ const DrawingToolbar = memo(function DrawingToolbar({
     || !supportsDrawingTool(drawingAnchorMode, "fibonacci");
   const positionToolsDisabled = drawingGestureToolsDisabled
     || !hasSupportedDrawingVariant(drawingAnchorMode, POSITION_VARIANTS);
+  // Calculated drawings are painted only by the scene overlay.
+  const calculatedToolsDisabled = drawingGestureToolsDisabled
+    || !hasSupportedDrawingVariant(drawingAnchorMode, CALCULATED_VARIANTS)
+    || resolveDrawingHostInteractionSurfaceMode() !== "overlay";
   const lineVariantSupported = supportsDrawingTool(drawingAnchorMode, lineVariant);
   const displayedLineVariant = lineVariantSupported
     ? (LINE_VARIANTS.find((variant) => variant.id === lineVariant) || DEFAULT_LINE_VARIANT)
@@ -439,6 +447,25 @@ const DrawingToolbar = memo(function DrawingToolbar({
           />
         )}
       </DrawingToolButton>
+
+      <DrawingVariantToolButton
+        active={calculatedGroup.active}
+        anchorRef={calculatedGroup.anchorRef}
+        currentId={calculatedGroup.currentId}
+        dataDrawingTool={calculatedGroup.currentId}
+        disabled={calculatedToolsDisabled}
+        flyoutKey="calculated"
+        flyoutOpen={flyoutOpen}
+        icon={calculatedGroup.icon}
+        onClick={calculatedGroup.onClick}
+        onCloseFlyout={closeFlyout}
+        onContextMenu={calculatedGroup.onContextMenu}
+        onDoubleClick={calculatedGroup.onDoubleClick}
+        onSelect={calculatedGroup.onSelect}
+        title={calculatedToolsDisabled ? drawingToolTitle : t("drawing.switch.calculated", { tool: calculatedGroup.label })}
+        variants={CALCULATED_VARIANTS}
+        isVariantDisabled={isVariantDisabled}
+      />
 
       <DrawingVariantToolButton
         active={isPositionActive}

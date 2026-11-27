@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type {
   ArrowToolId,
   BasicLineToolId,
+  CalculatedToolId,
   ChannelToolId,
   PathToolId,
   RangeMeasureToolId,
@@ -378,6 +379,44 @@ const ChartHistogramIcon = (
   </svg>
 );
 
+const FibExtensionIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 20 8 8l4 6" strokeDasharray="2 2.5" />
+    <line x1="12" y1="14" x2="21" y2="14" />
+    <line x1="12" y1="9" x2="21" y2="9" opacity="0.6" />
+    <line x1="12" y1="4" x2="21" y2="4" opacity="0.6" />
+    <circle cx="3" cy="20" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="14" r="1.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const AnchoredVwapIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 16c3-1 4-6 7-6s4 4 6 3 3-5 4-6" />
+    <path d="M4 16v5" opacity="0.6" />
+    <circle cx="4" cy="16" r="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const VolumeProfileIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="3" x2="3" y2="21" opacity="0.5" />
+    <rect x="3" y="4" width="6" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.55" />
+    <rect x="3" y="8.4" width="11" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.7" />
+    <rect x="3" y="12.8" width="17" height="2.6" rx="0.6" fill="currentColor" stroke="none" />
+    <rect x="3" y="17.2" width="8" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.55" />
+  </svg>
+);
+
+const RegressionChannelIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="14" x2="21" y2="4" />
+    <line x1="3" y1="20" x2="21" y2="10" />
+    <line x1="3" y1="17" x2="21" y2="7" strokeDasharray="2 2.5" opacity="0.7" />
+  </svg>
+);
+
 const CURSOR_VARIANTS: ToolbarVariant<PassiveCursorToolId>[] = [
   { id: "cursor-default", label: "Default cursor", icon: MouseDefaultIcon },
   { id: "cursor-crosshair", label: "Crosshair", icon: MouseCrosshairIcon },
@@ -438,6 +477,14 @@ const POSITION_VARIANTS: ToolbarVariant<PositionToolId>[] = [
 
 const POSITION_TOOL_IDS = new Set(POSITION_VARIANTS.map((v) => v.id));
 
+/** Drawings whose values come from the chart's bars (PL-3). */
+const CALCULATED_VARIANTS: ToolbarVariant<CalculatedToolId>[] = [
+  { id: "fib-extension", label: "Fib extension", description: "Click the move's start and end, then the pullback", icon: FibExtensionIcon },
+  { id: "anchored-vwap", label: "Anchored VWAP", description: "Click the bar the average starts from", icon: AnchoredVwapIcon },
+  { id: "volume-profile", label: "Fixed range volume profile", description: "Click the first and last bar; estimated from bar volume", icon: VolumeProfileIcon },
+  { id: "regression-channel", label: "Regression channel", description: "Click the first and last bar; rails at 2 standard deviations", icon: RegressionChannelIcon },
+];
+
 const CHART_TYPE_VARIANTS: ToolbarVariant<MainChartType>[] = [
   { id: "candlestick", label: "Candles", description: "Open, high, low and close candles", icon: CandlestickChartIcon },
   { id: "hollow-candlestick", label: "Hollow candles", description: "Body fill and price-change color", icon: HollowCandlestickChartIcon },
@@ -457,6 +504,7 @@ const CHART_TYPE_VARIANTS: ToolbarVariant<MainChartType>[] = [
 ];
 
 export {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
   AutoSelectIcon,

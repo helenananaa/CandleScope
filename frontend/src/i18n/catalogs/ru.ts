@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRussian, replayNoteRussian, tradeHistoryRussian, readonlyAccountRussian, continuousRussian, tradingAccountsRu, nativeRussian } from "./russianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 
 export const ru = {
   ...unifiedMessages["ru"],
@@ -4173,4 +4174,5 @@ export const ru = {
   "chartTester.deleteDraft": "Удалить",
   "chartTester.deleteRetiredDraft": "Удалить снятый с поддержки черновик {name}",
   "chartTester.deleteRetiredDraftFailed": "Не удалось удалить снятый с поддержки черновик. Повторите попытку.",
+  ...drawingCalculatedMessages["ru"],
 } as const satisfies MessageCatalog;

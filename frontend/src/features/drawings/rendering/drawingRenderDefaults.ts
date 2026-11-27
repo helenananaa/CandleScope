@@ -3,7 +3,14 @@ import {
   normalizeFreehandStroke,
   normalizeLegacyFreehandDataPoints,
 } from "../freehandStrokeModel.js";
+import {
+  DEFAULT_REGRESSION_DEVIATION,
+  DEFAULT_VOLUME_PROFILE_ROWS,
+  MAX_VOLUME_PROFILE_ROWS,
+  MIN_VOLUME_PROFILE_ROWS,
+} from "../geometry/calculatedDrawingMath.js";
 import type {
+  CalculatedDrawingType,
   AxisLineType,
   BasicLineToolId,
   BrushShape,
@@ -78,6 +85,18 @@ export type ChannelDrawingRenderEntity = DrawingRenderEntityBase<"channel", {
   color: string;
   lineWidth: number;
   fillOpacity: number;
+}>;
+
+export type CalculatedDrawingRenderEntity = DrawingRenderEntityBase<"calculated", {
+  kind: "calculated";
+  calcType: CalculatedDrawingType;
+  dataPoints: readonly DrawingDataPoint[];
+}, {
+  kind: "calculated";
+  color: string;
+  lineWidth: number;
+  deviation: number;
+  rows: number;
 }>;
 
 export type AxisLineDrawingRenderEntity = DrawingRenderEntityBase<"axis-line", {
@@ -182,6 +201,7 @@ export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "
 export type DrawingRenderEntity =
   | PathDrawingRenderEntity
   | ChannelDrawingRenderEntity
+  | CalculatedDrawingRenderEntity
   | LineDrawingRenderEntity
   | AxisLineDrawingRenderEntity
   | RangeMeasureDrawingRenderEntity
@@ -347,6 +367,27 @@ export function normalizeDrawingEntityForRender(
           color: renderColor(style.color),
           lineWidth: renderLineWidth(style.lineWidth),
           fillOpacity: renderOpacity(style.fillOpacity, DEFAULT_CHANNEL_RENDER_FILL_OPACITY),
+        }),
+      });
+    case "calculated":
+      if (entity.kind !== "calculated" || style.kind !== "calculated") return null;
+      return Object.freeze({
+        ...renderBase(entity, "calculated"),
+        geometry: Object.freeze({
+          kind: "calculated" as const,
+          calcType: geometry.calcType,
+          dataPoints: cloneFrozen(geometry.dataPoints),
+        }),
+        style: Object.freeze({
+          kind: "calculated" as const,
+          color: renderColor(style.color),
+          lineWidth: renderLineWidth(style.lineWidth),
+          deviation: typeof style.deviation === "number" && Number.isFinite(style.deviation) && style.deviation > 0
+            ? style.deviation
+            : DEFAULT_REGRESSION_DEVIATION,
+          rows: typeof style.rows === "number" && Number.isInteger(style.rows)
+            ? Math.min(MAX_VOLUME_PROFILE_ROWS, Math.max(MIN_VOLUME_PROFILE_ROWS, style.rows))
+            : DEFAULT_VOLUME_PROFILE_ROWS,
         }),
       });
     case "axis-line":

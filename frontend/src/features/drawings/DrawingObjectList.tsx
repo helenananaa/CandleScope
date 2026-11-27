@@ -28,7 +28,8 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
       : drawingName(drawing.type === "shape" ? drawing.shapeType ?? "rectangle"
         : drawing.type === "path" ? (drawing.arrowEnd ? "path-arrow" : "path-line")
         : drawing.type === "line" ? (drawing.arrowEnd ? "line-arrow" : drawing.lineType ?? "line")
-        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line" : drawing.type);
+        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line"
+        : drawing.type === "calculated" ? drawing.calcType : drawing.type);
     const name = drawing.type === "text" ? drawing.text || typeName : typeName;
     const intervalHidden = !drawingVisibleAtInterval({ visibleIntervals: drawing.visibleIntervals ?? null }, interval);
     const searchable = `${typeName} ${name} ${id}`.toLocaleLowerCase();

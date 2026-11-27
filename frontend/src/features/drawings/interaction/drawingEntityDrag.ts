@@ -53,6 +53,7 @@ export function drawingEntityGeometryCommandForDrag(
     case "range-measure":
     case "path":
     case "channel":
+    case "calculated":
     case "angle":
     case "fibonacci":
       return descriptor.pointIndex < 0 ? "move" : "resize";
@@ -599,7 +600,8 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     snap,
   } = options;
   if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci"
-    && descriptor.type !== "range-measure" && descriptor.type !== "channel" && descriptor.type !== "path") {
+    && descriptor.type !== "range-measure" && descriptor.type !== "channel" && descriptor.type !== "path"
+    && descriptor.type !== "calculated") {
     return null;
   }
   if ((descriptor.type === "line" && drawing.type !== "line")
@@ -607,11 +609,14 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     || (descriptor.type === "range-measure" && drawing.type !== "range-measure")
     || (descriptor.type === "path" && drawing.type !== "path")
     || (descriptor.type === "channel" && drawing.type !== "channel")
+    || (descriptor.type === "calculated" && drawing.type !== "calculated")
     || (descriptor.type === "fibonacci" && drawing.type !== "fibonacci")) return null;
   const currentPoints = "dataPoints" in drawing && Array.isArray(drawing.dataPoints)
     ? immutableDataPoints(drawing.dataPoints)
     : null;
-  if (!currentPoints || currentPoints.length < 2 || !Number.isInteger(descriptor.pointIndex)) return null;
+  // An anchored VWAP keeps one anchor; every other line-like drawing keeps two or more.
+  const minimumPoints = drawing.type === "calculated" ? 1 : 2;
+  if (!currentPoints || currentPoints.length < minimumPoints || !Number.isInteger(descriptor.pointIndex)) return null;
 
   let dataPoints: DrawingDataPoint[] | null;
   if (descriptor.pointIndex >= 0) {
@@ -676,6 +681,7 @@ export function applyDrawingEntityDrag(options: DrawingEntityDragOptions): Saved
       case "range-measure":
       case "path":
     case "channel":
+      case "calculated":
       case "angle":
       case "fibonacci":
         return applyLineLikeDrag(options);

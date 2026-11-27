@@ -109,7 +109,7 @@ interface ShapeDrag extends DragBase {
 }
 
 interface LineLikeDrag extends DragBase {
-  type: "line" | "angle" | "fibonacci" | "range-measure" | "channel" | "path";
+  type: "line" | "angle" | "fibonacci" | "range-measure" | "channel" | "path" | "calculated";
   pointIndex: number;
   origPoints: DrawingDataPoint[];
 }
@@ -156,6 +156,7 @@ export function drawingGeometryCommandForDrag(
     case "range-measure":
     case "path":
     case "channel":
+    case "calculated":
     case "angle":
     case "fibonacci":
       return dragging.pointIndex < 0 ? "move" : "resize";

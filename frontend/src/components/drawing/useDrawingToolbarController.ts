@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   CURSOR_VARIANTS,
   FREEHAND_VARIANTS,
@@ -14,9 +15,11 @@ import {
   SHAPE_VARIANTS,
 } from "./drawingToolbarDefinitions.js";
 import { drawingVariantLabel } from "./drawingToolbarI18n.js";
+import { useVariantToolGroup } from "./useVariantToolGroup.js";
 import { t } from "../../i18n/index.js";
 import type { LineToolbarToolId, ToolbarVariant } from "./drawingToolbarDefinitions.js";
 import type {
+  CalculatedToolId,
   DrawingToolId,
   FreehandToolId,
   PassiveCursorToolId,
@@ -33,7 +36,8 @@ export type DrawingToolbarFlyoutKey =
   | "shape"
   | "fib-levels"
   | "position"
-  | "position-settings";
+  | "position-settings"
+  | "calculated";
 
 export interface DrawingToolbarControllerOptions {
   activeTool: DrawingToolId | null;
@@ -75,6 +79,14 @@ export function useDrawingToolbarController({
   const [shapeVariant, setShapeVariant] = useState<ShapeToolId>("shape-rectangle");
   const [posVariant, setPosVariant] = useState<PositionToolId>("position-long");
   const [flyoutOpen, setFlyoutOpen] = useState<DrawingToolbarFlyoutKey | null>(null);
+  const calculatedGroup = useVariantToolGroup<CalculatedToolId, DrawingToolbarFlyoutKey>({
+    activeTool,
+    flyoutKey: "calculated",
+    initialVariant: "fib-extension",
+    variants: CALCULATED_VARIANTS,
+    onToolChange,
+    setFlyoutOpen,
+  });
 
   const chartTypeBtnRef = useRef<HTMLDivElement | null>(null);
   const cursorBtnRef = useRef<HTMLDivElement | null>(null);
@@ -354,6 +366,7 @@ export function useDrawingToolbarController({
   const currentPosition = findVariant(POSITION_VARIANTS, posVariant);
 
   return {
+    calculatedGroup,
     chartType,
     chartTypeBtnRef,
     closeFlyout,
