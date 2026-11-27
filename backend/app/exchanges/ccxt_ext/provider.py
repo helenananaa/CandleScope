@@ -34,7 +34,6 @@ class _VenueContext:
     entry: Any
     contracts: _VenueContractBundle
     adapter: CcxtUnifiedAdapter
-    rest_book_revision: int = 0
 
 
 class CcxtVenueBinding:
