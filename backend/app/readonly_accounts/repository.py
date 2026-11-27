@@ -272,7 +272,8 @@ class AccountRepository:
 
     def save_snapshot(self, kind: str, payload: dict | list, received_ms: int) -> None:
         if kind not in {"positions", "open_orders", "balances", "contracts", "position_history", "position_history_state",
-                        "fee_rates", "fee_rates_state"}:
+                        "fee_rates", "fee_rates_state", "funding_balances", "funding_balances_state",
+                        "funding_history", "funding_history_state"}:
             raise AccountDataError("SNAPSHOT_KIND_INVALID")
         with self.transaction() as db:
             if kind == "position_history":
@@ -284,10 +285,15 @@ class AccountRepository:
                     self._raw(db,"contract",item["normalized"]["instrument"],item["raw"],received_ms,"REST")
             db.execute("INSERT OR REPLACE INTO snapshot VALUES(?,?,?)", (kind,received_ms,canonical(payload)))
 
+    def snapshot(self, kind: str) -> dict | None:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM snapshot WHERE kind=?", (kind,)).fetchone()
+        return None if row is None else {"receivedMs": row["received_ms"], "data": json.loads(row["payload"])}
+
     def snapshots(self, *, overview: bool = False) -> dict:
         with self.connection() as db:
             return {row["kind"]:{"receivedMs":row["received_ms"],"data":json.loads(row["payload"])}
-                    for row in db.execute("SELECT * FROM snapshot" + (" WHERE kind NOT IN ('contracts','position_history')" if overview else ""))}
+                    for row in db.execute("SELECT * FROM snapshot" + (" WHERE kind NOT IN ('contracts','position_history','funding_history')" if overview else ""))}
 
     def overview(self) -> dict:
         """One committed account/fact/coverage view; never expose credentials.
@@ -309,7 +315,7 @@ class AccountRepository:
                 "coverage": [dict(row) for row in db.execute("SELECT * FROM coverage ORDER BY kind,start_ms,end_ms")],
                 "gaps": [dict(row) for row in db.execute("SELECT * FROM gap ORDER BY kind,start_ms")],
                 "snapshots": {row["kind"]: {"receivedMs": row["received_ms"], "data": json.loads(row["payload"])}
-                              for row in db.execute("SELECT * FROM snapshot WHERE kind NOT IN ('contracts','position_history')")},
+                              for row in db.execute("SELECT * FROM snapshot WHERE kind NOT IN ('contracts','position_history','funding_history')")},
                 "counts": {row[0]: row[1] for row in db.execute("SELECT kind,COUNT(*) FROM fact GROUP BY kind")},
             }
 

@@ -137,6 +137,11 @@ export async function getAccountFacts(kind: FactKind, before: FactPage["next"] =
   return value as unknown as FactPage;
 }
 
+/** The last funding history read (deposits, withdrawals, transfers); see fundingRows.ts. */
+export async function getFundingHistory(signal?: AbortSignal): Promise<unknown> {
+  return await accountRequest("/funding-history", "GET", undefined, signal);
+}
+
 export async function connectAccount(credentials: { apiKey: string; secret: string; password: string }): Promise<void> {
   await accountRequest("/connect", "POST", credentials);
 }
