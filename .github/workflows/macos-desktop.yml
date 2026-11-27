@@ -121,6 +121,7 @@ jobs:
           export CANDLESCOPE_MIHOMO="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/mihomo/mihomo"
           test -x "$CANDLESCOPE_MIHOMO"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_proxy_subscription_scheduled_refresh.py \
             tests/test_proxy_subscriptions.py \
             tests/test_proxy_subscription_refresh.py \
             tests/test_proxy_subscription_formats.py \

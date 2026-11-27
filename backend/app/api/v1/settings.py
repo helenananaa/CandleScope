@@ -570,6 +570,33 @@ async def _blocking(func, *args):
     return await asyncio.to_thread(func, *args)
 
 
+class _BackendChange:
+    """A change the backend makes on its own (scheduled subscription refresh): no client request."""
+
+    def __init__(self, app):
+        self.app = app
+
+
+async def apply_refreshed_routes(app, replacements: dict[str, str]) -> bool:
+    """Point subscription routes at refreshed snapshots, as a save from the settings panel would.
+
+    Routes the user changed since the refresh read them are left alone. Returns whether
+    anything changed.
+    """
+    async with _proxy_update_lock:
+        persisted = load_proxy_settings()
+        routes = persisted.get("routes", [])
+        updated = [dict(route, url=replacements.get(route["url"], route["url"])) for route in routes]
+        if persisted.get("mode") != "pool" or updated == routes:
+            return False
+        body = ProxyConfig(mode="pool", routes=updated, strategy=persisted.get("strategy", "failover"))
+        try:
+            await finish_cleanup(_apply_proxy_settings(_BackendChange(app), body))
+        except HTTPException as exc:
+            raise SubscriptionError(str(exc.detail)) from None
+        return True
+
+
 async def _apply_proxy_settings(request, body):
     mode, custom_proxy = normalize_proxy_settings(body.mode, body.custom_proxy)
     cfg = _get_ingestion_config(request)
@@ -582,7 +609,8 @@ async def _apply_proxy_settings(request, body):
         previous_core and previous_core.alive and cfg and getattr(cfg, "proxy_mode", None) == mode == "pool"
         and external_routes(cfg.proxy_routes) == external_routes(selected)
     )
-    if any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core:
+    if not isinstance(request, _BackendChange) and (
+            any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core):
         require_local_research_access(request)
     readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
     # The account service binds to the first usable route, independently of
