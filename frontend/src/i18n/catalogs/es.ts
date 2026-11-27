@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 
 /** Neutral Spanish trading glossary for Spain and Latin America:
  * orden, ejecución, posición, pérdidas y ganancias, margen,
@@ -4172,4 +4173,5 @@ export const es = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar el borrador retirado {name}",
   "chartTester.deleteRetiredDraftFailed": "No se pudo eliminar el borrador retirado. Inténtalo de nuevo.",
+  ...chartTimeZoneMessages["es"],
 } as const satisfies MessageCatalog;
