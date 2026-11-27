@@ -163,6 +163,30 @@
       ],
       "fixed_intervals_only": true,
       "intervals": null,
+      "language": "pine",
+      "reason": "READ_ONLY",
+      "starts": [
+        "HISTORY_LIVE",
+        "LIVE_ONLY"
+      ]
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FORWARD",
+      "controls": {
+        "cancel": false
+      },
+      "family": "continuous",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
       "language": "python",
       "reason": "READ_ONLY",
       "starts": [

@@ -76,6 +76,8 @@ def main() -> int:
         "test_native_follow_sessions.py",
         # B-333: forward runs advance on closed bars of any fixed-length signal interval.
         "test_continuous_grid.py",
+        # B-333b: Pine forward runs, close-bar ORDER_INTENT only (runtime equality runs in pine-host-contracts).
+        "test_continuous_pine.py",
         "test_execution_data_market.py",
         # Replay: no future data before reveal (launch non-negotiable) and revealed indicator columns.
         "test_replay_no_lookahead.py", "test_replay_indexed_indicator_closes.py",

@@ -15,7 +15,7 @@ from .continuous_grid import supports as grid_interval
 from .continuous_provider import prepare_provider, _json
 from .errors import BacktestError
 from .models import ENGINE_VERSION
-from .service import _base_execution_contract, _config_decimal, _config_optional_decimal
+from .execution_contract import _base_execution_contract, _config_decimal, _config_optional_decimal
 
 BASE_FIELDS = {"account_model","gap_policy","contract_data_mode","funding_mode","leverage",
     "initial_balance","slippage_bps","taker_fee_bps","maker_fee_bps","funding_rate","funding_interval_hours",
@@ -97,6 +97,9 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
             or key.identity.volume_semantics not in CONTINUOUS_VOLUME_SEMANTICS):
         raise BacktestError("FIDELITY_UNSUPPORTED",
             "This continuous source requires raw spot or Binance futures OHLCV with base-unit volume")
+    # B-333b: refuse what no Pine forward run supports before compiling its code.
+    from .continuous_pine import refuse_before_compile
+    refuse_before_compile(provider, execution, follow=follow)
     provider = prepare_provider(provider)
     payload = {**execution,"output_mode":provider["output_mode"],"market_type":key.market_type}
     try:
@@ -144,6 +147,9 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     if policy:config.update(policy.identity())
     if preset:config.update(quick_preset_id=preset,quick_preset_revision=preset_revision,fee_source=fee_source)
     config.update(realism.identity(fidelity_mode="BAR_APPROX"))
+    if provider["language"] == "pine":
+        from .continuous_pine import pine_definition_config
+        config.update(pine_definition_config(provider, realism_enabled=realism.enabled))
     series = [key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values]
     return {"engine_version":ENGINE_VERSION,"language":provider["language"],"provider":provider,
         "configuration":config,"input_plan":{"roles":["BARS"]},

@@ -19,6 +19,7 @@ import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
 import { forwardBarOpenMs, forwardIntervalMs, MINUTE_MS } from "./forwardInterval.js";
+import { forwardSupport, pineForwardInputs } from "./forwardPine.js";
 import { readContinuousAccountRows } from "./continuousAccountRows.js";
 import {
   PRACTICE_ACCOUNT_RULES, defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
@@ -89,9 +90,13 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [from, setFrom] = useState(() => new Date(props.initialFromMs ?? Date.now() - 86400000).toISOString().slice(0, 16));
   const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
   const [fee, setFee] = useState(() => defaultForwardFeeBps(props.initialExecution)), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
-  const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
+  const [selectedOutput, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
+  // B-333b: a Pine script places its own orders, on the CandleScope bar account at leverage 1.
+  const pine = props.language === "pine";
+  const output = pine ? "ORDER_INTENT" : selectedOutput;
   // ADR-BACKTEST-015 P6e: new forward runs trade on the practice account model (continuousAccountRules).
-  const executionModel = forwardExecutionModel(props.initialization, reference);
+  // Practice rules run built-in and Python strategies only, as fixed-history runs do.
+  const executionModel = pine ? "LEGACY" : forwardExecutionModel(props.initialization, reference);
   const spot = props.session.marketType === "spot";
   const [leverage, setLeverage] = useState(() => defaultForwardLeverage(props.session.marketType, props.initialExecution));
   const accountLeverage = forwardAccountLeverage(executionModel, props.session.marketType, leverage);
@@ -106,7 +111,10 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const liveBarsUnavailable = props.liveBars === false;
   // B-333: the run advances on closed bars of the chart's interval, any fixed length of whole minutes.
   const barMs = forwardIntervalMs(props.session.interval);
-  const qualified = props.language === "python" && hasSource && barMs !== null && !liveBarsUnavailable
+  const support = forwardSupport(props.language, props.signalChart);
+  // Python runs on this computer after the in-app consent; Pine needs a backend with Pine forward runs.
+  const languageReady = pine ? !!caps?.languages.includes("pine") : props.trusted && !!caps?.python_editor_authorized;
+  const qualified = support.supported && hasSource && barMs !== null && !liveBarsUnavailable
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
     && CONTINUOUS_SERIES_VARIANTS.has(identity.seriesVariant) && identity.priceAdjustment === "raw"
     && CONTINUOUS_VOLUME_SEMANTICS.has(identity.volumeSemantics);
@@ -167,7 +175,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const matchingPending = savedRuns.find((item) => !item.runId && item.inputRevision === inputRevision);
   const changedInputs = !!reference?.runId && reference.inputRevision !== inputRevision;
   async function initialize() {
-    if (submitting.current || busy || storageFailed || !manager || !caps?.execution_enabled || !caps.python_editor_authorized || !props.trusted || !qualified) return;
+    if (submitting.current || busy || storageFailed || !manager || !caps?.execution_enabled || !languageReady || !qualified) return;
     submitting.current = true;
     setBusy(true); setError(null);
     try {
@@ -198,9 +206,12 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         series: { exchange: props.session.exchange, market_type: props.session.marketType, symbol: props.session.symbol, interval: props.session.interval,
           identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
             series_variant: identity.seriesVariant, price_adjustment: identity.priceAdjustment, session_variant: identity.sessionVariant, volume_semantics: identity.volumeSemantics } },
-        provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
+        provider: pine ? { language: "pine", source_text: props.source, ...pineForwardInputs(props.parameters), output_mode: "ORDER_INTENT" }
+          : { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
         execution: { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
-          initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
+          initial_balance: balance, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
+          // A Pine script sizes its own orders; Python output is sized by the Host equity percent.
+          ...(pine ? {} : { sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent }),
           ...forwardModelExecution(executionModel, accountLeverage) },
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
@@ -236,7 +247,8 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const start = props.mode === "HISTORY_LIVE" ? forwardBarOpenMs(props.session.interval, Date.parse(from + ":00Z")) ?? -1
     : (observed?.cutoff_ms ?? -1) + 1;
   const warmupBars = props.initialization?.warmupBars ?? 0;
-  const researchSettings: StrategyRunSettings | null = view && !view.stale && observed?.run_id === view.identity.id && barMs !== null
+  // The research workspace continues Python bar runs (pythonBarExecution); Pine has no hand-off yet.
+  const researchSettings: StrategyRunSettings | null = !pine && view && !view.stale && observed?.run_id === view.identity.id && barMs !== null
     && start > 0 && start % MINUTE_MS === 0 && (view.identity.event_time_ms + 1 - start) % barMs === 0
     && view.identity.event_time_ms >= start + warmupBars * barMs ? {
       parameters: props.parameters, fidelityPreference: "FAST", rangeMode: "CUSTOM",
@@ -280,11 +292,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     </option>)}</select></label>}
     <div className="continuous-settings">
       {props.mode === "HISTORY_LIVE" && <label>{t("continuous.from")}<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} /></label>}
-      {([["continuous.balance", balance, setBalance], ["continuous.percent", percent, setPercent], ["continuous.fee", fee, setFee], ["continuous.slippage", slippage, setSlippage]] as const).map(([label, value, change]) =>
+      {([["continuous.balance", balance, setBalance], ...(pine ? [] : [["continuous.percent", percent, setPercent] as const]), ["continuous.fee", fee, setFee], ["continuous.slippage", slippage, setSlippage]] as const).map(([label, value, change]) =>
         <label key={label}>{t(label)}<input type="number" min="0" step="any" value={value} onChange={(event) => change(event.target.value)} /></label>)}
       {executionModel === "PRACTICE" && !spot && <label>{t("continuous.leverage")}<input type="number" min="1" max="125" step="1"
         value={leverage} onChange={(event) => setLeverage(event.target.value)} /></label>}
-      <label>{t("continuous.output")}<select aria-label={t("continuous.output")} value={output} onChange={(event) => setOutput(event.target.value as typeof output)}>
+      <label>{t("continuous.output")}<select aria-label={t("continuous.output")} value={output} disabled={pine} onChange={(event) => setOutput(event.target.value as typeof output)}>
         <option value="SIGNAL">{t("continuous.signal")}</option><option value="TARGET_POSITION">{t("continuous.target")}</option><option value="ORDER_INTENT">{t("continuous.order")}</option>
       </select></label>
     </div>
@@ -298,11 +310,12 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {props.editor(() => { void initialize(); })}
     {!qualified && <p role="status">{liveBarsUnavailable
       ? t("continuous.liveBarsUnavailable", { symbol: props.session.symbol })
+      : !support.supported && support.reason === "PINE_SIGNAL_CHART" ? t("strategyForward.pineSignalChart")
       : t("continuous.unsupported")}</p>}
     {reference && reference.inputRevision !== inputRevision && <p role="status">{t("continuous.edited")}</p>}
     {reference && !reference.runId && <p role="status">{t("continuous.pending")}</p>}
     <div className="continuous-actions">
-      <Button size="sm" variant="primary" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</Button>
+      <Button size="sm" variant="primary" disabled={busy || storageFailed || !qualified || !languageReady || !caps?.execution_enabled || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</Button>
       {props.onDetach && <Button size="sm" disabled={busy || !props.language} onClick={() => { void detach(); }}>{t("continuous.detach")}</Button>}
       {reference && <Button size="sm" disabled={busy} onClick={() => { void recover(); }}>{t(reference.runId ? "continuous.observe" : "continuous.recover")}</Button>}
       {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <Button size="sm" key={action} disabled={busy || !caps?.execution_enabled}

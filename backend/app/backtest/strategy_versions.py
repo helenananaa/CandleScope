@@ -86,9 +86,12 @@ def continuous_material(definition: Mapping[str, Any]) -> dict[str, Any]:
     source = provider.get("source_text") or ""
     if builtin and not source:
         return material("builtin", str(builtin), {}, runtime)
-    return material(str(provider["language"]), str(source), {},
+    pine = provider.get("pine") if isinstance(provider.get("pine"), Mapping) else None
+    return material(str(provider["language"]), str(source), provider.get("libraries") or {},
                     {**runtime, "provider_schema": str(provider.get("schema")),
-                     **({"builtin_id": str(builtin)} if builtin else {})})
+                     **({"builtin_id": str(builtin)} if builtin else {}),
+                     # B-333b: a Pine forward run's compilation on the installed Pine runtime.
+                     **({"dependency_hash": str(pine.get("dependency_hash"))} if pine else {})})
 
 
 def check_hash(value: object) -> str:

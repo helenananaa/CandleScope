@@ -102,6 +102,18 @@ from .study_v2 import (
     verify_selection_receipt,
     walk_forward_folds_v2,
 )
+from .execution_contract import _base_execution_contract, _config_decimal, _config_optional_decimal
+from .host_bar import (
+    _assert_strategy_frame_inputs,
+    _build_bar_kernel,
+    _declared_feature_names,
+    _execution_kernel_kwargs,
+    _new_host_planner,
+    _pine_account_view,
+    _planning_context,
+    _strategy_execution_reporter,
+    _strategy_observation_features,
+)
 from .strategy.host_adapter import StrategyHostAdapter
 from .strategy.host_policy import (
     HOST_POLICY_REVISION,
@@ -4815,66 +4827,16 @@ class BacktestService:
             str(payload["strategy_revision_id"])
         )
         if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
-            compiled_pine = json.loads(str(persisted_execution["compiled_json"]))
-            execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
-            fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
-            history_ticks = json.loads(compiled_pine["executionSource"]).get("historyTicks") is True
-            realtime_ticks = json.loads(compiled_pine["executionSource"]).get("realtimeTicks") is True
-            if realtime_ticks and fidelity not in DUAL_MODES and not (history_ticks and fidelity=="BAR_APPROX"):
-                raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require aggregate-trade execution; historical BAR ticks require calc_on_every_history_tick")
-            if realtime_ticks and fidelity in DUAL_MODES:
-                envelope=json.loads(compiled_pine["executionSource"])
-                if (output_mode!="ORDER_INTENT" or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
-                    raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require the negotiated aggregate-trade stream and ORDER_INTENT")
-                execution_config["pine_realtime_ticks"]=True
-            if history_ticks and not execution_config.get("pine_realtime_ticks"):
-                envelope=json.loads(compiled_pine["executionSource"])
-                if (fidelity!="BAR_APPROX" or output_mode!="ORDER_INTENT"
-                        or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
-                    raise BacktestError("FIDELITY_UNSUPPORTED","chart historical ticks require the negotiated BAR stream and ORDER_INTENT")
-                execution_config.update(pine_history_ticks=True,pine_bar_path_contract="candlescope.pine-bar-path/1")
-                if account_model=="LINEAR_PERP_ONE_WAY_V2" or execution_realism.enabled:
-                    execution_config["pine_v2_bar_contract"]="candlescope.pine-v2-bar/1"
-            process_close = json.loads(compiled_pine["executionSource"]).get("processOnClose") is True
-            stop_functions = json.loads(compiled_pine["executionSource"]).get("riskStopFunctions") or []
-            if stop_functions:
-                from .pine_risk_stops import window_contract
-                if output_mode != "ORDER_INTENT":
-                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine stop rules require ORDER_INTENT")
-                execution_config["pine_risk_windows"] = window_contract({**payload, "fidelity_mode": fidelity}, stop_functions)
-            if process_close:
-                execution_config["pine_process_on_close"] = True
-            if fill_callbacks:
-                if fidelity not in {"BAR_APPROX", *DUAL_MODES} or output_mode != "ORDER_INTENT":
-                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and BAR or aggregate-trade execution")
-                if fidelity == "BAR_APPROX":
-                    envelope = json.loads(compiled_pine["executionSource"])
-                    if envelope.get("executionScheduleContract") != "candlescope.pine-execution-schedule/1":
-                        raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR callbacks require explicit execution schedules")
-                    if account_model == "LINEAR_PERP_ONE_WAY_V2" or execution_realism.enabled:
-                        execution_config["pine_v2_bar_contract"] = "candlescope.pine-v2-bar/1"
-                    execution_config["pine_bar_path_contract"] = "candlescope.pine-bar-path/1"
-                execution_config["pine_fill_callbacks"] = True
-            if output_mode == "ORDER_INTENT" or process_close:
-                from .strategy.pine_planner import host_identity
-                execution_config["pine_order_runtime_identity"] = host_identity()
-            if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
-                raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
+            from .pine_host_config import pine_execution_config
+            execution_config.update(pine_execution_config(
+                json.loads(str(persisted_execution["compiled_json"])), payload=payload, fidelity=fidelity,
+                output_mode=output_mode, account_model=account_model, realism_enabled=execution_realism.enabled))
         if payload.get("pine_chart_metadata") is not None:
-            from .native_contracts import PineChartMetadata
+            from .pine_host_config import pine_chart_metadata
             if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "Pine contract metadata requires PINE_ENGINE")
-            try:
-                metadata = PineChartMetadata.model_validate(payload["pine_chart_metadata"]).model_dump(exclude_none=True)
-            except ValueError as exc:
-                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "invalid Pine contract metadata") from exc
-            from fractions import Fraction
-            for field, config_field in (("priceTickSize", "price_tick"), ("quantityStep", "qty_step")):
-                if metadata.get(field) is not None and payload.get(config_field) is not None and Fraction(metadata[field]) != Fraction(str(payload[config_field])):
-                    raise BacktestError("DATA_SNAPSHOT_MISMATCH", f"Pine {field} differs from Host {config_field}")
-            if account_model == "SPOT_CASH_V1" and metadata.get("pointValue", 1) != 1:
-                raise BacktestError("FIDELITY_UNSUPPORTED", "spot cash accounting requires unit pointValue")
-            execution_config["pine_chart_metadata"] = metadata
+            execution_config["pine_chart_metadata"] = pine_chart_metadata(
+                payload["pine_chart_metadata"], payload=payload, account_model=account_model)
         if payload.get("pine_contexts"):
             from .pine_requested_data import normalize_contexts
             if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
@@ -5597,80 +5559,6 @@ class BacktestService:
         return _strategy_observation_features(provider, bar=bar, trade=trade, _names=_names)
 
 
-def _strategy_observation_features(
-    provider: object,
-    *,
-    bar: Mapping[str, object] | None,
-    trade: Mapping[str, object] | None,
-    _names: tuple[str, ...] | None = None,
-) -> dict[str, str]:
-    source: dict[str, object] = {}
-    if bar is not None:
-        for name in ("open", "high", "low", "close", "volume"):
-            if bar.get(name) is not None:
-                source[name] = bar[name]
-    if trade is not None:
-        if trade.get("price") is not None:
-            source.setdefault("close", trade["price"])
-            source.setdefault("price", trade["price"])
-        if trade.get("qty") is not None:
-            source.setdefault("volume", trade["qty"])
-    names = _declared_feature_names(provider) if _names is None else _names
-    if names:
-        missing = [name for name in names if name not in source]
-        if missing:
-            raise StrategyProviderError(
-                "PROVIDER_PROTOCOL_VIOLATION",
-                f"missing features {missing}",
-            )
-        return {name: str(source[name]) for name in names}
-    if "close" in source:
-        return {"close": str(source["close"])}
-    return {key: str(value) for key, value in source.items()}
-
-
-def _assert_strategy_frame_inputs(
-    provider: object,
-    *,
-    bar: Mapping[str, object] | None,
-    trade: Mapping[str, object] | None,
-    _modes: tuple[str, ...] | None = None,
-) -> None:
-    modes = _modes
-    if modes is None:
-        describe = getattr(provider, "describe", None)
-        if not callable(describe):
-            return
-        modes = tuple(getattr(describe(), "input_modes", ()) or ())
-    if "BAR_CLOSE" in modes and bar is None:
-        raise StrategyProviderError(
-            "PROVIDER_PROTOCOL_VIOLATION", "BAR_CLOSE requires a bar"
-        )
-    if "TRADE_EVENT" in modes and trade is None:
-        raise StrategyProviderError(
-            "PROVIDER_PROTOCOL_VIOLATION", "TRADE_EVENT requires a trade"
-        )
-    if "BOOK_EVENT" in modes:
-        raise StrategyProviderError(
-            "FIDELITY_UNSUPPORTED",
-            "BOOK_EVENT is not available on this execute path",
-        )
-
-
-def _declared_feature_names(provider: object) -> tuple[str, ...] | None:
-    artifact = getattr(provider, "_artifact", None)
-    schema = getattr(artifact, "feature_schema", None) if artifact is not None else None
-    if schema is None:
-        schema = getattr(provider, "feature_schema", None)
-    names = getattr(schema, "names", None)
-    if not names:
-        describe = getattr(provider, "describe", None)
-        capabilities = describe() if callable(describe) else None
-        names = getattr(capabilities, "required_features", None)
-    if not names:
-        return None
-    return tuple(str(name) for name in names)
-
 
 def _provider_step_batch_size(provider: object) -> int:
     """Frames per exchange for isolated providers that stream batched replies."""
@@ -5690,30 +5578,6 @@ def _provider_report_metadata(provider: object) -> dict[str, object]:
     value = report_metadata()
     return dict(value) if isinstance(value, Mapping) else {}
 
-
-def _execution_kernel_kwargs(config: Mapping[str, object]) -> dict[str, object]:
-    if config.get("execution_model_revision") != EXECUTION_REALISM_V2:
-        return {}
-    return {
-        "execution_model_revision": EXECUTION_REALISM_V2,
-        "participation_rate": _config_decimal(config, "participation_rate", "0.1"),
-        "latency_ms": int(config.get("latency_ms") or 0),
-        "latency_events": int(config.get("latency_events") or 0),
-        "order_end_policy": str(config.get("order_end_policy") or "CANCEL_AT_END"),
-        "equity_curve_event_interval": int(
-            config.get("equity_curve_event_interval") or 100
-        ),
-        "equity_curve_mode": (
-            str(config["equity_curve_mode"])
-            if config.get("equity_curve_mode") is not None
-            else None
-        ),
-        **(
-            {"bar_path_scenario": str(config["bar_path_scenario"])}
-            if config.get("bar_path_scenario") is not None
-            else {}
-        ),
-    }
 
 
 def _practice_account_rules(payload, *, fidelity, account_model, contract_data_mode, funding_mode, funding_rate,
@@ -5766,45 +5630,6 @@ def _metrics_market_context(
     return build_market_context(events, fills)
 
 
-def _planning_context(kernel: Any, event: MarketEvent) -> PlanningContext:
-    account = kernel.account
-    reference = getattr(account, "mark", None)
-    if reference is None:
-        reference = event.payload.get("close", event.payload.get("price"))
-    if reference is None:
-        raise BacktestError(
-            "DATA_ROLE_COVERAGE_MISSING", "Host policy requires a visible price"
-        )
-    quantity_step = getattr(account, "step", None) or getattr(kernel, "qty_step", None)
-    min_notional = getattr(account, "min_notional", None) or getattr(
-        kernel, "min_notional", None
-    )
-    contract_multiplier = getattr(account, "multiplier", None) or Decimal("1")
-    active_orders = (len(kernel._live_orders()) if isinstance(kernel, SimulationKernel)
-                     else sum(order.status in {"OPEN", "PARTIAL"} for order in
-                              (kernel._working_orders() if isinstance(kernel, TradeSimulationKernel) else kernel.orders)))
-    cumulative_fees = getattr(account, "cumulative_fees", None)
-    if cumulative_fees is None:
-        cumulative_fees = getattr(kernel, "fee_total", Decimal("0"))
-    return PlanningContext(
-        sequence=event.sequence,
-        event_time_ms=event.event_time_ms,
-        actual_position=account.position_qty,
-        projected_position=kernel.projected_position_qty,
-        reference_price=Decimal(str(reference)),
-        equity=account.equity(),
-        initial_balance=kernel.initial_balance,
-        cumulative_fees=Decimal(str(cumulative_fees)),
-        leverage=Decimal(str(getattr(account, "leverage", kernel.leverage))),
-        active_order_count=active_orders,
-        quantity_step=quantity_step,
-        min_notional=min_notional,
-        contract_multiplier=Decimal(str(contract_multiplier)),
-        rule_revision=str(getattr(account, "rule_version", None) or "LEGACY_CONFIG"),
-        taker_fee_bps=kernel.taker_fee_bps,
-        maker_fee_bps=kernel.maker_fee_bps,
-    )
-
 
 def _policy_result_overrides(
     planner: HostOrderPlanner, result: Any
@@ -5821,26 +5646,6 @@ def _policy_result_overrides(
         **({"pine_risk_stops": pine_stops} if pine_stops is not None else {}),
     }
 
-
-def _config_decimal(config: Mapping[str, object], name: str, default: str) -> Decimal:
-    try:
-        value = Decimal(str(config.get(name, default)))
-    except (InvalidOperation, TypeError, ValueError) as exc:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"{name} must be Decimal") from exc
-    if not value.is_finite() or value < 0:
-        raise BacktestError(
-            "SCHEMA_UNKNOWN_FIELD", f"{name} must be finite and non-negative"
-        )
-    return value
-
-
-def _config_optional_decimal(config: Mapping[str, object], name: str) -> Decimal | None:
-    if config.get(name) is None:
-        return None
-    value = _config_decimal(config, name, "0")
-    if value <= 0:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"{name} must be positive")
-    return value
 
 
 def _event_wire_bytes(events: tuple[MarketEvent, ...]) -> int:
@@ -5898,175 +5703,3 @@ def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
         "close": float(bar.payload["close"]),
         "volume": float(bar.payload["volume"]),
     }
-
-
-def _pine_account_view(kernel):
-    account = kernel.account
-    from .external import account_feedback_profit
-    from .pine_contract_metadata import observed_contract_metadata
-    metadata = observed_contract_metadata(kernel)
-    return {**({"_contract_metadata": metadata} if metadata is not None else {}), "position_size": float(account.position_qty),
-            "position_avg_price": None if account.entry_price is None else float(account.entry_price),
-            "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
-            "netprofit": float(account_feedback_profit(account, kernel.initial_balance)),
-            "openprofit": float(account.unrealized())}
-
-
-def _strategy_execution_reporter(session):
-    def report(event: dict) -> None:
-        payload = dict(event)
-        payload.setdefault("accepted", True)
-        payload["generation"] = session.generation
-        session.on_execution_report(payload)
-
-    return report
-
-
-def _build_bar_kernel(config, execution_reporter):
-    """One BAR kernel configuration for fixed and continuing strategy execution.
-
-    A Pine script with a frozen path contract runs on the Host bar kernel's chart clock, or
-    its V2 path clock when the V2 contract is frozen too (ADR-BACKTEST-015 P6).
-    """
-    from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_V2
-    from app.simulation.practice_clock import PRACTICE, PRACTICE_ACCOUNT_RULES
-    bar_clock = (PINE_V2 if config.get("pine_v2_bar_contract") else PINE_CHART) if config.get("pine_bar_path_contract") else BAR_CLOCK
-    if config.get("account_rules") == PRACTICE_ACCOUNT_RULES:
-        bar_clock = PRACTICE
-    kernel = SimulationKernel(
-        bar_clock=bar_clock,
-        process_orders_on_close=bool(config.get("pine_process_on_close")),
-        account_model=str(
-            config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
-        ),
-        funding_mode=str(config.get("funding_mode") or "OFF"),
-        leverage=_config_decimal(config, "leverage", "1"),
-        host_policy_revision=config.get("host_policy_revision"),
-        slippage_bps=_config_decimal(config, "slippage_bps", "1"),
-        taker_fee_bps=_config_decimal(config, "taker_fee_bps", "0"),
-        maker_fee_bps=_config_decimal(config, "maker_fee_bps", "0"),
-        funding_rate=_config_decimal(config, "funding_rate", "0"),
-        funding_interval_ms=int(config.get("funding_interval_hours") or 8)
-        * 3_600_000,
-        initial_balance=_config_decimal(config, "initial_balance", "10000"),
-        price_tick=_config_optional_decimal(config, "price_tick"),
-        qty_step=_config_optional_decimal(config, "qty_step"),
-        min_notional=_config_optional_decimal(config, "min_notional"),
-        gap_policy=str(config.get("gap_policy") or "REJECT"),
-        **_execution_kernel_kwargs(config),
-        execution_reporter=execution_reporter,
-    )
-    return kernel
-
-
-def _new_host_planner(config, **kwargs):
-    if config.get("pine_process_on_close"):
-        from .strategy.pine_planner import host_identity
-        if config.get("pine_order_runtime_identity") != host_identity():
-            raise BacktestError("IDENTITY_MUTATION", "Pine closing-tick implementation changed; create a fresh run")
-    if config.get("pine_runtime_identity") and config.get("output_mode") == "ORDER_INTENT":
-        from .strategy.pine_planner import PineHostPlanner, host_identity
-        if config.get("pine_order_runtime_identity") != host_identity():
-            raise BacktestError("IDENTITY_MUTATION", "Pine Host order implementation changed; create a fresh run")
-        return PineHostPlanner(config, **kwargs)
-    return HostOrderPlanner(config, **kwargs)
-
-
-def _base_execution_contract(payload):
-    """Shared financial preflight; no revision, input, provider or storage access."""
-    account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
-    if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
-        raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
-    if str(payload.get("gap_policy") or "REJECT") not in {
-        "REJECT",
-        "PAUSE",
-        "SKIP_WITH_WARNING",
-    }:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown gap_policy")
-    contract_data_mode = str(payload.get("contract_data_mode") or "LEGACY_FIXED_V1")
-    if contract_data_mode not in {
-        "LEGACY_FIXED_V1",
-        "HISTORICAL_CONTRACT_V1",
-    }:
-        raise BacktestError("FIDELITY_UNSUPPORTED", "unknown contract_data_mode")
-    funding_mode = str(payload.get("funding_mode") or "OFF")
-    if funding_mode not in {"OFF", "FIXED_SCENARIO", "HISTORICAL_REQUIRED"}:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown funding_mode")
-    leverage = _config_decimal(payload, "leverage", "1")
-    if leverage < 1 or leverage > 125:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "leverage must be 1..125")
-    if (
-        account_model == "LINEAR_PERP_ONE_WAY_V2"
-        and contract_data_mode != "HISTORICAL_CONTRACT_V1"
-    ):
-        raise BacktestError(
-            "DATA_ROLE_COVERAGE_MISSING",
-            "LINEAR_PERP_ONE_WAY_V2 requires historical mark and instrument rules",
-        )
-    for name, default, strictly_positive in (
-        ("initial_balance", "10000", True),
-        ("slippage_bps", "1", False),
-        ("taker_fee_bps", "0", False),
-        ("maker_fee_bps", "0", False),
-    ):
-        value = _config_decimal(payload, name, default)
-        if strictly_positive and value <= 0:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"{name} must be positive")
-        if not strictly_positive and value < 0:
-            raise BacktestError(
-                "SCHEMA_UNKNOWN_FIELD", f"{name} cannot be negative"
-            )
-    funding_rate = _config_decimal(payload, "funding_rate", "0")
-    if account_model == "SPOT_CASH_V1" and (
-        str(payload.get("market_type") or "").lower() != "spot" or leverage != 1
-        or funding_mode != "OFF" or funding_rate != 0 or contract_data_mode != "LEGACY_FIXED_V1"
-    ):
-        raise BacktestError("SPOT_ACCOUNT_CONFIG_INVALID", "Spot cash requires a spot market, leverage 1, funding OFF and no contract multiplier")
-    if abs(funding_rate) > Decimal("1"):
-        raise BacktestError(
-            "SCHEMA_UNKNOWN_FIELD", "funding_rate must be between -1 and 1"
-        )
-    if account_model == "LINEAR_PERP_ONE_WAY_V2":
-        if funding_mode in {"OFF", "HISTORICAL_REQUIRED"} and funding_rate != 0:
-            raise BacktestError(
-                "SCHEMA_UNKNOWN_FIELD",
-                f"{funding_mode} requires funding_rate=0",
-            )
-    try:
-        funding_interval_hours = int(payload.get("funding_interval_hours") or 8)
-    except (TypeError, ValueError) as exc:
-        raise BacktestError(
-            "SCHEMA_UNKNOWN_FIELD", "invalid funding_interval_hours"
-        ) from exc
-    if funding_interval_hours < 1 or funding_interval_hours > 168:
-        raise BacktestError(
-            "SCHEMA_UNKNOWN_FIELD", "funding_interval_hours must be 1..168"
-        )
-    output_mode = str(payload.get("output_mode") or "TARGET_POSITION")
-    if output_mode not in {"SIGNAL", "TARGET_POSITION", "ORDER_INTENT"}:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unsupported output_mode")
-    try:
-        host_policy = HostPolicyConfig.from_mapping(payload)
-    except StrategyProviderError as exc:
-        raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
-    quick_preset_id = str(payload.get("quick_preset_id") or "").strip()
-    quick_preset_revision = str(payload.get("quick_preset_revision") or "").strip()
-    fee_source = str(payload.get("fee_source") or "").strip()
-    quick_fee_fields = ("taker_fee_bps", "maker_fee_bps", "slippage_bps")
-    missing_quick_fee_fields = [
-        name
-        for name in quick_fee_fields
-        if name not in payload or not str(payload.get(name) or "").strip()
-    ]
-    if quick_preset_id and (
-        not quick_preset_revision or not fee_source or missing_quick_fee_fields
-    ):
-        raise BacktestError(
-            "FEE_PRESET_UNKNOWN",
-            "quick backtests require a versioned, confirmed fee preset",
-            details={
-                "next_step": "select or confirm the market fee preset",
-                "missing_fields": missing_quick_fee_fields,
-            },
-        )
-    return (account_model, contract_data_mode, funding_mode, leverage, funding_rate, funding_interval_hours, output_mode, host_policy, quick_preset_id, quick_preset_revision, fee_source)

@@ -45,6 +45,38 @@ def _diagnostic(source: str, token: str, message: str) -> dict[str, object]:
     }
 
 
+def pine_dependency_hash(analysis: Mapping[str, Any], libraries: Mapping[str, str]) -> str:
+    """The compiled PINE_ENGINE dependency identity: runtime, libraries and Host order contract."""
+    return canonical_hash({"baseRevision": PINE_ENGINE_REVISION, "runtime": RUNTIME_REVISION,
+                           "pineIdentity": analysis["identity"], "pineLibraries": libraries, "pineOrderContract": ORDER_CONTRACT})
+
+
+def pine_execution_source(source: str, libraries: Mapping[str, str], pine_analysis: Mapping[str, Any]) -> str:
+    """The frozen ``candlescope.chart-pine/1`` envelope that PineEngineProvider prepares from."""
+    return json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
+            "executionClock": pine_analysis["requirements"]["execution"]["clock"], "orderContract": ORDER_CONTRACT,
+            "fillCallbacks": pine_analysis["requirements"]["execution"].get("calcOnOrderFills", False),
+            "historyTicks": pine_analysis["requirements"]["execution"].get("calcOnEveryHistoryTick",False),
+            "realtimeTicks": pine_analysis["requirements"]["execution"].get("calcOnEveryTick",False),
+            **({"defaultQuantity": pine_analysis["requirements"]["account"]["defaultQuantity"]}
+               if pine_analysis["identity"].get("external_sizing") == 1 else {}),
+            "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),
+            **({"requestUpdateContract": pine_analysis["request_update_contract"]}
+               if pine_analysis.get("request_update_contract") else {}),
+            **({"eventRequestContract": pine_analysis["event_request_contract"]}
+               if pine_analysis.get("event_request_contract") else {}),
+            **({"executionScheduleContract": pine_analysis["identity"]["execution_schedule_contract"]}
+               if pine_analysis["identity"].get("execution_schedule_contract") else {}),
+            **({"entryRisk": True} if any(item["feature"].startswith("strategy.risk.")
+                for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
+            **({"riskStopFunctions": sorted(item["feature"] for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])
+                if item["feature"] in STOP_FUNCTIONS)}
+                if any(item["feature"] in STOP_FUNCTIONS
+                    for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
+            "requiresOrderMode": any(item["feature"] == "strategy.order" or item["feature"].startswith("strategy.oca.")
+                for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", []))}, sort_keys=True)
+
+
 def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str, Any]:
     language = str(payload.get("language") or "BUILTIN_TEMPLATE").upper()
     if language not in LANGUAGES:
@@ -178,10 +210,8 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         base = "builtin-expression-model-v1"
 
     source_hash = canonical_hash({"language": language, "source": source})
-    dependency_hash = canonical_hash(
-        {"baseRevision": base, "runtime": RUNTIME_REVISION,
-         **({"pineIdentity": pine_analysis["identity"], "pineLibraries": libraries, "pineOrderContract": ORDER_CONTRACT} if pine_analysis else {})}
-    )
+    dependency_hash = (pine_dependency_hash(pine_analysis, libraries) if pine_analysis
+                       else canonical_hash({"baseRevision": base, "runtime": RUNTIME_REVISION}))
     compiled = {
         "schema": COMPILE_RECEIPT_SCHEMA,
         "language": language,
@@ -191,28 +221,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         "runtimeRevision": RUNTIME_REVISION,
         "tradingViewEquivalent": False if language in {"PINE_SUBSET", "PINE_ENGINE"} else None,
         "executionSource": (
-            json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
-                "executionClock": pine_analysis["requirements"]["execution"]["clock"], "orderContract": ORDER_CONTRACT,
-                "fillCallbacks": pine_analysis["requirements"]["execution"].get("calcOnOrderFills", False),
-                "historyTicks": pine_analysis["requirements"]["execution"].get("calcOnEveryHistoryTick",False),
-                "realtimeTicks": pine_analysis["requirements"]["execution"].get("calcOnEveryTick",False),
-                **({"defaultQuantity": pine_analysis["requirements"]["account"]["defaultQuantity"]}
-                   if pine_analysis["identity"].get("external_sizing") == 1 else {}),
-                "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),
-                **({"requestUpdateContract": pine_analysis["request_update_contract"]}
-                   if pine_analysis.get("request_update_contract") else {}),
-                **({"eventRequestContract": pine_analysis["event_request_contract"]}
-                   if pine_analysis.get("event_request_contract") else {}),
-                **({"executionScheduleContract": pine_analysis["identity"]["execution_schedule_contract"]}
-                   if pine_analysis["identity"].get("execution_schedule_contract") else {}),
-                **({"entryRisk": True} if any(item["feature"].startswith("strategy.risk.")
-                    for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
-                **({"riskStopFunctions": sorted(item["feature"] for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])
-                    if item["feature"] in STOP_FUNCTIONS)}
-                    if any(item["feature"] in STOP_FUNCTIONS
-                        for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
-                "requiresOrderMode": any(item["feature"] == "strategy.order" or item["feature"].startswith("strategy.oca.")
-                    for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", []))}, sort_keys=True)
+            pine_execution_source(source, libraries, pine_analysis)
             if pine_analysis else
             artifact["recorded_expression"]
             if language == "EXTERNAL_ARTIFACT_REF"

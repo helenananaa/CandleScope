@@ -87,7 +87,9 @@ def main():
         # research page's selected Pine version keeps its frozen libraries and parameters.
         "test_native_replay.py", "test_external_replay.py", "test_research_selected_version.py",
         # ADR-BACKTEST-015 O1 (B-157a): extended Pine FOLLOW rebuilds equal full runs.
-        "test_native_follow_sessions.py")]
+        "test_native_follow_sessions.py",
+        # B-333b: a Pine forward run restarted mid-way equals the fixed Host run.
+        "test_continuous_pine_engine.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

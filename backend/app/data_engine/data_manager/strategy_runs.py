@@ -477,7 +477,7 @@ class StrategyRuns:
 
 
     async def _follow_capabilities(self) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-        from app.backtest.continuous_contracts import ACCOUNT_MODELS, LANGUAGES
+        from app.backtest.continuous_contracts import ACCOUNT_MODELS, FOLLOW_LANGUAGES
 
         enabled = self.owner.market_manager is not None
         reason = None if enabled else "FOLLOW_UNAVAILABLE"
@@ -485,7 +485,7 @@ class StrategyRuns:
                             available=enabled, reason=reason, account_models=list(ACCOUNT_MODELS), intervals=None,
                             cancel=False),
                  # Any chart interval of fixed length; weeks and months are not followed.
-                 "fixed_intervals_only": True} for language in LANGUAGES]
+                 "fixed_intervals_only": True} for language in FOLLOW_LANGUAGES]
         return {"follow": _family(enabled, reason)}, rows
 
 

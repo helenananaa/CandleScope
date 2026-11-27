@@ -245,7 +245,7 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
     assert set(rows) == {("host", "builtin"), ("host", "pine"), ("host", "python"), ("native", "pine"),
                          ("external", "pine"), ("continuous", "builtin"), ("continuous", "python"),
-                         ("follow", "builtin"), ("follow", "python")}
+                         ("continuous", "pine"), ("follow", "builtin"), ("follow", "python")}
     host = rows["host", "builtin"]
     assert host["available"] and host["authority"] == "HOST" and host["clock_policy"] == "FIXED"
     assert host["fidelities"] == runtime.service.capabilities()["fidelity_modes"] and "BAR_APPROX" in host["fidelities"]
