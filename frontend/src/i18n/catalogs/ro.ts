@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRomanian, replayNoteRomanian, tradeHistoryRomanian, readonlyAccountRomanian, continuousRomanian, tradingAccountsRo, nativeRomanian } from "./romanianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 
 export const ro = {
   ...unifiedMessages["ro"],
@@ -4167,4 +4168,5 @@ export const ro = {
   "chartTester.deleteDraft": "Ștergeți",
   "chartTester.deleteRetiredDraft": "Ștergeți schița retrasă {name}",
   "chartTester.deleteRetiredDraftFailed": "Schița retrasă nu a putut fi ștearsă. Încercați din nou.",
+  ...chartTimeZoneMessages["ro"],
 } as const satisfies MessageCatalog;

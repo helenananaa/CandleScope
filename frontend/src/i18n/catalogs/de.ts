@@ -3,6 +3,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyGerman, replayNoteGerman, tradeHistoryGerman, readonlyAccountGerman, continuousGerman, tradingAccountsDe, nativeGerman } from "./germanFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 
 export const de = {
   ...unifiedMessages["de"],
@@ -4162,5 +4163,6 @@ export const de = {
   "chartTester.deleteDraft": "Löschen",
   "chartTester.deleteRetiredDraft": "Eingestellten Entwurf {name} löschen",
   "chartTester.deleteRetiredDraftFailed": "Der eingestellte Entwurf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
+  ...chartTimeZoneMessages["de"],
 } as const satisfies MessageCatalog;
 

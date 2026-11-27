@@ -10,6 +10,7 @@ import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 
 export const en = {
   ...unifiedMessages["en"],
@@ -4571,4 +4572,5 @@ export const en = {
   "chartTester.deleteRetiredDraft": "Delete retired draft {name}",
   "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
+  ...chartTimeZoneMessages["en"],
 } as const satisfies MessageCatalog;
