@@ -5,6 +5,12 @@ positions from its cursor up to the present. Live matching and catch-up after do
 the same operation; a history gap pauses the instrument (status
 ``catching_up``) instead of guessing what happened inside it.
 
+A market on a session calendar (Twelve Data's US equities, ADR-DATA-002 D2)
+has no candles while it is closed. A closure is neither a gap nor catching
+up: windows count trading minutes, and a hole the calendar has no trading in
+connects the bars on either side of it. Always-open markets have no session
+calendar and keep the plain minute grid.
+
 Steps are triggered two ways:
 
 - a live 1m update (DataManager ``BAR_*`` event) for an instrument wakes the
@@ -27,9 +33,12 @@ from typing import Any
 
 from app.core.executors import run_storage
 from app.data_engine.data_manager.models import DataEvent, DataEventType
+from app.data_engine.history.calendar import TradingCalendar
+from app.data_engine.history.expected_bars import open_at_or_after, opens_after, session_calendar
 
 from .series import market_series
 from .service import Instrument, TradingAccountService
+from .sessions import closed_between, market_calendar
 
 logger = logging.getLogger("trading_accounts.practice")
 
@@ -66,6 +75,25 @@ class DataManagerMarket:
 
     def __init__(self, data_manager: Any) -> None:
         self.data_manager = data_manager
+        self._calendars: dict[tuple[str, str, str, Any], Any] = {}
+
+    def calendar(
+        self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,
+    ) -> TradingCalendar | None:
+        """The session calendar of this market's 1m series; None for the plain minute grid."""
+        key = (exchange, market_type, symbol, series_identity)
+        found = self._calendars.get(key)
+        if found is None:
+            series_calendar = getattr(self.data_manager, "series_calendar", None)
+            if series_calendar is None:
+                return None
+            found = series_calendar(symbol, INTERVAL, exchange=exchange, market_type=market_type,
+                                    series_identity=series_identity)
+            if found is None:
+                # Not known yet (a provider still loading): ask again next time.
+                return None
+            self._calendars[key] = found
+        return session_calendar(found)
 
     def latest_bar(
         self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,
@@ -119,18 +147,45 @@ def contiguous_bars(
     start_time: int,
     *,
     complete: bool,
+    calendar: TradingCalendar | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Bars from ``start_time`` without unexplained gaps; second value = gap hit."""
+    """Bars from ``start_time`` without unexplained gaps; second value = gap hit.
+
+    A hole the market was closed for is explained by its ``calendar``.
+    """
     out: list[dict[str, Any]] = []
     expected = start_time
     for bar in sorted(bars, key=lambda item: item["time"]):
         if bar["time"] < expected:
             continue
-        if bar["time"] > expected and not complete:
+        if (bar["time"] > expected and not complete
+                and not closed_between(calendar, expected * 1000, bar["time"] * 1000 - 1)):
             return out, True
         out.append(bar)
         expected = bar["time"] + BAR_SECONDS
     return out, False
+
+
+def window_end_ms(calendar: TradingCalendar | None, start_ms: int, now_ms: int) -> int:
+    """End of one step's read: ``MAX_BARS_PER_TICK`` minutes, trading minutes on a calendar."""
+    end_ms = start_ms + (MAX_BARS_PER_TICK - 1) * BAR_SECONDS * 1000
+    if calendar is not None and end_ms < now_ms:
+        # A night or a weekend is longer than one window of clock minutes.
+        try:
+            end_ms = opens_after(calendar, start_ms, MAX_BARS_PER_TICK - 1, INTERVAL)[-1]
+        except LookupError:
+            end_ms = now_ms
+    return min(now_ms, end_ms)
+
+
+def due_since_ms(calendar: TradingCalendar | None, start_ms: int) -> int | None:
+    """When the cursor's candle was due: its own open, or the next one on a calendar."""
+    if calendar is None:
+        return start_ms
+    try:
+        return open_at_or_after(calendar, start_ms, INTERVAL)
+    except LookupError:
+        return None
 
 
 class PracticeRuntime:
@@ -342,16 +397,20 @@ class PracticeRuntime:
         if start_ms is None:
             return None
         now = _wall_ms()
-        end_ms = min(now, start_ms + (MAX_BARS_PER_TICK - 1) * BAR_SECONDS * 1000)
+        series = self.service.instrument_series(instrument)
+        calendar = market_calendar(self.market, instrument, series)
+        end_ms = window_end_ms(calendar, start_ms, now)
         try:
             bars, complete = self.market.bars(*instrument, INTERVAL, start_ms, end_ms, MAX_BARS_PER_TICK,
-                                              **market_series(self.service.instrument_series(instrument)))
+                                              **market_series(series))
         except Exception as exc:
             self.service.set_feed_status(instrument, "unavailable", str(exc))
             return None
         queried = time.perf_counter()
-        usable, gap = contiguous_bars(bars, start_ms // 1000, complete=complete)
-        behind = now - start_ms > 3 * BAR_SECONDS * 1000
+        usable, gap = contiguous_bars(bars, start_ms // 1000, complete=complete, calendar=calendar)
+        # A closed market owes no candle until it opens again.
+        due_ms = due_since_ms(calendar, start_ms)
+        behind = due_ms is not None and now - due_ms > 3 * BAR_SECONDS * 1000
         fills = 0
         if gap or (not usable and behind):
             status, detail = "catching_up", "Waiting for 1m history before matching further"
@@ -361,7 +420,9 @@ class PracticeRuntime:
             fills = self.service.apply_market_bars(
                 instrument, usable, observed_ms=now, status=status, detail=detail,
             )
-        elif status != "live":
+        else:
+            # Also replaces "unavailable" from a stream that cannot open: a
+            # history-only market that is closed owes no candles yet.
             self.service.set_feed_status(instrument, status, detail)
         done = time.perf_counter()
         timing = {
