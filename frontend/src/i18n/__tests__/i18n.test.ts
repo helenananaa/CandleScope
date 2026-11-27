@@ -373,7 +373,8 @@ const PT_BR_PRODUCT_TOKENS = new Set([
   "train", "test", "high", "low", "close", "open", "percentage",
   "uvicorn", "aggtrade", "pro", "reverse", "windows", "bollinger",
   "socks5", "ta4j", "frontend", "backend", "python", "candle", "candles",
-  "runtime", "strategy", "local", "volume", "status", "software", "visual",
+  // Pine namespaces (strategy.*, request.*) stay as the language names them.
+  "runtime", "strategy", "request", "local", "volume", "status", "software", "visual",
   "manual", "interface", "layout", "zoom", "editor", "desktop", "web", "total",
   "normal", "original", "capital", "auto", "error", "item", "type", "mode",
   "model", "regular", "final", "terminal", "stack", "proxy", "ticker", "script", "scripts", "site", "linear",
