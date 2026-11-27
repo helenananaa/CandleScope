@@ -120,3 +120,22 @@ test("arrow and parallel channel variants keep their own toolbar identity and tr
     assert.ok(buttonTag(html, `data-drawing-tool="${tool}"`).includes(label));
   }
 });
+
+test("calculated drawing variants share one toolbar button with their own identity and title", () => {
+  for (const [tool, label] of [
+    ["fib-extension", "Fib extension"],
+    ["anchored-vwap", "Anchored VWAP"],
+    ["volume-profile", "Fixed range volume profile"],
+    ["regression-channel", "Regression channel"],
+  ] as const) {
+    const html = renderInEnglish(<DrawingToolbar activeTool={tool} penColor="#f59e0b" penSize={2}
+      onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+    const button = buttonTag(html, `data-drawing-tool="${tool}"`);
+    assert.ok(button.includes(`${label} (right-click or double-click for other calculated drawings)`), tool);
+    assert.doesNotMatch(button, /disabled=""/);
+  }
+  const idle = renderInEnglish(<DrawingToolbar activeTool={null} penColor="#f59e0b" penSize={2}
+    onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+  assert.ok(buttonTag(idle, 'data-drawing-tool="fib-extension"'), "the group shows its first variant before any choice");
+});
+

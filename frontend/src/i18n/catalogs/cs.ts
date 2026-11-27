@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyCzech, replayNoteCzech, tradeHistoryCzech, readonlyAccountCzech, continuousCzech, tradingAccountsCs, nativeCzech } from "./czechFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4177,6 +4178,7 @@ export const cs = {
   "chartTester.deleteDraft": "Smazat",
   "chartTester.deleteRetiredDraft": "Smazat ukončený koncept {name}",
   "chartTester.deleteRetiredDraftFailed": "Ukončený koncept se nepodařilo smazat. Zkuste to znovu.",
+  ...drawingCalculatedMessages["cs"],
   ...replayDrawingSaveMessages["cs"],
   ...chartTimeZoneMessages["cs"],
   ...chartTimeShortcutMessages["cs"],

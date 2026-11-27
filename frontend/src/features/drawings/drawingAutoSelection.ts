@@ -14,6 +14,7 @@ export function drawingToolForSavedObject(drawing: SavedDrawing): DrawingToolId 
     case "shape": return `shape-${drawing.shapeType ?? "rectangle"}`;
     case "position": return `position-${drawing.direction ?? "long"}`;
     case "freehand": return "pen";
+    case "calculated": return drawing.calcType;
     case "text": return drawing.priceLabel ? "price-label" : drawing.target ? "callout" : "text";
     default: return drawing.type;
   }

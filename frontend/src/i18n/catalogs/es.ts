@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4177,6 +4178,7 @@ export const es = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar el borrador retirado {name}",
   "chartTester.deleteRetiredDraftFailed": "No se pudo eliminar el borrador retirado. Inténtalo de nuevo.",
+  ...drawingCalculatedMessages["es"],
   ...replayDrawingSaveMessages["es"],
   ...chartTimeZoneMessages["es"],
   ...chartTimeShortcutMessages["es"],

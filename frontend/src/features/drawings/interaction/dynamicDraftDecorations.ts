@@ -18,6 +18,7 @@ import type {
 import { parallelChannelScreenGeometry } from "../geometry/drawingToolGeometry.js";
 import { measureDrawingRange, rangeMeasurementLabel } from "../rangeMeasurement.js";
 import { DEFAULT_FIBONACCI_RENDER_LEVELS } from "../rendering/drawingRenderDefaults.js";
+import { calculatedSelectionHandles } from "./drawingCalculatedInteraction.js";
 import { textAnnotationDraftDecorations } from "./drawingTextAnnotations.js";
 import {
   buildAngleDynamicOverlayDecoration,
@@ -451,6 +452,11 @@ export function dynamicSelectionHandlesForSavedDrawing(
       hit: Object.freeze({ zone: "center", pointIndex: 0 }),
       radius: 10,
     })] : [];
+  }
+  if (saved.type === "calculated") {
+    // Handles sit where the projection puts them (fitted line ends, profile
+    // corners, first VWAP value), not on the stored anchors.
+    return calculatedSelectionHandles(saved, sceneHandles);
   }
   if ("dataPoints" in saved && Array.isArray(saved.dataPoints)) {
     const projected = saved.dataPoints

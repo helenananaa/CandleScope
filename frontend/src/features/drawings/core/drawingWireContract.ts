@@ -22,6 +22,7 @@ export const DRAWING_COMMON_STYLE_KEYS = ["hidden", "locked", "visibleIntervals"
 export const DRAWING_GEOMETRY_KEYS = {
   path: ["dataPoints", "kind"],
   channel: ["dataPoints", "kind"],
+  calculated: ["calcType", "dataPoints", "kind"],
   "range-measure": ["dataPoints", "kind", "measureType"],
   "angle-measure": ["dataPoints", "kind"],
   "axis-line": ["axisLineType", "dataPoint", "kind"],
@@ -38,6 +39,7 @@ export const DRAWING_GEOMETRY_KEYS = {
 export const DRAWING_STYLE_KEYS = {
   path: ["arrowEnd", "color", "kind", "lineWidth"],
   channel: ["color", "fillOpacity", "kind", "lineWidth"],
+  calculated: ["color", "deviation", "kind", "lineWidth", "rows"],
   "range-measure": ["color", "kind", "lineWidth"],
   "angle-measure": ["color", "kind", "lineWidth"],
   "axis-line": ["color", "kind", "lineWidth"],

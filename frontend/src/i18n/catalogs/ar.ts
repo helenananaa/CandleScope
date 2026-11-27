@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyArabic, replayNoteArabic, tradeHistoryArabic, readonlyAccountArabic, continuousArabic, tradingAccountsAr, nativeArabic } from "./arabicFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4187,6 +4188,7 @@ export const ar = {
   "chartTester.deleteDraft": "حذف",
   "chartTester.deleteRetiredDraft": "حذف المسودة المتوقفة {name}",
   "chartTester.deleteRetiredDraftFailed": "تعذّر حذف المسودة المتوقفة. حاول مرة أخرى.",
+  ...drawingCalculatedMessages["ar"],
   ...replayDrawingSaveMessages["ar"],
   ...chartTimeZoneMessages["ar"],
   ...chartTimeShortcutMessages["ar"],

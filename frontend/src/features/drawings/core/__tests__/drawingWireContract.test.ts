@@ -41,7 +41,8 @@ const stroke: FreehandStrokeV3 = {
  * One entity per drawing kind with every contract key set, built and encoded the
  * way replay training saves them. Freehand and highlighter carry either points or
  * a stroke, never both, and a text is either a callout (target) or a price label,
- * so each appears twice.
+ * so each appears twice. Calculated drawings appear as a regression channel
+ * (deviation) and a volume profile (rows).
  */
 const SAMPLES: readonly DrawingEntityInput[] = [
   {
@@ -53,6 +54,16 @@ const SAMPLES: readonly DrawingEntityInput[] = [
     id: "channel", kind: "channel",
     geometry: { kind: "channel", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_120, 60_160), at(1_795_000_060, 60_090.5)] },
     style: { kind: "channel", color: "#089981", fillOpacity: 0.15, lineWidth: 1, ...common },
+  },
+  {
+    id: "regression-channel", kind: "calculated",
+    geometry: { kind: "calculated", calcType: "regression-channel", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_600, 60_180)] },
+    style: { kind: "calculated", color: "#2962ff", lineWidth: 1, deviation: 2.5, ...common },
+  },
+  {
+    id: "volume-profile", kind: "calculated",
+    geometry: { kind: "calculated", calcType: "volume-profile", dataPoints: [at(1_795_000_000, 60_100), at(1_795_000_600, 60_180)] },
+    style: { kind: "calculated", color: "#787b86", lineWidth: 1, rows: 24 },
   },
   {
     id: "range-measure", kind: "range-measure",

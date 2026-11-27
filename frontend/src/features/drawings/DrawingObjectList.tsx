@@ -31,7 +31,8 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
       : drawingName(drawing.type === "shape" ? drawing.shapeType ?? "rectangle"
         : drawing.type === "path" ? (drawing.arrowEnd ? "path-arrow" : "path-line")
         : drawing.type === "line" ? (drawing.arrowEnd ? "line-arrow" : drawing.lineType ?? "line")
-        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line" : drawing.type);
+        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line"
+        : drawing.type === "calculated" ? drawing.calcType : drawing.type);
     const name = drawing.type === "text"
       ? (drawing.priceLabel && drawing.dataPoint
         ? `${typeName} ${formatDrawingPositionPrice(drawing.dataPoint.price)}`

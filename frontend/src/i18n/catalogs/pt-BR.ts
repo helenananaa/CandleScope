@@ -10,6 +10,7 @@ import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4845,6 +4846,7 @@ export const ptBR = {
   "chartTester.deleteRetiredDraft": "Excluir o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível excluir o rascunho descontinuado. Tente novamente.",
   ...tradingAccountsPtBR,
+  ...drawingCalculatedMessages["pt-BR"],
   ...replayDrawingSaveMessages["pt-BR"],
   ...chartTimeZoneMessages["pt-BR"],
   ...chartTimeShortcutMessages["pt-BR"],

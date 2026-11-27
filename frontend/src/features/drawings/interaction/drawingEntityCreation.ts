@@ -8,12 +8,14 @@ import {
 } from "../drawingModel.js";
 import { normalizeSavedDrawingItemStrict } from "../drawingPersistence.js";
 import { normalizeFreehandStroke } from "../freehandStrokeModel.js";
+import { createCalculatedSavedDrawing, isCalculatedToolId } from "./drawingCalculatedInteraction.js";
 import type {
   AngleToolId,
   ArrowToolId,
   AxisLineToolId,
   BasicLineToolId,
   BrushShape,
+  CalculatedToolId,
   ChannelToolId,
   PathToolId,
   DrawingDataPoint,
@@ -27,6 +29,7 @@ import type {
   SavedRangeMeasureDrawing,
   SavedAngleDrawing,
   SavedAxisLineDrawing,
+  SavedCalculatedDrawing,
   SavedChannelDrawing,
   SavedPathDrawing,
   SavedDrawing,
@@ -53,9 +56,11 @@ export type TwoPointCreationTool =
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
-  | ShapeToolId;
+  | ShapeToolId
+  | CalculatedToolId;
 
 export type SavedTwoPointDrawing =
+  | SavedCalculatedDrawing
   | SavedPathDrawing
   | SavedChannelDrawing
   | SavedRangeMeasureDrawing
@@ -163,6 +168,9 @@ export function createTwoPointSavedDrawing({
   tool,
 }: TwoPointSavedDrawingOptions): CreatedSavedDrawing<SavedTwoPointDrawing> | null {
   if (!Array.isArray(dataPoints)) return null;
+  if (isCalculatedToolId(tool)) {
+    return createCalculatedSavedDrawing({ tool, dataPoints, color, lineWidth });
+  }
   if (tool === "path-line" || tool === "path-arrow") {
     return finalizedCreatedDrawing("path", { type: "path", dataPoints: dataPoints.map((point: DrawingDataPoint) => ({ ...point })), color, lineWidth,
       arrowEnd: tool === "path-arrow" });

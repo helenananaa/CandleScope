@@ -31,6 +31,20 @@
         "lineWidth"
       ]
     },
+    "calculated": {
+      "geometry": [
+        "calcType",
+        "dataPoints",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "deviation",
+        "kind",
+        "lineWidth",
+        "rows"
+      ]
+    },
     "channel": {
       "geometry": [
         "dataPoints",
@@ -181,7 +195,7 @@
   },
   "replaySample": {
     "runId": "wire-contract",
-    "entityCount": 15,
+    "entityCount": 17,
     "document": {
       "documentSchemaVersion": 2,
       "scopeKey": "replay-run:wire-contract",
@@ -271,6 +285,72 @@
                   "1m",
                   "4h"
                 ]
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "regression-channel",
+              "kind": "calculated",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "calculated",
+                "calcType": "regression-channel",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000600,
+                    "price": 60180
+                  }
+                ]
+              },
+              "style": {
+                "kind": "calculated",
+                "color": "#2962ff",
+                "lineWidth": 1,
+                "deviation": {
+                  "$replay_decimal_v1": "2.5"
+                },
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ]
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "volume-profile",
+              "kind": "calculated",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "calculated",
+                "calcType": "volume-profile",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000600,
+                    "price": 60180
+                  }
+                ]
+              },
+              "style": {
+                "kind": "calculated",
+                "color": "#787b86",
+                "lineWidth": 1,
+                "rows": 24
               },
               "bounds": {
                 "kind": "deferred"

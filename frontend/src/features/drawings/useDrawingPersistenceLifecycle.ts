@@ -219,6 +219,7 @@ function canonicalDrawingEntityPointCount(entity: DrawingEntity): number {
     case "line":
     case "path":
     case "channel":
+    case "calculated":
     case "range-measure":
     case "angle-measure":
     case "fibonacci":

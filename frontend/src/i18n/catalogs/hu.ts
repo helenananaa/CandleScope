@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHungarian, replayNoteHungarian, tradeHistoryHungarian, readonlyAccountHungarian, continuousHungarian, tradingAccountsHu, nativeHungarian } from "./hungarianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4167,6 +4168,7 @@ export const hu = {
   "chartTester.deleteDraft": "Törlés",
   "chartTester.deleteRetiredDraft": "A megszűnt {name} piszkozat törlése",
   "chartTester.deleteRetiredDraftFailed": "A megszűnt piszkozatot nem sikerült törölni. Próbálja újra.",
+  ...drawingCalculatedMessages["hu"],
   ...replayDrawingSaveMessages["hu"],
   ...chartTimeZoneMessages["hu"],
   ...chartTimeShortcutMessages["hu"],

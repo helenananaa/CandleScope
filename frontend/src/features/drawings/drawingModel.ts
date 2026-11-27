@@ -6,6 +6,8 @@ import type {
   AxisLineToolId,
   AxisLineType,
   BasicLineToolId,
+  CalculatedDrawingType,
+  CalculatedToolId,
   DrawingToolId,
   PassiveCursorToolId,
   ScreenBox,
@@ -31,6 +33,23 @@ export const LINE_TOOL_IDS = new Set([
   ...CHANNEL_TOOL_IDS,
 ]);
 export const FIB_TOOL_IDS = new Set<DrawingToolId>(["fibonacci"]);
+export const CALCULATED_TOOL_IDS = new Set<CalculatedToolId>([
+  "fib-extension",
+  "anchored-vwap",
+  "volume-profile",
+  "regression-channel",
+]);
+/** Source anchors each calculated drawing keeps. */
+export const CALCULATED_ANCHOR_COUNT: Readonly<Record<CalculatedDrawingType, number>> = Object.freeze({
+  "fib-extension": 3,
+  "anchored-vwap": 1,
+  "volume-profile": 2,
+  "regression-channel": 2,
+});
+export function isCalculatedToolId(tool: DrawingToolId | null | undefined): tool is CalculatedToolId {
+  return tool === "fib-extension" || tool === "anchored-vwap"
+    || tool === "volume-profile" || tool === "regression-channel";
+}
 export const POSITION_TOOL_IDS = new Set<DrawingToolId>(["position-long", "position-short"]);
 export const SHAPE_TOOL_IDS = new Set<DrawingToolId>(["shape-rectangle", "shape-ellipse"]);
 export const CURSOR_TOOL_IDS = new Set<PassiveCursorToolId>([
@@ -65,6 +84,7 @@ export const DRAWING_ENGINE_TOOL_IDS = new Set<DrawingToolId>([
   "callout",
   "price-label",
   ...FIB_TOOL_IDS,
+  ...CALCULATED_TOOL_IDS,
   ...POSITION_TOOL_IDS,
 ]);
 

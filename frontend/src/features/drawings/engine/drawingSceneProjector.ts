@@ -60,6 +60,7 @@ import {
 } from "../geometry/drawingToolGeometry.js";
 import type {
   AngleDrawingRenderEntity,
+  CalculatedDrawingRenderEntity,
   ChannelDrawingRenderEntity,
   PathDrawingRenderEntity,
   RangeMeasureDrawingRenderEntity,
@@ -81,6 +82,10 @@ import {
   formatDrawingPositionPrice,
 } from "../drawingPositionPresentation.js";
 import { positionInfoPanelLeft } from "../positionInfoPanelLayout.js";
+import {
+  CALCULATED_PROJECTION_FAILED,
+  projectCalculatedDrawing,
+} from "./drawingCalculatedProjection.js";
 
 export interface DrawingSceneTextMeasureRequest {
   readonly text: string;
@@ -1028,6 +1033,33 @@ function projectChannel(
       midlinePointOffset: 4 as const,
       offsetHandlePointOffset: 6 as const,
     }),
+  });
+}
+
+function projectCalculated(
+  entity: CalculatedDrawingRenderEntity,
+  frame: DrawingFrameSnapshot,
+  adapter: DrawingSceneProjectionAdapter,
+  selected: boolean,
+): EntityProjection {
+  const result = projectCalculatedDrawing(entity, {
+    seriesData: frame.seriesData,
+    project: (points) => {
+      const projected = projectBatch(adapter, frame, points);
+      return projected === PROJECTION_FAILED ? null : projected;
+    },
+    formatPrice: formatDrawingPositionPrice,
+    paintAlpha: legacyPaintAlpha,
+  }, selected);
+  if (result === CALCULATED_PROJECTION_FAILED) return PROJECTION_FAILED;
+  if (!result) return null;
+  return createProjectedEntity(entity, result.values, {
+    bbox: bboxFromValues(result.values),
+    handles: result.handles,
+    handleNames: result.handleNames,
+    handleResults: result.handleResults,
+    hitZones: result.hitZones,
+    renderSpec: result.renderSpec,
   });
 }
 
@@ -3729,6 +3761,7 @@ function projectEntity(
     case "range-measure": return projectRangeMeasure(entity, frame, adapter, selected);
     case "path": return projectPath(entity, frame, adapter, selected);
     case "channel": return projectChannel(entity, frame, adapter, selected);
+    case "calculated": return projectCalculated(entity, frame, adapter, selected);
     case "angle-measure": return projectAngle(entity, frame, adapter, selected);
     case "text": return projectText(entity, frame, adapter, selected);
     case "fibonacci": return projectFibonacci(entity, frame, adapter, selected);

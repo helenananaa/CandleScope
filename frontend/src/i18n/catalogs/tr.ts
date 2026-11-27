@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyTurkish, replayNoteTurkish, tradeHistoryTurkish, readonlyAccountTurkish, continuousTurkish, tradingAccountsTr, nativeTurkish } from "./turkishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4167,6 +4168,7 @@ export const tr = {
   "chartTester.deleteDraft": "Sil",
   "chartTester.deleteRetiredDraft": "Kullanımdan kaldırılan {name} taslağını sil",
   "chartTester.deleteRetiredDraftFailed": "Kullanımdan kaldırılan taslak silinemedi. Yeniden deneyin.",
+  ...drawingCalculatedMessages["tr"],
   ...replayDrawingSaveMessages["tr"],
   ...chartTimeZoneMessages["tr"],
   ...chartTimeShortcutMessages["tr"],

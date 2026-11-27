@@ -4,6 +4,7 @@ import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyMalay, replayNoteMalay, tradeHistoryMalay, readonlyAccountMalay, continuousMalay, tradingAccountsMs, nativeMalay } from "./malayFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
 import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
@@ -4167,6 +4168,7 @@ export const ms = {
   "chartTester.deleteDraft": "Padam",
   "chartTester.deleteRetiredDraft": "Padam draf yang dihentikan {name}",
   "chartTester.deleteRetiredDraftFailed": "Draf yang dihentikan tidak dapat dipadam. Cuba lagi.",
+  ...drawingCalculatedMessages["ms"],
   ...replayDrawingSaveMessages["ms"],
   ...chartTimeZoneMessages["ms"],
   ...chartTimeShortcutMessages["ms"],
