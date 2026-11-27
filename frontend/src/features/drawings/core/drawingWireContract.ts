@@ -31,7 +31,7 @@ export const DRAWING_GEOMETRY_KEYS = {
   line: ["dataPoints", "kind", "lineType"],
   position: ["direction", "entryPrice", "kind", "slPrice", "timeRange", "tpPrice"],
   shape: ["dataPoints", "extendRight", "kind", "shapeType"],
-  text: ["dataPoint", "kind"],
+  text: ["dataPoint", "kind", "target"],
 } as const satisfies Record<DrawingKind, readonly string[]>;
 
 /** Per-kind style keys; every kind also accepts DRAWING_COMMON_STYLE_KEYS. */
@@ -52,7 +52,7 @@ export const DRAWING_STYLE_KEYS = {
   ],
   text: [
     "align", "bgColor", "bold", "borderColor", "borderWidth", "color", "fontFamily",
-    "fontSize", "italic", "kind", "padding", "text", "underline", "widthPx",
+    "fontSize", "italic", "kind", "padding", "priceLabel", "text", "underline", "widthPx",
   ],
 } as const satisfies Record<DrawingKind, readonly string[]>;
 

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyArabic, replayNoteArabic, tradeHistoryArabic, readonlyAccountArabic, continuousArabic, tradingAccountsAr, nativeArabic } from "./arabicFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ar = {
   ...unifiedMessages["ar"],
+  ...drawingAnnotationMessages["ar"],
   ...syntheticEnglish,
   ...continuousArabic,
   ...tradeHistoryArabic,

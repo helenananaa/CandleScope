@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHungarian, replayNoteHungarian, tradeHistoryHungarian, readonlyAccountHungarian, continuousHungarian, tradingAccountsHu, nativeHungarian } from "./hungarianFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hu = {
   ...unifiedMessages["hu"],
+  ...drawingAnnotationMessages["hu"],
   ...syntheticEnglish,
   ...continuousHungarian,
   ...tradeHistoryHungarian,

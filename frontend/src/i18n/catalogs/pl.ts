@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyPolish, replayNotePolish, tradeHistoryPolish, readonlyAccountPolish, continuousPolish, tradingAccountsPl, nativePolish } from "./polishFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const pl = {
   ...unifiedMessages["pl"],
+  ...drawingAnnotationMessages["pl"],
   ...syntheticEnglish,
   ...continuousPolish,
   ...tradeHistoryPolish,

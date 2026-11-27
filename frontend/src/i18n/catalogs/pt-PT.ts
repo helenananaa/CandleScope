@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyEuropeanPortuguese, replayNoteEuropeanPortuguese, tradeHistoryEuropeanPortuguese, readonlyAccountEuropeanPortuguese, continuousEuropeanPortuguese, tradingAccountsPtPT, nativeEuropeanPortuguese } from "./europeanPortugueseFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptPT = {
   ...unifiedMessages["pt-PT"],
+  ...drawingAnnotationMessages["pt-PT"],
   ...syntheticEnglish,
   ...continuousEuropeanPortuguese,
   ...tradeHistoryEuropeanPortuguese,

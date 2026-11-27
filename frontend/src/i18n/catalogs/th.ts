@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyThai, replayNoteThai, tradeHistoryThai, readonlyAccountThai, continuousThai, tradingAccountsTh, nativeThai } from "./thaiFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const th = {
   ...unifiedMessages["th"],
+  ...drawingAnnotationMessages["th"],
   ...syntheticEnglish,
   ...continuousThai,
   ...tradeHistoryThai,

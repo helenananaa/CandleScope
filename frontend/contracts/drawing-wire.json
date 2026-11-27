@@ -157,7 +157,8 @@
     "text": {
       "geometry": [
         "dataPoint",
-        "kind"
+        "kind",
+        "target"
       ],
       "style": [
         "align",
@@ -171,6 +172,7 @@
         "italic",
         "kind",
         "padding",
+        "priceLabel",
         "text",
         "underline",
         "widthPx"
@@ -179,7 +181,7 @@
   },
   "replaySample": {
     "runId": "wire-contract",
-    "entityCount": 14,
+    "entityCount": 15,
     "document": {
       "documentSchemaVersion": 2,
       "scopeKey": "replay-run:wire-contract",
@@ -409,7 +411,7 @@
               }
             },
             {
-              "id": "text",
+              "id": "callout",
               "kind": "text",
               "geometryRevision": 1,
               "styleRevision": 1,
@@ -418,6 +420,12 @@
                 "dataPoint": {
                   "time": 1795000000,
                   "price": 60100
+                },
+                "target": {
+                  "time": 1795000060,
+                  "price": {
+                    "$replay_decimal_v1": "60120.5"
+                  }
                 }
               },
               "style": {
@@ -441,6 +449,30 @@
                   "1m",
                   "4h"
                 ]
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "price-label",
+              "kind": "text",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "text",
+                "dataPoint": {
+                  "time": 1795000120,
+                  "price": {
+                    "$replay_decimal_v1": "60133.25"
+                  }
+                }
+              },
+              "style": {
+                "kind": "text",
+                "text": "",
+                "priceLabel": true,
+                "color": "#2962ff"
               },
               "bounds": {
                 "kind": "deferred"

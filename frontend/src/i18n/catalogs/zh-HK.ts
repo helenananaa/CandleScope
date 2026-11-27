@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
@@ -13,6 +14,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhHK = {
   ...unifiedMessages["zh-HK"],
+  ...drawingAnnotationMessages["zh-HK"],
   ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyMalay, replayNoteMalay, tradeHistoryMalay, readonlyAccountMalay, continuousMalay, tradingAccountsMs, nativeMalay } from "./malayFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ms = {
   ...unifiedMessages["ms"],
+  ...drawingAnnotationMessages["ms"],
   ...syntheticEnglish,
   ...continuousMalay,
   ...tradeHistoryMalay,

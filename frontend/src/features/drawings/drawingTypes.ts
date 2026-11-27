@@ -41,6 +41,7 @@ export type DrawingToolId =
   | "shape-rectangle"
   | "shape-ellipse"
   | "text"
+  | AnnotationToolId
   | "pen"
   | "highlighter";
 
@@ -58,6 +59,8 @@ export type FibonacciToolId = "fibonacci";
 export type PositionToolId = "position-long" | "position-short";
 export type ShapeToolId = "shape-rectangle" | "shape-ellipse";
 export type FreehandToolId = "pen" | "highlighter";
+/** Text annotations that point at a priced bar: a callout and a price label. */
+export type AnnotationToolId = "callout" | "price-label";
 
 export type DrawingKind =
   | "path"
@@ -345,6 +348,13 @@ export interface SavedRangeMeasureDrawing extends SavedDrawingBase<"range-measur
 
 export interface SavedTextDrawing extends SavedDrawingBase<"text"> {
   dataPoint?: DrawingDataPoint;
+  /**
+   * Callout target: the leader line runs from the box to this anchor. A price
+   * label has no target; it points at `dataPoint` and shows that price.
+   */
+  target?: DrawingDataPoint;
+  /** Show the anchor's price instead of `text`; the box sits beside the anchor. */
+  priceLabel?: boolean;
   text?: string;
   color?: string;
   fontSize?: number;

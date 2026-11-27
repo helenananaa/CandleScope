@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySwedish, replayNoteSwedish, tradeHistorySwedish, readonlyAccountSwedish, continuousSwedish, tradingAccountsSv, nativeSwedish } from "./swedishFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const sv = {
   ...unifiedMessages["sv"],
+  ...drawingAnnotationMessages["sv"],
   ...syntheticEnglish,
   ...continuousSwedish,
   ...tradeHistorySwedish,

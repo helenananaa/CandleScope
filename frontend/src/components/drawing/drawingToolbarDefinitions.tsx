@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type {
+  AnnotationToolId,
   ArrowToolId,
   BasicLineToolId,
   ChannelToolId,
@@ -18,6 +19,8 @@ export interface ToolbarVariant<TId extends string = string> {
   description?: string;
   icon: ReactNode;
 }
+
+export type TextToolbarToolId = "text" | AnnotationToolId;
 
 export type LineToolbarToolId = BasicLineToolId
   | ArrowToolId
@@ -60,6 +63,24 @@ const TextIcon = (
     <path d="M4 7V4h16v3" />
     <line x1="12" y1="4" x2="12" y2="20" />
     <line x1="8" y1="20" x2="16" y2="20" />
+  </svg>
+);
+
+const CalloutIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="3" width="12" height="9" rx="1.5" />
+    <path d="M12 7h6" />
+    <path d="M10 12 4 19" />
+    <circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const PriceLabelIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 4h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4-5z" />
+    <path d="M10 9h6" />
+    <circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none" />
+    <path d="M7 14 4.5 18" />
   </svg>
 );
 
@@ -431,6 +452,22 @@ const SHAPE_VARIANTS: ToolbarVariant<ShapeToolId>[] = [
 
 const SHAPE_TOOL_IDS = new Set(SHAPE_VARIANTS.map((v) => v.id));
 
+const TEXT_VARIANTS: ToolbarVariant<TextToolbarToolId>[] = [
+  { id: "text", label: "Text", icon: TextIcon },
+  {
+    id: "callout",
+    label: "Callout",
+    description: "Click the point to annotate, then click where the note goes",
+    icon: CalloutIcon,
+  },
+  {
+    id: "price-label",
+    label: "Price label",
+    description: "Click a point to label its price",
+    icon: PriceLabelIcon,
+  },
+];
+
 const POSITION_VARIANTS: ToolbarVariant<PositionToolId>[] = [
   { id: "position-long", label: "Long position", icon: LongPositionIcon },
   { id: "position-short", label: "Short position", icon: ShortPositionIcon },
@@ -478,5 +515,6 @@ export {
   SegmentIcon,
   SHAPE_TOOL_IDS,
   SHAPE_VARIANTS,
+  TEXT_VARIANTS,
   TextIcon,
 };

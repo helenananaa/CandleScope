@@ -83,6 +83,8 @@ export interface DrawingEntityTextEditController {
   cancelTextEditing(options?: DrawingEntityTextEditingOptions): boolean;
   commitTextEditing(options?: DrawingEntityTextEditingOptions): boolean;
   completeSurfaceDispose(): void;
+  /** The text drawing the textarea is editing, including a new, uncommitted one. */
+  getEditingDrawing(): SavedTextDrawing | null;
   getSnapshot(): DrawingEntityTextEditSnapshot;
   setEditingTextPos(value: ScreenPoint | null): void;
   setEditingTextValue(value: string): void;
@@ -102,6 +104,8 @@ export interface DrawingEntityTextEditRuntime extends DrawingEntityTextEditSnaps
   cancelTextEditing(options?: DrawingEntityTextEditingOptions): boolean;
   commitTextEditing(options?: DrawingEntityTextEditingOptions): boolean;
   completeSurfaceDispose(): void;
+  getEditingDrawing(): SavedTextDrawing | null;
+  getSnapshot(): DrawingEntityTextEditSnapshot;
   startTextEditing(
     drawing: SavedTextDrawing,
     options?: StartDrawingEntityTextEditOptions,
@@ -134,6 +138,8 @@ function editableTextDrawing(
   drawing: SavedTextDrawing | null | undefined,
 ): drawing is SavedTextDrawing & { dataPoint: DrawingDataPoint; id: string } {
   return drawing?.type === "text"
+    // A price label's content is its anchor's price, never typed text.
+    && drawing.priceLabel !== true
     && typeof drawing.id === "string"
     && drawing.id.length > 0
     && typeof drawing.dataPoint === "object"
@@ -218,7 +224,7 @@ export function createDrawingEntityTextEditController(
   const exitTextTool = (shouldExit: boolean): void => {
     if (shouldExit
       && options.isContinuousDrawingEnabled?.() !== true
-      && options.getActiveTool() === "text") {
+      && (options.getActiveTool() === "text" || options.getActiveTool() === "callout")) {
       invokeSafely(() => options.onToolChange(null));
     }
   };
@@ -395,6 +401,7 @@ export function createDrawingEntityTextEditController(
     cancelTextEditing,
     commitTextEditing,
     completeSurfaceDispose,
+    getEditingDrawing: () => activeEdit?.drawing ?? null,
     getSnapshot: () => snapshot,
     setEditingTextPos(value: ScreenPoint | null): void {
       if (!activeEdit) return;
@@ -464,6 +471,8 @@ export function useDrawingEntityTextEdit(
     cancelTextEditing: controller.cancelTextEditing,
     commitTextEditing: controller.commitTextEditing,
     completeSurfaceDispose: controller.completeSurfaceDispose,
+    getEditingDrawing: controller.getEditingDrawing,
+    getSnapshot: controller.getSnapshot,
   };
 }
 

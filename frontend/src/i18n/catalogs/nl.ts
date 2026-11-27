@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyDutch, replayNoteDutch, tradeHistoryDutch, readonlyAccountDutch, continuousDutch, tradingAccountsNl, nativeDutch } from "./dutchFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const nl = {
   ...unifiedMessages["nl"],
+  ...drawingAnnotationMessages["nl"],
   ...syntheticEnglish,
   ...continuousDutch,
   ...tradeHistoryDutch,

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHindi, replayNoteHindi, tradeHistoryHindi, readonlyAccountHindi, continuousHindi, tradingAccountsHi, nativeHindi } from "./hindiFeatureMessages.js";
@@ -9,6 +10,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hi = {
   ...unifiedMessages["hi"],
+  ...drawingAnnotationMessages["hi"],
   ...syntheticEnglish,
   ...continuousHindi,
   ...tradeHistoryHindi,

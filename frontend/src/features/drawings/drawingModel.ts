@@ -62,6 +62,8 @@ export const DRAWING_ENGINE_TOOL_IDS = new Set<DrawingToolId>([
   ...CHANNEL_TOOL_IDS,
   ...SHAPE_TOOL_IDS,
   "text",
+  "callout",
+  "price-label",
   ...FIB_TOOL_IDS,
   ...POSITION_TOOL_IDS,
 ]);
