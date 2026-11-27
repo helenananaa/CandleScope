@@ -49,8 +49,9 @@ jobs:
   browser-suites:
     # `npm test` only finds *.test.{ts,tsx}. The *.browser.ts(x) suites need a
     # real Chrome, so scripts/run-browser-suites.mjs builds and runs each
-    # fixture here. Suites it leaves out are listed with the reason in that
-    # script and printed at the start of the run.
+    # fixture here. Fixtures that need a Python fixture server (its "python"
+    # group) run in browser-suites-python.yml; the run prints which suites
+    # each group covers and any suite left out with its reason.
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -78,7 +79,7 @@ jobs:
           CHROME_PATH: /usr/bin/google-chrome
           CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS: "60000"
           CANDLESCOPE_TEST_CHECK_TIMEOUT_MS: "240000"
-        run: node scripts/run-browser-suites.mjs --out ../output/browser-suites
+        run: node scripts/run-browser-suites.mjs --group browser --out ../output/browser-suites
       - name: Upload browser suite evidence
         if: failure()
         uses: actions/upload-artifact@v4

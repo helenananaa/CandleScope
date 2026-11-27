@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EXCLUDED, RUN, inventory } from "./run-browser-suites.mjs";
+import fs from "node:fs";
+import { BACKENDS, EXCLUDED, GROUPS, RUN, inventory } from "./run-browser-suites.mjs";
 
 test("every browser suite runs in CI or is excluded with a reason", () => {
   const found = inventory();
@@ -26,4 +27,31 @@ test("a fixture is run or excluded, never both", () => {
   const fixtures = RUN.map((item) => item.fixture);
   assert.equal(new Set(fixtures).size, fixtures.length);
   for (const fixture of fixtures) assert.ok(!Object.hasOwn(EXCLUDED, fixture), fixture);
+});
+
+test("the Python-backed suites run in the python group against a maintained backend/tests server", () => {
+  const { imports, run } = inventory();
+  const python = RUN.filter(GROUPS.python);
+  for (const suite of [
+    "src/features/replay/__tests__/replayNotes.browser.tsx",
+    "src/chart-adapter/__tests__/backendSynthetic.browser.tsx",
+    "src/chart-adapter/__tests__/pinnedSynthetic.browser.tsx",
+    "src/chart-adapter/__tests__/chartIndicatorInput.browser.tsx",
+    "src/chart-adapter/__tests__/chartCalculation.browser.tsx",
+    "src/chart-adapter/__tests__/chartMarketCalculation.browser.tsx",
+  ]) {
+    assert.ok(run.includes(suite), `${suite} does not run`);
+    assert.ok(python.some((item) => imports.get(item.fixture).includes(suite)), `${suite} is not in the python group`);
+  }
+  for (const item of python) {
+    const { source } = BACKENDS[item.backend];
+    // QA evidence under docs/qa stays frozen; CI runs only maintained fixtures.
+    assert.match(source, /^tests\/[a-z_]+_browser_server\.py$/);
+    assert.ok(fs.existsSync(new URL(`../../backend/${source}`, import.meta.url)), source);
+  }
+});
+
+test("each fixture runs in exactly one of the browser and python groups", () => {
+  for (const item of RUN) assert.equal(GROUPS.browser(item) + GROUPS.python(item), 1, item.fixture);
+  assert.equal(RUN.filter(GROUPS.all).length, RUN.length);
 });
