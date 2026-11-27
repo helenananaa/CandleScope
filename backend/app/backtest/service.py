@@ -4828,8 +4828,10 @@ class BacktestService:
         )
         if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
             from .pine_host_config import pine_execution_config
+            # The chart-signal checks below read this revision's envelope too.
+            compiled_pine = json.loads(str(persisted_execution["compiled_json"]))
             execution_config.update(pine_execution_config(
-                json.loads(str(persisted_execution["compiled_json"])), payload=payload, fidelity=fidelity,
+                compiled_pine, payload=payload, fidelity=fidelity,
                 output_mode=output_mode, account_model=account_model, realism_enabled=execution_realism.enabled))
         if payload.get("pine_chart_metadata") is not None:
             from .pine_host_config import pine_chart_metadata
