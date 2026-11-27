@@ -462,7 +462,7 @@ class StrategyRuns:
         return {"native": family("native"), "external": family("external")}, rows
 
     async def _continuous_capabilities(self) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-        from app.backtest.continuous_contracts import ACCOUNT_MODELS, INTERVALS, LANGUAGES, ContinuousCreate
+        from app.backtest.continuous_contracts import ACCOUNT_MODELS, LANGUAGES, ContinuousCreate
 
         controller = self.owner.continuous_access().controller()
         enabled = controller.execution_enabled is not False
@@ -470,8 +470,9 @@ class StrategyRuns:
         starts = list(get_args(ContinuousCreate.model_fields["mode"].annotation))
         rows = [{**_profile("continuous", language, authority="HOST", clock_policy="FORWARD",
                             fidelities=["BAR_APPROX"], available=enabled, reason=reason,
-                            account_models=list(ACCOUNT_MODELS), intervals=list(INTERVALS), cancel=False),
-                 "starts": starts} for language in LANGUAGES]
+                            account_models=list(ACCOUNT_MODELS), intervals=None, cancel=False),
+                 # Any fixed-length interval of whole minutes (B-333).
+                 "starts": starts, "fixed_intervals_only": True} for language in LANGUAGES]
         return {"continuous": _family(enabled, reason)}, rows
 
 

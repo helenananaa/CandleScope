@@ -13,6 +13,7 @@ import inspect
 from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.storage.prefix_watches import PrefixReceipt, PrefixAcquisitionChanged
 from app.data_engine.storage.revisions import StaleAcquisition
+from .continuous_grid import bar_grid
 from .continuous_store import ContinuousStrategyStore
 from .continuous_source_identity import affects_protected_prefix, source_owner
 from .errors import BacktestError
@@ -23,7 +24,7 @@ from .strategy.protocol import StrategyProvider, StrategyProviderSession
 
 ProviderFactory = Callable[[Mapping[str, object]], StrategyProvider]
 MAX_BATCH_EVENTS = 1000
-MARKET_BAR_STEP_MS = 60_000
+MARKET_BAR_STEP_MS = 60_000  # The 1m grid; a market run's own interval decides (B-333).
 logger = logging.getLogger(__name__)
 
 
@@ -67,6 +68,10 @@ class ContinuousBarHost:
         self.resources_closed = False
         self.definition = definition
         self.config = config
+        series = definition.get("source_series")
+        # A market run advances on its series' bar grid: closes are that interval apart.
+        self.bar_step_ms = (bar_grid(series[3]).step_ms if isinstance(series, list) and len(series) > 3
+                            else MARKET_BAR_STEP_MS)
         provider = provider_factory(definition)
         self.session = StrategyProviderSession(provider, run_id=run_id)
         self.adapter = StrategyHostAdapter(self.session, step_timeout_s=step_timeout_s)
@@ -239,8 +244,8 @@ class ContinuousBarHost:
                 if self.source_receipt is not None:
                     opened = event.payload.get("open_time_ms")
                     if (not closed or type(opened) is not int or opened != stamp + 1
-                            or close != opened + MARKET_BAR_STEP_MS - 1 or event.event_time_ms != close):
-                        raise error("LOOKAHEAD_VIOLATION", "Protected input must be an exact consecutive closed UTC minute")
+                            or close != opened + self.bar_step_ms - 1 or event.event_time_ms != close):
+                        raise error("LOOKAHEAD_VIOLATION", "Protected input must be the exact next closed bar of the run's interval")
                 if event.sequence != sequence + 1 or event.event_time_ms < stamp:
                     self._defer("CONTINUOUS_SOURCE_GAP", "Source coverage is incomplete; committed result retained")
                     raise error("CONTINUOUS_SOURCE_GAP", "Source coverage is incomplete")

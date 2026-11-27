@@ -9,6 +9,7 @@ from app.backtest.continuous_store import ContinuousStrategyStore
 from app.backtest.errors import BacktestError
 from app.backtest.identity import canonical_json
 from app.data_engine.data_manager import DataManager
+from app.data_engine.data_manager.models import SeriesKey
 from app.data_engine.storage import klines_repo
 from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged,ProcessedPrefixChanged
 from app.local_data.service import LocalDatasetService
@@ -187,3 +188,82 @@ def test_initial_copy_queries_bounded_pages_and_excludes_future_extreme(storage,
             assert len(tail)==5 and all(row["close"]=="101" for row in tail)
             assert reader.read_window(start_ms=START+1005*STEP)==[]
     finally:source.close();store.close();service.shutdown()
+
+
+FIVE = SeriesKey("BTCUSDT", "5m")
+FIVE_STEP = 300_000
+FIVE_START = (START // FIVE_STEP + 1) * FIVE_STEP
+FIVE_END = FIVE_START + 25 * FIVE_STEP - 1
+
+
+def five_minute_setup(storage, tmp_path, monkeypatch):
+    service, row, definition, factory, store = prepare(tmp_path, monkeypatch)
+    manager = DataManager();manager.set_storage(storage)
+    klines_repo.upsert_klines(FIVE.symbol, FIVE.interval, [
+        {**_row(FIVE_START + i * FIVE_STEP, 100 + i % 7), "close_time": FIVE_START + (i + 1) * FIVE_STEP - 1}
+        for i in range(25)], source=SOURCE)
+    source = ContinuousMarketBarSource(manager, LocalDatasetService(tmp_path / 'local-data'), FIVE,
+                                       clock_ms=lambda: FIVE_END + 1)
+    receipt = source.register("cs_source", from_ms=FIVE_START)
+    definition.update(source_kind="MARKET_BAR", source_series=list(receipt.series),
+                      market={"venue": "binance", "symbol": FIVE.symbol})
+    return service, row, definition, factory, store, manager, source, receipt
+
+
+def test_a_5m_forward_run_restarts_and_equals_the_fixed_run_of_its_bars(storage, tmp_path, monkeypatch):
+    """B-333: a forward run advances on closed bars of its own signal interval."""
+    service, row, definition, factory, store, manager, source, receipt = five_minute_setup(storage, tmp_path, monkeypatch)
+    host = None
+    try:
+        definition = create_frozen(source, receipt, definition, factory, store, through=FIVE_START + 20 * FIVE_STEP - 1)
+        host = ContinuousBarHost.resume(store, "cs_source", factory)
+        first = source.acquire(host, revealed_through_ms=FIVE_END, limit=7)
+        assert len(first.events) == 7 and [event.payload["close_time_ms"] - event.payload["open_time_ms"]
+                                           for event in first.events] == [FIVE_STEP - 1] * 7
+        first.apply(host, manager)
+        host.close();source.close();store.close()
+        store = ContinuousStrategyStore(tmp_path / 'continuous.db')
+        source = ContinuousMarketBarSource(manager, LocalDatasetService(tmp_path / 'local-data'), FIVE,
+                                           clock_ms=lambda: FIVE_END + 1)
+        host = ContinuousBarHost.resume(store, "cs_source", factory)
+        rest = source.acquire(host, revealed_through_ms=FIVE_END)
+        assert len(rest.events) == 13 and not rest.caught_up  # the sealed initial bars end at bar 20
+        rest.apply(host, manager)
+        tail = source.acquire(host, revealed_through_ms=FIVE_END)
+        assert len(tail.events) == 5 and tail.caught_up
+        tail.apply(host, manager)
+        assert host.row["phase"] == "LIVE" and host.row["sequence"] == 25 and host.row["event_time_ms"] == FIVE_END
+        actual = asdict(host.kernel.run((), host._observe, finalize=True))
+        rows = source._query_rows(FIVE_START, FIVE_END, rest.proof.storage_revision)
+        events = tuple(MarketEvent(i + 1, r["close_time_ms"], "BARS", r) for i, r in enumerate(rows))
+        reference = service.execute_bar_run(row["run_id"], events=events, provider=factory(definition),
+                                            observation_market=definition["market"], now_ms=3)["result"]
+        for field in ("decision_hash", "fill_hash", "ledger_hash", "fills", "orders", "ledger", "equity_curve"):
+            assert canonical_json(actual[field]) == canonical_json(reference[field]), field
+        assert actual["fills"]
+    finally:
+        if host is not None:host.close()
+        source.close();store.close();service.shutdown()
+
+
+def test_a_5m_source_admits_only_its_own_bar_boundaries(storage, tmp_path, monkeypatch):
+    service, _row_, definition, factory, store, manager, source, receipt = five_minute_setup(storage, tmp_path, monkeypatch)
+    try:
+        with pytest.raises(BacktestError) as early:
+            source.register("cs_other", from_ms=FIVE_START + 60_000)
+        assert early.value.code == "CONTINUOUS_SOURCE_GAP"
+        create_frozen(source, receipt, definition, factory, store, through=FIVE_START + 20 * FIVE_STEP - 1)
+        host = ContinuousBarHost.resume(store, "cs_source", factory)
+        try:
+            # A 1m close inside a 5m bar is not a boundary of this run.
+            with pytest.raises(BacktestError) as inside:
+                source.acquire(host, revealed_through_ms=FIVE_START + 20 * FIVE_STEP + 60_000 - 1)
+            assert inside.value.code == "LOOKAHEAD_VIOLATION"
+            # Nor is a bar that has not closed yet.
+            with pytest.raises(BacktestError) as future:
+                source.acquire(host, revealed_through_ms=FIVE_END + FIVE_STEP)
+            assert future.value.code == "LOOKAHEAD_VIOLATION"
+        finally:
+            host.close()
+    finally:
+        source.close();store.close();service.shutdown()

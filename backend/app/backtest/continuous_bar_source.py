@@ -1,7 +1,8 @@
 """DataManager-owned closed BAR input, sealed initialization then live catchup.
 
-Only the first qualified UTC 1m clock is admitted here. Backend runtime owns
-scheduling, demand and retry/repair authorization; views never own this source.
+The run's signal interval is its bar grid (B-333): any fixed-length interval of
+whole minutes. Backend runtime owns scheduling, demand and retry/repair
+authorization; views never own this source.
 """
 from __future__ import annotations
 
@@ -15,8 +16,9 @@ from app.local_data.service import LocalDatasetService
 from app.market_dataset.snapshot import MarketEvent
 from .errors import BacktestError
 from .continuous_bar_host import ContinuousExecutionStopping
+from .continuous_grid import bar_grid
 
-STEP = 60_000
+STEP = 60_000  # The 1m grid's step, kept for callers that name the first clock.
 MAX_INITIAL_BARS = 200_000
 MAX_BATCH_BARS = 1000
 
@@ -53,8 +55,7 @@ class MarketBarBatch:
 
 class ContinuousMarketBarSource:
     def __init__(self, manager, local_datasets: LocalDatasetService, key: SeriesKey, *, clock_ms: Callable[[], int], auto_backfill=False):
-        if key.interval != "1m":
-            raise BacktestError("FIDELITY_UNSUPPORTED","Continuous market input requires its qualified UTC 1m base clock")
+        self.grid = bar_grid(key.interval)
         self.manager, self.local_datasets, self.key, self.clock_ms = manager, local_datasets, key, clock_ms
         self.auto_backfill = bool(auto_backfill)
         self._reader = None
@@ -72,38 +73,39 @@ class ContinuousMarketBarSource:
     def _boundary(self, through_ms):
         self._check_stopping()
         now = self.clock_ms()
-        if (self.closed or type(now) is not int or type(through_ms) is not int
-                or (through_ms + 1) % STEP or through_ms > (now // STEP)*STEP-1):
-            raise BacktestError("LOOKAHEAD_VIOLATION","Input boundary must be a revealed closed UTC minute")
+        if (self.closed or type(now) is not int or not self.grid.closes_bar(through_ms)
+                or through_ms > self.grid.closed_through(now)):
+            raise BacktestError("LOOKAHEAD_VIOLATION","Input boundary must be a revealed closed bar of the run's interval")
 
     def register(self, run_id, *, from_ms, definition=None):
-        if self.closed or type(from_ms) is not int or from_ms % STEP:
-            raise failure("Input must start at its exact UTC minute")
+        if self.closed or not self.grid.aligned(from_ms):
+            raise failure("Input must start at a bar open of the run's interval")
         from .continuous_source_identity import source_owner
         return self.manager.bars.prefixes.register(source_owner(run_id,definition or {}),self.key,
             from_ms=from_ms,committed_through_ms=from_ms-1)
 
     def _query_rows(self, start_ms, through_ms, revision):
+        step = self.grid.step_ms
         cursor = start_ms
         while cursor <= through_ms:
             self._check_stopping()
-            last = min(through_ms,cursor+MAX_BATCH_BARS*STEP-1)
-            count = (last+1-cursor)//STEP
+            last = min(through_ms,cursor+MAX_BATCH_BARS*step-1)
+            count = (last+1-cursor)//step
             result = self.manager.bars.query(self.key.symbol,self.key.interval,
                 exchange=self.key.exchange,market_type=self.key.market_type,series_identity=self.key.identity,
-                start_ms=cursor,end_ms=last-STEP+1,limit=count,
+                start_ms=cursor,end_ms=last-step+1,limit=count,
                 min_revision=revision,auto_backfill=self.auto_backfill,backfill_requester="continuous-strategy")
             if (not result.complete or result.retryable or result.missing_ranges or result.excluded_ranges
                     or len(result.bars) != count):
                 raise failure("Wait for DataManager to complete the exact closed input window")
             for index, bar in enumerate(result.bars):
                 self._check_stopping()
-                opened = cursor+index*STEP
+                opened = cursor+index*step
                 if not bar.trusted_final or bar.time*1000 != opened:
                     raise failure("DataManager input is not contiguous trusted closed OHLCV")
                 payload = {name:LocalDatasetService._decimal_text(LocalDatasetService._host_decimal(bar,name,index+1))
                     for name in ("open","high","low","close","volume")}
-                yield {**payload,"open_time_ms":opened,"close_time_ms":opened+STEP-1,"is_closed":True}
+                yield {**payload,"open_time_ms":opened,"close_time_ms":opened+step-1,"is_closed":True}
             cursor = last+1
 
     def freeze_initial(self, receipt, *, through_ms, dataset_id, max_payload_bytes=None):
@@ -116,7 +118,7 @@ class ContinuousMarketBarSource:
         self._boundary(through_ms)
         if receipt.through_ms != receipt.from_ms-1:
             raise failure("Initialization requires an empty financial input cursor")
-        count = (through_ms+1-receipt.from_ms)//STEP
+        count = self.grid.count(receipt.from_ms,through_ms)
         if not 1 <= count <= MAX_INITIAL_BARS:
             raise BacktestError("BUDGET_EXCEEDED","Initial input exceeds its bounded snapshot budget")
         if max_payload_bytes is not None and (type(max_payload_bytes) is not int or max_payload_bytes<1):
@@ -157,7 +159,7 @@ class ContinuousMarketBarSource:
                 through_ms=max(receipt.through_ms,frozen["through_ms"]) if initializing else receipt.through_ms,
                 **({"frozen_version":frozen["source_version"]} if initializing else {}))
             return MarketBarBatch(proof,(),revealed_through_ms,True)
-        last = min(revealed_through_ms,cursor+limit*STEP-1,
+        last = min(revealed_through_ms,cursor+limit*self.grid.step_ms-1,
             frozen["through_ms"] if initializing else revealed_through_ms)
         proof = self.manager.bars.prefixes.prepare(receipt,committed_through_ms=receipt.through_ms,
             through_ms=max(last,frozen["through_ms"]) if initializing else last,
@@ -169,7 +171,7 @@ class ContinuousMarketBarSource:
                 self._reader = self.local_datasets.open_pinned_bar_window(identity[0],data_epoch=identity[1],
                     interval=identity[2],from_ms=identity[3],through_ms=identity[4])
                 self._reader_identity = identity
-            rows = self._reader.read_window(start_ms=cursor,limit=(last+1-cursor)//STEP)
+            rows = self._reader.read_window(start_ms=cursor,limit=self.grid.count(cursor,last))
         else:
             if self._reader is not None:
                 self._reader.close();self._reader=None;self._reader_identity=None

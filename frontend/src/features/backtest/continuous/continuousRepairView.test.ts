@@ -16,6 +16,9 @@ test("repair progress counts recomputed suffix BARs and never a guessed financia
   assert.deepEqual(repairProgress(repair), { done: 5, total: 15 });
   assert.deepEqual(repairProgress({ ...repair, phase: "COMMITTED" }), { done: 15, total: 15 });
   assert.deepEqual(repairProgress({ ...repair, progress: null }), { done: 0, total: 15 });
+  // B-333: a 5m run counts its own bars (25 bars over the window, 10 kept before the revision).
+  const five = { ...repair, interval: "5m", through_ms: 25 * 300_000 - 1, from_ms: 10 * 300_000 };
+  assert.deepEqual(repairProgress(five), { done: 5, total: 15 });
 });
 
 test("late HTTP status cannot rewind socket progress, an adopted repair, or a later request", () => {

@@ -23,6 +23,7 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged, PrefixReceipt
 from .continuous_bar_host import ContinuousBarHost, ContinuousExecutionStopping
 from .continuous_bar_source import ContinuousMarketBarSource, STEP
+from .continuous_grid import bar_grid
 from .continuous_definition import prepare_definition
 from .continuous_inputs import ContinuousInputs, ProfileLease, reject_path_links
 from .continuous_provider import ContinuousProviderFactory
@@ -310,20 +311,21 @@ class ContinuousStrategyController:
         self._live()
         definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars,
             calendar=self._calendar(series))
+        grid=bar_grid(series.interval)
         now=self.clock_ms()
         if type(now) is not int or now<STEP:raise BacktestError("CONTINUOUS_INPUT_INVALID","Backend UTC clock is unavailable")
-        cutoff=(now//STEP)*STEP-1
+        cutoff=grid.closed_through(now)
         # Journal validation must run before any reservation, job or demand.
         from .continuous_store import _text
         _text(key,128)
         if (type(mode) is not str or mode not in {"HISTORY_LIVE","LIVE_ONLY"}
                 or (mode=="LIVE_ONLY" and from_ms is not None)
-                or (mode=="HISTORY_LIVE" and (type(from_ms) is not int or from_ms<STEP or from_ms%STEP))):
+                or (mode=="HISTORY_LIVE" and (type(from_ms) is not int or from_ms<STEP or not grid.aligned(from_ms)))):
             raise BacktestError("CONTINUOUS_INPUT_INVALID","Creation mode and closed input window are invalid")
         try:row=await run_storage(self.store.creations.describe,key)
         except BacktestError as failure:
             if failure.code!="CONTINUOUS_CREATION_NOT_FOUND":raise
-            if mode=="HISTORY_LIVE" and not 1<=(cutoff+1-from_ms)//STEP<=200_000:
+            if mode=="HISTORY_LIVE" and not 1<=grid.count(from_ms,cutoff)<=200_000:
                 raise BacktestError("CONTINUOUS_INPUT_INVALID","Creation history exceeds its closed input budget")
         else:
             if (_wire(row["definition"],MAX_DEFINITION_BYTES)!=_wire(definition,MAX_DEFINITION_BYTES) or row["mode"]!=mode

@@ -17,7 +17,7 @@ from app.core.executors import run_storage
 from app.data_engine.data_manager.models import DataEventType,SeriesKey
 from app.data_engine.series_identity import KlineSeriesIdentity
 from .continuous_bar_host import ContinuousBarHost,ContinuousExecutionStopping
-from .continuous_bar_source import ContinuousMarketBarSource,STEP
+from .continuous_bar_source import ContinuousMarketBarSource
 from .continuous_source_identity import affects_protected_prefix
 from .errors import BacktestError
 
@@ -82,7 +82,7 @@ class _Actor:
         delay_ms = boundary_ms - self.owner.clock_ms()
         if delay_ms <= 0:
             self.wake.set()
-        elif delay_ms <= STEP and self.close_wakeup is None:
+        elif delay_ms <= self.source.grid.step_ms and self.close_wakeup is None:
             self.close_wakeup = asyncio.get_running_loop().call_later(
                 delay_ms / 1000, self._close_boundary_reached, boundary_ms,
             )
@@ -104,10 +104,10 @@ class _Actor:
                 if await run_storage(self.mark_revised_prefix):
                     self.request_stop()
             elif event.event_type == DataEventType.BAR_CLOSED and event.bar is not None and event.bar.is_closed:
-                # A source close can precede our UTC minute boundary. Wake again
-                # when the closed input becomes eligible, without moving the fence.
-                boundary_ms = event.bar.time * 1000 + STEP
-                if boundary_ms % STEP == 0:
+                # A source close can precede our bar boundary. Wake again when
+                # the closed input becomes eligible, without moving the fence.
+                boundary_ms = event.bar.time * 1000 + self.source.grid.step_ms
+                if self.source.grid.aligned(boundary_ms):
                     self._wake_after_close(boundary_ms)
             self.wake.set()
         async def lost(_error):
@@ -172,7 +172,7 @@ class _Actor:
                 logger.exception("Could not record continuous restore failure; original recovery data retained")
 
     def _closed_boundary(self):
-        return (self.owner.clock_ms() // STEP) * STEP - 1
+        return self.source.grid.closed_through(self.owner.clock_ms())
 
     def step(self, gaps, stream_unavailable):
         if self.stopping:raise ContinuousExecutionStopping()

@@ -18,6 +18,7 @@ import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
 import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
+import { forwardBarOpenMs, forwardIntervalMs, MINUTE_MS } from "./forwardInterval.js";
 import { readContinuousAccountRows } from "./continuousAccountRows.js";
 import {
   PRACTICE_ACCOUNT_RULES, defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
@@ -103,7 +104,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   // ADR-DATA-002 D2c: the source's live bars and price semantics decide, not its asset class.
   const liveBarsUnavailable = props.liveBars === false;
-  const qualified = props.language === "python" && hasSource && props.session.interval === "1m" && !liveBarsUnavailable
+  // B-333: the run advances on closed bars of the chart's interval, any fixed length of whole minutes.
+  const barMs = forwardIntervalMs(props.session.interval);
+  const qualified = props.language === "python" && hasSource && barMs !== null && !liveBarsUnavailable
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
     && CONTINUOUS_SERIES_VARIANTS.has(identity.seriesVariant) && identity.priceAdjustment === "raw"
     && CONTINUOUS_VOLUME_SEMANTICS.has(identity.volumeSemantics);
@@ -168,7 +171,8 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     submitting.current = true;
     setBusy(true); setError(null);
     try {
-      const start = Date.parse(from + ":00Z");
+      // A history start is the open of the bar it falls in, on the run's grid.
+      const start = forwardBarOpenMs(props.session.interval, Date.parse(from + ":00Z")) ?? Number.NaN;
       if (![balance, percent, fee, slippage].every((value) => value.trim() && Number.isFinite(Number(value)))
         || Number(balance) <= 0 || Number(percent) <= 0 || Number(percent) > 100 || Number(fee) < 0 || Number(slippage) < 0
         || !validForwardLeverage(accountLeverage)
@@ -229,11 +233,12 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     finally { setBusy(false); }
   }
   const observed = state.creation ?? creation;
-  const start = props.mode === "HISTORY_LIVE" ? Date.parse(from + ":00Z") : (observed?.cutoff_ms ?? -1) + 1;
+  const start = props.mode === "HISTORY_LIVE" ? forwardBarOpenMs(props.session.interval, Date.parse(from + ":00Z")) ?? -1
+    : (observed?.cutoff_ms ?? -1) + 1;
   const warmupBars = props.initialization?.warmupBars ?? 0;
-  const researchSettings: StrategyRunSettings | null = view && !view.stale && observed?.run_id === view.identity.id
-    && start > 0 && start % 60_000 === 0 && (view.identity.event_time_ms + 1) % 60_000 === 0
-    && view.identity.event_time_ms >= start + warmupBars * 60_000 ? {
+  const researchSettings: StrategyRunSettings | null = view && !view.stale && observed?.run_id === view.identity.id && barMs !== null
+    && start > 0 && start % MINUTE_MS === 0 && (view.identity.event_time_ms + 1 - start) % barMs === 0
+    && view.identity.event_time_ms >= start + warmupBars * barMs ? {
       parameters: props.parameters, fidelityPreference: "FAST", rangeMode: "CUSTOM",
       customRange: { startMs: start, endMs: view.identity.event_time_ms },
       executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: accountLeverage, feeBps: fee, slippageBps: slippage },

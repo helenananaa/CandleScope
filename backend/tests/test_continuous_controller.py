@@ -643,3 +643,41 @@ def test_new_closes_during_restart_catchup_keep_the_account_catching_up(storage,
         assert not active
 
     asyncio.run(scenario())
+
+
+def test_a_5m_forward_run_initializes_and_advances_on_5m_closes_only(storage, tmp_path, monkeypatch):
+    """B-333: a forward run's cutoff, history window and live closes are bars of its own interval."""
+    from app.data_engine.data_manager.models import SeriesKey
+    five, step = SeriesKey("BTCUSDT", "5m"), 300_000
+    start = (START // step + 1) * step
+    manager, active, calls = market(storage, monkeypatch, count=0)
+    klines_repo.upsert_klines(five.symbol, five.interval, [
+        {**_row(start + i * step, 100 + i % 7), "close_time": start + (i + 1) * step - 1} for i in range(25)], source=SOURCE)
+    now = [start + 20 * step + 2 * STEP]  # two minutes into bar 21: bar 20 is the newest closed one
+
+    async def scenario():
+        owner = await open_owner(tmp_path, manager, now)
+        try:
+            accepted = await owner.create("five", provider=spec(), execution={"account_model": "SPOT_CASH_V1"},
+                                          series=five, mode="HISTORY_LIVE", from_ms=start)
+            assert accepted["cutoff_ms"] == start + 20 * step - 1
+            await asyncio.wait_for(owner.wait_initial("five"), 10)
+            run_id = accepted["run_id"]
+            row = await wait_row(owner.store, run_id, lambda value: value["phase"] == "LIVE")
+            assert row["sequence"] == 20 and row["event_time_ms"] == start + 20 * step - 1
+            # A minute close inside bar 21 reveals nothing new.
+            now[0] = start + 20 * step + 4 * STEP
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, five))
+            await asyncio.sleep(0.2)
+            assert owner.store.summary(run_id)["sequence"] == 20
+            now[0] = start + 25 * step
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, five))
+            row = await wait_row(owner.store, run_id, lambda value: value["sequence"] == 25)
+            assert row["event_time_ms"] == start + 25 * step - 1
+            with pytest.raises(BacktestError) as misaligned:
+                await owner.create("five-misaligned", provider=spec(), execution={"account_model": "SPOT_CASH_V1"},
+                                   series=five, mode="HISTORY_LIVE", from_ms=start + STEP)
+            assert misaligned.value.code == "CONTINUOUS_INPUT_INVALID"
+        finally:
+            await owner.close();await manager.event_bus.close()
+    asyncio.run(scenario())

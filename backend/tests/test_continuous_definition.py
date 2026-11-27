@@ -93,12 +93,21 @@ def test_warmup_is_exact_closed_bar_count(warmup):
 
 
 @pytest.mark.parametrize("key",[
-    SeriesKey("BTCUSDT","5m"),SeriesKey("BTCUSD_PERP","1m",market_type="coinm"),
+    SeriesKey("BTCUSDT","1M"),SeriesKey("BTCUSDT","60m"),SeriesKey("BTCUSD_PERP","1m",market_type="coinm"),
     SeriesKey.create("BTCUSDT","1m",identity=KlineSeriesIdentity("vendor","binance",volume_semantics="contracts")),
     SeriesKey.create("BTCUSDT","1m",identity=KlineSeriesIdentity("vendor","binance",price_adjustment="adjusted")),
 ])
 def test_unqualified_source_dimensions_not_relabelled(key):
     with pytest.raises(BacktestError):prepare_definition(spec(),{},key)
+
+
+@pytest.mark.parametrize("interval",["5m","1h","4h","1d","1w"])
+def test_forward_runs_take_any_fixed_length_signal_interval(interval):
+    # B-333: the run advances on closed bars of its series' own interval, as FIXED does.
+    key=SeriesKey.create("BTCUSDT",interval,market_type="spot",identity=KlineSeriesIdentity("vendor","binance"))
+    value=prepare_definition(spec(),{"account_model":"SPOT_CASH_V1"},key)
+    assert value["configuration"]["interval"]==interval
+    assert value["source_series"][3]==interval
 
 
 def test_spot_account_and_semantic_identity_are_explicit():
