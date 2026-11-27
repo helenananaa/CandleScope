@@ -43,7 +43,7 @@ test("selected drawing bar shows the selected object's own style and controls", 
     />);
     assert.match(expandedHtml, /value="#abcdef"/);
     assert.match(expandedHtml, /填充颜色/);
-    assert.match(expandedHtml, /aria-label="虚线" aria-pressed="true"/);
+    assert.match(expandedHtml, /role="radio" aria-checked="true" aria-label="虚线"/);
     assert.match(expandedHtml, /role="dialog"/);
     assert.match(expandedHtml, /保存并关闭/);
     assert.match(expandedHtml, /取消/);

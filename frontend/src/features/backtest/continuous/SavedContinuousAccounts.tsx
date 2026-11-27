@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
@@ -32,7 +33,7 @@ export function SavedContinuousAccounts({ manager }: { manager: ContinuousStrate
   }, [manager, refresh]);
   return <section className="continuous-reader" data-continuous-reader>
     <p>{t("reader.readonly")}</p>
-    <button type="button" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>{t("reader.refresh")}</button>
+    <Button size="sm" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>{t("reader.refresh")}</Button>
     {loading && <p role="status">{t("reader.loading")}</p>}
     {!loading && !runs.length && !error && <p role="status">{t("reader.empty")}</p>}
     {runs.length > 0 && <label>{t("reader.select")}<select aria-label={t("reader.select")} value={selected} onChange={(event) => {

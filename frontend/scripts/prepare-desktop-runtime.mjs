@@ -31,6 +31,10 @@ const destination = await prepareDesktopRuntime(cache, async staging => {
   }
   await fs.cp(sourceRoot, path.join(staging, "python"), { recursive: true, verbatimSymlinks: true });
   const python = path.join(staging, "python", ...(process.platform === "win32" ? ["python.exe"] : ["bin", "python3"]));
+  if (process.platform === "darwin" || process.platform === "win32") {
+    run(python, [path.join(frontend, "scripts", "prepare-mihomo.py"),
+      "--output", path.join(staging, "mihomo"), "--cache", path.join(cache, "mihomo-downloads")]);
+  }
   // Install wheels into a relocatable directory; never copy an editable project venv.
   // Desktop ships local replay/archive import, so include its pinned Parquet dependencies.
   const ccxtWheel = process.env.CANDLESCOPE_CCXT_WHEEL;

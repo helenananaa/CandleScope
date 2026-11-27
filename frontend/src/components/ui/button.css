@@ -119,13 +119,33 @@
   color: var(--text-primary);
 }
 
+.ui-icon-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--text-danger);
+}
+
+/* A corner mark (IconButton's indicator), e.g. that a tool has variants */
+.ui-icon-btn:has(> .ui-icon-btn-indicator) {
+  position: relative;
+}
+
+.ui-icon-btn-indicator {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  pointer-events: none;
+}
+
 .ui-icon-btn[aria-pressed='true'] {
   background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
   color: var(--text-accent);
 }
 
+/* Icon buttons rest in the secondary text colour, so a disabled one also fades to read as off. */
 .ui-icon-btn:disabled {
   color: var(--text-muted);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -164,7 +184,55 @@
   font-size: var(--font-size-xs);
 }
 
-:is(.ui-control, .ui-btn, .ui-icon-btn):focus-visible {
+.ui-control-icon {
+  display: inline-flex;
+}
+
+/* Option button: a block choice, as a card (bordered tile) or a list row. The feature lays out
+ * what is inside; the primitive owns the box, colour and states. */
+.ui-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 var(--font-size-sm)/1.35 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.ui-option-card {
+  border-color: var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.ui-option:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--surface-hover);
+}
+
+.ui-option:is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], [aria-current='true'], [aria-current='page']) {
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.ui-option-card:is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], [aria-current='true'], [aria-current='page']) {
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
+}
+
+/* Fades as well, like a disabled icon button: muted text alone reads as enabled in the dark theme. */
+.ui-option:is(:disabled, [aria-disabled='true']) {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:is(.ui-control, .ui-btn, .ui-icon-btn, .ui-option):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

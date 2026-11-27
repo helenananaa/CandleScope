@@ -217,6 +217,7 @@ function canonicalDrawingEntityPointCount(entity: DrawingEntity): number {
   const geometry = entity.geometry;
   switch (geometry.kind) {
     case "line":
+    case "path":
     case "channel":
     case "range-measure":
     case "angle-measure":

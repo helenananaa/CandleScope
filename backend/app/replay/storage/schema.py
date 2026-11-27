@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from app.core.pre_migration_copy import keep_pre_migration_copy
+
 from .checkpoint_delta import SCHEMA as CHECKPOINT_DELTA_SCHEMA
 
 
@@ -213,6 +215,9 @@ def migrate_replay_schema(connection: sqlite3.Connection, *, now_ms: int) -> Non
             f"replay schema {current} is newer than supported {REPLAY_SCHEMA_VERSION}"
         )
     if current == 4:
+        keep_pre_migration_copy(
+            connection, schema="replay", from_version=current, to_version=REPLAY_SCHEMA_VERSION,
+        )
         for statement in CHECKPOINT_DELTA_SCHEMA.split(";"):
             if statement.strip():
                 connection.execute(statement)

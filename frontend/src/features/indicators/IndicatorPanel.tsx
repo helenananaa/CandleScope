@@ -26,12 +26,13 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
-import { indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
+import { indicatorDescription, indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
 import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
 import { isFrontendScript } from "./frontendScriptContract.js";
+import { isRetiredScriptIndicator } from "./retiredScriptIndicator.js";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
 import type {
@@ -45,39 +46,24 @@ import type {
   IndicatorEditorValue,
 } from "./IndicatorEditor.js";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  "趋势": "趋势",
-  "震荡": "震荡",
-  "波动": "波动率",
-  "成交量": "成交量",
-  "contract-data": "合约数据",
-  "custom": "自定义",
-  // English fallbacks (lowercase)
-  "trend": "趋势",
-  "momentum": "动量",
-  "volatility": "波动率",
-  "volume": "成交量",
-  "oscillator": "震荡",
-  // English fallbacks (capitalized — as reported by backend engine)
-  "Trend": "趋势",
-  "Oscillator": "震荡",
-  "Volatility": "波动率",
-  "Volume": "成交量",
-};
-
+/**
+ * Catalog category → stable group key. Built-ins report English categories;
+ * the Chinese entries only recognise categories saved by older builds and
+ * custom scripts. Labels come from the message catalogs, never from here.
+ */
 const CATEGORY_GROUP_KEYS: Record<string, string> = {
-  "趋势": "trend",
-  "动量": "momentum",
-  "震荡": "oscillator",
-  "波动率": "volatility",
-  "成交量": "volume",
-  "合约数据": "contract-data",
-  "自定义": "custom",
+  trend: "trend", Trend: "trend", "趋势": "trend",
+  momentum: "momentum", Momentum: "momentum", "动量": "momentum",
+  oscillator: "oscillator", Oscillator: "oscillator", "震荡": "oscillator",
+  volatility: "volatility", Volatility: "volatility", "波动": "volatility", "波动率": "volatility",
+  volume: "volume", Volume: "volume", "成交量": "volume",
+  "contract-data": "contract-data", "合约数据": "contract-data",
+  custom: "custom", "自定义": "custom",
 };
 
 function categoryGroupKey(category: string | null | undefined, fallback: string): string {
   const raw = category || fallback;
-  return CATEGORY_GROUP_KEYS[CATEGORY_LABELS[raw] || raw] || raw;
+  return Object.hasOwn(CATEGORY_GROUP_KEYS, raw) ? CATEGORY_GROUP_KEYS[raw]! : raw;
 }
 
 const CATEGORY_MESSAGE_KEYS: Record<string, MessageKey> = {
@@ -92,7 +78,7 @@ const CATEGORY_MESSAGE_KEYS: Record<string, MessageKey> = {
 
 function categoryDisplayLabel(cat: string): string {
   const key = CATEGORY_MESSAGE_KEYS[cat];
-  return key ? t(key) : (CATEGORY_LABELS[cat] || cat);
+  return key ? t(key) : cat;
 }
 
 const SOURCE_OPTIONS = ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4", "hlcc4"];
@@ -141,6 +127,8 @@ interface CustomIndicatorDraft extends IndicatorDefinition {
 
 export interface IndicatorPanelProps {
   staticCatalog?: import("./useIndicatorCatalogRuntime.js").StaticIndicatorCatalog;
+  /** The tab shown when the drawer opens; the library by default. */
+  initialTab?: "presets" | "active";
   allowCustomIndicators?: boolean;
   customIndicatorsUnavailableReason?: string;
   allowedScriptLanguages?: readonly string[];
@@ -193,6 +181,11 @@ function isBuiltinIndicator(indicator: IndicatorBuiltinLike | null | undefined):
     indicator?.is_builtin === true ||
     (typeof indicator?.script === "string" && indicator.script.startsWith(ENGINE_SCRIPT_MARKER))
   );
+}
+
+/** A saved Pyne script: the backend lists it with `retired: true`. */
+function isRetiredCatalogItem(preset: CatalogIndicator): boolean {
+  return ("retired" in preset && preset.retired === true) || isRetiredScriptIndicator(preset);
 }
 
 function stripEngineMarker(script = ""): string {
@@ -254,7 +247,7 @@ function marketStudyMatchesSearch(
     study.id,
     study.description,
     study.category,
-    CATEGORY_LABELS[study.category || "contract-data"],
+    categoryDisplayLabel(categoryGroupKey(study.category, "contract-data")),
     study.unsupportedReason,
     study.statusText,
   ].some((value) => String(value || "").toLowerCase().includes(query));
@@ -262,6 +255,7 @@ function marketStudyMatchesSearch(
 
 export default function IndicatorPanel({
   staticCatalog,
+  initialTab = "presets",
   allowCustomIndicators = true,
   customIndicatorsUnavailableReason,
   allowedScriptLanguages,
@@ -287,7 +281,7 @@ export default function IndicatorPanel({
   resolveIndicatorSupport,
 }: IndicatorPanelProps) {
   useLocale();
-  const [tab, setTab] = useState<IndicatorPanelTab>("presets");
+  const [tab, setTab] = useState<IndicatorPanelTab>(initialTab);
   const tabsId = useId();
   const {
     customIndicators,
@@ -430,6 +424,7 @@ export default function IndicatorPanel({
   }, [handleParamChange, onRecompute]);
 
   const handleAddPreset = useCallback(async (preset: CatalogIndicator) => {
+    if (isRetiredCatalogItem(preset)) return;
     try {
       const resolved = await resolvePresetForChart(preset);
       if (resolveIndicatorSupport?.(resolved).supported === false) return;
@@ -476,6 +471,8 @@ export default function IndicatorPanel({
   }, []);
 
   const handleEditIndicator = useCallback((indicator: IndicatorDefinition) => {
+    // The editor would offer another language for the old source.
+    if (isRetiredScriptIndicator(indicator)) return;
     setEditorSession((session) => session + 1);
     setEditingIndicator({ ...indicator });
     setTab("editor");
@@ -627,6 +624,7 @@ export default function IndicatorPanel({
       indicatorDisplayName(p).toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
       (p.description || "").toLowerCase().includes(q) ||
+      indicatorDescription(p).toLowerCase().includes(q) ||
       (p.category || "").toLowerCase().includes(q)
     );
   });
@@ -666,6 +664,7 @@ export default function IndicatorPanel({
       command("search", "Search the catalog.", object({ query: text(256, 0) }), ({ query }) => setSearchQuery(query)),
       command("addPreset", "Resolve a catalog preset and add it through the same support/runtime guards as the UI.", object({ presetId: text(128) }), async ({ presetId }) => {
         const preset = [...presets, ...customIndicators].find((row) => row.id === presetId); if (!preset) throw new Error("PRESET_UNAVAILABLE");
+        if (isRetiredCatalogItem(preset)) throw new Error("PYNE_RETIRED: Pyne scripts are no longer supported");
         const resolved = await resolvePresetForChart(preset); if (resolveIndicatorSupport?.(resolved).supported === false) throw new Error("INDICATOR_UNSUPPORTED");
         if (activeIndicators.some((row) => row.id === resolved.id)) throw new Error("INDICATOR_ID_CONFLICT"); onAddIndicator(resolved);
       }),
@@ -790,7 +789,10 @@ export default function IndicatorPanel({
                         </h4>
                         <ul className="indicator-list">
                           {items.map((preset) => {
-                            const support = resolveIndicatorSupport?.(preset) ?? { supported: true, reason: null };
+                            const retired = isRetiredCatalogItem(preset);
+                            const support = retired
+                              ? { supported: false, reason: t("indicator.pyneRetired") }
+                              : resolveIndicatorSupport?.(preset) ?? { supported: true, reason: null };
                             const active = isActive(preset.id);
                             const addDisabled = !active && !support.supported;
                             const builtin = isBuiltinIndicator(preset);
@@ -799,15 +801,16 @@ export default function IndicatorPanel({
                               ...(("defaultEnabled" in preset && preset.defaultEnabled) ? [t("indicator.default")] : []),
                             ].filter(Boolean).join(" · ");
                             return (
-                              <li key={preset.id} data-indicator-id={preset.id} className="indicator-preset-item" data-active={active ? "true" : undefined}>
+                              <li key={preset.id} data-indicator-id={preset.id} className="indicator-preset-item" data-active={active ? "true" : undefined} data-retired={retired ? "true" : undefined}>
                                 <div className="indicator-row-main">
                                   <span className="indicator-preset-name">
                                     <strong>{indicatorDisplayName(preset)}</strong>
                                     {!builtin && <Badge tone="accent">{t("indicator.customBadge")}</Badge>}
-                                    {!support.supported && <Badge>{t("indicator.replayUnavailable")}</Badge>}
+                                    {retired && <Badge tone="warning">{t("indicator.retiredBadge")}</Badge>}
+                                    {!retired && !support.supported && <Badge>{t("indicator.replayUnavailable")}</Badge>}
                                   </span>
                                   <span className="indicator-row-desc">
-                                    {[preset.description, meta].filter(Boolean).join(" · ")}
+                                    {[indicatorDescription(preset), meta].filter(Boolean).join(" · ")}
                                   </span>
                                   {!support.supported && support.reason && (
                                     <span className="indicator-row-warning">{support.reason}</span>
@@ -897,10 +900,11 @@ export default function IndicatorPanel({
                     <ul className="indicator-list">
                       {activeIndicators.map((ind) => {
                         const builtin = isBuiltinIndicator(ind);
+                        const retired = isRetiredScriptIndicator(ind);
                         const schema = getSchemaForIndicator(ind);
                         const freeParams = schema.length === 0 ? Object.entries(ind.params || {}) : [];
                         return (
-                          <li key={ind.id} className="indicator-active-item" data-hidden={ind.visible ? undefined : "true"}>
+                          <li key={ind.id} className="indicator-active-item" data-hidden={ind.visible ? undefined : "true"} data-retired={retired ? "true" : undefined}>
                             <div className="indicator-active-header">
                               <IconButton
                                 size="sm"
@@ -912,17 +916,19 @@ export default function IndicatorPanel({
                               <span className="indicator-active-name">
                                 <strong>{indicatorDisplayName(ind)}</strong>
                                 {!builtin && <Badge tone="accent">{t("indicator.customBadge")}</Badge>}
+                                {retired && <Badge tone="warning">{t("indicator.retiredBadge")}</Badge>}
                                 <span className="indicator-row-tag">{paneText(indicatorDisplayPanes(ind, builtin))}</span>
                               </span>
-                              {ind.error && (
+                              {ind.error && !retired && (
                                 <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>
                               )}
                               <div className="indicator-row-actions">
                                 <IconButton
                                   size="sm"
-                                  label={builtin ? t("indicator.viewReference") : t("indicator.editCode")}
+                                  label={retired ? t("indicator.pyneRetired") : builtin ? t("indicator.viewReference") : t("indicator.editCode")}
                                   icon={<Icon name={builtin ? "book" : "pencil"} size={14} />}
                                   onClick={() => handleEditIndicator(ind)}
+                                  disabled={retired}
                                 />
                                 <IconButton
                                   size="sm"
@@ -933,7 +939,7 @@ export default function IndicatorPanel({
                               </div>
                             </div>
 
-                            {(schema.length > 0 || freeParams.length > 0) && (
+                            {!retired && (schema.length > 0 || freeParams.length > 0) && (
                               <div className="indicator-params">
                                 {schema.map((item) => (
                                   (item.type || "string") === "bool"
@@ -967,7 +973,8 @@ export default function IndicatorPanel({
                             )}
 
                             {activeControls?.(ind)}
-                            {ind.error && <InlineAlert tone="danger">{ind.error}</InlineAlert>}
+                            {retired && <InlineAlert tone="warning">{t("indicator.pyneRetired")}</InlineAlert>}
+                            {ind.error && !retired && <InlineAlert tone="danger">{ind.error}</InlineAlert>}
                             {ind.runtimeNotice && <InlineAlert>{t(ind.runtimeNotice)}</InlineAlert>}
 
                             {ind.lines && ind.lines.length > 0 && (

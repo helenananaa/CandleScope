@@ -125,6 +125,35 @@ test("startup failure is fail closed and leaves no running child", async () => {
   assert.equal(supervisor.diagnostics().running, false);
 });
 
+test("a backend that records its startup failure names the cause and leaves no report behind", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-sidecar-cause-"));
+  const port = await freePort();
+  const record = "require('node:fs').writeFileSync(process.env.CANDLESCOPE_DESKTOP_STARTUP_FAILURE_FILE,"
+    + " JSON.stringify({code:'CACHE_OWNER_MISMATCH',message:'Prepared inputs belong to another preparation database',"
+    + " type:'PreparationError'})); process.exit(3)";
+  const supervisor = new SidecarSupervisor({
+    command: process.execPath, args: ["-e", record], cwd: root, env: {},
+    healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 2_000, shutdownTimeoutMs: 100,
+    logPath: path.join(root, "sidecar.log"),
+  });
+  const failure = await supervisor.start().then(() => null, (error) => error);
+  assert.ok(failure instanceof SidecarStartupError);
+  assert.equal(failure.message,
+    "The backend stopped while starting: Prepared inputs belong to another preparation database (CACHE_OWNER_MISMATCH)");
+  assert.deepEqual(failure.diagnostics.backendFailure,
+    { code: "CACHE_OWNER_MISMATCH", message: "Prepared inputs belong to another preparation database" });
+  assert.deepEqual(await readdir(root), ["sidecar.log"]);
+
+  const silent = new SidecarSupervisor({
+    command: process.execPath, args: ["-e", "process.exit(3)"], cwd: root, env: {},
+    healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 2_000, shutdownTimeoutMs: 100,
+    logPath: path.join(root, "sidecar.log"),
+  });
+  const generic = await silent.start().then(() => null, (error) => error);
+  assert.equal(generic.message, "Sidecar exited before it became healthy (3)");
+  assert.equal(generic.diagnostics.backendFailure, null);
+});
+
 test("an existing healthy listener cannot impersonate the launched child", async () => {
   const server = http.createServer((_request, response) => response.end(JSON.stringify({ desktop_instance_id: "old-instance" })));
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -220,7 +249,7 @@ test("a signal-terminated sidecar reports stopped and does not wait for a second
   const source = `require('node:http').createServer((q,r)=>r.end(JSON.stringify({desktop_instance_id:process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID}))).listen(${port},'127.0.0.1');`;
   const supervisor = new SidecarSupervisor({ command: process.execPath, args: ["-e", source], cwd: root,
     gracefulStdin: true, healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 5000,
-    shutdownTimeoutMs: 10_000, logPath: path.join(root, "sidecar.log") });
+    shutdownTimeoutMs: 10_000, restartDelaysMs: [], logPath: path.join(root, "sidecar.log") });
   context.after(() => supervisor.stop());
   await supervisor.start();
   const child = supervisor.child;

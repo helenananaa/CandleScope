@@ -61,6 +61,7 @@ import {
 import type {
   AngleDrawingRenderEntity,
   ChannelDrawingRenderEntity,
+  PathDrawingRenderEntity,
   RangeMeasureDrawingRenderEntity,
   AxisLineDrawingRenderEntity,
   DrawingRenderEntity,
@@ -949,6 +950,26 @@ function projectLine(
       arrowEnd: entity.style.arrowEnd,
     }),
   });
+}
+
+function projectPath(entity: PathDrawingRenderEntity, frame: DrawingFrameSnapshot,
+  adapter: DrawingSceneProjectionAdapter, selected: boolean): EntityProjection {
+  const anchors = entity.geometry.dataPoints;
+  const points = projectBatch(adapter, frame, anchors, entity.geometry);
+  if (points === PROJECTION_FAILED) return points;
+  if (anchors.length < 2 || !points.every(Number.isFinite)) return null;
+  const handles = anchors.map((_, i) => ({ pointIndex: i }));
+  const zones: DrawingDisplayHitZone[] = anchors.map((_, i) => ({
+    kind: "point", name: `vertex-${i}`, pointOffset: i, pointCount: 1, tolerance: 7 + entity.style.lineWidth, result: handles[i]!,
+  }));
+  for (let i = 0; i < anchors.length - 1; i++) {
+    zones.push({ kind: "polyline", name: `segment-${i}`, pointOffset: i, pointCount: 2,
+      tolerance: 8 + entity.style.lineWidth / 2, result: { pointIndex: -1, zone: `segment-${i}` } });
+  }
+  return createProjectedEntity(entity, points, { bbox: bboxFromValues(points), handles: points,
+    handleNames: anchors.map((_, i) => `vertex-${i}`), handleResults: handles, hitZones: zones,
+    renderSpec: { op: "path", strokeColor: entity.style.color, lineWidthCssPx: entity.style.lineWidth,
+      selected, arrowEnd: entity.style.arrowEnd } });
 }
 
 function projectChannel(
@@ -3638,6 +3659,7 @@ function projectEntity(
     );
     case "axis-line": return projectAxisLine(entity, frame, adapter, selected);
     case "range-measure": return projectRangeMeasure(entity, frame, adapter, selected);
+    case "path": return projectPath(entity, frame, adapter, selected);
     case "channel": return projectChannel(entity, frame, adapter, selected);
     case "angle-measure": return projectAngle(entity, frame, adapter, selected);
     case "text": return projectText(entity, frame, adapter, selected);
@@ -3718,6 +3740,8 @@ function clipProjectedEntityToPane(
       // The head's wings reach half its length beyond the shaft.
       renderSpec.arrowEnd ? arrowHeadLengthCssPx(renderSpec.lineWidthCssPx) / 2 + 1 : 0,
     );
+  } else if (renderSpec?.op === "path") {
+    paintOutset = Math.max(renderSpec.selected ? 12 : 0, arrowHeadLengthCssPx(renderSpec.lineWidthCssPx));
   } else if (renderSpec?.op === "channel") {
     paintOutset = renderSpec.selected
       ? Math.max(renderSpec.lineWidthCssPx / 2, 12)

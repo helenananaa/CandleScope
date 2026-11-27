@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getLocale, setLocale } from "../../i18n/index.js";
-import { linkSuggestionLabel, planLevelParts, planLevels } from "./journalRender.js";
+import { autoFieldText, linkSuggestionLabel, planLevelParts, planLevels } from "./journalRender.js";
 import { formatDateTime } from "./tradingFormat.js";
 import type { LinkSuggestion } from "./tradingTypes.js";
 
@@ -56,6 +56,20 @@ test("plan level parts leave out empty levels", () => {
     setLocale("en");
     assert.deepEqual(planLevelParts(planLevels({ entryPrice: "82100", riskUsdt: "25" })), ["entry 82,100", "risk 25.00"]);
     assert.deepEqual(planLevelParts(planLevels({})), []);
+  } finally {
+    setLocale(previous);
+  }
+});
+
+test("the MFE / MAE line formats the excursions as amounts, without their price noise", () => {
+  const previous = getLocale();
+  try {
+    setLocale("en");
+    const field = { key: "excursion", labelKey: "trading.tpl.excursion", kind: "auto", auto: "excursion" } as const;
+    const excursion = { available: true, interval: "1m", complete: true, mfePrice: "15.890156", maePrice: "4.729844",
+      mfePct: "0.94", maePct: "0.28", mfeR: null, maeR: null };
+    assert.equal(autoFieldText(field, {}, null, excursion, "ETHUSDT"),
+      "15.89 / 4.73 (0.94% / 0.28%, estimated from 1m candles)");
   } finally {
     setLocale(previous);
   }

@@ -175,6 +175,17 @@ const PHASE8_TOOL_MATRIX: readonly Phase8MatrixRow[] = Object.freeze([
     create: () => createTwoPointSavedDrawing({ tool: "measure-price-time", dataPoints: [SOURCE_POINT, FUTURE_POINT], color: "#34d399", lineWidth: 2 }),
   },
   {
+    kind: "path",
+    renderOp: "path",
+    draggable: true,
+    create: () => createTwoPointSavedDrawing({
+      tool: "path-arrow",
+      dataPoints: [SOURCE_POINT, FUTURE_POINT, { time: 180, price: 110 }, { time: 120, price: 90 }],
+      color: "#22c55e",
+      lineWidth: 2,
+    }),
+  },
+  {
     kind: "channel",
     renderOp: "channel",
     draggable: true,
@@ -488,6 +499,7 @@ function dragDescriptor(
 ): DrawingDragDescriptor | null {
   switch (drawing.type) {
     case "range-measure":
+    case "path":
     case "channel":
     case "line":
       return drawing.dataPoints?.length
@@ -626,6 +638,7 @@ test("Phase 8 global matrix: all SavedDrawing kinds cross document, scene, hit, 
       "axis-line",
       "angle-measure",
       "range-measure",
+      "path",
       "channel",
       "fibonacci",
       "text",

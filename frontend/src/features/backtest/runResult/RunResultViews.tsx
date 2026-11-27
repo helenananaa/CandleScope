@@ -7,7 +7,7 @@
  * Values are shown as the run reports them; nothing here recomputes money.
  */
 import { useEffect, useId, useMemo, useRef, useState, type UIEvent } from "react";
-import { Button } from "../../../components/ui/index.js";
+import { Button, OptionButton } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { number, object } from "../../app-control/commandSchema.js";
@@ -129,9 +129,9 @@ export function RunResultTradeList({
               const index = window.start + offset;
               const selected = selectedTradeId === trade.id;
               return (
-                <button
+                <OptionButton
                   key={`${trade.id}:${index}`}
-                  type="button"
+                  variant="row"
                   role="row"
                   aria-rowindex={index + 1}
                   aria-selected={selected}
@@ -157,7 +157,7 @@ export function RunResultTradeList({
                   <span title={`${trade.exit_price} · ${dateTime(trade.exit_time_ms, locale)}`}>{formatChartStrategyNumber(trade.exit_price, "price")}</span>
                   <span title={trade.net_pnl ?? "—"} className={signedClass(trade.net_pnl ?? "")}>{formatChartStrategyNumber(trade.net_pnl ?? "—")}</span>
                   <span title={trade.fees ?? "—"}>{trade.fees === null ? "—" : formatChartStrategyNumber(trade.fees)}</span>
-                </button>
+                </OptionButton>
               );
             })}
           </div>

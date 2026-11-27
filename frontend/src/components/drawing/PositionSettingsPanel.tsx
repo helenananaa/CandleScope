@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { useAnchoredPopup } from "../ui/index.js";
+import { Button, IconButton, useAnchoredPopup } from "../ui/index.js";
+import { Icon } from "../icons/Icon.js";
 
 export interface PositionSettingsPanelProps {
   positionSize: number;
@@ -53,7 +54,7 @@ export default function PositionSettingsPanel({
     <div className="position-settings-panel" ref={panelRef} role="dialog" aria-label={t("drawing.settings.position")}>
       <div className="fib-levels-header">
         <span>{t("drawing.settings.position")}</span>
-        <button type="button" className="fib-levels-close" data-overlay-close onClick={onClose} aria-label={t("common.close")}>x</button>
+        <IconButton size="sm" label={t("common.close")} icon={<Icon name="close" size={14} />} data-overlay-close onClick={onClose} />
       </div>
       <div className="fib-levels-divider" />
       <div className="position-size-section">
@@ -69,13 +70,14 @@ export default function PositionSettingsPanel({
         />
         <div className="position-size-presets">
           {POSITION_SIZE_PRESETS.map((preset) => (
-            <button
+            <Button
               key={preset}
-              className={`position-size-preset ${Number(localSize) === preset ? "active" : ""}`}
+              size="sm"
+              aria-pressed={Number(localSize) === preset}
               onClick={() => handleSizeChange(String(preset))}
             >
               {preset >= 1000 ? `${preset / 1000}K` : preset}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

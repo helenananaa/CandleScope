@@ -50,7 +50,7 @@ test("a chart with its own appearance shows a marker, and a locked layout still 
       onSwap={() => {}}
     />,
   );
-  assert.match(html, /class="chart-appearance-marker" aria-label="此图表使用自己的外观"/);
+  assert.match(html, /class="ui-icon-btn ui-icon-btn-sm chart-appearance-marker" aria-label="此图表使用自己的外观"/);
   // The trigger is not disabled: layout actions are, appearance is not.
   assert.doesNotMatch(html, /class="multi-chart-cell-layout-trigger"[^>]*disabled/);
 });

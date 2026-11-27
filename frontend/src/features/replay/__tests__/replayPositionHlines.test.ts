@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { getLocale, setLocale } from "../../../i18n/index.js";
 import {
   buildReplayPositionHlines,
   replayMarkFidelityLabel,
@@ -11,6 +12,7 @@ import type { ReplayTrainingPortfolioPosition } from "../replayV2Types.js";
 
 function position({
   quantity,
+  entryPrice = "100",
   positionSide,
   liquidationPrice,
   bankruptcyPrice,
@@ -19,6 +21,7 @@ function position({
   maintenanceMargin = "5",
 }: {
   readonly quantity: string;
+  readonly entryPrice?: string;
   readonly positionSide?: "LONG" | "SHORT";
   readonly liquidationPrice?: string | null;
   readonly bankruptcyPrice?: string | null;
@@ -32,7 +35,7 @@ function position({
     ...(positionSide === undefined ? {} : { position_side: positionSide }),
     position: {
       quantity,
-      entry_price: "100",
+      entry_price: entryPrice,
       mark_price: markPrice,
       unrealized_pnl: "0",
     },
@@ -148,4 +151,57 @@ test("risk price presentation exposes proxy fidelity and rejects non-positive mo
   assert.equal(replayPositiveModelPrice("0"), null);
   assert.equal(replayPositiveModelPrice("-1"), null);
   assert.equal(replayPositiveModelPrice(null), null);
+});
+
+test("position line labels round server model prices to the chart's precision", () => {
+  const previous = getLocale();
+  setLocale("en");
+  try {
+    const titles = (pricePrecision: number | undefined) => buildReplayPositionHlines({
+      selectedTrackId: "track-1",
+      positionMode: "ONE_WAY",
+      positions: [position({
+        quantity: "0.1",
+        entryPrice: "61781.37752",
+        liquidationPrice: "55603.240000000005",
+        bankruptcyPrice: "55290.9999999",
+      })],
+      pricePrecision,
+    }).map((line) => [line.id, line.title, line.price]);
+
+    assert.deepEqual(titles(2), [
+      ["replay-position-average", "Position avg 61,781.38", 61781.37752],
+      ["replay-position-liquidation", "Position liq ≈ 55,603.24 (server model)", 55603.240000000005],
+      ["replay-position-bankruptcy", "Position bankruptcy ≈ 55,291.00 (server model)", 55290.9999999],
+    ]);
+    assert.equal(titles(1)[0]?.[1], "Position avg 61,781.4");
+  } finally {
+    setLocale(previous);
+  }
+});
+
+test("the K-line risk reference rounds its computed price to the chart's precision", () => {
+  const previous = getLocale();
+  setLocale("en");
+  try {
+    const riskTitle = (pricePrecision: number | undefined) => buildReplayPositionHlines({
+      selectedTrackId: "track-1",
+      positionMode: "ONE_WAY",
+      positions: [position({
+        quantity: "3",
+        liquidationPrice: null,
+        bankruptcyPrice: null,
+        markPrice: "100.1",
+        marginEquity: "30",
+        maintenanceMargin: "10",
+      })],
+      pricePrecision,
+    }).find((line) => line.id === "replay-position-risk-reference")?.title;
+
+    // 100.1 - 20 / 3 = 93.43333333333332
+    assert.equal(riskTitle(2), "Risk ref ≈ 93.43 (candle mark proxy)");
+    assert.equal(riskTitle(undefined), "Risk ref ≈ 93.433333 (candle mark proxy)");
+  } finally {
+    setLocale(previous);
+  }
 });

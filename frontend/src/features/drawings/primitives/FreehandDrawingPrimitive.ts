@@ -13,6 +13,7 @@
  *   - Hit-testing for eraser deletion
  */
 
+import { DEFAULT_DRAWING_RENDER_COLOR } from "../rendering/drawingRenderDefaults.js";
 import {
   normalizeFreehandStroke,
   normalizeLegacyFreehandDataPoints,
@@ -585,7 +586,7 @@ export class FreehandDrawingPrimitive {
     this._previewScreenPoints = previewPoints;
     this._isPreview = !!opts.isPreview || previewPoints !== null;
     this._previewCancelled = false;
-    this._color = opts.color || "#f59e0b";
+    this._color = opts.color || DEFAULT_DRAWING_RENDER_COLOR;
     this._lineWidth = opts.lineWidth || 2;
     this._opacity = normalizeOpacity(
       opts.opacity,

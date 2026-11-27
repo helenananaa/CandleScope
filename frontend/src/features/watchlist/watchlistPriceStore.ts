@@ -5,6 +5,8 @@ export interface WatchlistPriceTick extends Record<string, unknown> {
   daily_change?: number;
   daily_change_pct?: number;
   change_pct?: number;
+  /** The backend cannot reach the exchange for this symbol; the price is the last one held. */
+  stale?: boolean;
 }
 
 export type WatchlistPriceSnapshot = Readonly<Record<string, Readonly<WatchlistPriceTick>>>;

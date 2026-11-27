@@ -26,6 +26,7 @@ import type {
   MergeCacheData,
   PatchCacheTick,
   PendingBeforePage,
+  PendingInitialSeries,
   SeriesDataFeedConfig,
   StorageRevisionFloor,
   TerminalHistoryGap,
@@ -466,6 +467,64 @@ function unionRange(
   };
 }
 
+/**
+ * A pending before-page demands its own page, not every row a backfill wrote.
+ * One storage change can cover a whole hole, for example between two far
+ * date-seek windows. Read page after page into the window, it grew to the bar
+ * budget, and the prepend trim then dropped the newest rows: the ones in view.
+ * Bound the read to the window's coverage plus the page. When the page extent
+ * cannot be derived for the interval, the event range is kept as before.
+ */
+function pendingLoadMoreFetchRange(
+  series: MarketSeries,
+  eventRange: TimeRangeMs | null,
+  pending: PendingBeforePage,
+  activeCoverage: TimeRangeMs | null,
+): TimeRangeMs | null {
+  if (!eventRange) return eventRange;
+  const before = Number(pending.before);
+  const bars = Math.max(1, Math.floor(Number(pending.bars ?? 500)) || 500);
+  if (!Number.isFinite(before)) return eventRange;
+  const timeline = createIntervalTimeline(series.interval);
+  let start: number | null = null;
+  if (timeline) {
+    start = before;
+    for (let index = 0; index < bars && start !== null; index += 1) {
+      const previous: number | null = timeline.previous(start);
+      start = previous !== null && previous < start ? previous : null;
+    }
+  }
+  const seconds = parseIntervalSeconds(series.interval);
+  if (start === null && seconds) start = before - bars * seconds;
+  if (start === null || !Number.isFinite(start)) return eventRange;
+  return intersectRanges(eventRange, {
+    start: Math.max(0, start) * 1_000,
+    end: Math.max(activeCoverage?.end ?? 0, before * 1_000),
+  });
+}
+
+/**
+ * A pending initial window demands its own range, not every row a storage
+ * change wrote. The backend's daily-open lookup stores the 00:00 UTC 1m bar of
+ * each priced symbol. Read back into a 1m chart whose initial window started
+ * at 05:29, that bar became a lone first row with a five-hour hole after it,
+ * and when it was the first row the chart received, the first view was fitted
+ * to it. Bound the read to the pending range and the rows that touch it. A
+ * count-back window with no range yet is bounded by its rows; the initial
+ * verification reads the window itself.
+ */
+function pendingInitialFetchRange(
+  eventRange: TimeRangeMs | null,
+  pending: PendingInitialSeries,
+  activeCoverage: TimeRangeMs | null,
+): TimeRangeMs | null {
+  if (!eventRange) return eventRange;
+  const owned = pending.range
+    ? rangesTouch(pending.range, activeCoverage) ? unionRange(pending.range, activeCoverage) : pending.range
+    : activeCoverage;
+  return intersectRanges(eventRange, owned);
+}
+
 function rangesTouch(left: TimeRangeMs | null, right: TimeRangeMs | null): boolean {
   if (!left || !right) return !left && !right;
   return left.start <= right.end + 1 && right.start <= left.end + 1;
@@ -680,6 +739,7 @@ export class SeriesDataFeed {
   pendingGapRepairs: Map<string, PendingGapRepair>;
   private terminalHistoryGaps: readonly TerminalHistoryGap[] = [];
   private readonly terminalHistoryGapListeners = new Set<() => void>();
+  private readonly pendingBeforePageListeners = new Set<() => void>();
   gapRepairInFlight: Map<string, EpochLease>;
   gapRepairGenerationBySeries: Map<SeriesKey, number>;
   repairAbortStateBySeries: Map<SeriesKey, RepairAbortState>;
@@ -1145,11 +1205,28 @@ export class SeriesDataFeed {
   }
 
   setPendingBeforePage(series: MarketSeries, pending: PendingBeforePage): void {
-    this.pendingBeforePages.set(this.beforePageKey(series), pending);
+    const key = this.beforePageKey(series);
+    const previous = this.pendingBeforePages.get(key);
+    this.pendingBeforePages.set(key, pending);
+    if (previous?.before !== pending.before) this.publishPendingBeforePages();
   }
 
   clearPendingBeforePage(series: MarketSeries): void {
-    this.pendingBeforePages.delete(this.beforePageKey(series));
+    if (this.pendingBeforePages.delete(this.beforePageKey(series))) this.publishPendingBeforePages();
+  }
+
+  /**
+   * Notifies when a series gains, loses or moves its unresolved left page.
+   * The page owner keeps reporting older history as loading until this
+   * settles, because the rows it already holds can still have a hole.
+   */
+  subscribePendingBeforePages = (listener: () => void): (() => void) => {
+    this.pendingBeforePageListeners.add(listener);
+    return () => { this.pendingBeforePageListeners.delete(listener); };
+  };
+
+  private publishPendingBeforePages(): void {
+    for (const listener of [...this.pendingBeforePageListeners]) listener();
   }
 
   getBeforePageAvailability(series: MarketSeries): BeforePageAvailability | null {
@@ -1406,15 +1483,16 @@ export class SeriesDataFeed {
     const isPendingInitial = Boolean(
       pendingInitial && isSameSeries(job.series, pendingInitial),
     );
-    const isPendingLoadMore = Boolean(pendingBeforePage);
     const activeRows = getCacheRows(job.series) || [];
     const activeCoverage = activeCoverageMsFromRows(activeRows);
     const activeOverlap = intersectRanges(job.range, activeCoverage);
-    const fetchRange = (
-      (isPendingInitial || isPendingLoadMore)
-        ? job.range
-        : activeOverlap
-    );
+    const fetchRange = isPendingInitial && pendingInitial
+      ? pendingInitialFetchRange(job.range, pendingInitial, activeCoverage)
+      : pendingBeforePage
+        ? pendingLoadMoreFetchRange(job.series, job.range, pendingBeforePage, activeCoverage)
+        : activeOverlap;
+    // Nothing of the page was written: its own poll settles it.
+    if (!fetchRange && pendingBeforePage && job.storageRevisionFloor) pendingBeforePage.nextPollAt = Date.now();
     let loadedAny = false;
     let initialResolved = false;
     let rangeVerified = false;
@@ -2389,9 +2467,15 @@ export class SeriesDataFeed {
       return true;
     }
 
-    const fetchRange = (isPendingInitial || isPendingLoadMore)
-      ? eventRange
-      : activeOverlap;
+    const fetchRange = isPendingInitial && pendingInitial
+      ? pendingInitialFetchRange(eventRange, pendingInitial, activeCoverage)
+      : pendingBeforePage
+        ? pendingLoadMoreFetchRange(eventSeries, eventRange, pendingBeforePage, activeCoverage)
+        : activeOverlap;
+    if (!fetchRange && !isPendingInitial && pendingBeforePage && eventRange) {
+      pendingBeforePage.nextPollAt = Date.now();
+      return true;
+    }
     const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange, storageRevisionFloor);
     this.backfillRecovery.enqueue(this.seriesKey(eventSeries), {
       series: eventSeries,

@@ -25,6 +25,7 @@ function harness(overrides = {}) {
   let cursor = 0;
   let effects = [];
   const timers = [];
+  const restored = [];
   const api = {
     pluginManagementAvailable: () => false,
     fetchPluginCatalog: async () => catalog(1),
@@ -66,6 +67,7 @@ function harness(overrides = {}) {
       pluginCatalogNeedsChartContextSync: () => false,
       pluginLivePollIntervalMs: () => 2000,
     },
+    '../../desktop/backendConnection.js': { useBackendRestored: callback => { restored.push(callback); } },
     '../../i18n/useLocale.js': { useLocale: () => 'en' },
     '../../i18n/index.js': { t: key => key },
   };
@@ -89,6 +91,8 @@ function harness(overrides = {}) {
   }
   return {
     api, render,
+    // Runs the newest render's backend-restored callback, as after a sidecar restart.
+    backendRestored() { restored.at(-1)(); },
     startPolls() { timers.length = 0; effects.forEach(fn => fn()); return timers; },
   };
 }
@@ -166,4 +170,20 @@ test('persistent revision skew stops after one retry and fails closed', async ()
   h.api.fetchPluginCatalog = async () => catalog(2);
   await h.render().actions.refresh();
   assert.equal(h.render().view.snapshot.registryRevision, 2);
+});
+
+test('a restarted local service refreshes the catalog and live control at once', async () => {
+  let catalogReads = 0;
+  let liveReads = 0;
+  const h = harness({
+    fetchPluginCatalog: async () => { catalogReads++; return catalog(1); },
+    fetchPluginLiveControlStatus: async () => { liveReads++; return status('disarmed'); },
+  });
+  h.render();
+  assert.equal(catalogReads, 0);
+  h.backendRestored();
+  await flush();
+  assert.equal(catalogReads, 1);
+  assert.equal(liveReads, 1);
+  assert.equal(h.render().view.liveControl.mode, 'disarmed');
 });

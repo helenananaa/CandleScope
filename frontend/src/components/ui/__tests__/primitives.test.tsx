@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  Badge, Button, Checkbox, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
+  Badge, Button, Checkbox, ControlButton, MenuItemButton, OptionButton, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
   Select, Stat, Switch, TabPanel, Tabs, buttonClassName, choiceKeyTarget, fromDateTimeInputValue, fromDateTimeText, toDateTimeInputValue, toDateTimeText,
 } from "../index.js";
 
@@ -20,6 +21,13 @@ test("icon buttons always have an accessible name and report toggle state", () =
   assert.match(html, /aria-label="Close"/);
   assert.match(html, /title="Close"/);
   assert.match(html, /aria-pressed="false"/);
+});
+
+test("icon buttons take a danger variant and a corner indicator", () => {
+  const html = renderToStaticMarkup(<IconButton label="Delete" icon={<svg />} variant="danger" indicator={<svg data-mark="" />} />);
+  assert.match(html, /class="ui-icon-btn ui-icon-btn-danger"/);
+  assert.match(html, /<span class="ui-icon-btn-indicator" aria-hidden="true"><svg data-mark=""><\/svg><\/span><\/button>$/);
+  assert.doesNotMatch(renderToStaticMarkup(<IconButton label="Close" icon={<svg />} />), /ui-icon-btn-indicator/);
 });
 
 test("a field links its label, control and message", () => {
@@ -127,4 +135,35 @@ test("the file drop is a labelled file input", () => {
   const id = /<label for="([^"]+)" class="ui-file-drop"/.exec(html)?.[1];
   assert.ok(id);
   assert.match(html, new RegExp(`<input id="${id}" type="file" class="ui-file-drop-input" accept=".csv"`));
+});
+
+test("a control button is the toolbar pill, active while its panel is open", () => {
+  const html = renderToStaticMarkup(<ControlButton size="sm" active icon={<svg />} aria-expanded>1H</ControlButton>);
+  assert.match(html, /^<button type="button" class="ui-control ui-control-sm is-active" aria-expanded="true"><span class="ui-control-icon" aria-hidden="true"><svg><\/svg><\/span>1H<\/button>$/);
+});
+
+test("an option button reports its choice as pressed, or as selected for an option or tab", () => {
+  assert.match(renderToStaticMarkup(<OptionButton selected>A</OptionButton>), /class="ui-option ui-option-card" aria-pressed="true"/);
+  assert.match(renderToStaticMarkup(<OptionButton variant="row" role="option" selected={false}>A</OptionButton>), /role="option" class="ui-option ui-option-row" aria-selected="false"/);
+  assert.doesNotMatch(renderToStaticMarkup(<OptionButton>A</OptionButton>), /aria-(pressed|selected)/);
+});
+
+test("an option button in a radio group reports its choice as checked, and a held-back choice fades", () => {
+  assert.match(renderToStaticMarkup(<OptionButton role="radio" selected>A</OptionButton>), /role="radio" class="ui-option ui-option-card" aria-checked="true"/);
+  const css = readFileSync(new URL("../button.css", import.meta.url), "utf8");
+  assert.match(css, /\.ui-option-card:is\([^)]*\[aria-checked='true'\]/);
+  assert.match(css, /\.ui-option:is\(:disabled, \[aria-disabled='true'\]\) \{/);
+});
+
+test("a menu item button lays out a mark, a label and a hint, and keeps an empty mark column for null", () => {
+  assert.equal(renderToStaticMarkup(<MenuItemButton icon={<svg />} hint="BN" tone="danger">Binance</MenuItemButton>),
+    '<button type="button" class="ui-menu-item" data-tone="danger"><span class="ui-menu-icon" aria-hidden="true"><svg></svg></span><span class="ui-menu-label">Binance</span><span class="ui-menu-hint">BN</span></button>');
+  assert.match(renderToStaticMarkup(<MenuItemButton icon={null}>A</MenuItemButton>), /<span class="ui-menu-icon" aria-hidden="true"><\/span><span class="ui-menu-label">A<\/span><\/button>$/);
+  assert.doesNotMatch(renderToStaticMarkup(<MenuItemButton>A</MenuItemButton>), /ui-menu-icon|ui-menu-hint/);
+});
+
+test("an option row marked as the current item shows as chosen", () => {
+  assert.match(renderToStaticMarkup(<OptionButton variant="row" aria-current="true">A</OptionButton>), /class="ui-option ui-option-row" aria-current="true"/);
+  const css = readFileSync(new URL("../button.css", import.meta.url), "utf8");
+  assert.match(css, /\.ui-option:is\([^)]*\[aria-current='true'\], \[aria-current='page'\]\) \{/);
 });

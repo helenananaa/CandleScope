@@ -1,6 +1,7 @@
 export {
   DEFAULT_LOCALE,
   LOCALES,
+  detectSystemLocale,
   LOCALE_OPTIONS,
   getLocale,
   hydrateLocale,
@@ -10,6 +11,7 @@ export {
   setLocale,
   setLocaleAsync,
   subscribeLocale,
+  systemLanguages,
   type LocaleId,
 } from "./locale.js";
 export { loadLocaleCatalog } from "./registry.js";

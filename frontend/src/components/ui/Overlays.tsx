@@ -1,14 +1,22 @@
 import {
-  cloneElement, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState,
+  cloneElement, Fragment, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState,
   type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactElement, type ReactNode, type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
-import { IconButton } from "./Button.js";
-import { moveMenuFocus } from "./helpers.js";
+import { IconButton, MenuItemButton } from "./Button.js";
+import { menuItemRole, moveMenuFocus } from "./helpers.js";
 import { overlayHost, useOverlayLayer } from "./overlay/overlayRuntime.js";
 import { placePopover, type Placement } from "./overlay/position.js";
 import type { DrawerSide, OverlayKind } from "./overlay/overlayStack.js";
+
+function CheckGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function CloseGlyph() {
   return (
@@ -206,7 +214,9 @@ export interface PopoverProps {
   open: boolean;
   onClose: () => void;
   /** The control that opened it; focus returns there and the popover sits next to it. */
-  anchorRef: RefObject<HTMLElement | null>;
+  anchorRef?: RefObject<HTMLElement | null>;
+  /** Instead of a control: a point in the viewport, e.g. where a context menu was asked for. */
+  anchorPoint?: { x: number; y: number };
   placement?: Placement;
   /** Accessible name. */
   label?: string;
@@ -222,18 +232,21 @@ export function Popover(props: PopoverProps) {
   return createPortal(<PopoverLayer {...props} />, overlayHost());
 }
 
-function PopoverLayer({ open, onClose, anchorRef, placement = "bottom-start", label, role = "dialog", children, className, initialFocusRef }: PopoverProps) {
+function PopoverLayer({ open, onClose, anchorRef, anchorPoint, placement = "bottom-start", label, role = "dialog", children, className, initialFocusRef }: PopoverProps) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const zIndex = useOverlayLayer({ open, kind: "popover", onClose, layerRef, returnFocusRef: anchorRef, ...(initialFocusRef ? { initialFocusRef } : {}) });
+  const zIndex = useOverlayLayer({ open, kind: "popover", onClose, layerRef, ...(anchorRef ? { returnFocusRef: anchorRef } : {}), ...(initialFocusRef ? { initialFocusRef } : {}) });
   const [position, setPosition] = useState<{ top: number; left: number; maxHeight: number; placement: Placement } | null>(null);
+  const pointX = anchorPoint?.x, pointY = anchorPoint?.y;
 
   const place = useCallback(() => {
-    const anchor = anchorRef.current, element = layerRef.current;
-    if (!anchor || !element) return;
-    const rect = anchor.getBoundingClientRect();
+    const element = layerRef.current;
+    const rect = pointX !== undefined && pointY !== undefined
+      ? { top: pointY, left: pointX, width: 0, height: 0 }
+      : anchorRef?.current?.getBoundingClientRect();
+    if (!rect || !element) return;
     const size = { width: element.offsetWidth, height: element.scrollHeight };
     setPosition(placePopover(rect, size, { width: window.innerWidth, height: window.innerHeight }, placement));
-  }, [anchorRef, placement]);
+  }, [anchorRef, pointX, pointY, placement]);
 
   useLayoutEffect(() => {
     place();
@@ -248,7 +261,7 @@ function PopoverLayer({ open, onClose, anchorRef, placement = "bottom-start", la
   useEffect(() => {
     const onPointerDown = (event: globalThis.PointerEvent) => {
       const target = event.target as Node | null;
-      if (!target || layerRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      if (!target || layerRef.current?.contains(target) || anchorRef?.current?.contains(target)) return;
       onClose();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -272,20 +285,28 @@ export interface MenuItem {
   hint?: ReactNode;
   tone?: "danger";
   disabled?: boolean;
+  /** A setting the item turns on or off (a check mark shows when on). */
+  checked?: boolean;
+  /** With `checked`: one choice of the items around it (menuitemradio) rather than a toggle. */
+  radio?: boolean;
+  /** Draws a separator above the item, to start a new group. */
+  separatorBefore?: boolean;
   onSelect: () => void;
 }
 
 export interface MenuProps {
   open: boolean;
   onClose: () => void;
-  anchorRef: RefObject<HTMLElement | null>;
+  /** The trigger; focus returns there. A context menu passes anchorPoint instead. */
+  anchorRef?: RefObject<HTMLElement | null>;
+  anchorPoint?: { x: number; y: number };
   label: string;
   items: readonly MenuItem[];
   placement?: Placement;
 }
 
 /** Action menu: arrow keys move, Enter chooses, Escape closes and returns focus to the trigger. */
-export function Menu({ open, onClose, anchorRef, label, items, placement = "bottom-start" }: MenuProps) {
+export function Menu({ open, onClose, anchorRef, anchorPoint, label, items, placement = "bottom-start" }: MenuProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const firstRef = useRef<HTMLButtonElement>(null);
   const firstEnabled = items.findIndex((item) => !item.disabled);
@@ -294,17 +315,25 @@ export function Menu({ open, onClose, anchorRef, label, items, placement = "bott
     if (event.key === "Tab") { event.preventDefault(); onClose(); return; }
     moveMenuFocus(event, listRef.current);
   };
+  // When any item can be checked, every item keeps a mark column so the labels line up.
+  const checkable = items.some((item) => item.checked !== undefined);
   return (
-    <Popover open={open} onClose={onClose} anchorRef={anchorRef} label={label} role="menu" placement={placement} initialFocusRef={firstRef} className="ui-menu">
+    <Popover open={open} onClose={onClose} {...(anchorRef ? { anchorRef } : {})} {...(anchorPoint ? { anchorPoint } : {})} label={label} role="menu"
+      placement={placement} initialFocusRef={firstRef} className="ui-menu">
       <div ref={listRef} className="ui-menu-list" onKeyDown={onKeyDown}>
         {items.map((item, index) => (
-          <button key={item.id} ref={index === firstEnabled ? firstRef : undefined} type="button" role="menuitem" disabled={item.disabled}
-            className="ui-menu-item" data-tone={item.tone} tabIndex={-1}
-            onClick={() => { onClose(); item.onSelect(); }}>
-            {item.icon ? <span className="ui-menu-icon" aria-hidden="true">{item.icon}</span> : null}
-            <span className="ui-menu-label">{item.label}</span>
-            {item.hint ? <span className="ui-menu-hint">{item.hint}</span> : null}
-          </button>
+          <Fragment key={item.id}>
+            {item.separatorBefore && index > 0 ? <div className="ui-menu-separator" role="separator" /> : null}
+            <MenuItemButton ref={index === firstEnabled ? firstRef : undefined} disabled={item.disabled}
+              role={menuItemRole(item)}
+              aria-checked={item.checked}
+              tone={item.tone} tabIndex={-1}
+              icon={item.icon || checkable ? item.icon ?? (item.checked ? <CheckGlyph /> : null) : undefined}
+              hint={item.hint}
+              onClick={() => { onClose(); item.onSelect(); }}>
+              {item.label}
+            </MenuItemButton>
+          </Fragment>
         ))}
       </div>
     </Popover>

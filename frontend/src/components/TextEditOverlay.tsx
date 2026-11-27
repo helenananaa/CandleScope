@@ -161,7 +161,6 @@ export default function TextEditOverlay({
           background: bgColor || "transparent",
           border: `1px dashed ${borderColor || "#3b82f6"}`,
           borderRadius: "4px",
-          outline: "none",
           resize: "none",
           overflow: "hidden",
           whiteSpace: widthPx ? "pre-wrap" : "pre",

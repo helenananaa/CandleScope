@@ -15,6 +15,7 @@ import type {
   KlineStreamController,
   PatchCacheTick,
 } from "./klineContracts.js";
+import { upstreamAvailabilityOf } from "./klineContracts.js";
 import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
 import type { KlineSeriesIdentityInput } from "./klineSeriesIdentity.js";
 import type { KlineBar } from "./marketDataTypes.js";
@@ -73,7 +74,30 @@ export type KlineWebSocketStatus =
   | "loading"
   | "live"
   | "fallback"
-  | "reconnecting";
+  | "reconnecting"
+  /** The backend reports the exchange unreachable for this instrument. */
+  | "offline";
+
+export interface KlineTransportConditions {
+  upstreamOffline: boolean;
+  windowVisible: boolean;
+  consumerRecoveryRequired: boolean;
+}
+
+/**
+ * Final transport status shown for a chart. An exchange outage outranks every
+ * local state: held bars may still render, but nothing can make them current
+ * until the backend reports the exchange reachable again.
+ */
+export function resolveKlineTransportStatus(
+  next: KlineWebSocketStatus,
+  conditions: KlineTransportConditions,
+): KlineWebSocketStatus {
+  if (next === "idle") return next;
+  if (conditions.upstreamOffline) return "offline";
+  if (next === "offline") return "reconnecting";
+  return !conditions.windowVisible || conditions.consumerRecoveryRequired ? "reconnecting" : next;
+}
 
 export interface KlineStreamAcknowledgementState {
   activeIntervals: IntervalString[];
@@ -255,11 +279,16 @@ export function useKlineStreamRuntime({
     const consumerRecovery = new KlineConsumerRecovery();
     let nextConsumerRecoveryAt = 0;
     let windowVisible = true;
+    let upstreamOffline = false;
     let suspendedAt: number | null = null;
     const suspendedTails = new Map<string, readonly KlineBar[]>();
     const setTransportStatus: typeof setWsStatus = (status) => setWsStatus((previous) => {
       const next = typeof status === "function" ? status(previous) : status;
-      return !windowVisible || consumerRecovery.requiredFor(intervalRef.current) ? "reconnecting" : next;
+      return resolveKlineTransportStatus(next, {
+        upstreamOffline,
+        windowVisible,
+        consumerRecoveryRequired: consumerRecovery.requiredFor(intervalRef.current),
+      });
     });
     let subscription: KlineStreamController | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -369,6 +398,22 @@ export function useKlineStreamRuntime({
       setTransportStatus(status);
     };
 
+    const applyUpstreamAvailability = (offline: boolean) => {
+      if (upstreamOffline === offline) return;
+      upstreamOffline = offline;
+      recordPerfEvent(offline ? "ws.kline.upstreamOffline" : "ws.kline.upstreamOnline", {
+        symbol, marketType, exchange,
+      });
+      if (offline) {
+        // Held bars stay visible but are no longer current. Only data observed
+        // after the exchange returns may claim live again.
+        acknowledgementState = { ...acknowledgementState, lastObservedAt: {} };
+        setTransportStatus("offline");
+        return;
+      }
+      applyAcknowledgedStatus();
+    };
+
     const recoverConsumer = () => {
       if (!active || !consumerRecovery.required || Date.now() < nextConsumerRecoveryAt) return;
       nextConsumerRecoveryAt = Date.now() + 10_000;
@@ -442,6 +487,8 @@ export function useKlineStreamRuntime({
 
               const isReconnection = needsReconnectHistory || reconnectAttempts > 0;
               needsReconnectHistory = false;
+              // A new backend subscription re-reports exchange availability.
+              upstreamOffline = false;
               clearReconnectTimer();
               reconnectDelay = WS_RECONNECT_BASE_DELAY;
               reconnectAttempts = 0;
@@ -491,6 +538,11 @@ export function useKlineStreamRuntime({
             },
             onStreamStatus: (msg) => {
               if (!active) return;
+              const upstream = upstreamAvailabilityOf(msg);
+              if (upstream) {
+                applyUpstreamAvailability(upstream === "offline");
+                return;
+              }
               if (intervalsSemanticallyEquivalent(msg.interval, intervalRef.current)) {
                 if (
                   msg.status === "live"
@@ -555,6 +607,9 @@ export function useKlineStreamRuntime({
                   acknowledgementState,
                   msgInterval,
                 );
+                // A forming row linked to a verified closed-range readback ends
+                // recovery here; the tick commit below then re-reads the label.
+                consumerRecovery.observeRealtime(seriesDataFeed, series, tick, message.stream_version);
               }
 
               if (fresh && effect.updatesQuote && msgInterval === "1m" && tick.close != null) {

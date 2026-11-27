@@ -6,8 +6,8 @@
 
 本包不含后端、数据库、网络或 Plugin Platform 客户端。
 
-官方首批模板在 `templates/`。本地 10 分钟路径见
-`docs/BACKTEST_PYTHON_LOCAL_BETA_GUIDE_zh.md`。
+官方首批模板在 `templates/`。写策略、在图表上运行和离线验证模板，见
+[Python 策略指南](../../docs/BACKTEST_PYTHON_LOCAL_BETA_GUIDE_zh.md)。
 
 版本化纯行情批量接口原型见 [sma_cross_batch](templates/sma_cross_batch/README.md)。
 该接口须显式选择，当前宿主只开放给认证的官方 SMA，不改变原逐根脚本协议。

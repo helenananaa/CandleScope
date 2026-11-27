@@ -411,6 +411,7 @@ export function createDrawingEntityGeometryBounds(
         : box;
       break;
     }
+    case "path":
     case "channel":
     case "range-measure":
     case "angle-measure":

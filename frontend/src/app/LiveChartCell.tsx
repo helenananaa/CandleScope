@@ -1,4 +1,4 @@
-import { Button } from "../components/ui/index.js";
+import { Button, ControlButton, IconButton } from "../components/ui/index.js";
 import ChartAccountOverlayMenu from "../features/trading-accounts/ChartAccountOverlayMenu.js";
 import type { ChartAccountOverlaySettings } from "../features/chart-workspace/chartAccountOverlaySettings.js";
 import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavigation.js";
@@ -136,6 +136,7 @@ import TopBar from "./TopBar.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { Icon } from "../components/icons/Icon.js";
+import { chartStrategyChartDataReady } from "../features/backtest/chart-tester/chartStrategyChartData.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
@@ -223,6 +224,8 @@ export interface LiveChartCellProps {
     cellId: ChartCellId,
     attachment: ChartStrategyAttachmentRecord | null,
   ): void;
+  /** Removes the chart's retired Pyne strategy reference when the user asks to. */
+  onRetiredStrategyAttachmentRemove?(cellId: ChartCellId): void;
   onOpenReplayLauncher(): void;
   onActiveEnvironmentChange(cellId: ChartCellId, environment: ActiveChartEnvironment): void;
 }
@@ -268,6 +271,7 @@ function LiveChartCell({
   strategyPanelOpen,
   onStrategyPanelOpenChange,
   onStrategyAttachmentChange,
+  onRetiredStrategyAttachmentRemove,
   onNativeStrategiesChange,
   onStrategyTesterModeChange,
   onOpenReplayLauncher,
@@ -399,10 +403,9 @@ function LiveChartCell({
       : null
     : [nativeEntryName, nativeEntryCount > 1 ? `+${nativeEntryCount - 1}` : ""].filter(Boolean).join(" ") || null;
   const strategyEntryControl = CHART_STRATEGY_TESTER_ENABLED ? (
-    <button
+    <ControlButton
       ref={strategyEntryRef}
-      type="button"
-      className="chart-strategy-entry-button ui-control"
+      className="chart-strategy-entry-button"
       data-chart-strategy-entry={cell.id}
       title={t("chartTester.entryHint")}
       data-state={strategyEntryState}
@@ -416,7 +419,7 @@ function LiveChartCell({
       <i className="chart-strategy-entry-dot" aria-hidden="true" />
       <b className="chart-strategy-entry-label">{t("chartTester.entry")}</b>
       {strategyEntryLabel && <span>{strategyEntryLabel}</span>}
-    </button>
+    </ControlButton>
   ) : null;
   useLayoutEffect(() => {
     recordMultiChartCellCommit(cell.id);
@@ -690,6 +693,7 @@ function LiveChartCell({
       indicatorSignature: indicatorSignature(indicators.view.activeIndicators),
       marketReady: !obscured && sourceMarketData.status.barCount > 0 && !sourceMarketData.view.loading
         && !sourceMarketData.status.initialHistoryPending && !sourceMarketData.status.loadingMoreLeft,
+      liveStatus: sourceMarketData.view.wsStatus,
       indicatorsReady: !indicators.status.computing && indicators.view.activeIndicators.every((indicator) =>
         !indicator.error && (indicator.visible === false || indicator.lines?.some((line) => line.data.length > 0))),
       barCount: sourceMarketData.status.barCount,
@@ -705,7 +709,7 @@ function LiveChartCell({
   }, [cell.id, chartSession.view.exchange, chartSession.view.marketType, chartSession.view.symbol,
     chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
     sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
-    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation,
+    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, sourceMarketData.view.wsStatus, obscured, onControlObservation,
     study.pending, study.masked, study.playback, study.busy, study.error, cell.session, cell.quickReplay, quickReplay, replay.error, replay.key]);
   useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
@@ -1108,11 +1112,12 @@ function LiveChartCell({
       >
         <header className="multi-chart-cell-header" onDoubleClick={toggleMaximize}>
           <span className={`multi-chart-cell-status ${sourceMarketData.view.wsStatus}`} aria-hidden="true" />
-          <button
-            type="button"
+          <IconButton
+            size="sm"
             className="multi-chart-cell-drag-handle"
             draggable={!layoutEditingDisabled && !maximized && layoutCellIds.length > 1}
-            aria-label={t("chart.dragAria", { n: cell.id.slice("cell-".length) })}
+            label={t("chart.dragAria", { n: cell.id.slice("cell-".length) })}
+            icon={<Icon name="grip" size={14} />}
             aria-disabled={layoutEditingDisabled || maximized || layoutCellIds.length <= 1}
             title={layoutCellIds.length > 1 ? t("chart.dragTitle") : t("chart.dragNeedSplit")}
             onDragStart={(event) => {
@@ -1123,9 +1128,7 @@ function LiveChartCell({
               writeChartCellDragData(event.dataTransfer, cell.id);
             }}
             onDoubleClick={(event) => event.stopPropagation()}
-          >
-            <Icon name="grip" size={14} />
-          </button>
+          />
           {layoutRole && (
             <span className={`multi-chart-cell-role role-${layoutRole}`}>
               {layoutRole === "main" ? t("chart.roleMain") : t("chart.roleConfirm")}
@@ -1134,11 +1137,17 @@ function LiveChartCell({
           <strong>{chartSession.view.symbol}</strong>
           <span>{formatIntervalLabel(chartSession.view.interval)}</span>
           {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
-            <span role="status" style={{ color: "var(--text-warning)" }}>{t("interval.historyOnly")}</span>
+            <span role="status" className="multi-chart-cell-history-only">{t("interval.historyOnly")}</span>
           )}
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
+          {sourceMarketData.view.wsStatus === "offline" && (
+            <span role="status" className="multi-chart-cell-offline" data-live-offline="true"
+              title={t("status.ws.offlineDetail")}>
+              {t("status.ws.offline")}
+            </span>
+          )}
           {linkGroupControl ?? (linkGroup && (
             <span
               className="multi-chart-cell-link"
@@ -1156,13 +1165,11 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
-          {(!replay.key || study.masked) && <button type="button" className="multi-chart-cell-drawing-visibility"
-            aria-label={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-            title={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
-            aria-pressed={drawingsHidden} onDoubleClick={event => event.stopPropagation()}
-            onClick={drawings.actions.handleToggleDrawingsHidden}>
-            <Icon name={drawingsHidden ? "eye-off" : "eye"} size={14} />
-          </button>}
+          {(!replay.key || study.masked) && <IconButton size="sm" className="multi-chart-cell-drawing-visibility"
+            label={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+            icon={<Icon name={drawingsHidden ? "eye-off" : "eye"} size={14} />}
+            pressed={drawingsHidden} onDoubleClick={event => event.stopPropagation()}
+            onClick={drawings.actions.handleToggleDrawingsHidden} />}
           <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={!!replay.key || study.masked} />
           <WorkspaceCellLayoutMenu
             portal
@@ -1176,19 +1183,17 @@ function LiveChartCell({
             onClose={onCloseCell}
             onSwap={onSwapCells}
           />
-          <button
-            type="button"
+          <IconButton
+            size="sm"
             className="multi-chart-cell-maximize"
             onClick={(event) => {
               event.stopPropagation();
               toggleMaximize();
             }}
             onDoubleClick={(event) => event.stopPropagation()}
-            aria-label={maximized ? t("chart.restore") : t("chart.maximize")}
-            title={maximized ? t("chart.restore") : t("chart.maximize")}
-          >
-            <Icon name={maximized ? "minimize" : "maximize"} size={14} />
-          </button>
+            label={maximized ? t("chart.restore") : t("chart.maximize")}
+            icon={<Icon name={maximized ? "minimize" : "maximize"} size={14} />}
+          />
         </header>
         <div className="multi-chart-cell-canvas">
           {chartSession.status.exchangeCatalogStatus !== "loading" && !chartSession.status.historyIntervalAvailable ? (
@@ -1273,6 +1278,8 @@ function LiveChartCell({
               cellId={cell.id}
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
+              retiredAttachment={cell.retiredStrategyAttachment}
+              {...(onRetiredStrategyAttachmentRemove ? { onRemoveRetiredAttachment: () => onRetiredStrategyAttachmentRemove(cell.id) } : {})}
               nativeStrategies={cell.nativeStrategies}
               appearance={combinedSettings}
               strategyTesterMode={cell.strategyTesterMode}
@@ -1280,6 +1287,12 @@ function LiveChartCell({
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
               active={active}
               panelOpen={strategyPanelOpen && !study.masked}
+              chartDataReady={chartStrategyChartDataReady({
+                barCount: sourceMarketData.status.barCount,
+                loading: sourceMarketData.view.loading,
+                initialHistoryPending: sourceMarketData.status.initialHistoryPending,
+                meta: sourceMarketData.view.meta,
+              }, liveSourceSession)}
               continuousChartActive={active && !obscured && !study.masked && quickReplay === null}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
@@ -1347,6 +1360,7 @@ function LiveChartCell({
             viewHeights={marketRail.viewHeights}
             onViewHeightChange={marketRail.onViewHeightChange}
             {...(study.masked ? {} : { trading: tradingBinding })}
+            timezone={model.chartWorkspace.chart.chartProps.timezone}
           />
         </Suspense>,
         portalHosts.rightRail,

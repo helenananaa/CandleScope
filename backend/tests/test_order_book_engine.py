@@ -324,6 +324,21 @@ def test_active_streams_are_never_silently_evicted() -> None:
     assert diagnostics["stream_deactivations"] == 1
 
 
+def test_reactivated_stream_does_not_order_against_the_previous_feed() -> None:
+    engine = OrderBookEngine()
+    identity = ("binance", "futures", "BTCUSDT", 5, 100)
+    engine.activate_stream(identity)
+    assert engine.ingest(_snapshot(last_update_id=460)).accepted is True
+    engine.deactivate_stream(identity)
+
+    assert engine.activate_stream(identity) is True
+    assert engine.snapshot(identity) is None
+    restarted = engine.ingest(_snapshot(last_update_id=1))
+    assert restarted.accepted is True
+    assert engine.ingest(_snapshot(last_update_id=1)).reason == "duplicate_update_id"
+    assert engine.diagnostics()["stale_update_ids_rejected"] == 0
+
+
 def test_process_counts_invalid_market_events_without_storing_them() -> None:
     engine = OrderBookEngine()
 

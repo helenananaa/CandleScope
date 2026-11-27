@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Button } from "../ui/Button.js";
+import { Button, OptionButton } from "../ui/Button.js";
 import { SegmentedControl } from "../ui/Choice.js";
 import { InlineAlert } from "../ui/Display.js";
 import { Field, Input, Select } from "../ui/Field.js";
@@ -114,16 +114,15 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                 <div className="st-group-desc">{t(legacyChartScope ? "settings.appearance.cellThemeDescription" : "settings.appearance.themeDescription")}</div>
                 <div className="st-theme-grid st-appearance-theme-grid">
                     {themeOptions.map((theme) => (
-                        <button
+                        <OptionButton
                             key={theme.value}
-                            type="button"
-                            className={`st-theme-card ${appTheme === theme.value ? 'active' : ''}`}
-                            aria-pressed={appTheme === theme.value}
+                            className="st-theme-card"
+                            selected={appTheme === theme.value}
                             onClick={() => setAppTheme(theme.value)}
                         >
                             <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
                             <span className="st-theme-label">{t(theme.labelKey)}</span>
-                        </button>
+                        </OptionButton>
                     ))}
                 </div>
             </div>

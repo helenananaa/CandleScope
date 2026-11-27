@@ -1,5 +1,6 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
+import { Button } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { nativeTerminal, type NativeRun } from "../backtest/native/nativeBacktestApi.js";
 import { useStrategyDataManager } from "../market-data/useStrategyDataManager.js";
@@ -35,9 +36,9 @@ export default function PreparedNativeRun({ initial, onClose }: { initial: Nativ
     return () => controller.abort();
   }, [manager, initial.run_id, initial.execution_mode, attempt]);
   return <section className="native-strategy-panel" aria-label={t("native.history")}>
-    <button type="button" onClick={onClose}>{t("backtest.close")}</button>
+    <Button size="sm" onClick={onClose}>{t("backtest.close")}</Button>
     <p>{initial.run_id}</p>
-    {error ? <p role="alert">{error} <button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("shell.retry")}</button></p>
+    {error ? <p role="alert">{error} <Button size="sm" onClick={() => setAttempt((value) => value + 1)}>{t("shell.retry")}</Button></p>
       : !run && <p role="status">{t("native.loading")}</p>}
     {run && <>
       <p role="status">{run.state}</p>

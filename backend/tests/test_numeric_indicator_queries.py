@@ -187,7 +187,9 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
     from app.indicator.history_worker import history_executor_snapshot, shutdown_builtin_history
     service = NumericIndicatorService(IndicatorInputPort(dm), IndicatorRangeResultService())
     async def run():
-        submitted_before = history_executor_snapshot().get('submitted', 0)
+        # Measure a pool this test starts, not one an earlier module left behind.
+        await shutdown_builtin_history()
+        assert history_executor_snapshot()['started'] is False
         try:
             result = await service.query(query)
             assert result.status == 'ready', result
@@ -195,7 +197,7 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
             assert state['worker']['pid'] != os.getpid()
             assert state['input_bars'] == 0
             assert len(result.values) == 3
-            assert state['submitted'] - submitted_before == 1
+            assert state['submitted'] == 1 and state['process_starts'] == 1
             rows = read_rows(dm)[-100:]
             for output, value in result.values:
                 oracle = compute(output.name, {'symbol': KEY.symbol, 'interval': KEY.interval,

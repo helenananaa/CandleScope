@@ -194,6 +194,7 @@ class ExchangeIngestionFactory:
         *,
         gap_repair_owner: str = "inline",
         series_identity: KlineSeriesIdentity | None = None,
+        on_health: HealthCallback | None = None,
     ) -> _IngestionHandle:
         """Start an ingestion stream for (symbol, interval).
 
@@ -223,6 +224,7 @@ class ExchangeIngestionFactory:
             descriptor,
             on_market_event,
             on_gap=on_gap,
+            on_health=on_health,
             gap_repair_owner=gap_repair_owner,
         )
 
@@ -436,6 +438,7 @@ class ExchangeIngestionFactory:
         on_price: Callable[[dict], Awaitable[None]],
         exchange: str = "binance",
         market_type: str = "spot",
+        on_health: HealthCallback | None = None,
     ) -> _IngestionHandle:
         """Start an ingestion ticker stream for a watched price symbol."""
         stream_type = self._price_stream_type(exchange, market_type)
@@ -449,7 +452,7 @@ class ExchangeIngestionFactory:
         async def _bridge(market_event: MarketEvent) -> None:
             await self._forward_price_event(market_event, on_price, exchange, market_type)
 
-        return await self._start_descriptor(descriptor, _bridge)
+        return await self._start_descriptor(descriptor, _bridge, on_health=on_health)
 
     @staticmethod
     def _price_stream_type(exchange: str, market_type: str) -> StreamType:

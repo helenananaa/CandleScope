@@ -1,4 +1,4 @@
-import { IconButton } from "../components/ui/index.js";
+import { IconButton, OptionButton } from "../components/ui/index.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -12,7 +12,6 @@ import {
   MARKET_DOCK_MAX_HEIGHT,
   MARKET_DOCK_MIN_HEIGHT,
   marketRailWidthBounds,
-  MARKET_RAIL_SPLITTER_HEIGHT,
 } from "../shared/marketRailLayout.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
@@ -504,7 +503,6 @@ export default function MarketRightRailFrame({
                       </div>
                       <div
                         className={`market-rail-splitter market-rail-view-resizer ${heightResizingViewId === view.id ? "active" : ""}`}
-                        style={{ height: MARKET_RAIL_SPLITTER_HEIGHT }}
                         onPointerDown={(event) => startHeightResize(event, view, height)}
                         onDoubleClick={() => onViewHeightChange?.(
                           view.id,
@@ -523,8 +521,8 @@ export default function MarketRightRailFrame({
                       </div>
                     </>
                   ) : (
-                    <button
-                      type="button"
+                    <OptionButton
+                      variant="row"
                       className="market-rail-accordion-trigger"
                       aria-expanded="false"
                       aria-label={t("rail.expandView", { title: view.title })}
@@ -543,7 +541,7 @@ export default function MarketRightRailFrame({
                       {view.badge != null && view.badge !== "" && (
                         <span className="market-rail-accordion-badge">{view.badge}</span>
                       )}
-                    </button>
+                    </OptionButton>
                   )}
                 </section>
               );
@@ -561,13 +559,13 @@ export default function MarketRightRailFrame({
         {sortedViews.map((view) => {
           const active = phoneSheet ? panelOpen && view.id === sheetViewId : openViewIds.includes(view.id);
           return (
-            <button
+            <OptionButton
               key={view.id}
-              type="button"
+              variant="row"
               className={`market-activity-item ${active ? "active" : ""}`}
               title={view.title}
               aria-label={view.ariaLabel ?? view.title}
-              aria-pressed={active}
+              selected={active}
               aria-expanded={active && !panelCollapsed}
               data-rail-view={view.id}
               onClick={() => toggleView(view.id)}
@@ -577,16 +575,16 @@ export default function MarketRightRailFrame({
               {view.badge != null && view.badge !== "" && (
                 <span className="market-activity-badge">{view.badge}</span>
               )}
-            </button>
+            </OptionButton>
           );
         })}
         {onTogglePanelCollapsed && !singleView && !phoneSheet && (
-          <button
-            type="button"
+          <OptionButton
+            variant="row"
             className={`market-activity-item market-activity-collapse ${panelCollapsed ? "active" : ""}`}
             title={collapseLabel}
             aria-label={collapseLabel}
-            aria-pressed={panelCollapsed}
+            selected={panelCollapsed}
             data-rail-action="toggle-panel"
             disabled={sortedViews.length === 0}
             onClick={onTogglePanelCollapsed}
@@ -597,7 +595,7 @@ export default function MarketRightRailFrame({
             <span className="market-activity-label" aria-hidden="true">
               {panelCollapsed ? t("rail.show") : t("rail.collapse")}
             </span>
-          </button>
+          </OptionButton>
         )}
       </nav>
     </aside>

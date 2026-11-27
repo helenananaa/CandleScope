@@ -613,6 +613,122 @@ async def test_strategy_api_prepares_frozen_multi_minute_context(tmp_path, launc
         runtime.shutdown()
 
 
+class ChartSeries:
+    """Host bounds for the chart's stored series: only the intervals given have rows."""
+
+    def __init__(self, bounds):
+        self.bounds = bounds
+        self.intervals = []
+
+    def get_bounds(self, symbol, interval, **kwargs):
+        self.intervals.append(interval)
+        earliest, latest = self.bounds.get(interval, (None, None))
+        return {"storage_earliest_ms": earliest, "storage_latest_ms": latest}
+
+
+async def _prepare_all_available(tmp_path, series, *, interval, strategy=None):
+    import time
+    import httpx
+    from fastapi import FastAPI
+    from app.api.v1.data_preparation import router
+    from tests.test_backtest_chart_context import _runtime
+    runtime = _runtime(tmp_path)
+    rows = []
+
+    class Coordinator:
+        async def request_and_wait(self, repair):
+            for timestamp in range(repair.start_ms, repair.end_ms + 1, 60_000):
+                rows.append({**bars()[0], "open_time": timestamp, "close_time": timestamp + 59_999})
+
+    adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=Coordinator(),
+        local_data=runtime.local_data, backtest_runtime=runtime,
+        query=lambda *a, **kw: [r for r in rows if kw["start_ms"] <= r["open_time"] <= kw["end_ms"]])
+    service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
+    await service.start()
+    app = FastAPI()
+    app.state.data_preparation_service = service
+    app.state.backtest_runtime = runtime
+    app.state.data_manager = series
+    app.include_router(router)
+    launch = {"strategy": {"strategy_revision_id": strategy(runtime.service)["revision_id"],
+                           "parameters": {"length": 3}}} if strategy else {}
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            before = int(time.time() * 1000)
+            response = await client.post("/data-preparations/strategy", json={
+                **launch, "idempotency_key": "strategy-all-available", "context": {
+                    "exchange": "binance", "market_type": "futures", "symbol": "ETHUSDT",
+                    "interval": interval, "range_mode": "ALL_AVAILABLE", "fidelity_preference": "FAST",
+                }})
+            after = int(time.time() * 1000)
+            assert response.status_code == 202, response.text
+            job = await terminal(service, response.json()["id"], timeout=30)
+            run = None
+            if strategy and job["state"] == "READY":
+                run = runtime.service.repository.get_run_by_id(job["result"]["strategy_run"]["run_id"])
+            return job, rows, run, (before, after)
+    finally:
+        await service.shutdown()
+        runtime.shutdown()
+
+
+@async_test
+@pytest.mark.parametrize("one_minute", ["none", "live_tail"])
+async def test_strategy_all_available_covers_the_charts_own_series(tmp_path, one_minute):
+    """RC 34: a 5m chart just switched to (or started on) has no 1m history, or only a live 1m tail.
+
+    The run must cover the 5m bars the chart stored, not fail with a range request or use the 1m tail.
+    """
+    import json
+    import time
+    from tests.test_backtest_strategy_workspace_m9 import _revision
+    step = 300_000
+    forming = int(time.time() * 1000) // step * step
+    chart_start = forming - 499 * step  # the chart shows 500 bars; the last one is still forming
+    bounds = {"5m": (chart_start, forming)}
+    if one_minute == "live_tail":
+        bounds["1m"] = (forming - 260 * 60_000, int(time.time() * 1000) // 60_000 * 60_000)
+    series = ChartSeries(bounds)
+    job, rows, run, (before, after) = await _prepare_all_available(tmp_path, series, interval="5m", strategy=_revision)
+    assert job["state"] == "READY", job
+    assert series.intervals == ["5m"]
+    coverage = job["result"]["resolution"]["coverage"]
+    end = coverage["requested_end_ms"] + 1
+    # Only closed bars: the forming bar (or the one that just closed, at a boundary) ends the range.
+    assert end in {before // step * step, after // step * step}
+    assert coverage["requested_start_ms"] == chart_start
+    assert coverage["row_count"] == (end - chart_start) // step
+    assert coverage["row_count"] >= 499
+    assert job["result"]["resolution"]["preparation"] == {"warmup_bars": 4,
+        "requested_start_ms": chart_start + 4 * step, "prepared_start_ms": chart_start}
+    # No minute of the forming bar was acquired.
+    assert rows and max(row["open_time"] for row in rows) + 60_000 <= end
+    config = json.loads(run["config_json"])
+    assert (config["symbol"], config["interval"]) == ("ETHUSDT", "5m")
+    assert (config["start_time_ms"], config["end_time_ms"]) == (chart_start, end - 1)
+    # The prepared run records the range the user chose, so the result says "all available data".
+    assert config["chart_range_mode"] == "ALL_AVAILABLE"
+
+
+@async_test
+async def test_strategy_all_available_keeps_the_latest_bars_one_input_holds(tmp_path, monkeypatch):
+    import time
+    import app.api.v1.data_preparation as api
+    # 100 hours of one-minute rows per strategy input (the real cap is 200000 rows).
+    monkeypatch.setattr(api, "STRATEGY_BAR_INPUT_LIMIT", 6000)
+    step = 3_600_000
+    forming = int(time.time() * 1000) // step * step
+    series = ChartSeries({"1h": (forming - 499 * step, forming)})
+    job, rows, _run, (before, after) = await _prepare_all_available(tmp_path, series, interval="1h")
+    assert job["state"] == "READY", job
+    coverage = job["result"]["resolution"]["coverage"]
+    end = coverage["requested_end_ms"] + 1
+    assert end in {before // step * step, after // step * step}
+    assert coverage["requested_start_ms"] == end - 100 * step
+    assert coverage["row_count"] == 100
+    assert len(rows) == 6000
+
+
 @async_test
 async def test_shutdown_drains_acquisition_and_new_owner_recovers(tmp_path):
     adapter = Adapter()

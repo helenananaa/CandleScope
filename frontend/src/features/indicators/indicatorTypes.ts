@@ -575,6 +575,8 @@ export interface CustomIndicatorRecord {
   description: string;
   script: string;
   language?: string;
+  /** A retired Pyne script: listed and kept, never run or relabelled. */
+  retired?: boolean;
   params: IndicatorParams;
   paramSchema: IndicatorParameterSchema[];
   renderHints: Record<string, unknown>;

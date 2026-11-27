@@ -1,3 +1,4 @@
+import { ControlButton } from "../../components/ui/Button.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { t, translateMarketType } from "../../i18n/index.js";
@@ -93,8 +94,8 @@ export default function SymbolSearch({
 
   return (
     <>
-      <button
-        className="symbol-selector ui-control"
+      <ControlButton
+        className="symbol-selector"
         id="symbol-selector"
         onPointerEnter={loadSymbolSearchModal}
         onMouseOver={loadSymbolSearchModal}
@@ -113,7 +114,7 @@ export default function SymbolSearch({
         <span className="symbol-shortcut-badge">
           <kbd>{shortcutModifier()}</kbd><kbd>K</kbd>
         </span>
-      </button>
+      </ControlButton>
 
       {open && (
         <Suspense fallback={null}>

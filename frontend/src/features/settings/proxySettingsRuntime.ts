@@ -8,13 +8,10 @@ import {
 } from "../../services/api";
 
 export type ProxyMode = "system" | "custom" | "none" | "pool";
-export interface ProxyRouteConfig extends Record<string, unknown> {
-  id: string; name: string; url: string; egress_group: string;
-  enabled: boolean; exchanges: string[]; max_concurrency: number;
-  max_ws_subscriptions?: number;
-}
+export type { ProxyRouteConfig } from "../../services/api.js";
+import type { ProxyRouteConfig } from "../../services/api.js";
 export interface ProxyPoolStatus {
-  routes?: Array<{ id: string; active_requests: number;
+  routes?: Array<{ id: string; available?: boolean; active_requests: number;
     ws_subscriptions?: number; ws_sessions?: number; max_ws_subscriptions?: number;
     native_websockets?: number; ccxt_physical_websockets?: number;
     ws_traffic?: { window_seconds: number; messages_per_second: number; payload_bytes_per_second: number;
@@ -232,4 +229,21 @@ export function useProxySettingsRuntime({ isOpen }: { isOpen: boolean }): ProxyS
     handleProxyTest,
     proxyRoutes, proxySavedRoutes, proxyStrategy, proxyPoolStatus, handleProxyRoutesChange, handleProxyStrategyChange,
   };
+}
+
+export function mergeSubscriptionRoutes(routes: ProxyRouteConfig[], imported: ProxyRouteConfig[], source: string) {
+    const replacements = new Map(imported.map(route => [route.id, route]));
+    const result: ProxyRouteConfig[] = [];
+    for (const route of routes) {
+        if (!route.url.startsWith("mihomo://") || !route.id.startsWith("sub_" + source)) {
+            result.push(route);
+            continue;
+        }
+        const next = replacements.get(route.id);
+        if (next) {
+            result.push({ ...route, url: next.url });
+            replacements.delete(route.id);
+        }
+    }
+    return [...result, ...replacements.values()];
 }

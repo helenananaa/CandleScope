@@ -1,6 +1,7 @@
 import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, IconButton } from "../../components/ui/index.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
@@ -11,6 +12,7 @@ import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
+import { seriesPricePrecision } from "../../chart-adapter/mainSeriesPriceFormat.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
@@ -71,10 +73,12 @@ import {
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
 import { replayChartEventBarTime, replayChartNotePoints, useReplayChartNoteVersions } from "./replayChartAnnotations.js";
-import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
+import { replayChartTradeInputs, replayFillMarkerText } from "./replayChartTradeInputs.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
   formatReplayTimeAxisLabel,
+  replayDateNavigationEnabled,
+  replayPublicTimePolicy,
   replayTimeAxisMaxCharacterLength,
 } from "./replayPublicTimeModel.js";
 import { returnToTrainingHub } from "./trainingHubNavigation.js";
@@ -334,12 +338,16 @@ export default function ReplayTrainingPageShell({
     }
     return values;
   })();
-  const publicTimePolicy = integrityRuntime.integrity?.effective_time_disclosure_policy
-    ?? (config?.blind_mode === false ? "NONE" : "HIDE_ALL");
+  const publicTimePolicy = replayPublicTimePolicy(
+    integrityRuntime.integrity?.effective_time_disclosure_policy,
+    config?.blind_mode,
+  );
   const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
   const dateNavigation = useChartTimeNavigation({
     active: cell?.active ?? true,
-    enabled: active && review === null && publicTimePolicy === "NONE" && !viewer.loading,
+    enabled: replayDateNavigationEnabled({
+      active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
+    }),
     cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
     sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
       viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),
@@ -950,7 +958,15 @@ export default function ReplayTrainingPageShell({
   const tradeInputs = useMemo(() => replayChartTradeInputs(runtime.store,
     cell?.projectionBoundaryMs ?? null, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay),
   [runtime.store, cell?.projectionBoundaryMs, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay]);
+  // The precision the chart's price scale shows, recomputed when bars are added
+  // or the window moves rather than on every tick of the forming bar.
+  const viewerAxisRevision = Number(displayedSeriesStore.axisRevision);
+  const pricePrecision = useMemo(() => {
+    void viewerAxisRevision;
+    return viewerBarCount > 0 ? seriesPricePrecision(displayedSeriesStore.snapshot()) : undefined;
+  }, [displayedSeriesStore, viewerAxisRevision, viewerBarCount]);
   const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => {
+    const labels = { buy: t("replay.shell.buy", {}, locale), sell: t("replay.shell.sell", {}, locale) };
     const data = tradeInputs.fills.flatMap(fill => {
       const time = replayChartEventBarTime(fill.event_time_ms, displayedInterval, closedBarClock);
       if (time === null || !displayedSeriesStore.hasTime(time)) return [];
@@ -959,13 +975,13 @@ export default function ReplayTrainingPageShell({
         position: fill.side === "BUY" ? "below" : "above",
         shape: fill.side === "BUY" ? "arrow_up" : "arrow_down",
         color: fill.side === "BUY" ? "#16a34a" : "#e11d48",
-        text: `${fill.side === "BUY" ? t("replay.shell.buy", {}, locale) : t("replay.shell.sell", {}, locale)} ${fill.quantity} @ ${fill.price}`,
+        text: replayFillMarkerText(fill, labels, pricePrecision),
       }];
     });
     return data.length ? [{ id: "replay-trade-fills", pane: "main", data }] : [];
   // The store retains its identity across history and projection updates.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tradeInputs.fills, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale]);
+  }, [tradeInputs.fills, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale, pricePrecision]);
   const replayTradeHlines = useMemo<IndicatorHLine[]>(() => {
     const selectedTrackId = viewer.viewerState?.selected_track_id;
     const portfolio = tradeInputs.portfolio;
@@ -976,6 +992,7 @@ export default function ReplayTrainingPageShell({
       instrumentRules: portfolio?.schema_version === "replay.training.portfolio.v2"
         ? portfolio.instrument_rules
         : [],
+      pricePrecision,
     });
     for (const order of tradeInputs.orders) {
       if (order.status !== "OPEN" && order.status !== "PARTIALLY_FILLED") continue;
@@ -1002,7 +1019,7 @@ export default function ReplayTrainingPageShell({
       });
     }
     return lines;
-  }, [locale, tradeInputs.orders, tradeInputs.portfolio, viewer.viewerState?.selected_track_id]);
+  }, [locale, pricePrecision, tradeInputs.orders, tradeInputs.portfolio, viewer.viewerState?.selected_track_id]);
   const chartMarkers = useMemo(() => [
     ...indicators.view.markers,
     ...replayTradeMarkers,
@@ -1144,7 +1161,9 @@ export default function ReplayTrainingPageShell({
         {history.loading ? <span role="status">{t("replay.loadingOlder")}</span>
           : history.error ? <>
             <span role="alert">{history.error}</span>
-            <button type="button" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+            <div className="error-overlay-actions">
+              <Button variant="primary" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</Button>
+            </div>
           </> : <><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</>}
       </div></div>
     </div>
@@ -1158,7 +1177,7 @@ export default function ReplayTrainingPageShell({
       {reviewChartBounded && <span role="status">{t("replay.shell.historyTruncated")}</span>}
       {reviewOlderLoading && <span role="status">{t("replay.loadingOlder")}</span>}
       {reviewOlderError && <><span role="alert">{reviewOlderError}</span>
-        <button type="button" onClick={() => { void loadReviewMoreLeft(); }}>{t("replay.retry")}</button></>}
+        <Button size="sm" onClick={() => { void loadReviewMoreLeft(); }}>{t("replay.retry")}</Button></>}
     </div>
   ) : (
     <DrawingToolbar
@@ -1275,7 +1294,7 @@ export default function ReplayTrainingPageShell({
           className="replay-top-bar"
           badge={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
           context={config && (
-            <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
+            <Button variant="ghost" className="replay-identity-readonly" title={t("replay.shell.identityImmutable")}><span>
               {review === null
                 ? `${trainingExchangeLabel(activeSelectedTrack?.exchange ?? config.exchange)} · ${trainingMarketTypeLabel(activeSelectedTrack?.market_type ?? config.market_type)} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
                 : t("replay.reviewIdentity", {
@@ -1284,7 +1303,7 @@ export default function ReplayTrainingPageShell({
                   ))?.symbol ?? config.symbol),
                   interval: String(review.projection.viewer_state.display_interval ?? interval),
                 })}
-            </button>
+            </span></Button>
           )}
           panels={<>
             <PanelToggle
@@ -1373,7 +1392,7 @@ export default function ReplayTrainingPageShell({
         {review === null && history.notice !== null && (
           <div className="replay-history-boundary-notice" role="status">
             <span>{history.notice}</span>
-            <button type="button" onClick={history.dismissNotice} aria-label={t("replay.shell.dismissHistory")}><Icon name="close" size={14} /></button>
+            <IconButton size="sm" label={t("replay.shell.dismissHistory")} icon={<Icon name="close" size={14} />} onClick={history.dismissNotice} />
           </div>
         )}
         {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}
@@ -1507,10 +1526,10 @@ export default function ReplayTrainingPageShell({
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
             {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
-            {review === null && history.error && <>
+            {review === null && history.error && <span className="replay-history-error-item">
               <span className="replay-history-error">{history.error}</span>
-              <button type="button" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
-            </>}
+              <Button size="sm" variant="ghost" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</Button>
+            </span>}
             {review !== null && <span>{t("replay.immutableEvent", { sequence: review.selected_timeline_sequence })}</span>}
             {review !== null && reviewChartBounded && <span>{t("replay.prefixBound")}</span>}
           </>}

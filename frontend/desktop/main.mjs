@@ -16,6 +16,7 @@ import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
 import { DESKTOP_IPC, validateAppearancePayload, validateTopologyPayload } from "./ipc-contract.mjs";
 import { createEvidenceSession } from "./evidence-harness-loader.mjs";
 import { SidecarSupervisor } from "./sidecar-supervisor.mjs";
+import { backendStatusPayload, relayBackendStatus, UNSUPERVISED_BACKEND_STATUS } from "./backend-status.mjs";
 import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
@@ -72,6 +73,10 @@ const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
 const registeredWorkspaceContents = new WeakSet();
+
+function currentBackendStatus() {
+  return supervisor ? backendStatusPayload(supervisor.status()) : UNSUPERVISED_BACKEND_STATUS;
+}
 
 function windowIdForSender(sender) {
   return manager?.windowIdForContents(sender) ?? null;
@@ -146,6 +151,8 @@ function createSupervisor() {
       ))) : {}),
       ...(app.isPackaged ? {
         PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
+        CANDLESCOPE_MIHOMO: path.join(runtimeRoot, "python-runtime", "mihomo",
+          process.platform === "win32" ? "mihomo.exe" : "mihomo"),
         CANDLESCOPE_BUNDLED_UNIFIED_PYTHON: path.join(runtimeRoot, "python-runtime", "plugins", "unified-python.json"),
         CANDLESCOPE_BUNDLED_UNIFIED_PINE: path.join(runtimeRoot, "python-runtime", "plugins", "unified-pine.json"),
         CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),
@@ -204,6 +211,8 @@ async function boot() {
     controlEnabled: true,
     controlScopes: workflowScopes,
   });
+  // Pages keep their endpoint across a backend restart; they only need its state.
+  if (supervisor) relayBackendStatus(supervisor, (status) => manager.sendAllPages(DESKTOP_IPC.backendStatus, status));
 
   workflowControl = new WorkflowControlHost({ manager, channels: DESKTOP_IPC,
     directory: path.join(app.getPath("userData"), "control"), executable: process.execPath,
@@ -262,7 +271,14 @@ async function boot() {
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
     event.returnValue = {
       port: backendPort, windowId: windowIdForSender(event.sender), controlScopes: workflowScopes, pineChartTransport,
+      backendStatus: currentBackendStatus(),
     };
+  });
+  trustedIpc.handle(DESKTOP_IPC.backendStatusGet, () => currentBackendStatus());
+  trustedIpc.handle(DESKTOP_IPC.backendRestart, async () => {
+    // The outcome reaches every page as a status event; a failure stays in that state.
+    await supervisor?.restart().catch(() => {});
+    return currentBackendStatus();
   });
 
   if (supervisor) {
@@ -465,12 +481,16 @@ if (!gotSingleInstanceLock) {
     }
     const chinese = app.getLocale().toLowerCase().startsWith("zh");
     const sidecarFailed = error?.code === "SIDECAR_STARTUP_FAILED";
+    // The backend named its own cause (for example a data folder it refuses to use).
+    const backendFailed = sidecarFailed && Boolean(error?.diagnostics?.backendFailure);
     const originFailed = error?.code === "DESKTOP_ORIGIN_UNAVAILABLE";
     dialog.showErrorBox(
       chinese ? "CandleScope 启动失败" : "CandleScope could not start",
       [
         originFailed
           ? (chinese ? `此配置使用的端口 ${error.port} 被占用。请关闭占用端口的其他应用后重试。配置与数据未被重置。` : `This profile's port ${error.port} is unavailable. Close the other application using it and try again. Your settings and data have not been reset.`)
+          : backendFailed
+          ? (chinese ? "本地后端在启动过程中停止，原因如下。" : "The local backend stopped while starting, for the reason below.")
           : sidecarFailed
           ? (chinese ? "本地后端未能启动。请检查 Python 运行环境及后端依赖是否完整。" : "The local backend could not start. Check that the Python runtime and backend dependencies are installed.")
           : (chinese ? "应用初始化失败，请查看启动日志以确定原因。" : "Application initialization failed. Check the startup log for details."),
@@ -481,6 +501,7 @@ if (!gotSingleInstanceLock) {
       ].join("\n\n"),
     );
     await localMcp.close();
+    supervisor?.beginQuit();
     await supervisor?.stop();
     await assetServer?.close();
     app.exit(1);
@@ -488,6 +509,8 @@ if (!gotSingleInstanceLock) {
 }
 
 app.on("before-quit", () => {
+  // A backend that exits while the app quits is not restarted.
+  supervisor?.beginQuit();
   manager?.approveQuit();
 });
 
@@ -495,6 +518,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
+  supervisor?.beginQuit();
   shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => unifiedPlugins?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
     shutdownComplete = true;
     app.quit();

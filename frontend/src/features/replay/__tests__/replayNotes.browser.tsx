@@ -33,6 +33,7 @@ export async function checkReplayNotesBrowser() {
   const captureSubmissions = new Map<string, string>();
   let holdNextHistory = false;
   let releaseHistory: (() => void) | null = null;
+  const heldHistory: { url: string; text: string }[] = [];
   const api = managedReplayRunApi(lease, new ReplayV2ApiClient({ basePath: new URL("/api/v1/replay", backend).href,
     fetcher: async (url, options) => {
       const pathname = new URL(String(url), backend).pathname;
@@ -56,6 +57,7 @@ export async function checkReplayNotesBrowser() {
       if (holdNextHistory && String(url).includes("/versions?")) {
         holdNextHistory = false;
         const text = await response.text();
+        heldHistory.push({ url: String(url), text });
         // Let the production manager/body parser own cancellation after actual HTTP completed.
         const delayed = new Response(null, { status: response.status });
         delayed.text = () => new Promise(resolve => { releaseHistory = () => resolve(text); });
@@ -80,9 +82,15 @@ export async function checkReplayNotesBrowser() {
     trackId={state.context.trackId} generationKey={state.context.dataEpoch} reviewId={state.context.reviewId}
     reviewRevision={state.context.reviewRevision} cursorMs={state.context.virtualTimeMs}
     revisionKey={JSON.stringify(state.context)} formatTime={time => String(time)} captureChart={captureChart} embedded />)); };
-  const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find(value => value.textContent === name || value.textContent?.startsWith(name + " ·"));
+  // The fixture clock is frozen, so notes at one market time are listed in note-id
+  // order, which is random. A click meant for one note's button names its card.
+  const button = (name: string, noteId?: string) => [...(noteId === undefined ? host : host.querySelector(`[data-note-id="${CSS.escape(noteId)}"]`))
+    ?.querySelectorAll<HTMLButtonElement>("button") ?? []].find(value => value.textContent === name || value.textContent?.startsWith(name + " ·"));
   let lastAction = "initial";
-  const click = async (name: string) => { lastAction = name; await until(() => button(name) && !button(name)!.disabled); button(name)!.click(); };
+  const click = async (name: string, noteId?: string) => {
+    lastAction = noteId === undefined ? name : `${name} (${noteId})`;
+    await until(() => button(name, noteId) && !button(name, noteId)!.disabled); button(name, noteId)!.click();
+  };
   const input = async (text: string) => {
     await until(() => host.querySelector("textarea"));
     const area = host.querySelector("textarea")!;
@@ -153,7 +161,7 @@ export async function checkReplayNotesBrowser() {
     assert(!button("加载更早版本"), "Exhausted version history retained a continuation");
     await capture("version-history-pages");
     checks.push("actual history UI paginates 25 authoritative versions in 20+5 rows without duplication");
-    await click("版本历史");
+    await click("版本历史", planId);
     state = await call("/fixture/advance", "POST"); render();
     await click("新增笔记"); await input("未来创建的笔记"); await click("保存并关闭");
     await until(() => !host.querySelector("textarea") && host.textContent?.includes("未来创建的笔记"));
@@ -166,7 +174,7 @@ export async function checkReplayNotesBrowser() {
     await until(() => host.textContent?.includes("事前计划，保存不改变运行") && !host.querySelector("textarea"));
     for (const text of ["同一毫秒后一个事件修改的计划", "同一事件计划版本 25", "未来创建的笔记", "未来未保存草稿"])
       assert(!host.textContent?.includes(text), "Backward UI leaked future text: " + text);
-    await click("版本历史");
+    await click("版本历史", planId);
     await until(() => host.querySelectorAll("[data-note-version]").length === 1);
     assert(host.querySelector('[data-note-version="1"]') && !host.querySelector('[data-note-version="2"]'),
       "Earlier same-time event history revealed later revisions");
@@ -176,7 +184,7 @@ export async function checkReplayNotesBrowser() {
     const visibleImages = await api.noteCapturesRun(state.context.runId, state.context.trackId);
     assert(visibleImages.captures.every(image => image.id !== updatedImage.id), "Image chooser leaked a future-event capture");
     await capture("earlier-event-visible-original");
-    await click("版本历史");
+    await click("版本历史", planId);
     checks.push("earlier event hides same-time edits, future creation and future draft text");
     const before = await call("/fixture/state");
     await click("新增复盘补记"); await input("回退后的补记，保留实际写入时间"); await click("保存并关闭");
@@ -243,15 +251,21 @@ export async function checkReplayNotesBrowser() {
     assert(copiedNote?.screenshots?.[0]?.marketTimeMs === oldCapturedTime, "Explicit copy relabeled old pixels as a new capture time");
     checks.push("explicit current-time copy is a new review supplement and preserves the old-context draft");
     await until(() => host.textContent?.includes("显式另存的旧视图草稿") && !host.querySelector("textarea"));
-    if (button("版本历史")?.getAttribute("aria-expanded") === "true") await click("版本历史");
-    holdNextHistory = true; await click("版本历史");
+    if (button("版本历史", planId)?.getAttribute("aria-expanded") === "true") await click("版本历史", planId);
+    holdNextHistory = true; await click("版本历史", planId);
     await until(() => releaseHistory);
+    // The last event shows the plan at version 2 (the later same-millisecond edit), so
+    // the held page carries a version the marker event must not reveal.
+    const held = heldHistory.length === 1 ? JSON.parse(heldHistory[0]!.text) as { versions: { revisionCount: number; fields: Record<string, string> }[] } : null;
+    assert(heldHistory[0]?.url.includes(`/notes/${planId}/versions?`)
+      && held?.versions.some(version => version.revisionCount === 2 && version.fields.entryBasis === "同一毫秒后一个事件修改的计划"),
+    "The held history body is not the plan's page with its later same-time version");
     state = await call("/fixture/review-marker", "POST"); render();
-    await until(() => host.querySelectorAll("[data-note-version]").length === 1
-      && !host.textContent?.includes("同一事件计划版本 25"));
+    await until(() => host.querySelectorAll(`[data-note-id="${CSS.escape(planId)}"] [data-note-version]`).length === 1
+      && host.querySelectorAll("[data-note-version]").length === 1 && !host.textContent?.includes("同一毫秒后一个事件修改的计划"));
     releaseHistory!(); await new Promise(resolve => setTimeout(resolve, 100));
-    assert(!host.textContent?.includes("同一事件计划版本 25") && !host.querySelector('[data-note-version="25"]'),
-      "Late body of an old history request leaked future revisions into the earlier view");
+    assert(!host.textContent?.includes("同一毫秒后一个事件修改的计划") && !host.textContent?.includes("同一事件计划版本 25")
+      && !host.querySelector('[data-note-version="2"]'), "Late body of an old history request leaked future revisions into the earlier view");
     checks.push("actual delayed history body is cancelled on review rewind; the earlier same-time event keeps only version 1");
     const final = await call("/fixture/state");
     assert(JSON.stringify(final.snapshot) === JSON.stringify(before.snapshot), "Retry/copy changed live financial state");

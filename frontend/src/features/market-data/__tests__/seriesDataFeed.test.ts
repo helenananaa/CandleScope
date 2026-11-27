@@ -4358,3 +4358,163 @@ for (const endpoint of ["history", "before", "range", "latest"] as const) {
     assert.equal(feed.isCurrent(SERIES, epoch), true);
   });
 }
+
+test("a pending before-page reads back only its own page when one storage change fills a large hole", async () => {
+  // RC 0be80267f: after date seeks to Aug 20 and then Oct 1, the backend filled
+  // the hole between them (~43k 1m rows). The Oct-1 window had a left page
+  // pending, so the whole Aug 19..Oct 1 change was read into it 5000 bars at a
+  // time; the prepend trim then dropped the Oct-1 bars that were in view.
+  const series = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
+  const version = { protocol: 1, epoch: "server-a", generation: 1, sequence: 9, barrier: 9, observed_at_ms: 1, stable: true,
+    series: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", interval: "1m", provider_id: "binance", venue: "binance",
+      asset_class: "crypto", series_variant: "native", price_adjustment: "raw", session_variant: "continuous", volume_semantics: "base_asset" } };
+  const windowStart = 1_790_819_400, windowEnd = windowStart + 500 * 60, pageStart = windowStart - 500 * 60;
+  const holeStart = 1_787_182_200;
+  const requested: Array<{ start: number; end: number }> = [];
+  const feed = new SeriesDataFeed({
+    api: {
+      fetchKlinesBefore: async () => ({ data: [], history_state: "pending", complete: false, retryable: true,
+        verified_contiguous: false, missing_ranges: [{ start_ms: holeStart * 1_000, end_ms: (windowStart - 60) * 1_000 }] }),
+      fetchKlinesRange: async (_symbol, _interval, start, end) => {
+        requested.push({ start: Number(start), end: Number(end) });
+        return { ...resolvedQuality, data: [], stream_version: version, storage_revision: 50, missing_ranges: [],
+          verified_contiguous: true, history_state: "ready", complete: true, retryable: false };
+      },
+    },
+    getActiveSeries: () => series,
+    commitMergedChartData: () => {},
+  });
+  await feed.requestBeforePage(series, { before: epochSeconds(windowStart), bars: 500, pendingCooldownMs: 0 });
+  assert.ok(feed.getPendingBeforePage(series), "the left page is pending");
+  const windowRows = Array.from({ length: 501 }, (_, index) => ({
+    time: epochSeconds(windowStart + index * 60), open: 1, high: 1, low: 1, close: 1, volume: 1, is_closed: true }));
+  assert.equal(feed.handleBackfillCompleted({
+    type: "backfill_completed", symbol: series.symbol, interval: series.interval, exchange: series.exchange,
+    market_type: series.marketType, stream_version: version,
+    detail: { reason: "storage_history_changed", storage_revision: 50,
+      range_start_ms: holeStart * 1_000, range_end_ms: windowEnd * 1_000 },
+  }, { activeSeries: series, getCacheRows: () => windowRows, cooldownMs: 0 }), true);
+  for (let i = 0; i < 100 && (feed.backfillReloadInFlight.size || !requested.length); i += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(requested.length > 0, "the page itself is read back");
+  for (const range of requested) {
+    assert.ok(range.start >= pageStart && range.end <= windowEnd,
+      `read outside the window and its page: ${JSON.stringify(range)}`);
+  }
+});
+
+// RC 9d23e5f0a: the backend's daily-open lookup stores the 00:00 UTC 1m bar of
+// every priced symbol and announces it as a storage change. The 1m chart's
+// initial window (05:30..13:49) was still pending, so the feed read the whole
+// event range back into it: one bar at 00:00, a five-hour hole, then the window.
+// When it landed first, the first view was fitted to that one bar.
+const DAY_OPEN = 1_795_478_400;
+const INITIAL_START = DAY_OPEN + 330 * 60;
+const INITIAL_END = DAY_OPEN + 829 * 60;
+const MINUTE_SERIES = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
+const MINUTE_VERSION = { protocol: 1, epoch: "server-a", generation: 1, sequence: 9, barrier: 9, observed_at_ms: 1, stable: true,
+  series: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", interval: "1m", provider_id: "binance", venue: "binance",
+    asset_class: "crypto", series_variant: "native", price_adjustment: "raw", session_variant: "continuous", volume_semantics: "base_asset" } };
+
+function minuteBars(times: readonly number[]): KlineBar[] {
+  return times.map((time) => ({ time: epochSeconds(time), open: 1, high: 1, low: 1, close: 1, volume: 1, is_closed: true }));
+}
+
+function minuteSpan(start: number, end: number): number[] {
+  return Array.from({ length: (end - start) / 60 + 1 }, (_, index) => start + index * 60);
+}
+
+function storageChangeFeed(storage: readonly number[]) {
+  const requested: Array<{ start: number; end: number }> = [];
+  const committed: number[] = [];
+  const feed = new SeriesDataFeed({
+    api: {
+      fetchKlinesRange: async (_symbol, _interval, start, end) => {
+        requested.push({ start: Number(start), end: Number(end) });
+        return { ...resolvedQuality, stream_version: MINUTE_VERSION, storage_revision: 50,
+          data: minuteBars(storage.filter((time) => time >= Number(start) && time <= Number(end))) };
+      },
+      fetchKlinesHistory: async () => ({ ...resolvedQuality, stream_version: MINUTE_VERSION, storage_revision: 50,
+        data: minuteBars(storage.filter((time) => time >= INITIAL_START)) }),
+    },
+    getActiveSeries: () => MINUTE_SERIES,
+    commitMergedChartData: (_symbol, _interval, rows) => {
+      for (const row of rows) committed.push(Number(row.time));
+    },
+  });
+  return { feed, requested, committed };
+}
+
+function storageChanged(startSec: number, endSec: number): BackfillCompletedMessage {
+  return { type: "backfill_completed", symbol: MINUTE_SERIES.symbol, interval: MINUTE_SERIES.interval,
+    exchange: MINUTE_SERIES.exchange, market_type: MINUTE_SERIES.marketType, stream_version: MINUTE_VERSION,
+    detail: { reason: "storage_history_changed", storage_revision: 50,
+      range_start_ms: startSec * 1_000, range_end_ms: endSec * 1_000 + 59_999 } };
+}
+
+async function drainBackfill(feed: SeriesDataFeed): Promise<void> {
+  for (let i = 0; i < 200 && feed.backfillReloadInFlight.size; i += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(feed.backfillReloadInFlight.size, 0);
+}
+
+for (const [name, cacheRows] of [
+  ["empty window", [] as number[]],
+  ["latest-seeded window", [INITIAL_END - 60, INITIAL_END]],
+] as const) test(`a pending initial window does not read back the daily-open bar stored outside it (${name})`, async () => {
+  const storage = [DAY_OPEN, ...minuteSpan(INITIAL_START, INITIAL_END)];
+  const { feed, requested, committed } = storageChangeFeed(storage);
+  const pendingInitial = { ...MINUTE_SERIES, countBack: 500,
+    range: { start: toEpochMilliseconds(INITIAL_START * 1_000)!, end: toEpochMilliseconds(INITIAL_END * 1_000)! } };
+  let resolved = 0;
+  assert.equal(feed.handleBackfillCompleted(storageChanged(DAY_OPEN, DAY_OPEN), {
+    activeSeries: MINUTE_SERIES, pendingInitial, getPendingInitial: () => pendingInitial,
+    getCacheRows: () => minuteBars(cacheRows), cooldownMs: 0,
+    onRecoveryProgress: (event) => { if (event.type === "initial-resolved") resolved += 1; },
+  }), true);
+  await drainBackfill(feed);
+  assert.deepEqual(committed.filter((time) => time < INITIAL_START), [],
+    "the lone 00:00 bar was committed into the chart's initial window");
+  for (const range of requested) {
+    assert.ok(range.start >= INITIAL_START && range.end <= INITIAL_END + 59,
+      `read outside the initial window: ${JSON.stringify(range)}`);
+  }
+  assert.ok(requested.length > 0, "the initial window is still verified");
+  assert.equal(resolved, 1, "verification of the window itself still settles the initial load");
+});
+
+test("a storage change spanning the day reads back only the pending initial window", async () => {
+  // Later in the same RC run the backend filled 00:01..05:29 and announced the
+  // whole day. The initial window is still the 500 bars it asked for.
+  const storage = minuteSpan(DAY_OPEN, INITIAL_END);
+  const { feed, requested, committed } = storageChangeFeed(storage);
+  const pendingInitial = { ...MINUTE_SERIES, countBack: 500,
+    range: { start: toEpochMilliseconds(INITIAL_START * 1_000)!, end: toEpochMilliseconds(INITIAL_END * 1_000)! } };
+  let resolved = 0;
+  feed.handleBackfillCompleted(storageChanged(DAY_OPEN, INITIAL_END), {
+    activeSeries: MINUTE_SERIES, pendingInitial, getPendingInitial: () => pendingInitial,
+    getCacheRows: () => [], cooldownMs: 0,
+    onRecoveryProgress: (event) => { if (event.type === "initial-resolved") resolved += 1; },
+  });
+  await drainBackfill(feed);
+  assert.deepEqual(requested, [{ start: INITIAL_START, end: INITIAL_END }]);
+  assert.equal(Math.min(...committed), INITIAL_START);
+  assert.equal(resolved, 1, "a readback covering the window settles the initial load");
+});
+
+test("a pending count-back window does not read back a storage change outside its rows", async () => {
+  const storage = [DAY_OPEN, ...minuteSpan(INITIAL_START, INITIAL_END)];
+  const { feed, requested, committed } = storageChangeFeed(storage);
+  const pendingInitial = { ...MINUTE_SERIES, countBack: 500, range: null };
+  feed.handleBackfillCompleted(storageChanged(DAY_OPEN, DAY_OPEN), {
+    activeSeries: MINUTE_SERIES, pendingInitial, getPendingInitial: () => pendingInitial,
+    getCacheRows: () => [], cooldownMs: 0,
+  });
+  await drainBackfill(feed);
+  assert.deepEqual(requested, [], "the lone bar was read by range");
+  assert.deepEqual(committed.filter((time) => time < INITIAL_START), [],
+    "the lone 00:00 bar was committed into the chart's count-back window");
+  assert.ok(committed.length > 0, "the count-back verification still reads the window");
+});

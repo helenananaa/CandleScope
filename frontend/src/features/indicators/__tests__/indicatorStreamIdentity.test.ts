@@ -89,6 +89,7 @@ test("semantic indicator and market context changes invalidate the old wire iden
         engineName: null,
         kind: "script",
         script: "plot(close)",
+        language: "pine",
       }),
     },
     {
@@ -96,6 +97,7 @@ test("semantic indicator and market context changes invalidate the old wire iden
         engineName: null,
         kind: "script",
         script: "plot(open)",
+        language: "pine",
         securityMode: "strict",
       }),
     },

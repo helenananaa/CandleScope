@@ -16,6 +16,7 @@ import time
 from collections.abc import Mapping
 
 from app.core.committed_updates import committed_updates_for
+from app.core.pre_migration_copy import keep_pre_migration_copy
 from .errors import BacktestError
 
 SCHEMA = 5
@@ -131,6 +132,8 @@ class ContinuousStrategyStore:
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
                 if version not in (0, 1, 2, 3, 4, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
+                if 0 < version < SCHEMA:
+                    keep_pre_migration_copy(self.db, schema="continuous-strategy", from_version=version, to_version=SCHEMA)
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
                         raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Unrecognized database must not be overwritten")
@@ -173,6 +176,23 @@ class ContinuousStrategyStore:
             self.db.close()
             self.closed = True
             raise
+
+    def identity(self, *, create=None):
+        """This database's own id; ``create`` (an id or True) assigns one when it has none.
+
+        Private input and repair folders name this id rather than the file's
+        absolute path, so a moved or restored data folder still owns them. The
+        table sits outside the versioned schema, like ``run_catalog``.
+        """
+        from app.core.profile_relocation import new_identity, valid_identity
+        with self._transaction():
+            self.db.execute("CREATE TABLE IF NOT EXISTS store_identity ("
+                            "singleton INTEGER PRIMARY KEY CHECK(singleton=1), store_id TEXT NOT NULL)")
+            if create:
+                preferred = create if valid_identity(create) else new_identity()
+                self.db.execute("INSERT OR IGNORE INTO store_identity VALUES (1,?)", (preferred,))
+            row = self.db.execute("SELECT store_id FROM store_identity WHERE singleton=1").fetchone()
+        return None if row is None else str(row[0])
 
     @contextmanager
     def _transaction(self):

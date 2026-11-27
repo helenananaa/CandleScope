@@ -7,10 +7,17 @@
 ## 根地址
 
 ```text
-HTTP API:      http://localhost:8000/api/v1
-System API:    http://localhost:8000
-WebSocket API: ws://localhost:8000/api/v1
+HTTP API:      http://127.0.0.1:18080/api/v1
+System API:    http://127.0.0.1:18080
+WebSocket API: ws://127.0.0.1:18080/api/v1
 ```
+
+`backend/dev-server.sh` 和桌面应用都监听 18080 端口；桌面应用可以用
+`CANDLESCOPE_DESKTOP_BACKEND_PORT` 换端口。运行中的后端在
+`http://127.0.0.1:18080/docs` 提供完整的当前 OpenAPI 文档。
+
+本页详细说明行情、指标、设置和交易对 API。其余接口见[其他 API](#其他-api)，
+详细参数以 `/docs` 为准。
 
 所有 K 线、价格、交易对和 stream API 都支持交易所上下文。多数行情端点接受：
 
@@ -338,7 +345,7 @@ live 数据帧类型为 `full_order_book.snapshot`；断链/重同步帧类型�
 URL：
 
 ```text
-ws://localhost:8000/api/v1/stream/klines?symbol=BTCUSDT&interval=1m&exchange=binance&market_type=spot
+ws://127.0.0.1:18080/api/v1/stream/klines?symbol=BTCUSDT&interval=1m&exchange=binance&market_type=spot
 ```
 
 服务端先发送订阅确认：
@@ -383,7 +390,7 @@ K 线更新：
 URL：
 
 ```text
-ws://localhost:8000/api/v1/stream/klines_multi?symbol=BTCUSDT&exchange=binance&market_type=spot
+ws://127.0.0.1:18080/api/v1/stream/klines_multi?symbol=BTCUSDT&exchange=binance&market_type=spot
 ```
 
 初始消息：
@@ -722,6 +729,31 @@ cache limits 请求体：
 | `quote_asset` | string | 空 | 例如 `USDT` |
 | `market_type` | string | 空 | 空表示全部 |
 | `exchange` | string | 空 | 空表示全部已注册交易所 |
+
+## 其他 API
+
+以下接口本页不逐字段说明，请求和响应以后端 `/docs` 为准。
+
+| 范围 | 路径前缀 | 用途 |
+|---|---|---|
+| 订单流 | `/trade-flow`、`/liquidations`、`/order-book` | 成交明细、强平和盘口快照 |
+| 图表序列 | `/synthetic` | 由后端计算的 Heikin Ashi、Renko、点数图、Kagi 和新价线序列 |
+| 告警 | `/alerts` | 告警规则、触发记录与投递 |
+| 历史下载 | `/settings/storage/manual-downloads` | 规划、执行和取消历史下载任务 |
+| 数据准备 | `/data-preparations` | 准备回放或策略运行需要的历史数据 |
+| 本地资料库 | `/local` | CSV 导入、数据集和项目包 |
+| 历史研究 | `/history-studies` | 保存的研究视图及其笔记 |
+| 回放训练 | `/replay`、`WS /stream/replay/...` | 训练运行：创建、控制、复盘、分叉和报告 |
+| 策略运行 | `/strategy-runs`、`/strategy-drafts`、`/strategy-versions`、`/strategy-references`、`/strategy-experiments`、`/strategy-follows` | [ADR-BACKTEST-015](docs/adr/ADR-BACKTEST-015-strategy-run-model.md) 中的策略运行模型 |
+| 回测 | `/backtests` | 回测运行与报告，含 `/backtests/native`、`/backtests/continuous` 和 `/backtests/external` |
+| 模拟账户 | `/trading` | 模拟交易账户、订单和交易日志 |
+| 只读账户 | `/readonly-accounts` | 只读同步和对账真实交易所账户 |
+| 插件 | `/api/v2/plugins`（不在 `/api/v1` 下） | 插件目录、安装和插件运行时 |
+| 支持 | `/api/v1/support` | 生成支持报告用的诊断信息 |
+
+策略和回测路由在 `BACKTEST_ENABLED` 打开时存在，默认打开。本地离线模式
+（`CANDLESCOPE_RUNTIME_MODE=LOCAL_OFFLINE`）下没有实时行情、交易所、设置和账户路由，
+图表数据来自本地资料库；见[本地离线模式](docs/local-offline-mode.md)。
 
 ## 错误说明
 

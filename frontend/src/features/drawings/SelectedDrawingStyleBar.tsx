@@ -3,6 +3,8 @@ import DrawingVisibilityInputs from "./DrawingVisibilityInputs.js";
 import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Button, IconButton, Tabs } from "../../components/ui/index.js";
+import { Icon } from "../../components/icons/Icon.js";
 import type { DrawingStylePatch } from "./drawingInteractionController.js";
 import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
 
@@ -13,6 +15,7 @@ import DrawingCoordinateInputs from "./DrawingCoordinateInputs.js";
 import DrawingStyleTemplates from "./DrawingStyleTemplates.js";
 import { coordinateDraft, parseCoordinateDraft, sameCoordinates, type CoordinateDraft, type DrawingCoordinate } from "./drawingProperties.js";
 import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
+import { DEFAULT_DRAWING_RENDER_COLOR } from "./rendering/drawingRenderDefaults.js";
 
 function CommitNumberInput({ value, min, max, step, onCommit }: {
   value: number;
@@ -104,7 +107,8 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
   const isShape = drawing.type === "rectangle" || drawing.type === "ellipse" || drawing.type === "shape";
   const isZone = drawing.type === "rectangle";
   const isChannel = drawing.type === "channel";
-  const canToggleArrow = drawing.type === "line-segment" || drawing.type === "line-arrow";
+  const canToggleArrow = drawing.type === "line-segment" || drawing.type === "line-arrow"
+    || drawing.type === "path-arrow" || drawing.type === "path-line";
   const isFib = drawing.type === "fibonacci";
   const isPosition = drawing.type === "position" || drawing.type === "position-long" || drawing.type === "position-short";
   const hasStroke = typeof drawing.color === "string" && typeof drawing.lineWidth === "number";
@@ -116,7 +120,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
     const levels = drawing.levels ?? [];
     if (newLevel.trim() === "" || !Number.isFinite(level) || levels.length >= 32
       || levels.some((item) => Math.abs(item.level - level) < 0.0001)) return;
-    onPatch({ levels: [...levels, { level, color: drawing.color ?? "#f59e0b", enabled: true }]
+    onPatch({ levels: [...levels, { level, color: drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR, enabled: true }]
       .sort((left, right) => left.level - right.level) });
     setNewLevel("");
   };
@@ -138,12 +142,12 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
     onKeyDown={stop}
   >
     <div className="selected-drawing-style-bar-main" inert={expanded}>
-      <button type="button" className="drawing-drag-handle" aria-label={t("drawing.editor.moveToolbar")} title={t("drawing.editor.moveToolbar")} {...toolbar.handle}><StyleIcon name="drag" /></button>
+      <IconButton className="drawing-drag-handle" label={t("drawing.editor.moveToolbar")} icon={<StyleIcon name="drag" />} {...toolbar.handle} />
       <strong>{drawingName(drawing.type)}</strong>
       {hasStroke && <>
         <CommitColorInput
           key={`${drawing.id}-stroke`}
-          color={drawing.color ?? "#f59e0b"}
+          color={drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR}
           label={t("drawing.settings.lineColor")}
           onCommit={(color) => onPatch({ color })}
         />
@@ -151,38 +155,26 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       </>}
       {isShape && <LineStyleControl value={drawing.lineStyle ?? "solid"} onCommit={(lineStyle) => onPatch({ lineStyle })} />}
       <span className="drawing-toolbar-divider" />
-      {onSave && <button type="button" aria-label={t(selected.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} title={t(selected.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} aria-pressed={selected.locked === true}
-        onClick={() => commitPatch({ locked: !selected.locked })}><StyleIcon name={selected.locked ? "lock" : "unlock"} /></button>}
-      <button ref={settingsRef} type="button" aria-label={t("drawing.settings.more")}
-        title={t("drawing.settings.more")} aria-haspopup="dialog"
-        aria-expanded={expanded} onClick={() => { resetDraft(); setExpanded(!expanded); }}><StyleIcon name="settings" /></button>
-      <button className="drawing-delete-button" type="button" aria-label={t("format.delete")}
-        title={t("format.delete")} onClick={onDelete}><StyleIcon name="delete" /></button>
+      {onSave && <IconButton label={t(selected.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} pressed={selected.locked === true}
+        icon={<StyleIcon name={selected.locked ? "lock" : "unlock"} />} onClick={() => commitPatch({ locked: !selected.locked })} />}
+      <IconButton ref={settingsRef} label={t("drawing.settings.more")} icon={<StyleIcon name="settings" />} aria-haspopup="dialog"
+        aria-expanded={expanded} onClick={() => { resetDraft(); setExpanded(!expanded); }} />
+      <IconButton variant="danger" label={t("format.delete")} icon={<StyleIcon name="delete" />} onClick={onDelete} />
     </div>
     {expanded && <dialog className="drawing-properties-panel" style={panelStyle} role="dialog" aria-modal="true" aria-label={t("drawing.settings.selectedObject", { name: drawingName(drawing.type) })} ref={dialogRef} tabIndex={-1}
       onCancel={(event) => { event.preventDefault(); close(); }}
       onKeyDown={(event) => event.stopPropagation()}>
       <header className="drawing-properties-header"><div><span className="drawing-control-caption">{t("settings.category.appearance")}</span><h3>{drawingName(drawing.type)}</h3></div>
-        <button type="button" aria-label={t("settings.close")} onClick={close}><StyleIcon name="close" /></button>
+        <IconButton label={t("settings.close")} icon={<StyleIcon name="close" />} onClick={close} />
       </header>
-      {canEditCoordinates && <div className="drawing-properties-tabs" role="tablist" aria-label={t("drawing.settings.more")}>
-        {(["style", "coordinates"] as const).map((name) => <button key={name} id={`${editorId}-tab-${name}`} type="button" role="tab"
-          aria-selected={tab === name} aria-controls={`${editorId}-panel-${name}`} tabIndex={tab === name ? 0 : -1}
-          onKeyDown={(event) => {
-            if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-              event.preventDefault();
-              const next = event.key === "Home" ? "style" : event.key === "End" ? "coordinates" : tab === "style" ? "coordinates" : "style";
-              setTab(next);
-              const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-              buttons?.[next === "style" ? 0 : 1]?.focus();
-            }
-          }} onClick={() => setTab(name)}>{t(name === "style" ? "drawing.editor.style" : "drawing.editor.coordinates")}</button>)}
-      </div>}
+      {canEditCoordinates && <Tabs id={editorId} className="drawing-properties-tabs" label={t("drawing.settings.more")} value={tab}
+        tabs={[{ value: "style", label: t("drawing.editor.style") }, { value: "coordinates", label: t("drawing.editor.coordinates") }]}
+        onChange={setTab} />}
       <div className="selected-drawing-style-bar-detail">
       <div id={`${editorId}-panel-style`} role={canEditCoordinates ? "tabpanel" : undefined} aria-labelledby={canEditCoordinates ? `${editorId}-tab-style` : undefined} hidden={tab !== "style"} className="drawing-style-fields">
       <DrawingStyleTemplates drawing={drawing} onApply={onPatch} />
       {currentInterval && onSave && <DrawingVisibilityInputs value={drawing.visibleIntervals} currentInterval={currentInterval} onChange={visibleIntervals => onPatch({ visibleIntervals })} />}
-      {hasStroke && <div className="drawing-property-row"><span>{t("drawing.settings.lineColor")}</span><CommitColorInput color={drawing.color ?? "#f59e0b"} label={t("drawing.settings.lineColor")} onCommit={(color) => onPatch({ color })} /></div>}
+      {hasStroke && <div className="drawing-property-row"><span>{t("drawing.settings.lineColor")}</span><CommitColorInput color={drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR} label={t("drawing.settings.lineColor")} onCommit={(color) => onPatch({ color })} /></div>}
       {hasStroke && <label>{t("drawing.settings.lineWidth", { size: drawing.lineWidth ?? 2 })}
         <CommitNumberInput key={resetRevision} value={drawing.lineWidth ?? 2} min={1} max={10} step={1}
           onCommit={(lineWidth) => onPatch({ lineWidth })} />
@@ -191,7 +183,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
         <div className="drawing-property-row"><span>{t("drawing.settings.fillColor")}</span>
           <CommitColorInput
             key={`${drawing.id}-fill`}
-            color={drawing.fillColor ?? drawing.color ?? "#f59e0b"}
+            color={drawing.fillColor ?? drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR}
             label={t("drawing.settings.fillColor")}
             onCommit={(fillColor) => onPatch({ fillColor })}
           />
@@ -247,9 +239,8 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
           <CommitColorInput color={level.color} label={String(level.level)}
             onCommit={(color) => onPatch({ levels: (drawing.levels ?? []).map((item, itemIndex) =>
               itemIndex === index ? { ...item, color } : item) })} />
-          <button type="button" title={t("drawing.settings.removeLevel")}
-            aria-label={t("drawing.settings.removeLevel")}
-            onClick={() => onPatch({ levels: (drawing.levels ?? []).filter((_, itemIndex) => itemIndex !== index) })}><StyleIcon name="delete" /></button>
+          <IconButton size="sm" variant="danger" label={t("drawing.settings.removeLevel")} icon={<StyleIcon name="delete" />}
+            onClick={() => onPatch({ levels: (drawing.levels ?? []).filter((_, itemIndex) => itemIndex !== index) })} />
         </div>)}
         <div className="drawing-fib-add">
           <input type="number" value={newLevel} step="any" aria-invalid={invalidLevel} aria-label={t("drawing.settings.addLevelPlaceholder")}
@@ -259,8 +250,8 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
               event.stopPropagation();
               if (event.key === "Enter") addFibLevel();
             }} />
-          <button type="button" aria-label={t("drawing.settings.addLevelPlaceholder")} disabled={!newLevel.trim() || invalidLevel}
-            onClick={addFibLevel}>+</button>
+          <IconButton variant="secondary" label={t("drawing.settings.addLevelPlaceholder")} icon={<Icon name="plus" size={16} />}
+            disabled={!newLevel.trim() || invalidLevel} onClick={addFibLevel} />
         </div>
         {invalidLevel && <p className="drawing-field-error" role="status">{t("drawing.editor.invalidLevel")}</p>}
       </div>}
@@ -277,16 +268,16 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       {saveFailed && <p className="drawing-field-error" role="alert">{t("drawing.editor.saveFailed")}</p>}
       </div>
       <footer className="drawing-properties-footer">
-        <button type="button" className="drawing-reset-button" title={t("drawing.editor.resetChangesHint")} onClick={() => resetDraft(true)}>{t("drawing.editor.resetChanges")}</button>
-        <button type="button" onClick={close}>{t("workspace.cancel")}</button>
-        <button type="button" className="drawing-save-button" disabled={invalidCoordinates || drawing.visibleIntervals?.length === 0} onClick={() => {
+        <Button variant="ghost" className="drawing-reset-button" title={t("drawing.editor.resetChangesHint")} onClick={() => resetDraft(true)}>{t("drawing.editor.resetChanges")}</Button>
+        <Button onClick={close}>{t("workspace.cancel")}</Button>
+        <Button variant="primary" disabled={invalidCoordinates || drawing.visibleIntervals?.length === 0} onClick={() => {
           if (Object.keys(patch).length || coordinatesChanged) {
             if (onSave) {
               if (!onSave(selected.id, patch, coordinatesChanged ? parsedPoints ?? undefined : undefined, coordinateBase)) { setSaveFailed(true); return; }
             } else commitPatch(patch);
           }
           close();
-        }}>{t("settings.saveAndClose")}</button>
+        }}>{t("settings.saveAndClose")}</Button>
       </footer>
     </dialog>}
   </div>;

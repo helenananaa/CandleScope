@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
-import { IconButton, Menu } from "../components/ui/index.js";
+import { ControlButton, IconButton, Menu } from "../components/ui/index.js";
 import { Icon } from "../components/icons/Icon.js";
 import { t } from "../i18n/index.js";
 import { fitHeaderActions } from "./headerActionsModel.js";
@@ -64,7 +64,6 @@ export default function HeaderActions({ actions }: { actions: readonly HeaderAct
     <div ref={containerRef} className="app-header-actions">
       {actions.map((action, index) => {
         const shared = {
-          className: "ui-control",
           "data-header-action": action.id,
           "data-overflow": index >= visible ? "true" : undefined,
           title: action.title,
@@ -72,12 +71,11 @@ export default function HeaderActions({ actions }: { actions: readonly HeaderAct
         };
         const register = (element: HTMLElement | null) => { if (element) buttons.current.set(action.id, element); else buttons.current.delete(action.id); };
         return action.href
-          ? <a key={action.id} ref={register} {...shared} href={action.href} target="_blank" rel="noopener noreferrer">{action.label}</a>
+          ? <a key={action.id} ref={register} className="ui-control" {...shared} href={action.href} target="_blank" rel="noopener noreferrer">{action.label}</a>
           : (
-            <button
+            <ControlButton
               key={action.id}
               ref={register}
-              type="button"
               {...shared}
               aria-expanded={action.expanded}
               aria-haspopup={action.hasPopup}
@@ -86,7 +84,7 @@ export default function HeaderActions({ actions }: { actions: readonly HeaderAct
               onClick={action.onSelect}
             >
               {action.label}
-            </button>
+            </ControlButton>
           );
       })}
       <IconButton

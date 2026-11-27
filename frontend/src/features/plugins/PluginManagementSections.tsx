@@ -1,4 +1,5 @@
 import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
+import { Button } from "../../components/ui/Button.js";
 import { Badge } from "../../components/ui/Display.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -34,9 +35,9 @@ export function PermissionRows({ runtime, detail, reload }: {
           <div><strong>{permission.permissionId}</strong><span>{permissionKindLabel(permission.kind)} · {permissionDecisionLabel(permission.decision)}</span></div>
           <pre>{JSON.stringify(permission.requestedScope, null, 2)}</pre>
           <div className="plugin-action-row">
-            {permission.decision !== "granted" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "grant", permission.requestedScope)}>{t("plugin.host.grantScope")}</button>}
-            {permission.decision === "granted" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "revoke")}>{t("plugin.host.revoke")}</button>}
-            {permission.decision !== "denied" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "deny")}>{t("plugin.host.deny")}</button>}
+            {permission.decision !== "granted" && <Button size="sm" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "grant", permission.requestedScope)}>{t("plugin.host.grantScope")}</Button>}
+            {permission.decision === "granted" && <Button size="sm" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "revoke")}>{t("plugin.host.revoke")}</Button>}
+            {permission.decision !== "denied" && <Button size="sm" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "deny")}>{t("plugin.host.deny")}</Button>}
           </div>
         </article>
       ))}
@@ -142,14 +143,13 @@ export function PaperRows({
           <strong data-paper-kill-switch-state>
             {t("plugin.host.globalKillSwitch", { state: paper.killSwitchEnabled ? "ON" : "OFF" })}
           </strong>
-          <button
-            type="button"
+          <Button size="sm"
             data-paper-kill-switch
             disabled={!runtime.view.managementAvailable}
             onClick={() => void toggleKillSwitch()}
           >
             {paper.killSwitchEnabled ? t("plugin.host.resumePaperOrders") : t("plugin.host.stopPaperOrders")}
-          </button>
+          </Button>
         </div>
       )}
     </section>
@@ -222,8 +222,7 @@ export function MarketplacePanel({
                   : t("plugin.market.cacheUnavailable", { reason: marketplace.cache.reason ?? t("plugin.market.noVerifiedIndex") })}
               </small>
             </div>
-            <button
-              type="button"
+            <Button size="sm"
               data-marketplace-refresh={marketplace.marketplaceId}
               disabled={!runtime.view.managementAvailable || !catalog.enabled || !marketplace.enabled || busy !== null}
               onClick={() => void run(
@@ -232,7 +231,7 @@ export function MarketplacePanel({
               )}
             >
               {busy === `refresh:${marketplace.marketplaceId}` ? t("plugin.market.verifying") : t("plugin.market.refreshIndex")}
-            </button>
+            </Button>
           </article>
         ))}
       </div>
@@ -326,8 +325,7 @@ export function MarketplacePanel({
                 </div>
               )}
               <div className="plugin-action-row">
-                <button
-                  type="button"
+                <Button size="sm"
                   data-marketplace-prepare={entry.pluginId}
                   disabled={!runtime.view.managementAvailable || !catalog.enabled || !entry.installable || !unifiedRelease || busy !== null}
                   onClick={() => void run(
@@ -336,10 +334,9 @@ export function MarketplacePanel({
                   )}
                 >
                   {busy === `prepare:${entry.pluginId}` ? t("plugin.market.downloading") : t("plugin.market.downloadStage")}
-                </button>
+                </Button>
                 {approval && candidate?.phase === "verified-staged" && (
-                  <button
-                    type="button"
+                  <Button size="sm"
                     data-marketplace-apply={entry.pluginId}
                     disabled={!runtime.view.managementAvailable || busy !== null}
                     onClick={() => void run(
@@ -348,11 +345,10 @@ export function MarketplacePanel({
                     )}
                   >
                     {busy === `apply:${entry.pluginId}` ? t("plugin.market.probing") : t("plugin.market.applyStaged")}
-                  </button>
+                  </Button>
                 )}
                 {approval && candidate?.phase === "activation-staged" && (
-                  <button
-                    type="button"
+                  <Button size="sm"
                     data-marketplace-activate={entry.pluginId}
                     disabled={!runtime.view.managementAvailable || busy !== null}
                     onClick={() => void (async () => {
@@ -376,11 +372,10 @@ export function MarketplacePanel({
                     })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
-                  </button>
+                  </Button>
                 )}
                 {rollback && candidate?.phase !== "observing" && (
-                  <button
-                    type="button"
+                  <Button size="sm"
                     data-marketplace-rollback={entry.pluginId}
                     disabled={!runtime.view.managementAvailable || busy !== null}
                     onClick={() => void (async () => {
@@ -393,7 +388,7 @@ export function MarketplacePanel({
                     })()}
                   >
                     {t("plugin.rollback")}
-                  </button>
+                  </Button>
                 )}
               </div>
             </article>
@@ -581,12 +576,12 @@ export function TrustModeControl({
         </div>
       )}
       <div className="plugin-action-row">
-        <button type="button" disabled={busy || !allAccepted || reason.trim().length < 12 || review !== null} onClick={() => void begin()}>
+        <Button size="sm" disabled={busy || !allAccepted || reason.trim().length < 12 || review !== null} onClick={() => void begin()}>
           {t("plugin.trust.firstReviewTarget", { target: trustModeLabel(target) })}
-        </button>
-        <button type="button" disabled={busy || review === null} onClick={() => void confirm()}>
+        </Button>
+        <Button size="sm" disabled={busy || review === null} onClick={() => void confirm()}>
           {t("plugin.trust.secondApply")}
-        </button>
+        </Button>
       </div>
     </div>
   );

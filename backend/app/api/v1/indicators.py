@@ -67,7 +67,14 @@ from app.data_engine.interval_policy import parse_interval_spec
 from app.indicator import registry, IndicatorEngine, create_engine
 from app.indicator.serial_owner import SerialIndicatorOwner
 from app.indicator.history_worker import run_builtin_history
-from app.indicator.custom_store import CustomIndicatorStore
+from app.indicator.custom_store import (
+    PYNE_RETIRED_CODE,
+    RETIRED_PYNE_LANGUAGE,
+    CustomIndicatorStore,
+    PyneRetiredError,
+    present_record,
+    stored_record_language,
+)
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.engine import indicator_code_hash
 from app.indicator.types import IndicatorKey
@@ -498,9 +505,14 @@ async def get_preset(preset_id: str):
 
 @router.get("/custom")
 async def list_custom_indicators():
-    """List all user-saved custom indicators."""
+    """List all user-saved custom indicators.
+
+    A record saved by a pre-#105 build without ``language`` is a Pyne script.
+    It is listed as ``language: "pyne"`` with ``retired: true`` so clients
+    never show or run it as Pine. The stored file is not rewritten.
+    """
     try:
-        return _custom_store.list()
+        return [present_record(record) for record in _custom_store.list()]
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -754,6 +766,21 @@ def _trusted_origin(request: Request | None) -> bool:
     return is_trusted_operator_origin(origin_from(getattr(request, "headers", None)))
 
 
+def _pyne_retired_payload(message: str = "Pyne is retired and cannot be executed.") -> dict[str, Any]:
+    return build_error_payload(
+        PYNE_RETIRED_CODE,
+        message,
+        hint="Pyne 已退役，不会运行，也不会被当作 Pine。原始脚本保持不变。",
+    )
+
+
+def _reject_retired_saved_record(custom_id: str, record: dict[str, Any] | None) -> None:
+    if record is not None and stored_record_language(record) == RETIRED_PYNE_LANGUAGE:
+        raise PyneRetiredError(
+            f"Custom indicator '{custom_id}' is a retired Pyne script and cannot be executed."
+        )
+
+
 def _resolve_range_script(req: IndicatorRangeRequest) -> tuple[str, str, str | None]:
     script = req.script or ""
     custom_id = (req.customId or req.customIndicatorId or "").strip()
@@ -766,6 +793,8 @@ def _resolve_range_script(req: IndicatorRangeRequest) -> tuple[str, str, str | N
             raise ValueError(str(exc)) from exc
         if record is None:
             raise LookupError(f"Custom indicator '{custom_id}' not found.")
+        # A legacy record never runs, whatever language the request names.
+        _reject_retired_saved_record(custom_id, record)
         script = str(record.get("script") or "")
         name = str(req.name or record.get("name") or custom_id)
         if not req.params and isinstance(record.get("params"), dict):
@@ -773,7 +802,13 @@ def _resolve_range_script(req: IndicatorRangeRequest) -> tuple[str, str, str | N
         if security_mode is None:
             security_mode = record.get("securityMode")
         if req.language is None:
-            req.language = str(record.get("language") or "pine")
+            req.language = stored_record_language(record)
+    elif custom_id:
+        try:
+            record = _custom_store.get(custom_id)
+        except ValueError:
+            record = None  # the inline script does not depend on the store
+        _reject_retired_saved_record(custom_id, record)
     return script, name, security_mode
 
 
@@ -819,6 +854,8 @@ def _build_range_meta(
         language = "pine" if req.language is None else str(req.language).strip().lower()
         if not language:
             raise ValueError("Script language must not be empty.")
+        if language == RETIRED_PYNE_LANGUAGE:
+            raise PyneRetiredError()
         if not script.strip():
             raise ValueError("Script is required.")
         digest = script_hash(script)
@@ -927,6 +964,8 @@ async def compute_range(req: IndicatorRangeRequest, request: Request):
             str(exc),
             hint="请检查指标名称或自定义指标 id 是否存在。",
         )
+    except PyneRetiredError as exc:
+        return _pyne_retired_payload(str(exc))
     except ValueError as exc:
         return build_error_payload(
             "INVALID_INDICATOR_RANGE_REQUEST",
@@ -1102,6 +1141,8 @@ def _batch_range_error_payload(
 ) -> dict[str, Any]:
     if isinstance(exc, ExecutorBusyError):
         return _executor_busy_payload(exc)
+    if isinstance(exc, PyneRetiredError):
+        return _pyne_retired_payload(str(exc))
     if isinstance(exc, CalculationOwnerError):
         payload = dict(exc.payload) if exc.payload is not None else build_error_payload(exc.code, str(exc))
         if exc.detail is not None:
@@ -1309,6 +1350,8 @@ async def compute_range_batch(req: IndicatorRangeBatchRequest, request: Request)
                 source="indicator",
                 detail={"clientIds": [job.client_id for job in jobs]},
             )
+    except PyneRetiredError as exc:
+        return _pyne_retired_payload(str(exc))
     except (LookupError, ValueError) as exc:
         return build_error_payload(
             "INVALID_INDICATOR_RANGE_BATCH",
@@ -1784,10 +1827,11 @@ async def _compute_script(
             "INDICATOR_LANGUAGE_REQUIRED",
             "Script language must not be empty.",
         )
+    if language == RETIRED_PYNE_LANGUAGE:
+        return _pyne_retired_payload()
 
     if (execution_options or {}).get("chartInput") and language != "pine":
         return build_error_payload("INDICATOR_CHART_INPUT_UNSUPPORTED",
-            "Pyne is retired and cannot be executed." if language == "pyne" else
             f"The {language} runtime has no ordered chart clock contract; choose a supported chart indicator runtime.")
 
     security_mode = effective_script_security_mode(

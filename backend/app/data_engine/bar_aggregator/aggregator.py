@@ -726,6 +726,10 @@ class BarAggregator:
         identity = resolve_kline_series_identity(exchange, series_identity)
         if any(component.identity != identity for component in components):
             raise ValueError("Component series identity does not match the target")
+        spec = parse_interval_spec(interval)
+        target_key = (exchange.lower().strip(), market_type.lower().strip(), symbol.upper().strip(),
+                      spec.canonical if spec else interval, identity)
+        target_epoch = self._target_epochs.get(target_key)
         if bucket_start_ms is not None and expire_existing:
             self.expire_bucket(
                 symbol,
@@ -736,7 +740,13 @@ class BarAggregator:
                 series_identity=series_identity,
             )
 
-        for component in components:
+        for index, component in enumerate(components):
+            # Awaiting an in-memory merge need not yield. Long warm-starts
+            # otherwise monopolize the loop and delay sockets and HTTP work.
+            if index and index % 32 == 0:
+                await asyncio.sleep(0)
+            if self._target_epochs.get(target_key) is not target_epoch:
+                return None
             if component.merge_mode != MergeMode.COMPONENT:
                 component = replace(component, merge_mode=MergeMode.COMPONENT)
             await self.ingest_bar_input(
@@ -748,6 +758,8 @@ class BarAggregator:
                 emit_events=emit_events,
             )
 
+        if self._target_epochs.get(target_key) is not target_epoch:
+            return None
         if bucket_start_ms is None and components:
             bucket_start_ms = self.compute_bucket(
                 interval,

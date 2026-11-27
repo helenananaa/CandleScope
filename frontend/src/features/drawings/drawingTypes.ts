@@ -33,6 +33,7 @@ export type DrawingToolId =
   | "measure-price"
   | "measure-time"
   | "measure-price-time"
+  | PathToolId
   | "channel-parallel"
   | "fibonacci"
   | "position-long"
@@ -49,6 +50,7 @@ export type AxisLineToolId = "line-horizontal" | "line-vertical" | "line-cross";
 export type AngleToolId = "angle-measure";
 /** A segment whose end carries an arrowhead; geometry stays an ordinary segment. */
 export type ArrowToolId = "line-arrow";
+export type PathToolId = "path-line" | "path-arrow";
 export type ChannelToolId = "channel-parallel";
 export type RangeMeasureType = "price" | "time" | "price-time";
 export type RangeMeasureToolId = `measure-${RangeMeasureType}`;
@@ -58,6 +60,7 @@ export type ShapeToolId = "shape-rectangle" | "shape-ellipse";
 export type FreehandToolId = "pen" | "highlighter";
 
 export type DrawingKind =
+  | "path"
   | "channel"
   | "range-measure"
   | "line"
@@ -71,6 +74,7 @@ export type DrawingKind =
   | "highlighter";
 
 export type DrawingHitType =
+  | "path"
   | "channel"
   | "range-measure"
   | "line"
@@ -306,6 +310,13 @@ export interface SavedAxisLineDrawing extends SavedDrawingBase<"axis-line"> {
   lineWidth?: number;
 }
 
+export interface SavedPathDrawing extends SavedDrawingBase<"path"> {
+  dataPoints: DrawingDataPoint[];
+  color?: string;
+  lineWidth?: number;
+  arrowEnd?: boolean;
+}
+
 /**
  * Parallel channel: anchors 0 and 1 define the baseline; anchor 2 is a point the
  * parallel line passes through. The parallel offset is derived in screen space
@@ -418,6 +429,7 @@ export type SavedHighlighterDrawing = SavedDrawingBase<"highlighter"> & SavedFre
 };
 
 export type SavedDrawing =
+  | SavedPathDrawing
   | SavedChannelDrawing
   | SavedRangeMeasureDrawing
   | SavedLineDrawing

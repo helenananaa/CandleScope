@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import type { createMainSeries } from "../chart-adapter/seriesLifecycle.js";
 import type { PanePointerLayout } from "./panePointerModel.js";
@@ -19,7 +19,7 @@ interface PanePriceScaleMenuOptions {
   priceAtPaneY?: (paneIndex: number, y: number) => number | null;
 }
 
-/** Owns menu selection and document listeners; chart operations resolve the live pane id. */
+/** Owns the menu's state (the kit Menu closes it on Escape or a click outside); chart operations resolve the live pane id. */
 export function usePanePriceScaleMenu({
   chartRef, containerRef, activePaneIdsRef, panePointerLayoutRef, onScaleChanged, priceAtPaneY,
 }: PanePriceScaleMenuOptions) {
@@ -54,22 +54,6 @@ export function usePanePriceScaleMenu({
     onScaleChanged();
     return true;
   }, [activePaneIdsRef, chartRef, contextMenu, onScaleChanged]);
-
-  useEffect(() => {
-    if (!contextMenu) return undefined;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", close);
-      document.addEventListener("keydown", handleKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [close, contextMenu]);
 
   return { contextMenu, close, handleContextMenu, applyOptions };
 }

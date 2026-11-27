@@ -29,6 +29,7 @@ import type {
   ScriptRuntimeCatalog,
   ScriptRuntimeDescriptor,
 } from "./indicatorTypes.js";
+import { RETIRED_PYNE_LANGUAGE } from "./retiredScriptIndicator.js";
 
 export class IndicatorPayloadError extends TypeError {
   path: string;
@@ -1247,7 +1248,11 @@ export function parseCustomIndicatorRecord(
   if (normalizedSecurityMode !== undefined) {
     customIndicator.securityMode = normalizedSecurityMode;
   }
-  if (language !== undefined) customIndicator.language = language;
+  // A saved record without a language was written by a pre-#105 build, which
+  // defaulted to Pyne. It is listed as retired Pyne, never as Pine.
+  customIndicator.language = language?.trim() || RETIRED_PYNE_LANGUAGE;
+  customIndicator.retired = record.retired === true
+    || customIndicator.language.toLowerCase() === RETIRED_PYNE_LANGUAGE;
   if (createdAt !== undefined) customIndicator.createdAt = createdAt;
   if (updatedAt !== undefined) customIndicator.updatedAt = updatedAt;
   return customIndicator;

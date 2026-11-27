@@ -1,5 +1,5 @@
 import { OverlayLayer } from "../../components/ui/Overlays.js";
-import { Button, IconButton } from "../../components/ui/Button.js";
+import { Button, IconButton, MenuItemButton } from "../../components/ui/Button.js";
 import { SegmentedControl } from "../../components/ui/Choice.js";
 import { Badge, Disclosure, InlineAlert } from "../../components/ui/Display.js";
 import { EmptyState } from "../../components/ui/EmptyState.js";
@@ -276,10 +276,9 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
               {discovery.partial && <p className="sym-coverage-note">{t("search.partial")}</p>}
               <div className="sym-coverage-sources">
                 {discovery.sources.map((source) => (
-                  <button key={source.id} type="button" className="ui-menu-item" onClick={() => selectExchange(source.id)}>
-                    <span className="ui-menu-label">{formatExchangeLabel(source.id, props.exchangeCatalog)}</span>
-                    <span className="ui-menu-hint">{tKey(`search.sourceStatus.${source.status}`)}</span>
-                  </button>
+                  <MenuItemButton key={source.id} hint={tKey(`search.sourceStatus.${source.status}`)} onClick={() => selectExchange(source.id)}>
+                    {formatExchangeLabel(source.id, props.exchangeCatalog)}
+                  </MenuItemButton>
                 ))}
               </div>
             </Disclosure>
@@ -320,24 +319,20 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
             {(watchlists || []).map((watchlist) => {
               const alreadyIn = watchlist.symbols.includes(contextMenu._key);
               return (
-                <button
+                <MenuItemButton
                   key={watchlist.id}
-                  type="button"
                   role="menuitem"
-                  className="ui-menu-item"
                   onClick={() => {
                     if (!alreadyIn) {
                       addContextSymbolToWatchlist(watchlist.id);
                     }
                   }}
                   disabled={alreadyIn}
+                  icon={<span className="sym-modal-wl-dot" style={{ background: watchlist.color || "var(--accent-blue)" }} />}
+                  hint={<span aria-hidden="true"><Icon name={alreadyIn ? "check" : "plus"} size={12} /></span>}
                 >
-                  <span className="ui-menu-icon" aria-hidden="true">
-                    <span className="sym-modal-wl-dot" style={{ background: watchlist.color || "var(--accent-blue)" }} />
-                  </span>
-                  <span className="ui-menu-label">{watchlistDisplayName(watchlist)}</span>
-                  <span className="ui-menu-hint" aria-hidden="true"><Icon name={alreadyIn ? "check" : "plus"} size={12} /></span>
-                </button>
+                  {watchlistDisplayName(watchlist)}
+                </MenuItemButton>
               );
             })}
           </div>

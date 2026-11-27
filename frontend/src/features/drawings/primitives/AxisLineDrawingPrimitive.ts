@@ -8,6 +8,7 @@
  */
 
 import { drawingDataPointsToCoordinates } from "./coordinateUtils.js";
+import { DEFAULT_DRAWING_RENDER_COLOR } from "../rendering/drawingRenderDefaults.js";
 import type {
   AxisLinePrimitiveOptions,
   AxisLineType,
@@ -255,7 +256,7 @@ export class AxisLineDrawingPrimitive {
     this._type = "axis-line";
     this._axisLineType = normalizeAxisLineType(opts.axisLineType);
     this._dataPoint = opts.dataPoint || null;
-    this._color = opts.color || "#f59e0b";
+    this._color = opts.color || DEFAULT_DRAWING_RENDER_COLOR;
     this._lineWidth = opts.lineWidth || 2;
     this._selected = !!opts.selected;
     this._hovered = !!opts.hovered;

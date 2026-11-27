@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ContinuousStrategyDataManager } from "../../market-data/manager/continuousStrategyDataManager.js";
@@ -140,17 +141,17 @@ export default function ContinuousRepairPanel({ manager, view, repair, active, a
       {repairing && repair.progress?.waiting && <p>{t("repair.waiting")}</p>}
       {repair.error && <p role="alert">{repair.error.message}</p>}
       {repair.progress?.cleanup_error && <p>{t("repair.cleanup")}</p>}
-      {repairing && <button type="button" disabled={busy || !enabled} onClick={cancel}>{t("repair.cancel")}</button>}
+      {repairing && <Button size="sm" disabled={busy || !enabled} onClick={cancel}>{t("repair.cancel")}</Button>}
     </div>}
     {intent && <div><p role="status">{t("repair.pendingRequest")}</p>
-      <button type="button" disabled={busy || !active} onClick={() => recoverRequest(false)}>{t("repair.recover")}</button>
-      <button type="button" disabled={busy || !enabled} onClick={() => recoverRequest(true)}>{t("repair.retryRequest")}</button>
+      <Button size="sm" disabled={busy || !active} onClick={() => recoverRequest(false)}>{t("repair.recover")}</Button>
+      <Button size="sm" disabled={busy || !enabled} onClick={() => recoverRequest(true)}>{t("repair.retryRequest")}</Button>
     </div>}
     {stale && !repairing && <>
       <label><input type="checkbox" checked={resumeAfter} disabled={busy || !enabled} onChange={(event) => {
         setResumeAfter(event.target.checked); setPreview(null); setConsent(false);
       }} />{t("repair.resumeAfter")}</label>
-      <button type="button" disabled={busy || !enabled || storageFailed} onClick={inspectRange}>{t("repair.preview")}</button>
+      <Button size="sm" disabled={busy || !enabled || storageFailed} onClick={inspectRange}>{t("repair.preview")}</Button>
     </>}
     {preview && !repairing && <div>
       <dl><div><dt>{t("repair.from")}</dt><dd>{utc(preview.plan.from_ms)}</dd></div>
@@ -160,7 +161,7 @@ export default function ContinuousRepairPanel({ manager, view, repair, active, a
       {reason && <p role="status">{t(reasonMessages[reason as keyof typeof reasonMessages] ?? "repair.unknownRange")}</p>}
       {expired && <p role="status">{t("repair.expired")}</p>}
       <label><input type="checkbox" checked={consent} disabled={busy || !enabled || expired} onChange={(event) => setConsent(event.target.checked)} />{t("repair.consent")}</label>
-      <button type="button" disabled={busy || !enabled || expired || !consent || storageFailed} onClick={submitPlan}>{t("repair.confirm")}</button>
+      <Button size="sm" variant="primary" disabled={busy || !enabled || expired || !consent || storageFailed} onClick={submitPlan}>{t("repair.confirm")}</Button>
     </div>}
     {error && <p role="alert">{error}</p>}
   </section>;

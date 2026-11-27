@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ContinuousStrategyDataManager } from "../../market-data/manager/continuousStrategyDataManager.js";
@@ -55,8 +56,8 @@ export default function ContinuousAutoRepairSetting({ manager, runId, canEnable 
       disabled={!policy || saving || (!policy.enabled && !canEnable)}
       onChange={event => void update(event.target.checked)} />{t("repair.auto")}</label>
     <p id={hint}>{t("repair.autoHint")}</p>
-    {error && <p role="alert">{error} {!policy && <button type="button" onClick={() => {
+    {error && <p role="alert">{error} {!policy && <Button size="sm" onClick={() => {
       setError(null); setReload(value => value + 1);
-    }}>{t("repair.autoReload")}</button>}</p>}
+    }}>{t("repair.autoReload")}</Button>}</p>}
   </div>;
 }

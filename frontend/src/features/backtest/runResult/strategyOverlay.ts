@@ -7,6 +7,7 @@
  * recomputes money, it only places what the run result already says.
  */
 import type { ExternalMarkerSource, ExternalMarkerSnapshot, ExternalSeriesMarker } from "../../../chart-adapter/externalMarkerSource.js";
+import { seriesPricePrecision } from "../../../chart-adapter/mainSeriesPriceFormat.js";
 import type { ChartSurfaceVisibleRange } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import type { ChartLayerSource, PluginChartLayerSnapshot, PluginChartRenderEntry } from "../../plugins/pluginChartLayerSource.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
@@ -16,6 +17,7 @@ import {
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { StrategyTradeFocus } from "../chart-tester/strategyTradeReview.js";
 import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
+import { formatPrice, formatQty } from "../../trading-accounts/tradingFormat.js";
 import type { RunResult, RunResultFill } from "./runResult.js";
 
 export type FillAction =
@@ -94,8 +96,10 @@ export function buildStrategyOverlay(result: RunResult, options: {
   labels: StrategyOverlayLabels;
   /** Run identity, so ids stay unique when several runs share one chart. */
   idPrefix: string;
+  /** The chart's price precision; fill and average prices carry slippage and float digits past the tick. */
+  pricePrecision?: number | undefined;
 }): StrategyOverlay {
-  const { labels, idPrefix } = options;
+  const { labels, idPrefix, pricePrecision } = options;
   const actions = fillActions(result.fills);
   const markers: ExternalSeriesMarker[] = [];
   const evidence = new Map<string, StrategyMarkerEvidence>();
@@ -110,7 +114,7 @@ export function buildStrategyOverlay(result: RunResult, options: {
       position: buy ? "belowBar" : "aboveBar",
       color: buy ? STRATEGY_OVERLAY_COLORS.buy : STRATEGY_OVERLAY_COLORS.sell,
       shape: buy ? "arrowUp" : "arrowDown",
-      text: `${labels.actions[actions[index]!]} ${fill.price}`,
+      text: `${labels.actions[actions[index]!]} ${formatPrice(fill.price, pricePrecision)}`,
       size: 1.2,
     });
     if (fill.explanation) evidence.set(id, { markerId: id, kind: "FILL", explanation: fill.explanation });
@@ -159,7 +163,7 @@ export function buildStrategyOverlay(result: RunResult, options: {
   if (position && average !== null) {
     entries.push({ id: `${idPrefix}:position`, zOrder: "above-series", item: {
       id: `${idPrefix}:position`, type: "price-line", price: average, color: STRATEGY_OVERLAY_COLORS.position, width: 1, style: "dashed",
-      text: `${position.side === "LONG" ? labels.long : labels.short} ${position.qty} @ ${position.avg_price}`,
+      text: `${position.side === "LONG" ? labels.long : labels.short} ${formatQty(position.qty)} @ ${formatPrice(position.avg_price, pricePrecision)}`,
     } });
   }
   result.pending_orders.forEach((order, index) => {
@@ -167,7 +171,7 @@ export function buildStrategyOverlay(result: RunResult, options: {
     if (price === null) return;
     entries.push({ id: `${idPrefix}:order:${order.order_id}:${index}`, zOrder: "above-series", item: {
       id: `${idPrefix}:order:${order.order_id}:${index}`, type: "price-line", price, color: STRATEGY_OVERLAY_COLORS.order,
-      width: 1, style: "dotted", text: `${labels.workingOrder} ${order.side} ${order.type}${order.qty ? ` ${order.qty}` : ""}`,
+      width: 1, style: "dotted", text: `${labels.workingOrder} ${order.side} ${order.type}${order.qty ? ` ${formatQty(order.qty)}` : ""}`,
     } });
   });
   return { markers, entries, connectors, evidence };
@@ -218,7 +222,10 @@ const NO_OVERLAY: StrategyOverlay = { markers: [], entries: [], connectors: [], 
 const EMPTY_MARKERS: ExternalMarkerSnapshot = Object.freeze({ markers: Object.freeze([]), revision: 0 });
 const EMPTY_LAYER: PluginChartLayerSnapshot = Object.freeze({ entries: Object.freeze([]), revision: 0 });
 
-type OverlaySeries = Pick<SeriesWindowView, "hasTime" | "axisRevision" | "subscribe">;
+type OverlaySeries = Pick<SeriesWindowView, "hasTime" | "axisRevision" | "subscribe"> & Partial<Pick<SeriesWindowView, "snapshot">>;
+
+/** An overlay, or one built for the chart's price precision (rebuilt when its bars change it). */
+export type StrategyOverlayInput = StrategyOverlay | ((pricePrecision: number | undefined) => StrategyOverlay);
 
 /**
  * Serves one run's overlay to a chart cell. Markers are limited to bars the chart
@@ -227,6 +234,8 @@ type OverlaySeries = Pick<SeriesWindowView, "hasTime" | "axisRevision" | "subscr
  */
 export class StrategyOverlaySource {
   private overlay: StrategyOverlay = NO_OVERLAY;
+  private build: ((pricePrecision: number | undefined) => StrategyOverlay) | null = null;
+  private pricePrecision: number | undefined = undefined;
   private owner: string | null = null;
   private focus: ExternalSeriesMarker[] = [];
   private series: OverlaySeries | null = null;
@@ -258,8 +267,9 @@ export class StrategyOverlaySource {
   };
 
   /** Show one run's overlay; `owner` names it (for example `run:host:<id>`) so a stale owner can be cleared. */
-  setOverlay(overlay: StrategyOverlay | null, interval: string | null, owner: string | null = null): void {
-    this.overlay = overlay ?? NO_OVERLAY;
+  setOverlay(overlay: StrategyOverlayInput | null, interval: string | null, owner: string | null = null): void {
+    this.build = typeof overlay === "function" ? overlay : null;
+    this.overlay = (this.build ? this.build(this.pricePrecision) : overlay as StrategyOverlay | null) ?? NO_OVERLAY;
     this.owner = overlay ? owner : null;
     this.intervalSeconds = Math.max(1, (interval ? parseIntervalSeconds(interval) : null) ?? 1);
     this.publish(true);
@@ -288,14 +298,15 @@ export class StrategyOverlaySource {
         const axis = Number(series.axisRevision);
         if (axis === this.seriesAxis) return;
         this.seriesAxis = axis;
-        this.publish(false);
+        this.publish(this.refreshPricePrecision());
       });
     }
-    this.publish(false);
+    this.publish(this.refreshPricePrecision());
   }
 
   dispose(): void {
     this.overlay = NO_OVERLAY;
+    this.build = null;
     this.focus = [];
     this.stopSeries?.();
     this.stopSeries = null;
@@ -314,6 +325,17 @@ export class StrategyOverlaySource {
     return { markers: this.overlay.markers.length, visibleMarkers: this.markerSnapshot.markers.length,
       entries: this.overlay.entries.length, connectors: this.overlay.connectors.length,
       drawnLayerEntries: this.layerSnapshot.entries.length, revision: this.revision };
+  }
+
+  /** Rebuild a deferred overlay when the chart's price precision changes; true if the layer did. */
+  private refreshPricePrecision(): boolean {
+    const rows = this.series?.snapshot?.();
+    const next = rows?.length ? seriesPricePrecision(rows) : undefined;
+    if (next === this.pricePrecision) return false;
+    this.pricePrecision = next;
+    if (!this.build) return false;
+    this.overlay = this.build(next);
+    return true;
   }
 
   private subscribe(listener: () => void): () => void {

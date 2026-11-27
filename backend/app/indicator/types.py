@@ -146,7 +146,7 @@ class IndicatorMeta:
     management.
     """
     name: str                               # display name, e.g. "MA"
-    category: str = ""                      # e.g. "趋势", "震荡", "波动"
+    category: str = ""                      # e.g. "Trend", "Oscillator", "Volatility"
     description: str = ""
     pane: PaneType = PaneType.MAIN          # default rendering pane
     overlay: bool = True                    # overlay on price chart?
@@ -167,7 +167,7 @@ class IndicatorParam:
     Used to generate configuration UIs and validate user input.
     """
     key: str                    # parameter name, e.g. "period"
-    label: str = ""             # display label, e.g. "周期"
+    label: str = ""             # display label, e.g. "Period"
     type: str = "int"           # "int", "float", "color", "string", "bool"
     default: Any = None
     min: float | None = None
@@ -329,7 +329,7 @@ class IndicatorSpec:
     to build configuration UIs.
     """
     name: str                                   # unique name, e.g. "MA"
-    display_name: str = ""                      # e.g. "简单移动平均线"
+    display_name: str = ""                      # e.g. "Simple Moving Average"
     description: str = ""
     category: str = ""
     input_specs: list[str] = field(default_factory=lambda: ["close"])

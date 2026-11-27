@@ -20,11 +20,21 @@ export function formatSigned(value: string | number | null | undefined, digits =
   return text;
 }
 
-/** Prices keep their own precision; only grouping is localized. */
-export function formatPrice(value: string | number | null | undefined): string {
+/**
+ * Prices keep their own precision; only grouping is localized. Pass the
+ * chart's price precision for computed prices (averages, slipped fills),
+ * whose own digits are float or slippage noise.
+ */
+export function formatPrice(value: string | number | null | undefined, precision?: number): string {
   if (value === null || value === undefined || value === "") return "—";
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
+  if (precision !== undefined && Number.isInteger(precision) && precision >= 0) {
+    return number.toLocaleString(getNumberLocale(), {
+      minimumFractionDigits: precision,
+      maximumFractionDigits: precision,
+    });
+  }
   const text = String(value);
   const decimals = text.includes(".") ? Math.min(8, text.split(".")[1]!.length) : 0;
   return number.toLocaleString(getNumberLocale(), {

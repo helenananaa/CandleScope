@@ -5,6 +5,7 @@ import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { bool, choice, empty, number, object, text } from "../app-control/commandSchema.js";
+import { Button, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { preparationRequest, type PreparationJob } from "./api.js";
 import type { NativeRun } from "../backtest/native/nativeBacktestApi.js";
@@ -111,15 +112,15 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
       {job.error && <span role="status">{job.error.message}</span>}
       <PreparationWaiting job={job} />
       <div className="preparation-job-actions">
-      {job.result?.run && <a href={`/replay.html?run=${encodeURIComponent(job.result.run.run_id)}`}>{t("preparation.open")}</a>}
-      {job.result?.strategy_run && <a href={strategyResearchModeHref("precise", { run: job.result.strategy_run.run_id })}>{t("ux.openResult")}</a>}
-      {job.result?.native_run && <button type="button" onClick={() => setNativeRun(job.result!.native_run!)}>{t("ux.openResult")}</button>}
-      {["FAILED", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" onClick={() => void action(job, "retry")}>{t("preparation.retry")}</button>}
-      {["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" disabled={job.cancel_requested || job.stage === "STARTING"} onClick={() => void action(job, "cancel")}>{t("preparation.cancel")}</button>}
-      {!summary && ["READY", "FAILED", "CANCELLED"].includes(job.state) && <button type="button" onClick={() => void action(job, "release-cache")}>{t("preparation.releaseCache")}</button>}
+      {job.result?.run && <a className={buttonClassName({ size: "sm" })} href={`/replay.html?run=${encodeURIComponent(job.result.run.run_id)}`}>{t("preparation.open")}</a>}
+      {job.result?.strategy_run && <a className={buttonClassName({ size: "sm" })} href={strategyResearchModeHref("precise", { run: job.result.strategy_run.run_id })}>{t("ux.openResult")}</a>}
+      {job.result?.native_run && <Button size="sm" onClick={() => setNativeRun(job.result!.native_run!)}>{t("ux.openResult")}</Button>}
+      {["FAILED", "BLOCKED_STORAGE"].includes(job.state) && <Button size="sm" onClick={() => void action(job, "retry")}>{t("preparation.retry")}</Button>}
+      {["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) && <Button size="sm" disabled={job.cancel_requested || job.stage === "STARTING"} onClick={() => void action(job, "cancel")}>{t("preparation.cancel")}</Button>}
+      {!summary && ["READY", "FAILED", "CANCELLED"].includes(job.state) && <Button size="sm" onClick={() => void action(job, "release-cache")}>{t("preparation.releaseCache")}</Button>}
       </div>
     </div>)}
-    {(summary ? pending : jobs).length > visibleCount && <button type="button" onClick={() => setVisibleCount((count) => count + 20)}>{t("replay.hub.loadMore")}</button>}
+    {(summary ? pending : jobs).length > visibleCount && <Button size="sm" onClick={() => setVisibleCount((count) => count + 20)}>{t("replay.hub.loadMore")}</Button>}
   </div>;
   if (summary) return <details className="training-hub-preparation">
     <summary>{t("preparation.activity", { active: pending.length - failed, failed })}</summary>
@@ -144,10 +145,10 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
       <p>{t("preparation.cacheHint")}</p>
       <label>{t("preparation.cacheBudget")} <input type="number" min={16} max={1048576} step={1}
         value={budgetValue} onChange={(event) => setBudgetMiB(Number(event.target.value))} /></label>
-      <button type="button" disabled={busy || !Number.isInteger(budgetValue) || budgetValue < 16} onClick={() => void cacheAction("settings", cache.prefetch_enabled, true)}>{t("preparation.saveSettings")}</button>
+      <Button size="sm" disabled={busy || !Number.isInteger(budgetValue) || budgetValue < 16} onClick={() => void cacheAction("settings", cache.prefetch_enabled, true)}>{t("preparation.saveSettings")}</Button>
       <label><input type="checkbox" checked={cache.prefetch_enabled} disabled={busy}
         onChange={(event) => void cacheAction("settings", event.target.checked)} />{t("preparation.prefetch")}</label>
-      <button type="button" disabled={busy} onClick={() => void cacheAction("cleanup")}>{t("preparation.cleanCache")}</button>
+      <Button size="sm" disabled={busy} onClick={() => void cacheAction("cleanup")}>{t("preparation.cleanCache")}</Button>
     </details>}
   </section>;
 }

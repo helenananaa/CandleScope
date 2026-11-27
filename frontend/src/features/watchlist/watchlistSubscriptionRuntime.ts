@@ -93,6 +93,8 @@ export function parseWatchlistPriceTick(value: unknown): WatchlistPriceTick | nu
   delete parsed.daily_change;
   delete parsed.daily_change_pct;
   delete parsed.change_pct;
+  delete parsed.stale;
+  if (record.stale === true) parsed.stale = true;
   if (price !== undefined) parsed.price = price;
   if (open !== undefined) parsed.open = open;
   if (dailyChange !== undefined) parsed.daily_change = dailyChange;

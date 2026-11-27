@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createExtensionContext } from "../runtime.js";
-import { applyExtensionTheme, getExtensionState, publishExtensions, getHostService } from "../state.js";
+import { applyExtensionTheme, extensionThemeDeclarations, getExtensionState, publishExtensions, getHostService } from "../state.js";
 import { getPaneThemeColors } from "../../../chart-adapter/chartPaneLifecycle.js";
 import MarketPageFrame from "../../../app/MarketPageFrame.js";
 import { structuralMock } from "../../../test/testHelpers.js";
@@ -50,6 +50,16 @@ test("selected theme reaches chart canvas and removal restores ordinary appearan
   assert.equal(getPaneThemeColors({ theme: "dark" }).textColor, "#4a4d55");
   publishExtensions({ theme: null });
   assert.equal(getPaneThemeColors({ theme: "light" }).bgColor, "#ffffff");
+});
+
+test("theme contract colours are written as the design tokens the stylesheets use", () => {
+  const css = extensionThemeDeclarations({
+    "bg-primary": "#faf8f2", "bg-secondary": "#f1eee5", "bg-tertiary": "#e7e3d7", "bg-hover": "#e3e8dc",
+    "border-color": "#d5d2c5", "text-primary": "#293831", "radius-sm": "6px",
+  });
+  assert.equal(css, "--surface-0:#faf8f2 !important;--surface-1:#f1eee5 !important;--surface-2:#e7e3d7 !important;"
+    + "--surface-hover:#e3e8dc !important;--border-subtle:#d5d2c5 !important;--text-primary:#293831 !important;--radius-sm:6px !important;");
+  assert.doesNotMatch(css, /--bg-|--border-color/);
 });
 
 test("page layout reorders supplied host slots without dropping them", () => {

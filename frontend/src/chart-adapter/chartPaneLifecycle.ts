@@ -65,11 +65,19 @@ function formatterSourceTime(value: unknown): number {
   return numeric;
 }
 
+/**
+ * The Intl `timeZone` for the chart timezone setting: "Local" (or no setting)
+ * means the system zone. Views that show times next to the chart use this too.
+ */
+export function chartTimeZoneOption(timezone: string | undefined): string | undefined {
+  return timezone && timezone !== "Local" ? timezone : undefined;
+}
+
 export function buildLocalizationOptions(
   timezone = "Local",
   interval = "1h",
 ): LocalizationBundle {
-  const timeZoneOpt = timezone && timezone !== "Local" ? timezone : undefined;
+  const timeZoneOpt = chartTimeZoneOption(timezone);
   try {
     const showSeconds = /^\d+s$/.test(String(interval));
     // "1M" is a month; minutes are lower-case "m".
@@ -213,13 +221,11 @@ export function chartPaneCssVariables(options: PaneAppearanceOptions & {
       "--text-primary": colors.textColor,
       "--text-secondary": colors.textColor,
       "--text-muted": colors.textColor,
-      "--bg-primary": colors.bgColor,
-      "--bg-secondary": colors.bgColor,
       "--surface-0": colors.bgColor,
       "--surface-1": colors.bgColor,
       "--surface-2": colors.bgColor,
       "--surface-3": colors.bgColor,
-      "--border-color": colors.borderColor,
+      "--border-subtle": colors.borderColor,
     } : {}),
   };
 }

@@ -1,3 +1,4 @@
+import { indicatorDisplayName } from "./indicatorDisplayName.js";
 import type {
   IndicatorBgColor,
   IndicatorDrawing,
@@ -175,7 +176,7 @@ export function buildIndicatorPaneData(
       const paneId = `${pane}-${indicator.id}`;
       paneMap.set(paneId, {
         id: paneId,
-        label: indicator.name || indicator.id,
+        label: indicatorDisplayName(indicator),
         lines,
         owner: { kind: "indicator", id: indicator.id },
       });

@@ -6,6 +6,7 @@ import type {
 import type { EpochSeconds } from "../market-data/marketDataTypes.js";
 import { addDecimalStrings } from "./liveChartOverlay.js";
 import { floorTo, legsBefore, notesBefore } from "./quickReplayModel.js";
+import { formatPrice, formatQty } from "./tradingFormat.js";
 import type { JournalEntry, TradeLeg } from "./tradingTypes.js";
 
 export interface ReplayMarkerColors {
@@ -23,6 +24,8 @@ export interface ReplayMarkerSource extends ExternalMarkerSource {
     bucketTime?: (time: number) => number | null;
     lastVisibleSec: number | null;
     labels: { buy: string; sell: string; note: string; reviewNote?: string };
+    /** The chart's price precision; fill prices carry slippage digits past the tick. */
+    pricePrecision?: number | undefined;
   }): void;
 }
 
@@ -88,7 +91,7 @@ export function createReplayMarkerSource(
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    update({ legs, notes, cursorSec, intervalSec, lastVisibleSec, labels, bucketTime = time => floorTo(time, intervalSec) }) {
+    update({ legs, notes, cursorSec, intervalSec, lastVisibleSec, labels, pricePrecision, bucketTime = time => floorTo(time, intervalSec) }) {
       const markers: ExternalSeriesMarker[] = [];
       const visible = (time: number) => lastVisibleSec !== null && time <= lastVisibleSec;
       for (const group of fillMarkerGroups(legsBefore(legs, cursorSec), intervalSec, bucketTime)) {
@@ -101,7 +104,7 @@ export function createReplayMarkerSource(
           position: buy ? "belowBar" : "aboveBar",
           shape: buy ? "arrowUp" : "arrowDown",
           color: buy ? colors.up : colors.down,
-          text: `${buy ? labels.buy : labels.sell} ${Number(group.qty)}${count} @ ${group.price}`,
+          text: `${buy ? labels.buy : labels.sell} ${formatQty(group.qty)}${count} @ ${formatPrice(group.price, pricePrecision)}`,
           size: 1.2,
         });
       }

@@ -492,13 +492,30 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    def _located_bundle(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        """A frozen bundle lives in this database's folder, wherever that folder is now.
+
+        ``store_path`` records an absolute path. After the data folder moves it
+        would name a missing directory, and after a copy the original profile's
+        bundle. A bundle kept in the standard layout is read from this folder.
+        """
+        if row is None:
+            return None
+        bundle = dict(row)
+        recorded = Path(str(bundle["store_path"]))
+        if recorded.name == bundle["bundle_id"] and recorded.parent.name == "python-strategy-bundles":
+            current = self.path.parent / "python-strategy-bundles" / str(bundle["bundle_id"])
+            if recorded != current:
+                bundle["store_path"] = str(current)
+        return bundle
+
     @_locked
     def get_strategy_bundle(self, bundle_id: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM backtest_strategy_bundles WHERE bundle_id = ?",
             (bundle_id,),
         ).fetchone()
-        return dict(row) if row is not None else None
+        return self._located_bundle(row)
 
     @_locked
     def get_strategy_bundle_by_hash(self, bundle_hash: str) -> dict[str, Any] | None:
@@ -506,7 +523,7 @@ class BacktestRepository:
             "SELECT * FROM backtest_strategy_bundles WHERE bundle_hash = ?",
             (bundle_hash,),
         ).fetchone()
-        return dict(row) if row is not None else None
+        return self._located_bundle(row)
 
     @_locked
     def count_strategy_bundles(self) -> int:
@@ -1838,32 +1855,42 @@ class BacktestRepository:
         return None if row is None else dict(row)
 
     @_locked
-    def next_audit_ordinal(self, run_id: str) -> int:
-        row = self.connection.execute(
-            "SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal FROM backtest_audit WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-        return int(row["max_ordinal"]) + 1
-
-    @_locked
-    def append_audit(
+    def append_next_audit(
         self,
         run_id: str,
-        ordinal: int,
         action: str,
         actor: str,
         details_json: str,
-        chain_hash: str,
-    ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO backtest_audit(
-                run_id, ordinal, action, actor, details_json, chain_hash
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (run_id, ordinal, action, actor, details_json, chain_hash),
-        )
-        self.connection.commit()
+        chain_hash: Callable[[int], str],
+    ) -> int:
+        """Append the run's next audit entry and return its ordinal.
+
+        Each worker slot has its own service and connection, so the API's
+        "create" entry and a slot that has just claimed the run can write at
+        once. The ordinal is read and inserted under one write lock; reading it
+        first in a separate call let both writers pick the same ordinal.
+        """
+        connection = self.connection
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal FROM backtest_audit WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            ordinal = int(row["max_ordinal"]) + 1
+            connection.execute(
+                """
+                INSERT INTO backtest_audit(
+                    run_id, ordinal, action, actor, details_json, chain_hash
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (run_id, ordinal, action, actor, details_json, chain_hash(ordinal)),
+            )
+            connection.commit()
+            return ordinal
+        except Exception:
+            connection.rollback()
+            raise
 
     @_locked
     def list_audit(self, run_id: str) -> list[dict[str, Any]]:

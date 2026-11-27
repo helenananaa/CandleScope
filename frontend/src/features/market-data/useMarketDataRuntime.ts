@@ -63,6 +63,7 @@ import { buildSeriesWindowKey } from "./window/seriesWindowKey.js";
 import { resolveSharedInitialRows } from "./manager/initialMarketRows.js";
 import { planChartTimeSeek, type ChartTimeSeekResult } from "./chartTimeNavigation.js";
 import { seekChartTimeWindow } from "./seekChartTimeWindow.js";
+import { isBackendLive, useBackendConnection } from "../../desktop/backendConnection.js";
 import {
   planRightWindowPage,
   rightWindowPageReachedLatest,
@@ -344,7 +345,11 @@ export function useMarketDataRuntime({
   const [lastPrice, setLastPrice] = useState<KlineBar | null>(null);
   const [connectionStatus, setConnectionStatus] = useState("loading");
   const [dataSource, setDataSource] = useState<string | null>(null);
-  const [wsStatus, setWsStatus] = useState<KlineWebSocketStatus>("idle");
+  const [transportWsStatus, setWsStatus] = useState<KlineWebSocketStatus>("idle");
+  // Held bars stay on screen while the local service is down, but never as live.
+  // The stream reports live again only after a fresh tick from the restarted service.
+  const backendLive = isBackendLive(useBackendConnection());
+  const wsStatus: KlineWebSocketStatus | "disconnected" = runtimeEnabled && !backendLive ? "disconnected" : transportWsStatus;
   useEffect(() => {
     if (runtimeEnabled) return;
     setLoading(false);
@@ -894,6 +899,9 @@ export function useMarketDataRuntime({
           source: "right-window-restore",
           ...(result.quality ? { quality: result.quality } : {}),
         });
+        // As for a date seek: reads planned against the replaced historical
+        // window must not land in the live one.
+        seriesDataFeed.beginEpoch(series);
         const latest = result.data.at(-1);
         if (latest) updateLastPrice(latest, interval);
         setHasMoreLeft(result.has_more !== false);

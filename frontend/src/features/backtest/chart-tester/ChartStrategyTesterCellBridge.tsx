@@ -16,6 +16,7 @@ import { parseIntervalSeconds } from "../../../utils/intervals.js";
 import type { ChartContextResolution } from "../backtestApi.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { ChartStrategyTesterRuntimeFactory } from "./ChartStrategyTesterRuntime.js";
+import { ChartStrategyChartDataGate } from "./chartStrategyChartData.js";
 import {
   getChartStrategyDraftStore,
   strategyDraftContentRevision,
@@ -36,6 +37,7 @@ import {
 import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
+import type { RetiredStrategyRecord } from "./retiredPyneStrategy.js";
 import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -72,12 +74,20 @@ export interface ChartStrategyTesterCellBridgeProps {
   session: ChartSession;
   appearance?: Partial<ChartSettings> | undefined;
   attachment: ChartStrategyAttachmentRecord | null;
+  /** A retired Pyne attachment from a build before PR #105: listed, never run. */
+  retiredAttachment?: RetiredStrategyRecord | undefined;
+  onRemoveRetiredAttachment?(): void;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
   onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
   onNativeStrategiesChange?(value: NativeStrategyCollection): void;
   active: boolean;
   panelOpen: boolean;
+  /**
+   * The chart has committed this session's first window (RC 34). Until then a run waits for it: right
+   * after a switch the backend has no stored bars for the run's range. Defaults to ready.
+   */
+  chartDataReady?: boolean;
   continuousChartActive: boolean;
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
@@ -97,6 +107,8 @@ export default function ChartStrategyTesterCellBridge({
   cellId,
   session,
   attachment: savedAttachment,
+  retiredAttachment,
+  onRemoveRetiredAttachment,
   appearance,
   nativeStrategies,
   strategyTesterMode,
@@ -104,6 +116,7 @@ export default function ChartStrategyTesterCellBridge({
   onNativeStrategiesChange,
   active,
   panelOpen,
+  chartDataReady = true,
   continuousChartActive,
   bottomPanelHost,
   seriesStore,
@@ -133,6 +146,19 @@ export default function ChartStrategyTesterCellBridge({
   const [selectedExplanation, setSelectedExplanation] = useState<TradeExplanationSelection | null>(null);
   const [pendingDataDraftRevision, setPendingDataDraftRevision] = useState<number | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  // Runs wait here while the chart is still loading the session's first window.
+  const [chartDataGate] = useState(() => new ChartStrategyChartDataGate(chartDataReady));
+  const [waitingForChartData, setWaitingForChartData] = useState(false);
+  useLayoutEffect(() => { chartDataGate.set(chartDataReady); }, [chartDataGate, chartDataReady]);
+  const waitForChartData = useCallback(async (signal: AbortSignal | undefined) => {
+    if (chartDataGate.ready) return;
+    setWaitingForChartData(true);
+    try {
+      await chartDataGate.wait(signal);
+    } finally {
+      setWaitingForChartData(false);
+    }
+  }, [chartDataGate]);
   const inFlightOriginRef = useRef<"MANUAL" | "AUTO" | null>(null);
   const inFlightSubmittedRef = useRef(false);
   const pendingDataRef = useRef<{
@@ -431,6 +457,7 @@ export default function ChartStrategyTesterCellBridge({
       request,
       signal: controller.signal,
       materializeResolution,
+      waitForChartData,
       onStage(stage) {
         if (origin === "AUTO") setAutoRunPauseReason(null);
         const status = stage === "QUEUED"
@@ -540,7 +567,7 @@ export default function ChartStrategyTesterCellBridge({
     inFlightSubmittedRef.current = false;
     inFlightRef.current = task;
     return task;
-  }, [cellId, onAttachmentChange, strategyManager, workspaceId]);
+  }, [cellId, onAttachmentChange, strategyManager, waitForChartData, workspaceId]);
 
   const cancelPendingAutoRun = useCallback(() => {
     cancelAutoDebounceRef.current?.();
@@ -766,6 +793,8 @@ export default function ChartStrategyTesterCellBridge({
       cellScope={`${workspaceId}\u0000${cellId}`}
       session={session}
       attachment={attachment}
+      retiredAttachment={retiredAttachment}
+      {...(onRemoveRetiredAttachment ? { onRemoveRetiredAttachment } : {})}
       nativeStrategies={nativeStrategies}
       signalChart={attachment?.signalChart ?? chartStrategySignalInput(appearance ?? {})}
       strategyTesterMode={strategyTesterMode}
@@ -779,6 +808,7 @@ export default function ChartStrategyTesterCellBridge({
       resolution={resolution}
       sourceDiagnostics={sourceDiagnostics}
       pendingDataDraftRevision={pendingDataDraftRevision}
+      waitingForChartData={waitingForChartData}
       result={result}
       resultLoading={resultLoading}
       resultError={resultError}

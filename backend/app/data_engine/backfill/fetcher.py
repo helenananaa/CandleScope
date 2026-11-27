@@ -27,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from contextlib import nullcontext
@@ -68,6 +69,11 @@ from .models import (
     FetchReceipt,
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
+from .route_health import (
+    URGENT_ARCHIVE_DEADLINE_SECONDS,
+    ArchiveDeadlineExceeded,
+    is_urgent_history_demand,
+)
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
 
 logger = logging.getLogger("backfill.Fetcher")
@@ -78,6 +84,15 @@ ProgressCallback = Callable[
 ]  # task, fetched, total
 ErrorCallback = Callable[[BackfillTask, str], Awaitable[None]]  # task, error_msg
 RateLimiter = Callable[[], Awaitable[None]]  # async sleep / token-bucket
+
+# Per fetch() call: one gate per rate-limit bucket, sized to the endpoint's
+# concurrency. A call's tasks and archive-routed REST pieces (tails, fallback
+# ranges) share one deferrable chunk demand. Without the gate, a piece that met
+# its own sibling on a one-slot endpoint deferred the whole chunk and discarded
+# the sibling's rows, and every retry raced the same way (RC item 23, #446).
+_SIBLING_GATES: contextvars.ContextVar[dict[str, asyncio.Semaphore] | None] = (
+    contextvars.ContextVar("backfill_fetch_sibling_gates", default=None)
+)
 
 
 class FetchBatchDeferred(RateLimitDeferred):
@@ -268,8 +283,8 @@ class HistoricalFetcher:
                 backpressure and receive FetchReceipt instead of payloads.
                 Archive/unqualified/overridden routes retain FetchResult.
             on_full_task: Admit a fallback task before its payload is fetched.
-            on_write_windows: Receive the windows archive-routed tasks will
-                write, after routing and before any of their data is used.
+            on_write_windows: Receive the windows the tasks will write, after
+                routing and before any of their data is used.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -313,7 +328,13 @@ class HistoricalFetcher:
                     on_full_task(task)
         coros = [self._fetch_rest_task(task, consume=on_native_page) if stream
                  else self._fetch_task(task, route_plan) for task, stream in zip(tasks, streaming)]
-        raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        # Tasks created below inherit this call's gates; concurrent calls
+        # (other chunks) get their own and still meet in public admission.
+        gates = _SIBLING_GATES.set({})
+        try:
+            raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        finally:
+            _SIBLING_GATES.reset(gates)
 
         deferred = [
             result for result in raw_results if isinstance(result, RateLimitDeferred)
@@ -392,7 +413,7 @@ class HistoricalFetcher:
 
     async def _fetch_rest_task(self, task: BackfillTask, *, consume=None) -> FetchResult | FetchReceipt:
         """Fetch all REST pages for a single task."""
-        async with self._semaphore:
+        async with self._sibling_gate(task), self._semaphore:
             if consume is None:
                 return await self._fetch_rest_task_inner(task)
             width, slots = stream_grid(task, self._cfg.fetch_batch_size)
@@ -770,6 +791,24 @@ class HistoricalFetcher:
         )
         return result
 
+    def _await_archive(self, future, ref, deadline: float | None):
+        if deadline is None or future.done():
+            return future
+        return self._await_archive_until(future, ref, deadline)
+
+    async def _await_archive_until(self, future, ref, deadline: float):
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), deadline)
+        except TimeoutError:
+            pass
+        self._metrics.inc("archive_deadline_rest_fallbacks")
+        router = self._source_router
+        if router is not None:
+            router.route_health.record_failure(ref.exchange, "archive object deadline")
+        raise ArchiveDeadlineExceeded(
+            f"archive object not ready within {deadline:g}s; using REST for this range"
+        )
+
     async def _fetch_routed_task(
         self,
         task: BackfillTask,
@@ -791,9 +830,13 @@ class HistoricalFetcher:
             for start_ms, end_ms in uncovered
         ]
 
+        # A chart waiting on screen gets REST for any object that is not ready
+        # in time; the shielded download keeps filling the cache.
+        deadline = (URGENT_ARCHIVE_DEADLINE_SECONDS
+                    if is_urgent_history_demand(task.metadata) else None)
         try:
             archive_values = await asyncio.gather(
-                *(route_plan.future_for(ref) for ref in refs),
+                *(self._await_archive(route_plan.future_for(ref), ref, deadline) for ref in refs),
                 return_exceptions=True,
             )
         except BaseException:
@@ -1172,6 +1215,28 @@ class HistoricalFetcher:
         )
         return get_shared_rate_limit_semaphore(rule, fallback=max(1, int(limit)))
 
+    def _sibling_gate(self, task: BackfillTask):
+        """Queue one fetch's REST work behind its own siblings on an endpoint.
+
+        Physical (CCXT) admission defers a chunk's request when the endpoint
+        slot is busy. When the holder is the same chunk, deferring cannot help:
+        the chunk reruns and races itself again. A waiting sibling holds no
+        extra worker, global REST slot or quota, and a slot held by any other
+        owner still defers the chunk through public admission as before.
+        """
+        gates = _SIBLING_GATES.get()
+        if gates is None:
+            return nullcontext()
+        try:
+            rule = self._rate_limit_rule(task, self._historical_request(task))
+            limit = rule.max_concurrency or self._rate_limit_policy(task).concurrency_for(task.market_type)
+        except Exception:
+            return nullcontext()  # No known endpoint limit: keep the old behaviour.
+        gate = gates.get(rule.bucket_key)
+        if gate is None:
+            gate = gates[rule.bucket_key] = asyncio.Semaphore(max(1, int(limit)))
+        return gate
+
     def _global_fetch_concurrency(self) -> int:
         configured = getattr(self._cfg, "fetch_global_concurrency", None)
         if configured is None:
@@ -1394,7 +1459,11 @@ class HistoricalFetcher:
 
 @dataclass(frozen=True, slots=True)
 class PlannedWriteWindow:
-    """One window a routed task will write: an owned archive object or a REST edge."""
+    """One window a task will write.
+
+    A plain task writes its own window over REST; a routed task writes the
+    archive objects it owns and the REST edges around them.
+    """
 
     exchange: str
     market_type: str
@@ -1424,16 +1493,24 @@ def planned_write_windows(
     tasks: list[BackfillTask],
     route_plan: ArchiveRoutePlan,
 ) -> list[PlannedWriteWindow]:
-    """The windows archive-routed tasks will write, known before their data arrives."""
+    """The windows the tasks will write, known before their data arrives.
+
+    A plain REST task writes its own window. Archive routing replaces a routed
+    task's window with the archive objects it owns and the REST edges around
+    them. The storage fence decides which of these windows qualify.
+    """
     windows: list[PlannedWriteWindow] = []
     for task in tasks:
         refs = route_plan.refs_for(task)
         interval_spec = parse_interval_spec(task.interval)
-        if not refs or interval_spec is None:
+        if interval_spec is None:
             continue
-        _, uncovered = _routed_coverage(task, refs, interval_spec)
-        spans = [(start, end, False) for start, end in uncovered]
-        spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
+        if not refs:
+            spans = [(task.start_ms, task.end_ms, False)]
+        else:
+            _, uncovered = _routed_coverage(task, refs, interval_spec)
+            spans = [(start, end, False) for start, end in uncovered]
+            spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
         windows.extend(
             PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
                                int(start), int(end), archive, task.metadata)

@@ -1,12 +1,14 @@
 import { BrowserDesktopLink, desktopReleaseUrl } from "../../../app/BrowserDesktopLink.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
-import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
+import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, OptionButton, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { bool, choice, empty, nullable, number, object, optional, record, text } from "../../app-control/commandSchema.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
+import { retiredStrategyName, type RetiredStrategyDraft, type RetiredStrategyRecord } from "./retiredPyneStrategy.js";
+import { RetiredStrategyDraftList } from "./RetiredStrategyDraftList.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
   Suspense,
@@ -49,7 +51,7 @@ import {
   createChartStrategyDraftId,
   strategyDraftContentRevision,
 } from "./chartStrategyTesterDrafts.js";
-import { chartStrategyQuickPresetIdForMarket } from "./chartStrategyRunRequest.js";
+import { chartStrategyDataErrorCode, chartStrategyQuickPresetIdForMarket } from "./chartStrategyRunRequest.js";
 import {
   CHART_STRATEGY_TEMPLATES,
   diagnoseChartStrategyDraft,
@@ -92,12 +94,13 @@ import { Icon } from "../../../components/icons/Icon.js";
 import {
   nativeStrategySwitcherActions,
   nativeStrategySwitcherItems,
+  nativeStrategySwitcherRetired,
   useNativeStrategyCollection,
 } from "../native/useNativeStrategyCollection.js";
 
 import StrategyDock from "./StrategyDock.js";
 import { StrategyDockPane, StrategyDockSlot } from "./StrategyDockSlots.js";
-import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.js";
+import { StrategySwitcher, type RetiredStrategySwitcherItem, type StrategySwitcherItem } from "./StrategySwitcher.js";
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
@@ -195,6 +198,9 @@ export interface ChartStrategyTesterPanelProps {
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
+  /** A Pyne strategy this chart had attached before PR #105: listed as retired, never run. */
+  retiredAttachment?: RetiredStrategyRecord | undefined;
+  onRemoveRetiredAttachment?(): void;
   nativeStrategies?: NativeStrategyCollection | undefined;
   strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
   onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
@@ -207,6 +213,8 @@ export interface ChartStrategyTesterPanelProps {
   resolution: ChartContextResolution | null;
   sourceDiagnostics: Array<Record<string, unknown>>;
   pendingDataDraftRevision: number | null;
+  /** A run waits for the chart to finish loading this session's first window (RC 34). */
+  waitingForChartData?: boolean;
   result?: ChartStrategyResultBundle | null;
   resultLoading?: boolean;
   resultError?: string | null;
@@ -248,6 +256,7 @@ export interface ChartStrategyTesterPanelProps {
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
+const RETIRED_ATTACHMENT_ID = "__retired_attachment__";
 
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
   const [localMode, setMode] = useState(() => resolveStrategyTesterMode(props.strategyTesterMode, !!props.attachment));
@@ -294,7 +303,15 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     .filter((action) => mode === "NATIVE" || action.id === "add" || action.id === "compare")
     .map((action) => ({ ...action, ...(strategyList && action.id === "add" ? { label: t("strategyList.addPine") } : {}),
       onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
-  const identity = <StrategySwitcher items={items} actions={actions}
+  const retired: RetiredStrategySwitcherItem[] = [
+    ...nativeStrategySwitcherRetired(strategies),
+    ...(props.retiredAttachment ? [{
+      id: RETIRED_ATTACHMENT_ID,
+      name: retiredStrategyName(props.retiredAttachment) || t("strategyCollection.default"),
+      ...(props.onRemoveRetiredAttachment ? { onRemove: props.onRemoveRetiredAttachment } : {}),
+    }] : []),
+  ];
+  const identity = <StrategySwitcher items={items} retired={retired} actions={actions}
     activeId={mode === "NATIVE" ? strategies.collection.activeId : HOST_STRATEGY_ID}
     onSelect={(id) => {
       if (id === HOST_STRATEGY_ID) { switchMode("CANDLESCOPE"); return; }
@@ -338,6 +355,7 @@ export function CandleScopeStrategyTesterPanel({
   resolution,
   sourceDiagnostics,
   pendingDataDraftRevision,
+  waitingForChartData = false,
   result = null,
   resultLoading = false,
   resultError = null,
@@ -409,6 +427,9 @@ export function CandleScopeStrategyTesterPanel({
   const [focusOnMount, setFocusOnMount] = useState(false);
   const [runReady, setRunReady] = useState(false);
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
+  // Pyne drafts from builds before PR #105: listed as retired, never opened or run; the user may delete them.
+  const [retiredDrafts, setRetiredDrafts] = useState<RetiredStrategyDraft[]>([]);
+  const [retiredDeleteFailed, setRetiredDeleteFailed] = useState(false);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const pendingSaveRef = useRef<{
     draft: StrategyDraftRecord | null;
@@ -520,7 +541,15 @@ export function CandleScopeStrategyTesterPanel({
     // In the strategy list this is the Python strategy: Pine strategies are their own list entries (P4c).
     void draftStore.recent(8).then((records) => setRecentDrafts(liveFollow ? records.filter((record) => record.language === "python") : records))
       .catch(() => setRecentDrafts([]));
+    void draftStore.retired().then(setRetiredDrafts, () => setRetiredDrafts([]));
   }, [draftStore, liveFollow]);
+
+  const deleteRetiredDraft = useCallback((id: string) => {
+    setRetiredDeleteFailed(false);
+    void draftStore.removeRetired(id)
+      .catch(() => setRetiredDeleteFailed(true))
+      .finally(refreshRecent);
+  }, [draftStore, refreshRecent]);
 
   useEffect(() => {
     refreshRecent();
@@ -722,7 +751,7 @@ export function CandleScopeStrategyTesterPanel({
   const pendingDataMatchesSource = runState.status === "NEEDS_DATA"
     && pendingDataDraftRevision === strategyDraftContentRevision(source);
   useControlCommands(() => ({ id: `host-chart-strategy:${cellScope}`, title: "Chart host strategy draft and run", context: () => ({ session, attachment, draftId: activeDraft?.id, source, runState, active }),
-    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })) }), commands: [
+    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, waitingForChartData, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })), retiredDrafts }), commands: [
       command("view", "Select host editor/tab and focus preference.", object({ tab: optional(choice(["script", "overview", "trades", "settings"])), focused: optional(bool), height: optional(number(0, 4096)) }), (input) => { if (input.tab) setActiveTab(input.tab); if (input.focused !== undefined) setFocusMode(input.focused); if (input.height !== undefined) setHeight(clampPanelHeight(input.height)); }),
       command("createDraft", "Create a persisted host strategy draft using the UI draft store.", object({ name: text(128), source: text(48000, 0) }), ({ name, source }) => createDraft(name, source, false), { available: () => !runBusy && active }),
       command("template", "Create a draft from a known host template.", object({ templateId: text(128) }), ({ templateId }) => { const item = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId); if (!item) throw new Error("TEMPLATE_UNAVAILABLE"); return createDraft(item.displayName, item.source, false); }, { available: () => !runBusy && active }),
@@ -740,7 +769,9 @@ export function CandleScopeStrategyTesterPanel({
       command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
-  const runLabel = pendingDataMatchesSource
+  const runLabel = waitingForChartData
+    ? t("chartTester.run.waitingForChart")
+    : pendingDataMatchesSource
     ? t("chartTester.prepareDataRun")
     : runState.status === "RESOLVING"
       ? t("chartTester.run.resolving")
@@ -778,7 +809,7 @@ export function CandleScopeStrategyTesterPanel({
     if (code.includes("PROVIDER") || code.includes("SMOKE")) {
       return { message: t("chartTester.error.strategy"), action: t("chartTester.error.action.strategy") };
     }
-    if (code.includes("DATA") || code.includes("SNAPSHOT") || code.includes("CONTEXT")) {
+    if (chartStrategyDataErrorCode(code)) {
       return { message: t("chartTester.error.data"), action: t("chartTester.error.action.retry") };
     }
     if (code.includes("BUDGET") || code === "RUN_CAPACITY_EXCEEDED") {
@@ -846,12 +877,12 @@ export function CandleScopeStrategyTesterPanel({
       <StrategyDockSlot name="actions">
         <div className="strategy-dock-run">
           {result && (
-            <button type="button" className="strategy-summary" data-stale={stale} onClick={() => setActiveTab("overview")}
+            <Button variant="ghost" className="strategy-summary" data-stale={stale} onClick={() => setActiveTab("overview")}
               title={stale ? t("chartTester.result.stale") : t("chartTester.tab.overview")}>
               <span><small>{t("chartTester.result.netPnl")}</small><b className={Number(netPnl) < 0 ? "negative" : Number(netPnl) > 0 ? "positive" : undefined}>{formatChartStrategyNumber(result.report.metrics.realized_net_pnl)}</b></span>
               <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{chartStrategyMaxDrawdown(result.report)}</b></span>
               <span><small>{t("chartTester.result.winRate")}</small><b>{chartStrategyWinRate(result.report.metrics.win_rate, locale)}</b></span>
-            </button>
+            </Button>
           )}
           {result && followStatus && (
             <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
@@ -864,11 +895,12 @@ export function CandleScopeStrategyTesterPanel({
             <Button size="sm" variant="ghost" onClick={retrySave}>{t("chartTester.retrySave")}</Button>
           )}
           {currentAttachment && showStatus && (
-            <span role="status" className="strategy-run-status" data-status={runState.status.toLowerCase()} data-testid="chart-strategy-run-status">
-              <i aria-hidden="true" />{t(runStatusKey(runState.status))}
+            <span role="status" className="strategy-run-status" data-status={runState.status.toLowerCase()} data-testid="chart-strategy-run-status"
+              data-waiting-for-chart={waitingForChartData ? "true" : undefined}>
+              <i aria-hidden="true" />{waitingForChartData ? t("chartTester.run.waitingForChart") : t(runStatusKey(runState.status))}
             </span>
           )}
-          {runBusy && runState.activeRunId && (
+          {runBusy && (runState.activeRunId || waitingForChartData) && (
             <Button size="sm" variant="ghost" data-testid="chart-strategy-stop-observing" onClick={onStopObserving}>
               {t("chartTester.stopObserving")}
             </Button>
@@ -939,10 +971,10 @@ export function CandleScopeStrategyTesterPanel({
                 <h3>{t("chartTester.start.template")}</h3>
                 <div className="chart-strategy-start-list">
                   {CHART_STRATEGY_TEMPLATES.map((template) => (
-                    <button key={template.id} type="button" className="chart-strategy-start-row" onClick={() => void createDraft(template.displayName, template.source, false, template.language)}>
+                    <OptionButton key={template.id} variant="row" className="chart-strategy-start-row" onClick={() => void createDraft(template.displayName, template.source, false, template.language)}>
                       <strong>{t(template.nameKey)}</strong>
                       <span>{t(template.descriptionKey)}</span>
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
               </section>
@@ -953,17 +985,19 @@ export function CandleScopeStrategyTesterPanel({
                 ) : (
                   <div className="chart-strategy-start-list">
                     {recentDrafts.map((record) => (
-                      <button key={record.id} type="button" className="chart-strategy-start-row" onClick={() => attachRecord(record, false)}>
+                      <OptionButton key={record.id} variant="row" className="chart-strategy-start-row" onClick={() => attachRecord(record, false)}>
                         <strong>{record.displayName}</strong>
                         <span>
                           {strategyLanguageLabel(record.language)}
                           {" · "}
                           <time dateTime={new Date(record.updatedAt).toISOString()}>{new Date(record.updatedAt).toLocaleString(locale)}</time>
                         </span>
-                      </button>
+                      </OptionButton>
                     ))}
                   </div>
                 )}
+                <RetiredStrategyDraftList drafts={retiredDrafts} locale={locale} deleteFailed={retiredDeleteFailed}
+                  onDelete={deleteRetiredDraft} />
               </section>
             </div>
             <footer className="chart-strategy-start-footer">
@@ -1152,7 +1186,7 @@ export function CandleScopeStrategyTesterPanel({
         )}
 
         <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult && sharedRunId === result.run.run_id
-            ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+            ? <div className="chart-strategy-result-overview" data-testid="run-result-views">
               <RunResultSummary result={sharedResult.result} locale={locale} />
               <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}
                 active={active && activeTab === "trades"} onLocateTrade={onLocateTrade}

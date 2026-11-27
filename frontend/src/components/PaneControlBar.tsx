@@ -4,6 +4,7 @@ import type {
 } from "react";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
+import { IconButton } from "./ui/index.js";
 import type { PaneMoveDirection } from "./paneControlModel.js";
 
 interface PaneControlBarProps {
@@ -109,58 +110,54 @@ export default function PaneControlBar({
       onPointerDown={stopPointer}
       onClick={stopClick}
     >
-      <button
-        type="button"
+      <IconButton
+        size="sm"
         className="pane-control-button"
-        aria-label={t("pane.moveUpAria", { title })}
+        label={t("pane.moveUpAria", { title })}
         title={canMoveUp ? t("pane.moveUp") : t("pane.moveUpDisabled")}
+        icon={<PaneIcon kind="up" />}
         disabled={!canMoveUp}
         onClick={() => onMove("up")}
-      >
-        <PaneIcon kind="up" />
-      </button>
-      <button
-        type="button"
+      />
+      <IconButton
+        size="sm"
         className="pane-control-button"
-        aria-label={t("pane.moveDownAria", { title })}
+        label={t("pane.moveDownAria", { title })}
         title={canMoveDown ? t("pane.moveDown") : t("pane.moveDownDisabled")}
+        icon={<PaneIcon kind="down" />}
         disabled={!canMoveDown}
         onClick={() => onMove("down")}
-      >
-        <PaneIcon kind="down" />
-      </button>
-      <button
-        type="button"
-        className={`pane-control-button${collapsed ? " active" : ""}`}
-        aria-label={collapsed ? t("pane.expandAria", { title }) : t("pane.collapseAria", { title })}
-        aria-pressed={collapsed}
+      />
+      <IconButton
+        size="sm"
+        className="pane-control-button"
+        label={collapsed ? t("pane.expandAria", { title }) : t("pane.collapseAria", { title })}
         title={collapsed ? t("pane.expand") : t("pane.collapse")}
+        icon={<PaneIcon kind={collapsed ? "expand" : "collapse"} />}
+        pressed={collapsed}
         disabled={!canCollapse}
         onClick={onToggleCollapse}
-      >
-        <PaneIcon kind={collapsed ? "expand" : "collapse"} />
-      </button>
-      <button
-        type="button"
-        className={`pane-control-button${maximized ? " active" : ""}`}
-        aria-label={maximized ? t("pane.exitFullscreenAria", { title }) : t("pane.fullscreenAria", { title })}
-        aria-pressed={maximized}
+      />
+      <IconButton
+        size="sm"
+        className="pane-control-button"
+        label={maximized ? t("pane.exitFullscreenAria", { title }) : t("pane.fullscreenAria", { title })}
         title={canMaximize ? (maximized ? t("pane.exitFullscreen") : t("pane.fullscreen")) : t("pane.onlyPane")}
+        icon={<PaneIcon kind={maximized ? "restore" : "maximize"} />}
+        pressed={maximized}
         disabled={!canMaximize}
         onClick={onToggleMaximize}
-      >
-        <PaneIcon kind={maximized ? "restore" : "maximize"} />
-      </button>
-      <button
-        type="button"
-        className="pane-control-button danger"
-        aria-label={t("pane.deleteAria", { title })}
+      />
+      <IconButton
+        size="sm"
+        variant="danger"
+        className="pane-control-button"
+        label={t("pane.deleteAria", { title })}
         title={canDelete ? t("pane.delete") : t("pane.cannotDeleteMain")}
+        icon={<PaneIcon kind="delete" />}
         disabled={!canDelete}
         onClick={onDelete}
-      >
-        <PaneIcon kind="delete" />
-      </button>
+      />
     </div>
   );
 }

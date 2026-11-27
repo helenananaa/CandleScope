@@ -7,6 +7,7 @@ import {
   formatIndicatorNotional,
   INDICATOR_SERIES_INCREMENTAL_GRACE_MS,
   removeSeriesEntries,
+  replaceFutureTimeAxisData,
   replaceMainSeries,
   resyncSeriesTimeScaleIndexes,
   selectIndicatorPaneAnnotationTarget,
@@ -375,4 +376,32 @@ test("indicator series use setData during their startup grace window", () => {
     usesDerivedAxis: true,
   }), true);
   assert.equal(shouldPreferIndicatorSetData({ createdAtMs: null, nowMs: 99_000 }), true);
+});
+
+function futureAxisHarness(moveOnSetData: boolean) {
+  const writes: unknown[] = [];
+  let range = { from: 14.5, to: 479 };
+  const scale = {
+    getVisibleLogicalRange: () => range,
+    setVisibleLogicalRange: (next: { from: number; to: number }) => { writes.push(next); },
+    options: () => ({ shiftVisibleRangeOnNewBar: true }),
+    applyOptions: () => {},
+  };
+  const chart = structuralMock<Parameters<typeof replaceFutureTimeAxisData>[0] & object>({ timeScale: () => scale });
+  const series = structuralMock<NonNullable<Parameters<typeof replaceFutureTimeAxisData>[1]>>({
+    setData: () => { if (moveOnSetData) range = { from: range.from + 3, to: range.to + 3 }; },
+  });
+  return { chart, series, writes };
+}
+
+test("carrier data restores the view only when the carrier moved it", () => {
+  // A range requested earlier in the frame is applied at the next draw; an
+  // unconditional write-back replaced it (RC6 reopen: the live-tail follow).
+  const still = futureAxisHarness(false);
+  assert.equal(replaceFutureTimeAxisData(still.chart, still.series, [{ time: 1 }]), 1);
+  assert.deepEqual(still.writes, []);
+
+  const moved = futureAxisHarness(true);
+  replaceFutureTimeAxisData(moved.chart, moved.series, [{ time: 1 }]);
+  assert.deepEqual(moved.writes, [{ from: 14.5, to: 479 }]);
 });

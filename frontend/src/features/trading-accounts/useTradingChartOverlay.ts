@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ExternalMarkerSource } from "../../chart-adapter/externalMarkerSource.js";
+import { seriesPricePrecision } from "../../chart-adapter/mainSeriesPriceFormat.js";
 import {
   createPriceLineSource,
   type ExternalPriceLineSource,
@@ -97,6 +98,11 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
   const { summary, trades, entries, error } = useSyncExternalStore(data?.subscribe ?? noSubscribe, data?.getSnapshot ?? emptyAccount);
   useEffect(() => data?.retain(), [data]);
   const loaded = useLoadedRange(enabled ? seriesStore : null);
+  // Recomputed when bars are added or the window moves, like the chart's own price scale.
+  const pricePrecision = useMemo(
+    () => (loaded && seriesStore ? seriesPricePrecision(seriesStore.snapshot()) : undefined),
+    [loaded, seriesStore],
+  );
 
   const markerSource = useMemo(() => createReplayMarkerSource({
     up: upColor,
@@ -125,8 +131,9 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
       bucketTime,
       lastVisibleSec: loaded?.lastSec ?? null,
       labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.note"), reviewNote: t("trading.journal.reviewNote") },
+      pricePrecision,
     });
-  }, [accountId, enabled, entries, exchange, interval, loaded, locale, marketType, markerSource, seriesStore, settings, symbol, trades]);
+  }, [accountId, enabled, entries, exchange, interval, loaded, locale, marketType, markerSource, pricePrecision, seriesStore, settings, symbol, trades]);
 
   useLayoutEffect(() => {
     if (!enabled || !settings.positions) {

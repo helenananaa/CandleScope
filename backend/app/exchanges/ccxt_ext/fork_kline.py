@@ -26,6 +26,25 @@ SPOT_SCHEMA = "candlescope.binance.spot.kline.v1"
 OKX_SCHEMA = "candlescope.okx.kline.v1"
 SCHEMAS = frozenset({SCHEMA, SPOT_SCHEMA, OKX_SCHEMA})
 LOCK_PATH = Path(__file__).resolve().parents[3] / "ccxt-fork.lock.json"
+# Binance REST closes a candle by exchange clock alone, but its kline cache can
+# still serve the pre-close snapshot several seconds later (RC 35: 2203 of the
+# final 2264 trades with the exchange clock 3.4 s past the close). A REST candle
+# is final only once the clock observed before the request is this far past the
+# close; until then it stays pending, so history retries it instead of storing
+# a value that a later read would revise. A WS x=true close needs no margin.
+BINANCE_REST_SETTLE_MS = 15_000
+
+
+def rest_candle_settled(close_time_ms: int, observed_ms: int) -> bool:
+    return close_time_ms + BINANCE_REST_SETTLE_MS < observed_ms
+
+
+def rest_payload_pending(payload: dict) -> bool:
+    """A fork REST candle that cannot be final yet (forming or unsettled)."""
+    server_time = payload.get("_source_rest_server_time_ms")
+    close_time = payload.get("closeTime")
+    return (type(server_time) is int and type(close_time) is int
+            and not rest_candle_settled(close_time, server_time))
 
 
 def require_fork(exchange: Any) -> None:
@@ -153,7 +172,7 @@ def normalize_fork_kline(
         if server_time is not None:
             if type(server_time) is not int or server_time <= 0:
                 raise ValueError("invalid REST exchange time evidence")
-            is_closed = closed_at < server_time
+            is_closed = rest_candle_settled(closed_at, server_time)
             evidence = (
                 "rest_server_time_elapsed" if is_closed else "rest_server_time_pending"
             )

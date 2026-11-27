@@ -70,8 +70,8 @@ test("on a phone the accordion rail shows one view in a sheet, the one opened la
   assert.doesNotMatch(html, /wl-resize-handle/);
   assert.doesNotMatch(html, /style="width:/);
   assert.doesNotMatch(html, /data-rail-action="toggle-panel"/);
-  assert.match(html, /class="market-activity-item active"[^>]*data-rail-view="order-book"/);
-  assert.doesNotMatch(html, /class="market-activity-item active"[^>]*data-rail-view="watchlist"/);
+  assert.match(html, /class="ui-option ui-option-row market-activity-item active"[^>]*data-rail-view="order-book"/);
+  assert.doesNotMatch(html, /market-activity-item active"[^>]*data-rail-view="watchlist"/);
 });
 
 test("on a phone a hidden panel leaves only the bar, with no tab current", () => {

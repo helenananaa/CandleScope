@@ -431,8 +431,25 @@ export interface KlineStreamStatusMessage extends Record<string, unknown> {
   type: "stream_status";
   interval?: IntervalString;
   status?: string;
+  /** "upstream": the backend's exchange connection, not this socket. */
+  source?: string;
+  reason?: string;
   stream_version?: unknown;
   detail?: { gap_id?: unknown; range_start_ms?: unknown; range_end_ms?: unknown };
+}
+
+export type UpstreamAvailabilityStatus = "offline" | "online";
+
+/**
+ * Exchange reachability reported by the backend for a whole instrument.
+ * The local socket stays open while the exchange is unreachable, so this is
+ * the only signal that separates an outage from a quiet market.
+ */
+export function upstreamAvailabilityOf(
+  message: Pick<KlineStreamStatusMessage, "source" | "status" | "interval">,
+): UpstreamAvailabilityStatus | null {
+  if (message.source !== "upstream" || message.interval != null) return null;
+  return message.status === "offline" || message.status === "online" ? message.status : null;
 }
 
 export interface KlineStreamIntervalFailure extends Record<string, unknown> {

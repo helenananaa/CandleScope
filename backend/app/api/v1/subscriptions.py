@@ -18,7 +18,9 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from pydantic import BaseModel
 
 from app.data_engine.data_manager.models import DataEventType
+from app.data_engine.data_manager.price_cache import normalize_price_key
 from app.data_engine.data_manager.subscriptions import SubscriptionTier
+from app.data_engine.data_manager.upstream_availability import UpstreamMarket
 
 logger = logging.getLogger("candlescope.subscription_api")
 
@@ -148,6 +150,27 @@ async def remove_subscription(request: Request, symbol: str):
     return {"symbol": mgr.normalize_symbol(symbol), "removed": True}
 
 
+# ── Exchange availability for watched prices ────────────────
+
+
+def _price_market(price: dict) -> tuple[str, str, str]:
+    return normalize_price_key(
+        str(price.get("symbol") or ""),
+        exchange=str(price.get("exchange") or "binance"),
+        market_type=str(price.get("market_type") or "spot"),
+    )
+
+
+def _price_is_stale(dm, price: dict) -> bool:
+    is_offline = getattr(getattr(dm, "upstream_availability", None), "is_offline", None)
+    return bool(callable(is_offline) and is_offline("price", *_price_market(price)))
+
+
+def _prices_with_availability(dm, prices: list[dict]) -> list[dict]:
+    """Mark snapshot prices whose ticker feed cannot reach the exchange."""
+    return [{**price, "stale": True} if _price_is_stale(dm, price) else price for price in prices]
+
+
 # ── WebSocket: real-time price stream ────────────────────────
 
 # This is registered on the /stream router in stream.py or can be
@@ -172,7 +195,20 @@ async def price_stream(websocket: WebSocket):
 
     await websocket.accept()
     await websocket.send_json({"type": "connected"})
-    await websocket.send_json({"type": "prices", "data": dm.get_prices_snapshot()})
+    await websocket.send_json({"type": "prices", "data": _prices_with_availability(dm, dm.get_prices_snapshot())})
+
+    # A live tick replaces the whole entry in the browser, so it clears the
+    # stale mark by itself; availability changes re-send the held price.
+    availability_changes: asyncio.Queue = asyncio.Queue()
+
+    def _queue_price_change(change) -> None:
+        if change.market.kind == "price":
+            availability_changes.put_nowait(change)
+
+    subscribe_availability = getattr(getattr(dm, "upstream_availability", None), "subscribe", None)
+    unsubscribe_availability = (
+        subscribe_availability(_queue_price_change) if callable(subscribe_availability) else None
+    )
 
     try:
         # Task to forward price updates
@@ -185,6 +221,17 @@ async def price_stream(websocket: WebSocket):
                     continue
                 await websocket.send_json({"type": "prices", "data": [price]})
 
+        async def _availability_forwarder():
+            while True:
+                change = await availability_changes.get()
+                held = [
+                    {**price, "stale": change.offline}
+                    for price in dm.get_prices_snapshot()
+                    if UpstreamMarket.create("price", *_price_market(price)) == change.market
+                ]
+                if held:
+                    await websocket.send_json({"type": "prices", "data": held})
+
         # Task to read client messages (keepalive pings)
         async def _reader():
             while True:
@@ -194,9 +241,10 @@ async def price_stream(websocket: WebSocket):
 
         forward_task = asyncio.create_task(_forwarder())
         reader_task = asyncio.create_task(_reader())
+        availability_task = asyncio.create_task(_availability_forwarder())
 
         done, pending = await asyncio.wait(
-            {forward_task, reader_task},
+            {forward_task, reader_task, availability_task},
             return_when=asyncio.FIRST_COMPLETED,
         )
         for t in pending:
@@ -212,6 +260,8 @@ async def price_stream(websocket: WebSocket):
     except Exception as exc:
         logger.warning("Price WS error: %s", exc)
     finally:
+        if unsubscribe_availability is not None:
+            unsubscribe_availability()
         try:
             await websocket.close()
         except Exception:

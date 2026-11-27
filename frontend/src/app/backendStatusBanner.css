@@ -1,0 +1,22 @@
+/* Local service outage banner: above the workspace and its panels, below dialogs. */
+.backend-status-banner {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  z-index: var(--z-overlay);
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  box-shadow: var(--shadow-md);
+}
+
+.backend-status-banner .ui-alert-body {
+  display: grid;
+  gap: 2px;
+}
+
+.backend-status-banner-reason {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

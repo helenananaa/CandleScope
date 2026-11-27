@@ -3,7 +3,7 @@ name: macOS desktop
 on:
   push:
     branches: [main]
-    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml", "!**/*.md", "packages/**/*.md"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
@@ -14,6 +14,9 @@ on:
       - "frontend/public/brand/candlescope-app-icon-1024.png"
       - "frontend/scripts/*desktop*"
       - "frontend/scripts/prepare-control-adapter.mjs"
+      - "frontend/scripts/prepare-mihomo.py"
+      - "backend/app/proxy_subscriptions/**"
+      - "backend/tests/test_proxy_subscription*.py"
       - "frontend/scripts/verify-macos-package.mjs"
       - "frontend/scripts/vite-loopback-alias.mjs"
       - "backend/app/core/version.py"
@@ -22,13 +25,18 @@ on:
       - "backend/ccxt-fork.lock.json"
       - "backend/scripts/install_ccxt_fork.py"
       - "packages/candlescope-control/**"
+      - "!**/*.md"
+      - "packages/candlescope-control/**/*.md"
   workflow_dispatch:
+  # The desktop release workflow builds its macOS packages with this same job.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: macos-desktop-${{ github.ref }}
+  # A release run calls this workflow; its own name keeps it from cancelling a PR or main run.
+  group: ${{ github.workflow }}-macos-desktop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -110,7 +118,11 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
+          export CANDLESCOPE_MIHOMO="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/mihomo/mihomo"
+          test -x "$CANDLESCOPE_MIHOMO"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_proxy_subscriptions.py \
+            tests/test_proxy_subscription_refresh.py \
             tests/test_market_stream_version.py \
             tests/test_oi_local_history.py \
             tests/test_market_metrics_storage.py \
@@ -179,6 +191,7 @@ jobs:
             tests/test_replay_training_notes.py \
             tests/test_replay_note_links.py \
             tests/test_replay_note_captures.py \
+            tests/test_pre_migration_copy.py \
             tests/test_replay_v2_training_phase1.py \
             tests/test_replay_imported_bar.py \
             tests/test_source_bucket_projection_cache.py \
@@ -187,6 +200,7 @@ jobs:
             tests/test_plugin_runtime_main_lifecycle.py \
             tests/test_pyne_removal.py \
             tests/test_data_preparation.py \
+            tests/test_profile_relocation.py \
             tests/test_replay_context_origin.py \
             tests/test_replay_bounded_context.py \
             tests/test_replay_history_archive.py \
@@ -249,7 +263,7 @@ jobs:
         run: |
           node scripts/record-desktop-artifacts.mjs
           cat desktop-dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
-          echo 'Ad-hoc signed test packages. No Apple Developer ID signature or notarization; no Release publication.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Ad-hoc signed packages. No Apple Developer ID signature or notarization. Only the Desktop release workflow publishes a draft GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload verified packages
         uses: actions/upload-artifact@v4
         with:

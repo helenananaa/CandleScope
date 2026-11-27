@@ -38,6 +38,7 @@
 @import "./features/replay-launcher/replayLauncher.css" layer(features);
 @import "./features/advanced-market-data/advancedMarketPaneLabels.css" layer(features);
 @import "./components/chartPaneOverlays.css" layer(features);
+@import "./app/backendStatusBanner.css" layer(features);
 @import "./features/replay/replayPanels.css" layer(features);
 @import "./features/replay/trainingHub.css" layer(features);
 @import "./features/chart-workspace/workspaceMembers.css" layer(features);
@@ -49,3 +50,4 @@
 @import "./features/trading-accounts/tradingAccounts.css" layer(features);
 @import "./features/trading-accounts/chartAccountOverlay.css" layer(features);
 @import "./features/readonly-accounts/readonlyAccount.css" layer(features);
+@import "./styles/overrides.css" layer(overrides);

@@ -4,8 +4,11 @@ import test from "node:test";
 import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRecord } from "../../backtestApi.js";
 import type { BacktestResultReplayFrame, BacktestRunRecord } from "../../backtestTypes.js";
 import { StrategyRunStreamError } from "../../backtestRunStream.js";
+import { PreparationApiError } from "../../../data-preparation/api.js";
+import { ChartStrategyChartDataGate } from "../chartStrategyChartData.js";
 import {
   buildChartStrategyRunBody,
+  chartStrategyDataErrorCode,
   chartStrategyQuickPresetIdForMarket,
   chartStrategyRunDiagnostics,
   freezeChartStrategyRunRequest,
@@ -441,6 +444,55 @@ test("automatic preparation carries frozen strategy intent and observes the serv
   assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare", "get"]);
 });
 
+test("Run pressed while the switched chart is loading waits for its first window, then runs (RC 34)", async () => {
+  // RC5 recheck: ETHUSDT 5m two seconds after the switch (barCount 0, loading) failed in 272 ms with
+  // "No local history exists": the backend had no stored series to take the run's range from.
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (context) => {
+    calls.push("prepare");
+    assert.equal(context.range_mode, "ALL_AVAILABLE");
+    return { ...resolution(), prepared_run: completed() };
+  };
+  const gate = new ChartStrategyChartDataGate(false);
+  const waits: boolean[] = [];
+  const switched = { ...request, session: { ...request.session, symbol: "ETHUSDT", interval: "5m" } };
+  let waiting!: () => void;
+  const started = new Promise<void>((resolve) => { waiting = resolve; });
+  const pending = runChartStrategyBacktest({ api, request: switched, waitForChartData: async (signal) => {
+    waits.push(gate.ready);
+    waiting();
+    await gate.wait(signal);
+  } });
+  // A run that skipped the wait settles first and fails the call check below instead of hanging.
+  await Promise.race([started, pending.then(() => undefined, () => undefined)]);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  // The strategy compiles meanwhile, but nothing resolves or prepares a range the chart has not stored.
+  assert.deepEqual(calls, ["revision:PINE_ENGINE"]);
+  assert.deepEqual(waits, [false]);
+  gate.set(true);
+  const outcome = await pending;
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare"]);
+});
+
+test("a run waiting for the chart stops without reaching the backend when it is stopped or switched (RC 34)", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  const gate = new ChartStrategyChartDataGate(false);
+  const controller = new AbortController();
+  let waiting!: () => void;
+  const started = new Promise<void>((resolve) => { waiting = resolve; });
+  const pending = runChartStrategyBacktest({ api, request, signal: controller.signal,
+    waitForChartData: (signal) => { waiting(); return gate.wait(signal); } });
+  await Promise.race([started, pending.then(() => undefined, () => undefined)]);
+  controller.abort(new DOMException("switched", "AbortError"));
+  await assert.rejects(pending, { name: "AbortError" });
+  gate.set(true);
+  await Promise.resolve();
+  assert.deepEqual(calls, ["revision:PINE_ENGINE"]);
+});
+
 test("validate/create drift fails before create", async () => {
   const calls: string[] = [];
   await assert.rejects(
@@ -490,6 +542,27 @@ test("backend Run capacity is actionable and never hidden behind generic retry",
   assert.equal(diagnostics.action, "wait-and-retry");
   assert.equal(diagnostics.details.retryable, true);
   assert.equal(diagnostics.details.retry_after_ms, 1000);
+});
+
+test("a preparation failure keeps its code and asks for the chart data, not a backend retry (RC 34)", () => {
+  // A run right after a market switch used to fail here with BACKTEST_API_UNAVAILABLE ("service unavailable").
+  const missing = chartStrategyRunDiagnostics(new PreparationApiError(
+    "RANGE_REQUIRED", "No local history exists; select a time range to download", 409,
+  ));
+  assert.equal(missing.code, "RANGE_REQUIRED");
+  assert.equal(missing.message, "No local history exists; select a time range to download");
+  assert.equal(missing.action, "resolve-data");
+  // A preparation job that ended FAILED reaches the run the same way (waitForPreparation).
+  const incomplete = chartStrategyRunDiagnostics(new PreparationApiError(
+    "COVERAGE_INCOMPLETE", "Historical source did not supply the complete requested range", 200,
+  ));
+  assert.equal(incomplete.code, "COVERAGE_INCOMPLETE");
+  assert.equal(incomplete.action, "resolve-data");
+  for (const code of ["RANGE_REQUIRED", "INVALID_RANGE", "WARMUP_RANGE_INSUFFICIENT", "COVERAGE_INCOMPLETE", "DATA_SNAPSHOT_MISMATCH"]) {
+    assert.equal(chartStrategyDataErrorCode(code), true, code);
+  }
+  assert.equal(chartStrategyDataErrorCode("RUN_CAPACITY_EXCEEDED"), false);
+  assert.equal(chartStrategyRunDiagnostics(new Error("socket hang up")).code, "BACKTEST_API_UNAVAILABLE");
 });
 
 const importedSource = {

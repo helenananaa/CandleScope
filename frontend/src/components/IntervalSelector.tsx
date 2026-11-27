@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { confirmAction } from "./ui/overlay/overlayApi.js";
 import { useAnchoredPopup } from "./ui/overlay/overlayRuntime.js";
+import { Button, ControlButton, IconButton, Input, SegmentedControl, Tabs } from "./ui/index.js";
+import { tabId, tabPanelId } from "./ui/helpers.js";
 import { getLocale, t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import {
@@ -265,6 +267,7 @@ function IntervalSelector({
   const locale = useLocale();
   useEffect(() => () => onCancelPreview?.(), [onCancelPreview]);
   const anchorInputId = useId();
+  const tabsId = useId();
   const compact = variant === "compact";
   const favoriteIntervals = useFavoriteIntervals();
   const [open, setOpen] = useState(defaultOpen);
@@ -700,10 +703,14 @@ function IntervalSelector({
   const renderIntervalButton = (item: IntervalItem, extraClass = ""): ReactNode => {
     const available = isIntervalAvailable(item.value);
     return (
-      <button
+      <Button
         key={item.value}
+        variant="ghost"
+        size="sm"
         id={`interval-${item.value}`}
-        className={clsx("interval-btn", intervalsSemanticallyEquivalent(interval, item.value) && "active", item.isCustom && "custom-interval-btn", !available && "unavailable", extraClass)}
+        // "active" stays as the scripts' hook beside aria-pressed.
+        className={clsx("interval-btn", intervalsSemanticallyEquivalent(interval, item.value) && "active", item.isCustom && "custom-interval-btn", extraClass)}
+        aria-pressed={intervalsSemanticallyEquivalent(interval, item.value)}
         onClick={() => selectInterval(item.value)}
         onMouseEnter={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
         onMouseLeave={onCancelPreview}
@@ -712,13 +719,12 @@ function IntervalSelector({
         title={readOnlyReason ?? (!available
           ? unavailableMessage(item.value)
           : item.isCustom ? t("interval.customNamed", { desc: formatIntervalDescription(item.value) }, locale) : item.value)}
-        type="button"
         disabled={!available || readOnlyReason !== null}
         aria-disabled={!available || readOnlyReason !== null}
       >
         {item.isCustom && <span className="interval-custom-dot" />}
         {formatIntervalLabel(item.label || item.value)}
-      </button>
+      </Button>
     );
   };
 
@@ -742,15 +748,11 @@ function IntervalSelector({
         key={item.value}
         className={clsx("interval-chip-wrap", manage && item.isCustom && "manage", pinOnly && "manage pin-only")}
       >
-        <button
-          type="button"
+        <Button
+          size="sm"
           data-interval-chip={item.value}
-          className={clsx(
-            "interval-chip",
-            active && "active",
-            !available && "unavailable",
-            highlighted && "highlighted",
-          )}
+          className={clsx("interval-chip", highlighted && "highlighted")}
+          aria-pressed={active}
           onClick={() => selectInterval(item.value)}
           onMouseEnter={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
           onMouseLeave={onCancelPreview}
@@ -763,41 +765,38 @@ function IntervalSelector({
           {item.isCustom && <span className="interval-custom-dot" />}
           {formatIntervalLabel(item.label || item.value)}
           {pinned && <span className="interval-chip-star" aria-hidden="true"><Icon name="star" size={10} filled /></span>}
-        </button>
+        </Button>
         {pinOnly && (
           <div className="interval-chip-actions">
-            <button
-              type="button"
-              className={clsx("interval-chip-action", pinned && "active")}
+            <IconButton
+              size="sm"
+              className="interval-chip-action"
               onClick={togglePinned}
               title={pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
-              aria-label={`${item.value} ${pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}`}
-              aria-pressed={pinned}
-            >
-              <Icon name="star" size={12} filled={pinned} />
-            </button>
+              label={`${item.value} ${pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}`}
+              pressed={pinned}
+              icon={<Icon name="star" size={12} filled={pinned} />}
+            />
           </div>
         )}
         {manage && item.isCustom && (
           <div className="interval-chip-actions">
-            <button
-              type="button"
-              className={clsx("interval-chip-action", record?.pinned && "active")}
+            <IconButton
+              size="sm"
+              className="interval-chip-action"
               onClick={() => onTogglePinCustomInterval(item.value)}
-              title={record?.pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
-              aria-label={record?.pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
-            >
-              <Icon name="star" size={12} filled={Boolean(record?.pinned)} />
-            </button>
-            <button
-              type="button"
-              className="interval-chip-action danger"
+              label={record?.pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
+              pressed={Boolean(record?.pinned)}
+              icon={<Icon name="star" size={12} filled={Boolean(record?.pinned)} />}
+            />
+            <IconButton
+              size="sm"
+              variant="danger"
+              className="interval-chip-action"
               onClick={() => handleRemove(item.value)}
-              title={t("interval.deleteNamed", { value: item.value }, locale)}
-              aria-label={t("interval.deleteNamed", { value: item.value }, locale)}
-            >
-              <Icon name="close" size={14} />
-            </button>
+              label={t("interval.deleteNamed", { value: item.value }, locale)}
+              icon={<Icon name="close" size={14} />}
+            />
           </div>
         )}
       </div>
@@ -837,10 +836,10 @@ function IntervalSelector({
         )}
 
         {!compact && <div className="toolbar-divider" />}
-        <button
+        <ControlButton
           ref={moreBtnRef}
-          type="button"
-          className={clsx("interval-more-btn ui-control", open && "active")}
+          className="interval-more-btn"
+          active={open}
           onClick={() => {
             if (open) {
               closePanel();
@@ -858,7 +857,7 @@ function IntervalSelector({
           {!compact && <span className="interval-more-label">{t("interval.label", {}, locale)}</span>}
           {!compact && <span className="interval-more-value">{formatIntervalLabel(interval)}</span>}
           <span className="interval-more-caret" aria-hidden="true"><Icon name="chevron-down" size={12} /></span>
-        </button>
+        </ControlButton>
       </nav>
 
       {open && (
@@ -887,37 +886,28 @@ function IntervalSelector({
               className="interval-panel-search"
               placeholder={t("interval.searchPlaceholder", {}, locale)}
             />
-            <button
-              type="button"
-              className="interval-panel-close"
-              onClick={closePanel}
-              aria-label={t("interval.closePanel", {}, locale)}
-            >
-              <Icon name="close" size={14} />
-            </button>
+            <IconButton size="sm" label={t("interval.closePanel", {}, locale)} icon={<Icon name="close" size={14} />} onClick={closePanel} />
           </div>
 
-          <div className="interval-panel-tabs">
-            {TAB_OPTIONS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                data-interval-tab={tab.key}
-                className={clsx("interval-panel-tab", activeTab === tab.key && "active")}
-                onClick={() => { setActiveTab(tab.key); setHighlightIndex(0); }}
-              >
-                {t(tab.labelKey, {}, locale)}
-                {tab.key === "custom" && <span>{effectiveCustomRecords.length}</span>}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            id={tabsId}
+            className="interval-panel-tabs"
+            label={t("interval.picker", {}, locale)}
+            value={activeTab}
+            onChange={(tab) => { setActiveTab(tab); setHighlightIndex(0); }}
+            tabs={TAB_OPTIONS.map((tab) => ({
+              value: tab.key,
+              label: t(tab.labelKey, {}, locale),
+              ...(tab.key === "custom" ? { badge: effectiveCustomRecords.length } : {}),
+            }))}
+          />
 
-          <div className="interval-panel-body">
+          <div className="interval-panel-body" role="tabpanel" id={tabPanelId(tabsId, activeTab)} aria-labelledby={tabId(tabsId, activeTab)}>
             {(inlineMessage || intervalNotice) && (
               <div className={clsx("interval-panel-message", (inlineMessage || intervalNotice)?.type)}>
                 <span>{(inlineMessage || intervalNotice)?.text}</span>
                 {intervalNotice?.actionLabel && (
-                  <button type="button" onClick={onRestoreCustomInterval}>{intervalNotice.actionLabel}</button>
+                  <Button size="sm" onClick={onRestoreCustomInterval}>{intervalNotice.actionLabel}</Button>
                 )}
               </div>
             )}
@@ -926,9 +916,9 @@ function IntervalSelector({
               <div className="interval-manage-head">
                 <span>{t("interval.manageHint", {}, locale)}</span>
                 {effectiveCustomRecords.length > 0 && (
-                  <button type="button" className="interval-clear-all" onClick={handleClear}>
+                  <Button size="sm" variant="ghost" onClick={handleClear}>
                     {t("interval.clearAll", {}, locale)}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -950,15 +940,7 @@ function IntervalSelector({
                       <div className="interval-chips">
                         {group.items.map((item, index) => renderPickerChip(item, baseIndex + index, activeTab === "custom"))}
                         {group.showAdd && (
-                          <button
-                            type="button"
-                            className="interval-chip-add"
-                            onClick={openComposer}
-                            title={t("interval.addCustom", {}, locale)}
-                            aria-label={t("interval.addCustom", {}, locale)}
-                          >
-                            +
-                          </button>
+                          <IconButton size="sm" variant="secondary" label={t("interval.addCustom", {}, locale)} icon={<Icon name="plus" size={14} />} onClick={openComposer} />
                         )}
                       </div>
                     </div>
@@ -995,7 +977,7 @@ function IntervalSelector({
                   </>}
                 </div>
                 <div className="interval-split">
-                  <input
+                  <Input
                     ref={amountInputRef}
                     type="number"
                     min="1"
@@ -1011,29 +993,23 @@ function IntervalSelector({
                     className="interval-number-input"
                     aria-label={t("interval.numberAria", {}, locale)}
                   />
-                  <div className="interval-unit-tabs" aria-label={t("interval.unitAria", {}, locale)}>
-                    {INTERVAL_UNITS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        className={clsx("interval-unit-tab", unit === item.value && "active")}
-                        onClick={() => setUnit(item.value)}
-                        title={t(item.labelKey, {}, locale)}
-                      >
-                        {item.shortLabel}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="interval-create-btn"
+                  <SegmentedControl
+                    size="sm"
+                    className="interval-unit-tabs"
+                    label={t("interval.unitAria", {}, locale)}
+                    value={unit}
+                    onChange={setUnit}
+                    options={INTERVAL_UNITS.map((item) => ({ value: item.value, label: item.shortLabel, title: t(item.labelKey, {}, locale) }))}
+                  />
+                  <Button
+                    variant="primary"
                     onClick={() => createOrSelectInterval(formValue, anchorEnabled ? anchorTimeMs : undefined)}
                     disabled={!formStatus.ok && formStatus.kind === "invalid"}
                   >
                     {formStatus.kind === "native" || formStatus.kind === "exists"
                       ? t("interval.select", {}, locale)
                       : t("interval.addAndSwitch", {}, locale)}
-                  </button>
+                  </Button>
                 </div>
                 <div className={clsx("interval-create-status", formStatus.ok ? "ok" : formStatus.kind)}>
                   {calendarEnabled && !formValue ? t("interval.calendarInvalid", {}, locale) : anchorEnabled && !formValue ? t("interval.anchorInvalid", {}, locale) : formStatus.text}

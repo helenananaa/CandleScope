@@ -26,11 +26,11 @@ import { automaticHostExecution, bookFileRequired, emptyAdvancedInputs, executio
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
-import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, SegmentedControl, Select, Tabs, Textarea } from "../../../components/ui/index.js";
+import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, OptionButton, SegmentedControl, Select, Tabs, Textarea } from "../../../components/ui/index.js";
 import { researchStateTone } from "../research/researchStateTone.js";
 import { chartContextStatusLabel, researchStateLabel } from "../research/researchLabels.js";
 import { reportAnalytics } from "./nativeReportAnalytics.js";
-import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
+import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, nativeStrategySwitcherRetired, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
@@ -103,7 +103,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
 
   return <>
     {!props.strategies && <div className="native-strategy-collection">
-      <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} activeId={collection.activeId} onSelect={strategies.select}
+      <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} retired={nativeStrategySwitcherRetired(strategies)} activeId={collection.activeId} onSelect={strategies.select}
         actions={nativeStrategySwitcherActions(strategies)} renaming={strategies.renaming} onRename={strategies.rename} />
     </div>}
     {strategies.storageError && <InlineAlert tone="danger">{strategies.storageError}</InlineAlert>}
@@ -614,12 +614,12 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     {props.docked && <StrategyDockSlot name="tabs"><Tabs className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={tab} onChange={selectTab}
       tabs={SESSION_TABS.map((item) => ({ value: item, label: t(item === "history" ? "ux.history" : `chartTester.tab.${item}`) }))} /></StrategyDockSlot>}
     <StrategyDockSlot name="actions"><div className="strategy-dock-run">
-      {summary && <button type="button" className="strategy-summary" data-stale={resultStale && !historicalRun} onClick={() => selectTab("overview")}
+      {summary && <Button variant="ghost" className="strategy-summary" data-stale={resultStale && !historicalRun} onClick={() => selectTab("overview")}
         title={resultStale && !historicalRun ? t("chartTester.result.staleGuidanceTitle") : t("chartTester.tab.overview")}>
         <span><small>{t("report.change")}</small><b className={returnPercent == null ? undefined : returnPercent < 0 ? "negative" : "positive"}>{percent(returnPercent)}</b></span>
         <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{percent(summary.maxDrawdownPercent)}</b></span>
         <span><small>{t("report.winRate")}</small><b>{percent(summary.winRate)}</b></span>
-      </button>}
+      </Button>}
       {status !== "idle" && !(followStatus && !historicalRun && status === "completed") && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
       {followStatus && !historicalRun && <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
         data-follow-state={followStatus.state} data-testid="native-strategy-follow-status"><i aria-hidden="true" />{chartFollowStatusLabel(followStatus)}</span>}
@@ -685,12 +685,12 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <section className="strategy-settings-section">
         <h3>{t(strategyList ? "strategyExecution.title" : "native.mode")}</h3>
         <div className="strategy-engine-options" role="radiogroup" aria-label={t(strategyList ? "strategyExecution.title" : "native.mode")}>
-          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <button key={engine} type="button" className="strategy-engine-option" role="radio" aria-checked={mode === engine} disabled={busy || (!!props.signalChart && engine === "NATIVE")}
+          {(["NATIVE", "CANDLESCOPE"] as const).map((engine) => <OptionButton key={engine} variant="card" className="strategy-engine-option" role="radio" selected={mode === engine} disabled={busy || (!!props.signalChart && engine === "NATIVE")}
             onClick={() => { if (mode !== engine) props.onExecutionModeChange(engine); }}>
             <strong>{t(strategyList ? (engine === "NATIVE" ? "strategyExecution.script" : "strategyExecution.candleScope")
               : engine === "NATIVE" ? "native.title" : "native.external.title")}</strong>
             <span>{t(engine === "NATIVE" ? "native.description" : "native.external.description")}</span>
-          </button>)}
+          </OptionButton>)}
         </div>
       </section>
       {automatic && automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions) !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <section className="strategy-settings-section">
@@ -768,7 +768,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <p>{t("strategyDock.empty")}</p>
         <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
-      {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+      {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview" data-testid="run-result-views">
         <RunResultSummary result={sharedResult.result} locale={locale} />
         <RunResultTradeList key={sharedResult.run.runId} result={sharedResult.result} locale={locale}
           active={props.active !== false} onLocateTrade={props.onLocateTrade ?? (() => undefined)}
@@ -784,12 +784,12 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </div>
       {!visibleHistory.length && <EmptyState compact title={t("strategyHistory.empty")} />}
       {visibleHistory.length > 0 && <ul className="native-history-list" aria-label={t(mode === "NATIVE" ? "native.history" : "native.external.history")}>
-        {visibleHistory.map((item) => <li key={item.run_id}><button type="button" disabled={busy} aria-current={reportRun?.run_id === item.run_id}
+        {visibleHistory.map((item) => <li key={item.run_id}><OptionButton variant="row" className="native-history-row" disabled={busy} aria-current={reportRun?.run_id === item.run_id}
           onClick={() => void requireStrategyManager().loadNativeRun(mode, item.run_id).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
           <time dateTime={new Date(item.created_at_ms).toISOString()}>{new Date(item.created_at_ms).toLocaleString(locale)}</time>
           <span>{item.runtime_identity.engine.package}</span>
           <Badge tone={researchStateTone(item.state === "INTERRUPTED" ? "FAILED" : item.state)}>{researchStateLabel(item.state)}</Badge>
-        </button></li>)}
+        </OptionButton></li>)}
       </ul>}
       {feedbackRun?.config?.source && <Disclosure summary={t("native.source")}><pre className="native-source">{feedbackRun.config.source}</pre></Disclosure>}
     </div>

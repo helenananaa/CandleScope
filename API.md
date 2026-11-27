@@ -7,10 +7,19 @@
 ## Base URLs
 
 ```text
-HTTP API:      http://localhost:8000/api/v1
-System API:    http://localhost:8000
-WebSocket API: ws://localhost:8000/api/v1
+HTTP API:      http://127.0.0.1:18080/api/v1
+System API:    http://127.0.0.1:18080
+WebSocket API: ws://127.0.0.1:18080/api/v1
 ```
+
+`backend/dev-server.sh` and the desktop app both listen on port 18080; the
+desktop app takes another port from `CANDLESCOPE_DESKTOP_BACKEND_PORT`. A
+running backend serves its full, current OpenAPI schema at
+`http://127.0.0.1:18080/docs`.
+
+This page documents the market-data, indicator, settings and symbol APIs in
+detail. [Other API areas](#other-api-areas) lists the rest, which `/docs`
+describes.
 
 All K-line, price, symbol, and stream APIs are exchange-aware. Most market-data endpoints accept:
 
@@ -336,7 +345,7 @@ Single-interval K-line stream.
 URL:
 
 ```text
-ws://localhost:8000/api/v1/stream/klines?symbol=BTCUSDT&interval=1m&exchange=binance&market_type=spot
+ws://127.0.0.1:18080/api/v1/stream/klines?symbol=BTCUSDT&interval=1m&exchange=binance&market_type=spot
 ```
 
 Server sends a subscription acknowledgement:
@@ -381,7 +390,7 @@ Multiplexed K-line stream for one symbol and many intervals.
 URL:
 
 ```text
-ws://localhost:8000/api/v1/stream/klines_multi?symbol=BTCUSDT&exchange=binance&market_type=spot
+ws://127.0.0.1:18080/api/v1/stream/klines_multi?symbol=BTCUSDT&exchange=binance&market_type=spot
 ```
 
 Initial message:
@@ -723,6 +732,33 @@ Cache limits body:
 | `quote_asset` | string | empty | e.g. `USDT` |
 | `market_type` | string | empty | Empty means all |
 | `exchange` | string | empty | Empty means all registered exchanges |
+
+## Other API Areas
+
+These areas are not documented field by field here. Their requests and
+responses are in the backend's `/docs` schema.
+
+| Area | Path prefix | Purpose |
+|---|---|---|
+| Order flow | `/trade-flow`, `/liquidations`, `/order-book` | Trade tape, liquidations and order book snapshots |
+| Chart series | `/synthetic` | Heikin Ashi, Renko, Point & Figure, Kagi and Line Break series computed by the backend |
+| Alerts | `/alerts` | Alert rules, their events and delivery |
+| History downloads | `/settings/storage/manual-downloads` | Plan, run and cancel history download jobs |
+| Data preparation | `/data-preparations` | Prepare the history a replay or strategy run needs |
+| Local data library | `/local` | CSV imports, datasets and project packages |
+| Historical study | `/history-studies` | Saved study views and their notes |
+| Replay training | `/replay`, `WS /stream/replay/...` | Training runs: create, command, review, fork and report |
+| Strategy runs | `/strategy-runs`, `/strategy-drafts`, `/strategy-versions`, `/strategy-references`, `/strategy-experiments`, `/strategy-follows` | The strategy run model in [ADR-BACKTEST-015](docs/adr/ADR-BACKTEST-015-strategy-run-model.md) |
+| Backtests | `/backtests` | Backtest runs and reports, with `/backtests/native`, `/backtests/continuous` and `/backtests/external` |
+| Practice accounts | `/trading` | Paper trading accounts, orders and the trade journal |
+| Read-only accounts | `/readonly-accounts` | Sync and reconcile a real exchange account, read-only |
+| Plugins | `/api/v2/plugins` (outside `/api/v1`) | Plugin catalog, installs and plugin runtimes |
+| Support | `/api/v1/support` | Diagnostics for a support report |
+
+Strategy and backtest routes are present while `BACKTEST_ENABLED` is on, which
+is the default. In local offline mode (`CANDLESCOPE_RUNTIME_MODE=LOCAL_OFFLINE`) the live
+market, exchange, settings and account routes are absent and the local data
+library serves the charts; see [Local offline mode](docs/local-offline-mode.md).
 
 ## Error Notes
 

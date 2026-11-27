@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Dispatch, SetStateAction } from "react";
 import { fetchPreset } from "../../services/indicatorApi.js";
 import type { IndicatorDefinition, IndicatorParams } from "./indicatorTypes.js";
+import { isRetiredScriptIndicator, upgradePersistedIndicator } from "./retiredScriptIndicator.js";
 
 const ACTIVE_INDICATORS_KEY = "candlescope-active-indicators";
 const VOL_INIT_KEY = "candlescope-vol-initialized";
@@ -41,7 +42,10 @@ export function loadActiveIndicators(
     const raw = storage.getItem(storageKey);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed)
-      ? parsed.filter(isIndicatorDefinition).map((indicator) => ({ ...indicator, visible: indicator.visible !== false }))
+      ? parsed.filter(isIndicatorDefinition).map((indicator) => upgradePersistedIndicator({
+        ...indicator,
+        visible: indicator.visible !== false,
+      }))
       : [];
   } catch {
     return [];
@@ -158,6 +162,9 @@ export function applyIndicatorScriptUpdate(
     indicator: IndicatorDefinition,
   ) => IndicatorDefinition | null,
 ): IndicatorDefinition {
+  // A retired Pyne script keeps its original source and language; an edit
+  // must not relabel it as another language.
+  if (isRetiredScriptIndicator(indicator)) return indicator;
   const updated: IndicatorDefinition = {
     ...indicator,
     script: newScript,

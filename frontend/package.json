@@ -3,7 +3,7 @@
   "description": "CandleScope native multi-chart desktop shell and web frontend",
   "author": "CandleScope Contributors",
   "private": true,
-  "version": "0.3.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "desktop/main.mjs",
   "build": {
@@ -68,8 +68,18 @@
     "win": {
       "icon": "public/brand/candlescope-app-icon-1024.png",
       "target": [
-        "dir"
-      ]
+        "nsis",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "CandleScope",
+      "artifactName": "${productName}-${version}-windows-${arch}-setup.${ext}"
     },
     "beforePack": "scripts/check-desktop-runtime.cjs",
     "afterPack": "scripts/compile-desktop-python.cjs",
@@ -162,7 +172,8 @@
     "test:drawing": "node scripts/run-frontend-tests.mjs \"src/features/drawings/**/*.test.{ts,tsx}\"",
     "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs",
     "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never",
-    "check:styles": "node scripts/check-style-metrics.mjs",
+    "desktop:package:win": "node scripts/package-desktop.mjs --distributable --win nsis zip --publish never",
+    "check:styles": "node scripts/check-style-metrics.mjs --strict",
     "check:css-layers": "node scripts/check-css-layers.mjs",
     "css:cascade": "node scripts/css-cascade-check.mjs",
     "prebuild:web": "npm ci --prefix browser --ignore-scripts --no-audit --no-fund",

@@ -1,7 +1,7 @@
 import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { useEffect, useState } from "react";
-import { Button, buttonClassName } from "../../components/ui/index.js";
+import { Button, OptionButton, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
@@ -58,26 +58,25 @@ export function StrategyResearchFirstOpen({
       )}
       <div className="strategy-research-templates" data-testid="strategy-research-templates">
         {templates.map((template) => (
-          <button
+          <OptionButton
             key={template.id}
-            type="button"
             className="strategy-template-card"
             data-testid={`strategy-research-template-${template.id}`}
             disabled={saving}
-            aria-pressed={selected?.source === template.source}
+            selected={selected?.source === template.source}
             onClick={() => onSelectTemplate(template.id)}
           >
             <strong>{t(template.nameKey)}</strong>
             <span>{t(template.descriptionKey)}</span>
             <small>{strategyLanguageLabel(template.language)}</small>
-          </button>
+          </OptionButton>
         ))}
-        {onSelectPine && <button type="button" className="strategy-template-card" data-testid="strategy-research-pine-strategy"
+        {onSelectPine && <OptionButton className="strategy-template-card" data-testid="strategy-research-pine-strategy"
           disabled={saving} onClick={onSelectPine}>
           <strong>{t("researchStrategy.pine")}</strong>
           <span>{t("researchStrategy.pineDetail")}</span>
           <small>{strategyLanguageLabel("pine")}</small>
-        </button>}
+        </OptionButton>}
       </div>
       {saving && <p className="strategy-research-note" role="status">{t("chartTester.autosave.saving")}</p>}
       <div className="strategy-research-first-open-actions" data-testid="strategy-research-current-chart-unavailable">

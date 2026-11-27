@@ -2,6 +2,7 @@ import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, useP
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
+import { seriesPricePrecision } from "../../chart-adapter/mainSeriesPriceFormat.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
@@ -210,6 +211,8 @@ export default function QuickReplayOverlay({
   const version = useSyncExternalStore(subscribe, getVersion, getVersion);
   const snapshot = useMemo(() => { void version; return store.snapshot(); }, [store, version]);
   const lastVisible = shown.at(-1)?.time ?? null;
+  // From every loaded bar, so stepping the cursor never changes how prices round.
+  const pricePrecision = useMemo(() => (chartBars.length ? seriesPricePrecision(chartBars) : undefined), [chartBars]);
   usePluginChartSource(pluginChartId ?? "", pluginChartId && !loading && !loadFailed && !timeOutsideHistory && shown.length ? {
     observe: () => ({
       mode: "quick-replay", runId: `${request.accountId}:${trade.id}`, trackId: trade.symbol,
@@ -288,8 +291,9 @@ export default function QuickReplayOverlay({
       intervalSec,
       lastVisibleSec: lastVisible,
       labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker"), reviewNote: t("trading.journal.reviewNote") },
+      pricePrecision,
     });
-  }, [cursor, notes, reviewNotes, intervalSec, lastVisible, locale, markerSource, overlay, trade.legs]);
+  }, [cursor, notes, reviewNotes, intervalSec, lastVisible, locale, markerSource, overlay, pricePrecision, trade.legs]);
 
   const position = useMemo(() => {
     const atCursor = positionAt(trade, shown, cursor, intervalSec);
@@ -501,7 +505,7 @@ export default function QuickReplayOverlay({
               ? `${t(trade.direction === "long" ? "trading.long" : "trading.short")} ${formatQty(position.qty)}`
               : t("trading.replay.flat")}</dd>
             <dt>{t("trading.replay.avgEntry")}</dt>
-            <dd>{formatPrice(position.avgEntry)}</dd>
+            <dd>{formatPrice(position.avgEntry, pricePrecision)}</dd>
             <dt>{t("trading.replay.unrealized")}</dt>
             <dd data-tone={pnlTone(position.unrealized)}>
               {formatSigned(position.unrealized)}{toR(position.unrealized) ? ` · ${toR(position.unrealized)}R` : ""}
@@ -510,7 +514,7 @@ export default function QuickReplayOverlay({
             <dt>{t("trading.replay.realized")}</dt>
             <dd data-tone={pnlTone(position.realized - position.fees + position.funding)}>{formatSigned(position.realized - position.fees + position.funding)}</dd>
             <dt>{t("trading.replay.mfeMae")}</dt>
-            <dd>{formatPrice(position.mfe)} / {formatPrice(position.mae)}</dd>
+            <dd>{formatAmount(position.mfe)} / {formatAmount(position.mae)}</dd>
           </dl>
           {plan && (
             <p className="trading-help">

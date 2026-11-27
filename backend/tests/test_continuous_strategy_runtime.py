@@ -3,6 +3,7 @@
 Only public transport leases are replaced; no remote feed is opened in tests.
 """
 import asyncio
+import json
 from threading import Event
 
 import pytest
@@ -10,7 +11,9 @@ import pytest
 from app.backtest.continuous_runtime import ContinuousStrategyRuntime
 from app.backtest.errors import BacktestError
 from app.data_engine.data_manager.models import BarData,DataEvent,DataEventType
-from app.data_engine.storage import klines_repo
+from app.data_engine.ingestion.models import DataSource,RawMessage,StreamDescriptor,StreamType
+from app.data_engine.storage import klines_repo,kline_sources
+from app.exchanges.ccxt_ext.fork_kline import SPOT_SCHEMA,normalize_fork_kline
 from tests.test_kline_revision_contract import storage as storage
 from tests.test_continuous_bar_source import source_setup,create_frozen,START,STEP,END,KEY,SOURCE,_row
 
@@ -150,6 +153,123 @@ def test_history_amendment_stops_actor_and_keeps_financial_recovery_point(storag
             with pytest.raises(BacktestError,match="repair resolution"):
                 await runtime.start_existing("cs_source",retry_failed=True)
         finally:await runtime.shutdown();await manager.event_bus.close()
+    try:asyncio.run(scenario())
+    finally:source.close();store.close();service.shutdown()
+
+
+SPOT=StreamDescriptor(KEY.symbol,StreamType.KLINE,interval=KEY.interval,market_type="spot")
+CANDLE=("timestamp","open","high","low","close","volume","closeTime","quoteVolume","trades","takerBuyBaseVolume","takerBuyQuoteVolume")
+
+
+def _candle(opened,source,*,close,volume,quote,trades,at):
+    """A Binance spot fork candle for ``_row(opened, 105)``'s stored bar."""
+    row=[opened,"100","250","50",close,volume,opened+STEP-1,quote,trades,"5","500","0"]
+    payload={"schema":SPOT_SCHEMA,"exchange":"binance","marketType":"spot","marketId":KEY.symbol,
+        "symbol":"BTC/USDT","timeframe":KEY.interval,"volumeUnit":"base","quoteVolumeUnit":"quote",**dict(zip(CANDLE,row))}
+    if source is DataSource.WEBSOCKET:
+        kline=dict(zip(("t","o","h","l","c","v","T","q","n","V","Q"),row[:11]))
+        frame={"e":"kline","E":at,"s":KEY.symbol,"k":{**kline,"s":KEY.symbol,"i":KEY.interval,"x":True,"B":"0"}}
+        payload.update(closed=True,closeEvidence="ws_x",eventTime=at,raw=json.dumps(frame))
+    else:
+        payload.update(closed=None,closeEvidence="rest_close_time",_source_rest_server_time_ms=at,raw=json.dumps(row))
+    return normalize_fork_kline(RawMessage(payload,source,StreamType.KLINE,at),SPOT)
+
+
+def _observe_and_project(candle):
+    """Record a source observation; the canonical projection accepts only the selected head."""
+    watermark=kline_sources.rest_watermark() if candle.source is not DataSource.WEBSOCKET else None
+    receipt=kline_sources.record(candle,SPOT,rest_watermark=watermark)
+    klines_repo.upsert_klines(KEY.symbol,KEY.interval,[{name:candle.data[name] for name in (
+        "open_time","close_time","open","high","low","close","volume","quote_volume","trades",
+        "taker_buy_base","taker_buy_quote")}],source=SOURCE)
+    return receipt["status"]
+
+
+def test_lagging_rest_snapshot_of_processed_close_keeps_actor_live_until_a_real_correction(storage,tmp_path,monkeypatch):
+    service,_,definition,factory,store,manager,source,receipt=source_setup(storage,tmp_path,monkeypatch)
+    create_frozen(source,receipt,definition,factory,store)
+    active,_=leases(monkeypatch,manager)
+    now=[START+20*STEP]
+    last=START+19*STEP  # RC 35: the dirty range was the last processed bar.
+    closed=last+STEP-1
+    runtime=ContinuousStrategyRuntime(store,manager,source.local_datasets,factory,clock_ms=lambda:now[0])
+    def stored_close():
+        return next(row["close"] for row in klines_repo.query_klines(KEY.symbol,KEY.interval) if row["open_time"]==last)
+    async def scenario():
+        try:
+            await runtime.start_existing("cs_source")
+            await wait_row(store,"cs_source",lambda row:row["phase"]=="LIVE" and row["sequence"]==20)
+            # Restart reload: the same processed bars are written again.
+            klines_repo.upsert_klines(KEY.symbol,KEY.interval,[_row(START+i*STEP,100+i%7) for i in range(20)],source=SOURCE)
+            await manager.event_bus.emit(DataEvent(DataEventType.BACKFILL_COMPLETED,KEY))
+            # The exchange-confirmed WS close that the run processed...
+            ws=_candle(last,DataSource.WEBSOCKET,close="105",volume="10",quote="1000",trades=10,at=closed+97)
+            assert kline_sources.record(ws,SPOT)["status"]=="selected"
+            # ...then REST reads serve the cache's pre-close snapshot: still
+            # settling 2 s after the close, and (a longer lag) after settling.
+            pending=_candle(last,DataSource.HTTP,close="104",volume="9",quote="990",trades=9,at=closed+2_000)
+            assert pending.data["is_closed"] is False and _observe_and_project(pending)=="stale"
+            lagging=_candle(last,DataSource.HTTP,close="104",volume="9",quote="990",trades=9,at=closed+20_000)
+            assert lagging.data["is_closed"] is True
+            status=_observe_and_project(lagging)
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_AMENDED,KEY))
+            now[0]=END+1
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED,KEY))
+            row=await wait_row(store,"cs_source",lambda row:row["sequence"]==25 or row["phase"] in {"REPAIR_REQUIRED","FAILED"})
+            assert (row["phase"],row["sequence"],row["error"])==("LIVE",25,None)
+            assert (status,stored_close())==("stale",105)
+            old=store.load("cs_source")
+            # A real exchange correction of the processed bar still stops the run.
+            corrected=_candle(last,DataSource.HTTP,close="106",volume="11",quote="1100",trades=11,at=closed+21_000)
+            assert _observe_and_project(corrected)=="selected"
+            assert stored_close()==106
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_AMENDED,KEY))
+            row=await wait_row(store,"cs_source",lambda row:row["phase"]=="REPAIR_REQUIRED")
+            assert row["error"]["code"]=="CONTINUOUS_HISTORY_REVISED"
+            assert store.load("cs_source")["checkpoint"]==old["checkpoint"]
+        finally:await runtime.shutdown();await manager.event_bus.close()
+        assert not active and not runtime.actors
+    try:asyncio.run(scenario())
+    finally:source.close();store.close();service.shutdown()
+
+
+def test_rest_only_close_waits_for_settled_read_and_keeps_actor_live(storage,tmp_path,monkeypatch):
+    """RC 35 recheck: the WS stream was reconnecting, so REST was the only source."""
+    service,_,definition,factory,store,manager,source,receipt=source_setup(storage,tmp_path,monkeypatch)
+    create_frozen(source,receipt,definition,factory,store)
+    active,_=leases(monkeypatch,manager)
+    bar=START+25*STEP  # the first bar after the stored history
+    closed=bar+STEP-1
+    now=[END+1]
+    runtime=ContinuousStrategyRuntime(store,manager,source.local_datasets,factory,clock_ms=lambda:now[0])
+    async def scenario():
+        try:
+            await runtime.start_existing("cs_source")
+            await wait_row(store,"cs_source",lambda row:row["phase"]=="LIVE" and row["sequence"]==25)
+            # 3.4 s after the close REST serves a pre-close snapshot of the bar.
+            now[0]=closed+3_407
+            lagging=_candle(bar,DataSource.HTTP,close="104",volume="9",quote="990",trades=9,at=closed+3_407)
+            assert _observe_and_project(lagging)=="selected"
+            assert not [row for row in klines_repo.query_klines(KEY.symbol,KEY.interval) if row["open_time"]==bar]
+            await manager.event_bus.emit(DataEvent(DataEventType.BACKFILL_COMPLETED,KEY))
+            row=await wait_row(store,"cs_source",lambda row:row["phase"]!="LIVE")
+            assert (row["phase"],row["sequence"],row["error"]["code"])==("CATCHING_UP",25,"CONTINUOUS_SOURCE_GAP")
+            # The settled read stores the final bar; the run consumes it once.
+            now[0]=closed+20_000
+            final=_candle(bar,DataSource.HTTP,close="106",volume="11",quote="1100",trades=11,at=closed+16_000)
+            assert _observe_and_project(final)=="selected"
+            await manager.event_bus.emit(DataEvent(DataEventType.BACKFILL_COMPLETED,KEY))
+            row=await wait_row(store,"cs_source",lambda row:row["sequence"]==26 or row["phase"] in {"REPAIR_REQUIRED","FAILED"})
+            assert (row["phase"],row["event_time_ms"],row["error"])==("LIVE",closed,None)
+            # Later reads of the same final candle do not revise the processed bar.
+            again=_candle(bar,DataSource.HTTP,close="106",volume="11",quote="1100",trades=11,at=closed+40_000)
+            assert _observe_and_project(again)=="selected"
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_AMENDED,KEY))
+            await manager.event_bus.emit(DataEvent(DataEventType.BACKFILL_COMPLETED,KEY))
+            await asyncio.sleep(0.2)
+            assert store.summary("cs_source")["phase"]=="LIVE"
+        finally:await runtime.shutdown();await manager.event_bus.close()
+        assert not active and not runtime.actors
     try:asyncio.run(scenario())
     finally:source.close();store.close();service.shutdown()
 

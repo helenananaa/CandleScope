@@ -14,6 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator
 
+from app.core.pre_migration_copy import keep_pre_migration_copy
+
 from .models import dec_str
 
 SCHEMA_VERSION = 4
@@ -172,6 +174,16 @@ def _text(value: Any) -> Any:
     return value
 
 
+def _stored_schema_version(conn: sqlite3.Connection) -> int | None:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone() is None:
+        return None
+    row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+    try:
+        return None if row is None else int(row[0])
+    except (TypeError, ValueError):
+        return None
+
+
 class TradingStore:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -185,6 +197,9 @@ class TradingStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.execute("PRAGMA busy_timeout=5000")
+        stored = _stored_schema_version(self._conn)
+        if stored is not None and stored < SCHEMA_VERSION:
+            keep_pre_migration_copy(self._conn, schema="trading-accounts", from_version=stored, to_version=SCHEMA_VERSION)
         self._conn.executescript(_SCHEMA)
         self._conn.execute("CREATE TABLE IF NOT EXISTS ledger_state_revision (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, sequence INTEGER NOT NULL)")
         with self.transaction() as conn:

@@ -32,7 +32,7 @@ export default function MarketWorkspaceFrame({
         <ExtensionSlot name="toolbar">{toolbar}</ExtensionSlot>
         <div className="market-workspace-content">
           <ExtensionSlot name="exportOverlay">{exportOverlay}</ExtensionSlot>
-          <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0, order: position("chart") }}><ExtensionSlot name="chart">{chart}</ExtensionSlot></div>
+          <div className="market-workspace-chart-slot" style={{ order: position("chart") }}><ExtensionSlot name="chart">{chart}</ExtensionSlot></div>
           <div className="extension-bottom-slot" style={{ order: position("bottomPanel") }}><ExtensionSlot name="bottomPanel">{bottomPanel}</ExtensionSlot></div>
         </div>
       </div>

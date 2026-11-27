@@ -6,8 +6,9 @@ import { DialogSurface } from "../Overlays.js";
 import { createOverlayStack, type OverlayEntry } from "../overlay/overlayStack.js";
 import { placePopover } from "../overlay/position.js";
 import { escapeClosesTopLayer, focusLeavesPopup, trappedFocusTarget } from "../overlay/overlayRuntime.js";
-import { isContextMenuKey, moveMenuFocus } from "../helpers.js";
-import { MAX_TOASTS, createToastStore } from "../overlay/toastStore.js";
+import { isContextMenuKey, menuItemRole, moveMenuFocus } from "../helpers.js";
+import { MAX_TOASTS, createToastStore, toastStore } from "../overlay/toastStore.js";
+import { ToastRegion } from "../Feedback.js";
 
 function entry(id: string, kind: OverlayEntry["kind"], extra: Partial<OverlayEntry> = {}, closed: string[] = []): OverlayEntry {
   return { id, kind, requestClose: () => { closed.push(id); }, ...extra };
@@ -192,6 +193,23 @@ test("toasts keep the newest few and dismiss by id", () => {
   assert.equal(store.list().at(-2)?.durationMs, 5000);
 });
 
+test("a toast with a second action shows both under its message, the main one first", () => {
+  const single = toastStore.add({ title: "One", action: { label: "Open", onClick: () => undefined } });
+  const double = toastStore.add({ title: "Two", message: "Body", durationMs: 0,
+    action: { label: "View release", onClick: () => undefined }, secondaryAction: { label: "Skip this version", onClick: () => undefined } });
+  try {
+    const html = renderToStaticMarkup(<ToastRegion />);
+    const [first, second] = html.split('<div class="ui-toast"').slice(1);
+    assert.doesNotMatch(first ?? "", /ui-toast-actions/, "one action stays beside the text");
+    assert.match(first ?? "", /<\/div><button[^>]*>Open<\/button>/);
+    assert.match(second ?? "", /<span class="ui-toast-message">Body<\/span><div class="ui-toast-actions"><button[^>]*class="ui-btn[^"]*"[^>]*>View release<\/button><button[^>]*ui-btn-ghost[^>]*>Skip this version<\/button><\/div><\/div>/);
+    assert.equal(toastStore.list().at(-1)?.durationMs, 0);
+  } finally {
+    toastStore.dismiss(single);
+    toastStore.dismiss(double);
+  }
+});
+
 test("a dialog is labelled by its title and described by its description", () => {
   const html = renderToStaticMarkup(
     <DialogSurface role="alertdialog" titleId="t" descriptionId="d" title="Delete alert?" description="This cannot be undone." size="sm"
@@ -202,4 +220,18 @@ test("a dialog is labelled by its title and described by its description", () =>
   assert.match(html, /<p id="d" class="ui-dialog-description">This cannot be undone\.<\/p>/);
   assert.match(html, /aria-label="[^"]+"/, "the close button has a name");
   assert.match(html, /<footer class="ui-dialog-foot">/);
+});
+
+test("menu items are actions, toggles or one choice of a group", () => {
+  assert.equal(menuItemRole({}), "menuitem");
+  assert.equal(menuItemRole({ checked: false }), "menuitemcheckbox");
+  assert.equal(menuItemRole({ checked: true, radio: true }), "menuitemradio");
+});
+
+test("a popover anchored to a point opens below it and stays inside the viewport", () => {
+  const point = { top: 300, left: 1390, width: 0, height: 0 };
+  const placed = placePopover(point, { width: 200, height: 160 }, { width: 1440, height: 900 });
+  assert.equal(placed.top, 306);
+  assert.equal(placed.left, 1232);
+  assert.equal(placed.placement, "bottom-start");
 });

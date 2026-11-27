@@ -3,7 +3,7 @@ import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../../components/icons/Icon.js";
-import { Badge, Button, IconButton, InlineAlert, Input, Select } from "../../../components/ui/index.js";
+import { Badge, Button, IconButton, InlineAlert, Input, OptionButton, Select } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { sharesReplayMarketScope } from "../replayMarketScope.js";
@@ -207,8 +207,8 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
           if (track) event.dataTransfer.setData("application/x-candlescope-replay-track", track.track_id);
         }}
       >
-        <button
-          type="button"
+        <OptionButton
+          variant="row"
           className="replay-watchlist-market"
           disabled={pending || selected || !sameScope}
           title={
@@ -222,7 +222,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
         >
           <span><strong>{identity.symbol}</strong><small>{trainingExchangeLabel(identity.exchange)} · {trainingMarketTypeLabel(identity.marketType)}</small></span>
           <span className="replay-watchlist-price">{last ?? "--"}</span>
-        </button>
+        </OptionButton>
         {viewer.actions.openTrack && track !== null && <IconButton
           size="sm"
           label={`${identity.symbol} · ${t("replay.workspace.openNew")}`}
@@ -262,12 +262,17 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
       data-replay-watchlist-source="run-archive"
     >
       {!embedded && <div className="wl-header">
-        <button
+        <IconButton
+          size="sm"
           className="wl-collapse-btn"
-          type="button"
           onClick={() => onCollapsedChange(!collapsed)}
-          title={collapsed ? t("replay.watchlist.expand") : t("replay.watchlist.collapse")}
-        >{collapsed ? "‹" : "›"}</button>
+          label={collapsed ? t("replay.watchlist.expand") : t("replay.watchlist.collapse")}
+          icon={collapsed ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+          )}
+        />
         {!collapsed && <><span className="wl-header-title">{t("replay.watchlist.title")}</span><small>{t("replay.watchlist.subtitle")}</small></>}
       </div>}
       {collapsed ? (
@@ -323,8 +328,8 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
                 const state = addingMarket === key ? "adding" : tracked ? "tracked" : available ? "available" : "unavailable";
                 return (
                   <li key={key} className="replay-market-search-result" data-state={state}>
-                    <button
-                      type="button"
+                    <OptionButton
+                      variant="row"
                       className="replay-market-search-add"
                       disabled={tracked || !available || addingMarket !== null || viewer.viewerPending}
                       title={tracked ? t("replay.watchlist.inRun") : available ? t("search.addToWatchlist") : unavailableReason}
@@ -332,7 +337,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
                     >
                       <strong>{entry.identity.symbol}</strong>
                       <small>{addingMarket === key ? t("replay.watchlist.adding") : tracked ? t("replay.watchlist.added") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
-                    </button>
+                    </OptionButton>
                     {viewer.actions.openTrack && (tracked || available) && <span className="replay-market-open-actions">
                       <Button size="sm" variant="ghost" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
                         aria-label={`${entry.identity.symbol} · ${t("workspace.activeChart")}`}
