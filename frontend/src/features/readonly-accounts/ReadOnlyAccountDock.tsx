@@ -9,6 +9,7 @@ import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, 
 import AccountReconciliation from "./AccountReconciliation.js";
 import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTradeReview.js";
 import AccountJournal from "./AccountJournal.js";
+import AccountFeeRates from "./AccountFeeRates.js";
 import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, getAccountFacts,
@@ -157,6 +158,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
           <h4>{t("account.balance", {}, locale)}</h4><p className="readonly-account-help">{t("account.balanceHelp", {}, locale)}</p>
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.balances?.receivedMs) }, locale)}</p>
           {balances.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}</dl></article>)}
+          {status && <AccountFeeRates snapshots={status.snapshots} locale={locale} date={date} />}
           <Disclosure className="readonly-account-coverage" summary={t("account.coverage", {}, locale)}><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
             {status?.scans.map((scan) => <p key={scan.kind}>{t(`account.${scan.kind as FactKind}`, {}, locale)} · {date(scan.start_ms)} – {date(scan.end_ms)}<br />{t(scan.complete ? "account.queryComplete" : "account.queryPending", { pages: scan.pages }, locale)}</p>)}
             {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {factKindLabel(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}

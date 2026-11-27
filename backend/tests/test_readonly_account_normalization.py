@@ -71,3 +71,17 @@ def test_funding_and_transfers_are_not_trade_pnl_and_do_not_invent_leg_attributi
     assert bill(raw)['category']=='funding' and bill(raw)['positionSide'] is None
     assert bill({**raw,'type':'1'})['category']=='other_adjustment'
     assert bill(raw)['cashChange']=='-0.00001'
+
+
+def test_fee_rates_are_cost_rates_per_settlement_with_tier_and_time():
+    from app.readonly_accounts.normalization import fee_rates
+    raw={'instType':'SWAP','level':'Lv1','maker':'-0.0002','taker':'-0.0005','makerU':'0.00005','takerU':'-0.0005',
+         'makerUSDC':'-0.0002','takerUSDC':'-0.0005','ts':'1709251200000'}
+    # OKX reports charges as negative rates; stored as costs, a rebate is negative.
+    assert fee_rates(raw)=={'tier':'Lv1','usdtMargined':{'maker':'-0.00005','taker':'0.0005'},
+                            'coinMargined':{'maker':'0.0002','taker':'0.0005'},'exchangeTimeMs':1709251200000}
+    assert fee_rates({**raw,'maker':'0','taker':'0','makerU':'','takerU':''})=={'tier':'Lv1','usdtMargined':None,
+                            'coinMargined':{'maker':'0','taker':'0'},'exchangeTimeMs':1709251200000}
+    for bad in [{'instType':'SPOT'},{'taker':''},{'makerU':'1e-4'},{'ts':''}]:
+        with pytest.raises(AccountDataError):
+            fee_rates({**raw,**bad})
