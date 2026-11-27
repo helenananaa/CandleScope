@@ -36,10 +36,14 @@ def capabilities(request: Request):
     return _call(lambda: _native(request).capabilities())
 
 
+# A FOLLOW rebuild names the user's run it rebuilds (ADR-BACKTEST-015 O2); it is not part of the run's input.
+FOLLOW_OF = Header(default=None, alias="Strategy-Follow-Of", pattern=r"^native_[0-9a-f]{32}$")
+
+
 @router.post("/runs")
 def create(request: Request, payload: NativeRunRequest,
-           idempotency_key: str = Header(min_length=1, max_length=128)):
-    return _call(lambda: _native(request).create(payload.model_dump(), idempotency_key))
+           idempotency_key: str = Header(min_length=1, max_length=128), follow_of: str | None = FOLLOW_OF):
+    return _call(lambda: _native(request).create(payload.model_dump(), idempotency_key, follow_of=follow_of))
 
 
 @router.get("/runs")
@@ -48,8 +52,9 @@ def list_runs(request: Request):
 
 
 @external_router.post("/runs")
-def create_external(request: Request, payload: ExternalRunRequest, idempotency_key: str = Header(min_length=1, max_length=128)):
-    return _call(lambda: _native(request).create(payload.model_dump(), idempotency_key))
+def create_external(request: Request, payload: ExternalRunRequest, idempotency_key: str = Header(min_length=1, max_length=128),
+                    follow_of: str | None = FOLLOW_OF):
+    return _call(lambda: _native(request).create(payload.model_dump(), idempotency_key, follow_of=follow_of))
 
 
 @external_router.get("/runs")
