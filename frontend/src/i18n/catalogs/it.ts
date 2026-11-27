@@ -4,6 +4,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyItalian, replayNoteItalian, tradeHistoryItalian, readonlyAccountItalian, continuousItalian, tradingAccountsIt, nativeItalian } from "./italianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const it = {
   ...unifiedMessages["it"],
@@ -4169,5 +4171,7 @@ export const it = {
   "chartTester.deleteRetiredDraft": "Elimina la bozza ritirata {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossibile eliminare la bozza ritirata. Riprova.",
   ...drawingCalculatedMessages["it"],
+  ...chartTimeZoneMessages["it"],
+  ...chartTimeShortcutMessages["it"],
 } as const satisfies MessageCatalog;
 

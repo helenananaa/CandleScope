@@ -4,6 +4,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyGerman, replayNoteGerman, tradeHistoryGerman, readonlyAccountGerman, continuousGerman, tradingAccountsDe, nativeGerman } from "./germanFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const de = {
   ...unifiedMessages["de"],
@@ -4164,5 +4166,7 @@ export const de = {
   "chartTester.deleteRetiredDraft": "Eingestellten Entwurf {name} löschen",
   "chartTester.deleteRetiredDraftFailed": "Der eingestellte Entwurf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
   ...drawingCalculatedMessages["de"],
+  ...chartTimeZoneMessages["de"],
+  ...chartTimeShortcutMessages["de"],
 } as const satisfies MessageCatalog;
 

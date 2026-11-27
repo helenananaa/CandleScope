@@ -4,6 +4,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHungarian, replayNoteHungarian, tradeHistoryHungarian, readonlyAccountHungarian, continuousHungarian, tradingAccountsHu, nativeHungarian } from "./hungarianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hu = {
   ...unifiedMessages["hu"],
@@ -4164,4 +4166,6 @@ export const hu = {
   "chartTester.deleteRetiredDraft": "A megszűnt {name} piszkozat törlése",
   "chartTester.deleteRetiredDraftFailed": "A megszűnt piszkozatot nem sikerült törölni. Próbálja újra.",
   ...drawingCalculatedMessages["hu"],
+  ...chartTimeZoneMessages["hu"],
+  ...chartTimeShortcutMessages["hu"],
 } as const satisfies MessageCatalog;

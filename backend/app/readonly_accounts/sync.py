@@ -79,6 +79,7 @@ class AccountSynchronizer:
         self.contracts: dict[str,Contract] = {}
         self.last_full_scan = 0
         self.last_position_history_ms = 0
+        self.last_fee_rates_ms = 0
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self.changed = asyncio.Event()
         self.stream_status = "waiting"
@@ -285,6 +286,7 @@ class AccountSynchronizer:
         completed = [await self.history(kind,full=full) for kind in (pending or list(HISTORY))]
         if all(completed):
             await self.position_history(force=full)
+            await self.fee_rates(force=full)
             if full:
                 self.last_full_scan = now
                 self.requested_full = False
@@ -345,6 +347,28 @@ class AccountSynchronizer:
             # fills/bills or make their synchronization appear to have failed.
             await asyncio.to_thread(self.repository.save_snapshot, "position_history_state",
                                     {"error": code, "complete": False}, self.now_ms())
+
+    async def fee_rates(self, *, force: bool = False) -> None:
+        """Read the account's fee tier at most hourly; a failure never fails the round."""
+        now = self.now_ms()
+        if not force and self.last_fee_rates_ms and now - self.last_fee_rates_ms < 60*60*1000:
+            return
+        self.last_fee_rates_ms = now
+        try:
+            rows = response_rows(await self.client.privateGetAccountTradeFee({"instType": "SWAP"}), 1)
+            if len(rows) != 1:
+                raise AccountDataError("FEE_RATES_UNAVAILABLE")
+            payload = {"raw": rows[0], "rates": normal.fee_rates(rows[0])}
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates", payload, self.now_ms())
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates_state", {"error": None}, self.now_ms())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            code = error_code(exc)
+            if code in TERMINAL_ERRORS:
+                raise
+            # Estimates are optional: keep the last good rates and say why they are old.
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates_state", {"error": code}, self.now_ms())
 
     async def run(self) -> None:
         tasks = [asyncio.create_task(self.consume())]

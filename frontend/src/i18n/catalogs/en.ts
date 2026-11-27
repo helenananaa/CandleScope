@@ -11,6 +11,8 @@ import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const en = {
   ...unifiedMessages["en"],
@@ -4573,4 +4575,6 @@ export const en = {
   "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
   ...drawingCalculatedMessages["en"],
+  ...chartTimeZoneMessages["en"],
+  ...chartTimeShortcutMessages["en"],
 } as const satisfies MessageCatalog;

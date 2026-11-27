@@ -4,6 +4,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRomanian, replayNoteRomanian, tradeHistoryRomanian, readonlyAccountRomanian, continuousRomanian, tradingAccountsRo, nativeRomanian } from "./romanianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ro = {
   ...unifiedMessages["ro"],
@@ -4169,4 +4171,6 @@ export const ro = {
   "chartTester.deleteRetiredDraft": "Ștergeți schița retrasă {name}",
   "chartTester.deleteRetiredDraftFailed": "Schița retrasă nu a putut fi ștearsă. Încercați din nou.",
   ...drawingCalculatedMessages["ro"],
+  ...chartTimeZoneMessages["ro"],
+  ...chartTimeShortcutMessages["ro"],
 } as const satisfies MessageCatalog;

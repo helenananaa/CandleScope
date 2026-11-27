@@ -137,21 +137,64 @@ def fill(raw: Mapping[str, Any], contract: Contract) -> dict[str, Any]:
             "exchangeRealizedPnl": realized, "contract": contract.wire()}
 
 
+def _optional(raw: Mapping[str, Any], key: str, **sign: bool) -> Decimal | None:
+    return None if raw.get(key) in (None, "") else decimal(raw.get(key), **sign)
+
+
 def position(raw: Mapping[str, Any], contract: Contract) -> dict[str, Any]:
     if raw.get("instId") != contract.instrument or raw.get("instType") != "SWAP":
         raise AccountDataError("POSITION_MARKET_MISMATCH")
     leg = position_side(raw)
     quantity = decimal(raw.get("pos"), nonnegative=True)
-    mark = None if raw.get("markPx") in (None, "") else decimal(raw.get("markPx"), positive=True)
-    avg = None if raw.get("avgPx") in (None, "") else decimal(raw.get("avgPx"), nonnegative=True)
+    mark = _optional(raw, "markPx", positive=True)
+    avg = _optional(raw, "avgPx", nonnegative=True)
     unrealized = None if raw.get("upl") in (None, "") else exact(decimal(raw.get("upl")))
+    mode = raw.get("mgnMode") if raw.get("mgnMode") in {"cross", "isolated"} else None
+    leverage = _optional(raw, "lever", positive=True)
+    # OKX sends no price when liquidation is out of reach; a non-positive
+    # estimate is equally not a price a position can be liquidated at.
+    liquidation = _optional(raw, "liqPx")
+    # Isolated positions hold their own margin; cross positions report the
+    # initial margin they use from the shared balance.
+    margin = _optional(raw, "margin" if mode == "isolated" else "imr", nonnegative=True) if mode else None
+    margin_currency = identifier(raw["ccy"]) if raw.get("ccy") else contract.settle
     return {"positionId": identifier(raw.get("posId")), "instrument": contract.instrument,
-            "positionSide": leg, "contracts": exact(quantity), "marginMode": raw.get("mgnMode"),
+            "positionSide": leg, "contracts": exact(quantity), "marginMode": mode,
             "entryPrice": exact(avg) if avg is not None else None,
             "markPrice": exact(mark) if mark is not None else None,
             "baseQuantity": contract.quantities(quantity, mark)["baseQuantity"] if mark else None,
             "unrealizedPnl": unrealized, "settleCurrency": contract.settle,
+            "leverage": exact(leverage) if leverage is not None else None,
+            "liquidationPrice": exact(liquidation) if liquidation is not None and liquidation > 0 else None,
+            "priceCurrency": contract.quote,
+            "margin": exact(margin) if margin is not None else None, "marginCurrency": margin_currency,
             "eventTimeMs": timestamp(raw.get("uTime")), "contract": contract.wire()}
+
+
+def _cost_rates(raw: Mapping[str, Any], maker: str, taker: str) -> dict[str, str] | None:
+    # OKX reports a charge as a negative rate and a rebate as a positive one.
+    # Stored as cost rates: positive is a fee, negative a rebate.
+    if raw.get(maker) in (None, "") and raw.get(taker) in (None, ""):
+        return None
+    with localcontext() as context:
+        context.prec = 80
+        # Subtracting from zero keeps a zero rate "0", never "-0".
+        return {"maker": exact(Decimal(0) - decimal(raw.get(maker))), "taker": exact(Decimal(0) - decimal(raw.get(taker)))}
+
+
+def fee_rates(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """The account's standard perpetual fee rates at its current tier.
+
+    These estimate costs only. Fills and bills record the fees actually charged,
+    and some contracts carry rates of their own.
+    """
+    if raw.get("instType") != "SWAP":
+        raise AccountDataError("FEE_RATE_SCOPE_INVALID")
+    tier = raw.get("level")
+    return {"tier": identifier(tier) if tier else None,
+            "usdtMargined": _cost_rates(raw, "makerU", "takerU"),
+            "coinMargined": _cost_rates(raw, "maker", "taker"),
+            "exchangeTimeMs": timestamp(raw.get("ts"))}
 
 
 def bill(raw: Mapping[str, Any]) -> dict[str, Any]:
