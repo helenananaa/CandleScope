@@ -10,6 +10,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ko = {
   ...unifiedMessages["ko"],
@@ -196,6 +198,14 @@ export const ko = {
   "account.lastRead": "최근 조회 성공: {time}",
   "account.lastEvent": "최근 비공개 이벤트 수신: {time}",
   "account.snapshotTime": "스냅샷 수신: {time}",
+  "account.stale": "오래된 값",
+  "account.staleTitle": "계좌 값이 최신이 아닙니다",
+  "account.staleAge": "마지막 업데이트: {age} · {time}",
+  "account.staleReason.localService": "CandleScope 로컬 서비스와의 연결이 끊어졌습니다. 다시 연결하는 중이며, 마지막으로 받은 값을 표시합니다.",
+  "account.staleReason.service": "계좌 서비스가 실행 중이 아니어서 이 값은 업데이트되지 않습니다.",
+  "account.staleReason.paused": "동기화가 일시 중지되어 이 값은 더 이상 업데이트되지 않습니다. 다시 시작하려면 동기화 / 다시 시도를 선택하세요.",
+  "account.staleReason.error": "동기화에 실패한 뒤로 이 값이 업데이트되지 않았습니다. 오류는 아래에 표시됩니다.",
+  "account.staleReason.slow": "동기화는 실행 중이지만 최근 이 값이 업데이트되지 않았습니다. 네트워크 또는 프록시 설정을 확인하세요.",
   "account.unknown": "알 수 없음",
   "account.empty": "아직 반환된 내역이 없습니다",
   "account.positions": "포지션",
@@ -223,8 +233,29 @@ export const ko = {
   "account.refresh": "새로 고침",
   "account.balance": "거래 계좌 잔액",
   "account.balanceHelp": "이 잔액에는 계좌의 다른 활동도 포함되며 해당 무기한 선물 범위의 손익과 다릅니다.",
+  "account.feeRates": "수수료율 추정",
+  "account.feeRatesHelp": "현재 수수료 등급에서 계좌에 적용되는 표준 요율로, 비용 추정용입니다. 실제로 부과된 수수료는 각 체결과 현금 원장에 기록되며, 일부 계약은 별도 요율이 적용됩니다.",
+  "account.feeRatesPending": "수수료율을 아직 읽지 않았습니다.",
+  "account.feeRatesStale": "이번에는 수수료율을 읽지 못해 마지막으로 읽은 요율을 표시합니다.",
+  "account.feeRatesUnavailable": "수수료율을 읽지 못했습니다.",
+  "account.feeUsdtMargined": "USDT 마진 무기한",
+  "account.feeCoinMargined": "코인 마진 무기한",
+  "account.makerRate": "메이커 수수료율",
+  "account.takerRate": "테이커 수수료율",
+  "account.feeRebate": "리베이트 {rate}",
+  "account.feeTier": "수수료 등급 {tier} · 거래소 업데이트 시간 {time}",
   "account.equity": "계좌 자산",
   "account.cash": "현금 잔액",
+  "account.marginMode": "증거금 모드",
+  "account.marginMode.cross": "교차",
+  "account.marginMode.isolated": "격리",
+  "account.leverage": "레버리지",
+  "account.liquidationPrice": "예상 강제청산가",
+  "account.positionMargin": "사용 중인 증거금",
+  "account.settleCurrency": "결제 통화",
+  "account.availableMargin": "사용 가능 증거금",
+  "account.exchangeTime": "거래소 업데이트 시간",
+  "account.marginHelp": "사용 가능 증거금은 이 통화로 결제되는 교차 포지션이 아직 사용할 수 있는 자산입니다. 격리 포지션은 각자의 증거금을 사용합니다. 강제청산가는 거래소의 추정치입니다.",
   "account.newNote": "새 기록",
   "account.pendingFillNote": "체결 {id}의 새 메모를 준비합니다. 현재 초안을 먼저 저장해야 하며 기존 체결 연결은 유지됩니다.",
   "account.cancelNewNote": "새 메모 취소",
@@ -4748,4 +4779,6 @@ export const ko = {
   "chartTester.deleteRetiredDraftFailed": "지원 종료된 초안을 삭제하지 못했습니다. 다시 시도하세요.",
   ...tradingAccountsKo,
   ...replayDrawingSaveMessages["ko"],
+  ...chartTimeZoneMessages["ko"],
+  ...chartTimeShortcutMessages["ko"],
 } as const satisfies MessageCatalog;

@@ -4,6 +4,8 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 /** Neutral Spanish trading glossary for Spain and Latin America:
  * orden, ejecución, posición, pérdidas y ganancias, margen,
@@ -4174,4 +4176,6 @@ export const es = {
   "chartTester.deleteRetiredDraft": "Eliminar el borrador retirado {name}",
   "chartTester.deleteRetiredDraftFailed": "No se pudo eliminar el borrador retirado. Inténtalo de nuevo.",
   ...replayDrawingSaveMessages["es"],
+  ...chartTimeZoneMessages["es"],
+  ...chartTimeShortcutMessages["es"],
 } as const satisfies MessageCatalog;

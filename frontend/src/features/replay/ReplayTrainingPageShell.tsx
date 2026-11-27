@@ -77,7 +77,7 @@ import { replayChartTradeInputs, replayFillMarkerText } from "./replayChartTrade
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
   formatReplayTimeAxisLabel,
-  replayDateNavigationEnabled,
+  replayViewNavigationMode,
   replayPublicTimePolicy,
   replayTimeAxisMaxCharacterLength,
 } from "./replayPublicTimeModel.js";
@@ -343,11 +343,16 @@ export default function ReplayTrainingPageShell({
     config?.blind_mode,
   );
   const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
+  const viewNavigation = replayViewNavigationMode({
+    active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
+  });
   const dateNavigation = useChartTimeNavigation({
     active: cell?.active ?? true,
-    enabled: replayDateNavigationEnabled({
-      active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
-    }),
+    enabled: viewNavigation !== null,
+    // Shortcuts stop at the revealed boundary, and Last viewed outlives clock moves.
+    ceilingMs: runtime.store.virtualTimeMs,
+    lastViewedKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
+      viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval]),
     cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
     sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
       viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),
@@ -1338,7 +1343,7 @@ export default function ReplayTrainingPageShell({
             </div>
           </>}
           actions={[
-            ...(dateNavigation.available ? [{ id: "view-date", label: t("study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
+            ...(dateNavigation.available ? [{ id: "view-date", label: t(viewNavigation === "relative" ? "chartTime.move" : "study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
             ...(active ? [{
               id: "integrity", label: review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing"),
               expanded: integrityOpen, controls: "replay-integrity-drawer", anchorRef: integrityToggleRef,
@@ -1377,6 +1382,7 @@ export default function ReplayTrainingPageShell({
       featureSurfaces={active ? <>
         {dateNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={cell?.cellId ?? controlCellId}
           onClose={() => dateNavigation.setOpen(false)} onSubmit={dateNavigation.submit}
+          shortcuts={dateNavigation.shortcuts} hideDates={viewNavigation === "relative"}
           {...(runtime.store.virtualTimeMs === null ? {} : { initialTimeMs: runtime.store.virtualTimeMs })}
           hint={t("study.viewDateHint")} /></Suspense>}
         {chartSettingsOpen && <PageSettingsDialog runtime={chartSettingsRuntime} onClose={() => setChartSettingsOpen(false)} />}

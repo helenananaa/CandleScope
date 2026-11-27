@@ -9,6 +9,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ja = {
   ...unifiedMessages["ja"],
@@ -4543,4 +4545,6 @@ export const ja = {
   "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
   ...replayDrawingSaveMessages["ja"],
+  ...chartTimeZoneMessages["ja"],
+  ...chartTimeShortcutMessages["ja"],
 } as const satisfies MessageCatalog;
