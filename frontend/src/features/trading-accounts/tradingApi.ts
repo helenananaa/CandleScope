@@ -57,6 +57,8 @@ export const tradingApi = {
       order: PracticeOrder;
       priceSource: string;
       referencePrice: string;
+      /** The market is closed; the order fills at the next open (ADR-DATA-002 D5a). */
+      waitsForOpen?: boolean;
     }>,
   cancelOrder: (accountId: string, orderId: string) =>
     request(path(`/accounts/${id(accountId)}/orders/${id(orderId)}/cancel`), { method: "POST" }) as Promise<{

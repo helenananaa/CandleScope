@@ -715,6 +715,7 @@ export const tradingAccountsPl: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Złóż sprzedaż",
   "trading.ticket.filled": "Zrealizowano po {price}",
   "trading.ticket.working": "Zlecenie aktywne",
+  "trading.ticket.waitsForOpen": "Rynek jest zamknięty; zlecenie zostanie zrealizowane przy następnym otwarciu",
   "trading.ticket.model": "Symulowana realizacja. Nic nie jest wysyłane na giełdę.",
   "trading.manual.title": "Wpisz realizację",
   "trading.manual.help": "Zapisz realizację dla {symbol}. Realizacje są automatycznie grupowane w transakcje, od pozycji zerowej do zerowej.",

@@ -783,6 +783,11 @@ class TradingAccountService(JournalService):
         return now - at_ms <= 2 * BAR_MS or closed_between(
             market_calendar(self.market, instrument, series), at_ms + BAR_MS, now - 2 * BAR_MS)
 
+    def _market_closed(self, instrument: Instrument, series: KlineSeriesIdentity | None, now: int) -> bool:
+        """Whether the market's session calendar has it closed this minute (ADR-DATA-002 D5a)."""
+        minute_ms = now // BAR_MS * BAR_MS
+        return closed_between(market_calendar(self.market, instrument, series), minute_ms, now)
+
     def _reference_price(
         self, instrument: Instrument, series: KlineSeriesIdentity | None, client_price: Decimal | None,
     ) -> tuple[Decimal, str]:
@@ -969,6 +974,10 @@ class TradingAccountService(JournalService):
             order_type == "limit" and limit_price is not None
             and ((side == "buy" and limit_price >= reference) or (side == "sell" and limit_price <= reference))
         )
+        # Nothing trades while the market is closed: a marketable order waits
+        # and fills at the next open (ADR-DATA-002 D5a).
+        waits_for_open = marketable and self._market_closed(instrument, series, now)
+        marketable = marketable and not waits_for_open
         book = self._buying_power(account, instrument, trades) if marketable else None
         if seed_cursor:
             self._seed_cursor(conn, instrument, series, reference, now)
@@ -995,7 +1004,8 @@ class TradingAccountService(JournalService):
             self._feeds.pop(instrument, None)
         stored = self.store.order(order_id)
         assert stored is not None
-        return {"order": _order_view(stored), "priceSource": price_source, "referencePrice": dec_str(reference)}
+        return {"order": _order_view(stored), "priceSource": price_source, "referencePrice": dec_str(reference),
+                "waitsForOpen": waits_for_open}
 
     def cancel_order(self, account_id: str, order_id: str) -> dict[str, Any]:
         with self.store.locked():
@@ -1177,9 +1187,13 @@ class TradingAccountService(JournalService):
                 return 0
             cursor = feed.cursor
             chunks = []
+            calendar = market_calendar(self.market, instrument, feed.series) if bars else None
             for bar in bars:
                 bar_time = int(bar["time"])
                 bar_end_ms = bar_time * 1000 + BAR_MS - 1
+                # A candle after a closure opens with a gap (ADR-DATA-002 D5a).
+                after_closure = calendar is not None and bar_time > cursor.bar_time + BAR_MS // 1000 and closed_between(
+                    calendar, cursor.bar_time * 1000 + BAR_MS, bar_time * 1000 - 1)
                 cursor, chunk = advance_cursor(
                     cursor,
                     bar_time,
@@ -1188,8 +1202,9 @@ class TradingAccountService(JournalService):
                     _bar_decimal(bar, "low"),
                     _bar_decimal(bar, "close"),
                     observed_ms=min(observed_ms, bar_end_ms),
+                    after_closure=after_closure,
                 )
-                if chunk is not None and len(chunk.points) > 1:
+                if chunk is not None and (len(chunk.points) > 1 or chunk.after_closure):
                     chunks.append(chunk)
             if bars:
                 cursor = replace(cursor, observed_ms=max(cursor.observed_ms, observed_ms))

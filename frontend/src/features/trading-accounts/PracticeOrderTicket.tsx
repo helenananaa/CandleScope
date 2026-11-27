@@ -78,7 +78,7 @@ export default function PracticeOrderTicket({
         tone: "ok",
         text: response.order.status === "filled"
           ? t("trading.ticket.filled", { price: formatPrice(response.order.fillPrice) })
-          : t("trading.ticket.working"),
+          : t(response.waitsForOpen ? "trading.ticket.waitsForOpen" : "trading.ticket.working"),
       });
       onPlaced();
     } catch (cause) {

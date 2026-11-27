@@ -715,6 +715,7 @@ export const tradingAccountsFr: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Passer la vente",
   "trading.ticket.filled": "Exécuté à {price}",
   "trading.ticket.working": "L’ordre est actif",
+  "trading.ticket.waitsForOpen": "Le marché est fermé ; l’ordre sera exécuté à la prochaine ouverture",
   "trading.ticket.model": "Exécution simulée. Rien n’est envoyé à une plateforme.",
   "trading.manual.title": "Saisir une exécution",
   "trading.manual.help": "Consignez une exécution pour {symbol}. Les exécutions sont regroupées automatiquement en transactions, d’une position nulle à la suivante.",

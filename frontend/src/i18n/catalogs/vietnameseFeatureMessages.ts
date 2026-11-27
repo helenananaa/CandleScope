@@ -715,6 +715,7 @@ export const tradingAccountsVi: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Đặt bán",
   "trading.ticket.filled": "Đã khớp tại {price}",
   "trading.ticket.working": "Lệnh đang chờ khớp",
+  "trading.ticket.waitsForOpen": "Thị trường đang đóng cửa; lệnh sẽ khớp ở phiên mở cửa tiếp theo",
   "trading.ticket.model": "Khớp mô phỏng. Không có gì được gửi tới sàn.",
   "trading.manual.title": "Nhập một lệnh khớp",
   "trading.manual.help": "Ghi một lệnh khớp cho {symbol}. Các lệnh khớp được tự động gộp thành giao dịch, từ lúc không có vị thế đến khi vị thế về không.",

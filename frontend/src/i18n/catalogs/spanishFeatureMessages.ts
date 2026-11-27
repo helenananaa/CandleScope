@@ -715,6 +715,7 @@ export const tradingAccountsEs: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.submitSell": "Colocar venta",
   "trading.ticket.filled": "Ejecutada a {price}",
   "trading.ticket.working": "La orden está activa",
+  "trading.ticket.waitsForOpen": "El mercado está cerrado; la orden se ejecutará en la próxima apertura",
   "trading.ticket.model": "Ejecución simulada. No se envía nada a ningún exchange.",
   "trading.manual.title": "Introducir una ejecución",
   "trading.manual.help": "Registra una ejecución de {symbol}. Las ejecuciones se agrupan automáticamente en operaciones, de posición plana a posición plana.",
