@@ -7,6 +7,7 @@ readers. This private controller is not yet a public API or default live owner.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
@@ -29,6 +30,8 @@ from .continuous_runtime import ContinuousStrategyRuntime, WAKE_EVENTS
 from .continuous_store import ContinuousStrategyStore, _wire, MAX_DEFINITION_BYTES
 from .continuous_repairs import ContinuousRepairs
 from .errors import BacktestError
+
+logger = logging.getLogger(__name__)
 
 
 def _key(definition):
@@ -292,9 +295,21 @@ class ContinuousStrategyController:
         job.task.add_done_callback(lambda done:None if done.cancelled() else done.exception())
         return job
 
+    def _calendar(self,series):
+        """The series' trading calendar, or None (ADR-DATA-002 D2c)."""
+        series_calendar=getattr(self.manager,"series_calendar",None)
+        if series_calendar is None or not isinstance(series,SeriesKey):return None
+        try:
+            return series_calendar(series.symbol,series.interval,exchange=series.exchange,
+                market_type=series.market_type,series_identity=series.identity)
+        except Exception:
+            logger.warning("Continuous creation could not resolve the calendar of %s",series,exc_info=True)
+            return None
+
     async def create(self,key,*,provider,execution,series,mode,from_ms=None,warmup_bars=0):
         self._live()
-        definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars)
+        definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars,
+            calendar=self._calendar(series))
         now=self.clock_ms()
         if type(now) is not int or now<STEP:raise BacktestError("CONTINUOUS_INPUT_INVALID","Backend UTC clock is unavailable")
         cutoff=(now//STEP)*STEP-1

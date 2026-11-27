@@ -126,3 +126,81 @@ def test_shared_financial_rules_match_fixed_run_configuration(tmp_path):
         assert prepared["configuration"]["account_model"]==account
         assert service.repository.list_runs()==[] and service.repository.list_strategy_revisions()==[]
     finally:service.shutdown()
+
+
+# ADR-DATA-002 D2c: the source's capabilities and calendar decide, not its asset class.
+
+STOCK_IDENTITY = KlineSeriesIdentity("twelvedata", "xngs", asset_class="stock", series_variant="ohlcv",
+                                     session_variant="regular", volume_semantics="shares")
+
+
+@pytest.fixture(scope="module")
+def xnys():
+    from app.data_engine.history.expected_bars import calendar_by_id
+    from app.exchanges.plugins.twelvedata.adapter import EXCHANGE_DATE_CALENDAR_ID
+    from app.exchanges.plugins.twelvedata.plugin import _register_calendars
+    _register_calendars()
+    return calendar_by_id(EXCHANGE_DATE_CALENDAR_ID)
+
+
+def test_a_history_only_source_is_refused_with_its_reason(xnys):
+    from app.exchanges.registry import bootstrap_default_adapters
+    bootstrap_default_adapters()  # the running application has its exchanges loaded
+    key = SeriesKey.create("AAPL:NASDAQ", "1m", exchange="twelvedata", market_type="stock", identity=STOCK_IDENTITY)
+    with pytest.raises(BacktestError) as refused:
+        prepare_definition(spec(), {"account_model": "SPOT_CASH_V1"}, key, calendar=xnys)
+    assert refused.value.code == "CONTINUOUS_LIVE_BARS_UNAVAILABLE"
+    assert "no live 1m bars" in str(refused.value)
+
+
+def test_a_market_that_closes_cannot_start_a_forward_run_yet(xnys):
+    key = SeriesKey.create("BTCUSDT", "1m", market_type="spot", identity=KlineSeriesIdentity("vendor", "binance"))
+    with pytest.raises(BacktestError) as refused:
+        prepare_definition(spec(), {"account_model": "SPOT_CASH_V1"}, key, calendar=xnys)
+    assert refused.value.code == "CONTINUOUS_MARKET_SESSIONS_UNSUPPORTED"
+    # FOLLOW reads the chart's bars across closures (D2c2), and needs no live stream.
+    followed = prepare_definition(spec(), {"account_model": "SPOT_CASH_V1"}, key, follow=True, calendar=xnys)
+    assert followed["configuration"]["market_type"] == "spot"
+
+
+def test_the_asset_class_no_longer_decides():
+    from app.data_engine.history.calendar import AlwaysOpenCalendar
+    # A non-crypto series with live bars, raw prices and base-unit volume on an always-open market.
+    identity = KlineSeriesIdentity("vendor", "binance", asset_class="commodity", series_variant="ohlcv",
+                                   session_variant="regular", volume_semantics="shares")
+    key = SeriesKey.create("XAUUSDT", "1m", market_type="spot", identity=identity)
+    value = prepare_definition(spec(), {"account_model": "SPOT_CASH_V1"}, key, calendar=AlwaysOpenCalendar())
+    assert value["source_series"] == [key.exchange, "spot", key.symbol, "1m", *identity.storage_values]
+    # Roll series, adjusted prices and contract volumes still are not relabelled.
+    for refused in (replace(identity, series_variant="continuous.back_adjusted"),
+                    replace(identity, price_adjustment="adjusted"), replace(identity, volume_semantics="contracts")):
+        with pytest.raises(BacktestError) as failure:
+            prepare_definition(spec(), {"account_model": "SPOT_CASH_V1"},
+                               SeriesKey.create("XAUUSDT", "1m", market_type="spot", identity=refused))
+        assert failure.value.code == "FIDELITY_UNSUPPORTED"
+
+
+def test_creation_asks_the_manager_for_the_series_calendar(storage, tmp_path, monkeypatch, xnys):
+    import asyncio
+    from tests.test_continuous_controller import market, open_owner, submit
+
+    manager, _active, _calls = market(storage, monkeypatch)
+    asked = []
+
+    def series_calendar(symbol, interval, **kwargs):
+        asked.append((symbol, interval, kwargs["exchange"], kwargs["market_type"]))
+        return xnys
+
+    monkeypatch.setattr(manager, "series_calendar", series_calendar)
+
+    async def scenario():
+        owner = await open_owner(tmp_path, manager, [START + 30 * STEP])
+        try:
+            with pytest.raises(BacktestError) as refused:
+                await submit(owner)
+            return refused.value.code
+        finally:
+            await owner.close()
+
+    assert asyncio.run(scenario()) == "CONTINUOUS_MARKET_SESSIONS_UNSUPPORTED"
+    assert asked and asked[0][1] == "1m"
