@@ -30,6 +30,8 @@ export interface NativeRun {
   config?: FrozenExecutionSettings & { signal_chart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition; source: string; language: "pine"; parameters: Record<string, unknown>; context?: { symbol: string; timeframe: string }; interval?: string; exchange?: string; market_type?: string };
   result?: NativeResult | null;
   error?: { message: string; details?: unknown } | null;
+  /** A FOLLOW rebuild: whether its engine session can be extended with the next bars (B-157a). */
+  follow?: { extendable: boolean };
 }
 export interface NativeCapabilities {
   engines: Array<{ language: string; available: boolean; external_available?: boolean; external_replay?: string; reason?: string }>;

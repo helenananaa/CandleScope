@@ -272,6 +272,15 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
   **已确认（2026-11-22）：每根收盘做前缀重建。** `SCRIPT` 的 `FOLLOW` 在每根信号周期 K 线收盘后，
   对最新前缀新建一次 `FIXED` Run，并原子替换图上的结果；因此与同输入 `FIXED` 逐条相同（§3.4 不变量
   直接成立），`barstate.islast` 等按该前缀的语义计算。引擎支持区间延长与实时柱后，再改为增量推进。
+  **增量推进（B-157a，2026-11-27）：** 引擎补丁 `host-contracts-v6.patch` 给固定历史会话加了区间延长
+  （`HistoricalSession.extend`）：会话推进到终点后可接上后续收盘 K 线，结果与一次给出全部 K 线逐条相同。
+  运行时声明 `follow_session`（`candlescope.pine-follow/1`）后，宿主为每个被跟随的用户 Run 保留一个引擎会话
+  （`backend/app/backtest/native_follow_sessions.py`，最多 4 个，空闲 15 分钟关闭）；新一次重建若只是上一次
+  输入多了后续 K 线，就延长该会话，只执行新 K 线；否则新开会话。每次重建仍是一个普通 `FIXED` Run，结果与
+  同输入 `FIXED` 逐条相同（§3.4）。脚本在较早 K 线读取数据终点（`barstate.islast`、`last_bar_index`、
+  `timenow` 等）、用 `calc_bars_count`、或带上下文/放大镜/边界/交易时段等随 K 线冻结的输入时，运行时不开会话，
+  继续整段重建；任何会话失败都回落到整段重建。可延长时，图表保留上一次重建的起点（窗口最多到预算的两倍，
+  即 10,000 根），之后从最新 5,000 根重新开始，每 5,000 根收盘只整段重建一次；不可延长时仍按 5,000 根滑动。
 - **O2** `FOLLOW` 的默认条数预算、缓存容量与淘汰规则。建议默认值（P4 实测后确认）：
   - `SCRIPT` 前缀重建每次最多 5,000 根信号周期 K 线（取最近的），超出部分不参与该次重建；
   - 同一单元格同时只算一次重建，期间收盘的 K 线合并进下一次，不排队；

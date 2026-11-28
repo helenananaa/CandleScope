@@ -448,7 +448,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
               const created = (await waitForPreparation(job, () => undefined, signal)).result?.native_run;
               if (!created) return null;
               return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
-            } } };
+            },
+            extendable: (run) => run.follow?.extendable === true } };
         }
         if (alive.current) receiveRun(prepared);
         return;
@@ -513,7 +514,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal,
               { followOf: result.run_id });
             return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
-          } } };
+          },
+          extendable: (run) => run.follow?.extendable === true } };
       }
       if (alive.current) receiveRun(result);
     } catch (reason) { if (alive.current) { setError(reason instanceof PreparationApiError ? `${reason.code}: ${reason.message}` : String(reason)); setBusy(false); } }

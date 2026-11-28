@@ -150,8 +150,12 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
 
 
 class NativeBacktests:
-    def __init__(self, runtime, *, resolver=resolve_plugin, runner=invoke):
+    def __init__(self, runtime, *, resolver=resolve_plugin, runner=invoke, follow_sessions=None):
         self.runtime, self.resolver, self.runner = runtime, resolver, runner
+        from .native_follow_sessions import FollowSessions
+        # Pine FOLLOW rebuilds extend a warm engine session when they continue the previous one (B-157a).
+        self.follow_sessions = follow_sessions if follow_sessions is not None else (
+            FollowSessions() if runner is invoke else None)
         self.lock = threading.RLock()
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="native-backtest")
         self.cancel_events = {}
@@ -457,7 +461,7 @@ class NativeBacktests:
                 self._record_version(record)
             cancel = threading.Event()
             self.cancel_events[run_id] = cancel
-            self.pool.submit(self._execute, run_id, plugin, wire, cancel)
+            self.pool.submit(self._execute, run_id, plugin, wire, cancel, follow_of)
             return record
 
     def get(self, run_id, *, if_state=None):
@@ -599,7 +603,7 @@ class NativeBacktests:
         self.db.commit()
         self.run_updates.notify(run_id)
 
-    def _execute(self, run_id, plugin, wire, cancel):
+    def _execute(self, run_id, plugin, wire, cancel, follow_of=None):
         try:
             with self.lock:
                 if cancel.is_set():
@@ -610,7 +614,12 @@ class NativeBacktests:
                 from .external import run_external_host
                 result = run_external_host(plugin, wire, self.runner, cancel)
             else:
-                result = self.runner(plugin, wire, cancelled=cancel)
+                result = (self.follow_sessions.run(follow_of, plugin, wire, cancel)
+                          if follow_of is not None and self.follow_sessions is not None else None)
+                # Whether the next rebuild of this base can extend this one: then the chart keeps the window's start.
+                extendable = result is not None
+                if result is None:
+                    result = self.runner(plugin, wire, cancelled=cancel)
             if result.get("identity") != wire["identity"] or result.get("execution_mode") != ("CANDLESCOPE" if external else "NATIVE"):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "result identity differs from frozen engine")
             authority = "candlescope" if external else "pine-compat-runtime"
@@ -621,7 +630,8 @@ class NativeBacktests:
             result["report_hash"] = checkpoint_digest(result)
             with self.lock:
                 if not cancel.is_set():
-                    self._update(run_id, state="COMPLETED", result=result)
+                    self._update(run_id, state="COMPLETED", result=result,
+                                 **({"follow": {"extendable": extendable}} if follow_of is not None and not external else {}))
                     if self.follows.is_rebuild(run_id):
                         self._collect_follows()
                 # The committed row owns the result now. Release the job's
@@ -655,6 +665,8 @@ class NativeBacktests:
 
     def shutdown(self):
         self.replay.shutdown()
+        if self.follow_sessions is not None:
+            self.follow_sessions.close()
         with self.lock:
             self.closed = True
             for run_id, event in self.cancel_events.items():
