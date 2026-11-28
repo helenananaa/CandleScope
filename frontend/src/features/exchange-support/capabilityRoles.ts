@@ -28,11 +28,17 @@ export function capabilityRoleContract(capability: RoleSource, marketType: strin
   const market = marketType.trim().toLowerCase();
   const roles: unknown = capability?.roles;
   if (!Array.isArray(roles)) return null;
-  const found = roles.find((item) => (
-    item?.role === role && Array.isArray(item.market_types)
-    && item.market_types.some((value: unknown) => String(value).toLowerCase() === market)
-  ));
-  return typeof found?.contract === "string" ? found.contract : null;
+  for (const item of roles as unknown[]) {
+    if (!isRecord(item) || item.role !== role || !Array.isArray(item.market_types)) continue;
+    if ((item.market_types as unknown[]).some((value) => String(value).toLowerCase() === market)) {
+      return typeof item.contract === "string" ? item.contract : null;
+    }
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**

@@ -48,7 +48,8 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
       } catch (failure) { if (!controller.signal.aborted) setError(researchReturnError(failure)); }
     })();
     return () => controller.abort();
-  }, [manager, reference]);
+    // Validated again once the exchange catalog (venue roles) is ready.
+  }, [manager, reference, venueRoles]);
   const originCell = reference?.origin?.workspaceId === workspace.view.activeWorkspaceId ? reference.origin.cellId : "";
   const cellId = workspace.view.layoutCellIds.includes(cell) ? cell
     : workspace.view.layoutCellIds.includes(originCell) ? originCell : workspace.view.activeCellId;
