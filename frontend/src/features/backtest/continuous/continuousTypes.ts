@@ -13,14 +13,18 @@ export interface ContinuousCreation {
 export interface ContinuousCapabilities {
   execution_enabled: boolean; runtime_mode: string; protocol: "continuous.v1";
   python_editor_authorized: boolean; python_author_contract: string;
-  repair_available: boolean; automatic_repair_available?: boolean; intervals: string[]; languages: string[];
+  repair_available: boolean; automatic_repair_available?: boolean; languages: string[];
+  /** B-333: null with `fixed_intervals_only` — any fixed-length interval of whole minutes. */
+  intervals: string[] | null; fixed_intervals_only?: boolean;
 }
 export interface ContinuousCreate {
   mode: Exclude<ContinuousMode, "HISTORY">;
   series: { exchange: string; market_type: string; symbol: string; interval: string; identity: Record<string, string> };
-  provider: { language: "python" | "builtin"; source_text?: string; builtin_id?: string;
+  provider: { language: "python" | "builtin" | "pine"; source_text?: string; builtin_id?: string;
     parameters: Record<string, unknown>; output_mode: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
-    runtime_mode?: "TRUSTED_LOCAL"; trusted_confirmed?: boolean };
+    runtime_mode?: "TRUSTED_LOCAL"; trusted_confirmed?: boolean;
+    /** Pine only (B-333b): the versioned libraries the script imports. */
+    libraries?: Record<string, string> };
   execution: Record<string, unknown>; from_ms?: number; warmup_bars?: number;
 }
 export const resultKinds = ["orders", "fills", "decisions", "rejected", "equity_curve", "ledger",
@@ -68,6 +72,8 @@ export interface ContinuousRepair {
   automatic?: boolean; target_revision: number; base_identity: CommittedIdentity; plan_id: string;
   resume_after: boolean; from_ms: number; through_ms: number; original_from_ms: number;
   anchor_sequence: number; full_reinitialization: boolean; expanded_range_reason: string | null;
+  /** The run's interval (B-333); progress counts its bars. Older backends omit it: 1m. */
+  interval?: string | null;
   progress: { state?: string; sequence?: number; event_time_ms?: number; through_ms?: number;
     waiting?: string; resources_released?: boolean; physical_resources_released?: boolean;
     cleanup_error?: { code: string; message: string } } | null;
@@ -81,8 +87,12 @@ export type ContinuousParameterField = {
 } & ({ type: "boolean"; default: boolean } | { type: "string"; default: string }
   | { type: "integer" | "number"; default: number });
 
+/** Whether Pine code can run forward (backend `continuous_pine.forward_support`); `uses` names what it refuses. */
+export type PineForwardSupport = { supported: boolean; uses: string[]; reason: string | null };
+
 export interface ContinuousApi {
   editorParameters(source: string, signal: AbortSignal): Promise<{ fields: ContinuousParameterField[] }>;
+  pineSupport(source: string, libraries: Record<string, string>, signal: AbortSignal): Promise<PineForwardSupport>;
   capabilities(signal: AbortSignal): Promise<ContinuousCapabilities>;
   create(key: string, body: ContinuousCreate, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;
   request(key: string, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;

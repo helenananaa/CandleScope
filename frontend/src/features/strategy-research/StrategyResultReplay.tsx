@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Disclosure, Field, InlineAlert, Input, Select, Stat, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
@@ -6,13 +6,20 @@ import { researchStateLabel } from "../backtest/research/researchLabels.js";
 import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayChart, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
-import { formatIntervalLabel } from "../../utils/intervals.js";
+import type { ChartTimeOutcomes } from "../market-data/chartTimeShortcuts.js";
+import { useGoToDateHotkey } from "../market-data/useGoToDateHotkey.js";
+import { formatIntervalLabel, parseIntervalSeconds } from "../../utils/intervals.js";
+import { findResultReplayCursor } from "./resultReplayTimeSearch.js";
 
 import { StrategyResultReplayChart } from "./StrategyResultReplayChart.js";
 import { changeReplayChartDisplay, replayChartDisplay, replayDisplayKey, replayLayout, restoreReplayLayout, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
 import { editReplayDrawings, replayDrawingOwner, replayDrawingScope, type ReplayDrawingEdit } from "./strategyResultReplayDrawings.js";
 
+const ChartTimeNavigationDialog = lazy(() => import("../market-data/ChartTimeNavigationDialog.js"));
+
 const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
+/** The dialog reports per chart; the replay's charts share one cursor. */
+const DATE_TARGET = "strategy-result-replay";
 
 function ReplayMaControl({ testId, interval, period, onChange }: {
   testId: string; interval: string; period: number | undefined; onChange(period: number | undefined): void;
@@ -129,6 +136,33 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     }
   };
 
+  // ── go to date (PL-6): the cursor is found through the engine's own frames ──
+  const [dateOpen, setDateOpen] = useState(false);
+  const dateSearch = useRef<AbortController | null>(null);
+  useEffect(() => () => dateSearch.current?.abort(), []);
+  const canGoToDate = noteDraft === null && total !== undefined && total > 0;
+  useGoToDateHotkey(canGoToDate, () => setDateOpen(true));
+  const goToTime = async (timeMs: number): Promise<ChartTimeOutcomes> => {
+    dateSearch.current?.abort();
+    const controller = new AbortController();
+    dateSearch.current = controller;
+    const outcome = (result: ChartTimeOutcomes[number]["result"]): ChartTimeOutcomes => [{ cellId: DATE_TARGET, result }];
+    if (total === undefined) return outcome({ status: "unavailable", requestedTimeMs: timeMs });
+    // A bare frame per probe: no references or studies, same run, snapshot and report.
+    const probe = { runId: request.runId, snapshotHash: request.snapshotHash, reportHash: request.reportHash, interval: request.interval };
+    try {
+      const found = await findResultReplayCursor(timeMs, total,
+        async cursor => (await manager.loadResultReplay({ ...probe, cursor }, controller.signal)).time_ms,
+        { toleranceMs: (parseIntervalSeconds(request.interval) ?? 0) * 1000 });
+      if (controller.signal.aborted) return outcome({ status: "superseded", requestedTimeMs: timeMs });
+      if (!found) return outcome({ status: "empty", requestedTimeMs: timeMs });
+      navigate(found.cursor);
+      return outcome({ status: "located", requestedTimeMs: timeMs, actualTimeMs: found.timeMs, exact: found.exact });
+    } catch {
+      return outcome({ status: controller.signal.aborted ? "superseded" : "unavailable", requestedTimeMs: timeMs });
+    }
+  };
+
   const canAdvance = frame !== null && frame.cursor < frame.total;
   const displayKey = replayDisplayKey(initial);
   const extraSlots = BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => request.additionalCharts?.[slot]);
@@ -182,6 +216,9 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           <Button size="sm" disabled={!canAdvance} onClick={() => navigate(request.cursor + 1)}>{t("native.replay.step")}</Button>
           <Button size="sm" variant="primary" disabled={!playing && !canAdvance} onClick={() => setPlaying(!playing)}>
             {t(playing ? "native.replay.pause" : "native.replay.play")}
+          </Button>
+          <Button size="sm" disabled={!canGoToDate} onClick={() => setDateOpen(true)} title={t("chartTime.replayCursorHint")}>
+            {t("chartTime.title")}
           </Button>
         </div>
         <form className="strategy-result-replay-seek" onSubmit={event => {
@@ -352,6 +389,10 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
             </li>)}</ol>
           </Disclosure>}
         </>}
+      {dateOpen && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={DATE_TARGET}
+        onClose={() => setDateOpen(false)} onSubmit={goToTime}
+        {...(frame?.time_ms == null ? {} : { initialTimeMs: frame.time_ms })}
+        hint={t("chartTime.replayCursorHint")} /></Suspense>}
     </main>
   );
 }

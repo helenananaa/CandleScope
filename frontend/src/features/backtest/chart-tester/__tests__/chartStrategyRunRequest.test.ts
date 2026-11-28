@@ -8,6 +8,7 @@ import { PreparationApiError } from "../../../data-preparation/api.js";
 import { ChartStrategyChartDataGate } from "../chartStrategyChartData.js";
 import {
   buildChartStrategyRunBody,
+  chartContextRequestForFrozen,
   chartStrategyDataErrorCode,
   chartStrategyQuickPresetIdForMarket,
   chartStrategyRunDiagnostics,
@@ -333,6 +334,33 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
     request,
   });
   assert.equal(keys[0], keys[1]);
+});
+
+test("a run on a non-exchange series resolves and prepares that series, not the exchange default (ADR-DATA-002 D1)", async () => {
+  const appleSession = {
+    exchange: "twelvedata", marketType: "stock", symbol: "AAPL", interval: "1m",
+    providerId: "twelvedata", venue: "XNGS", assetClass: "stock", seriesVariant: "ohlcv",
+    priceAdjustment: "raw", sessionVariant: "regular", volumeSemantics: "shares",
+  };
+  const apple: ChartStrategyRunRequest = { ...request, session: appleSession };
+  assert.deepEqual(chartContextRequestForFrozen(await freezeChartStrategyRunRequest(apple)).identity, {
+    provider_id: "twelvedata", venue: "xngs", asset_class: "stock", series_variant: "ohlcv",
+    price_adjustment: "raw", session_variant: "regular", volume_semantics: "shares",
+  });
+  const plain = chartContextRequestForFrozen(await freezeChartStrategyRunRequest(request));
+  assert.equal("identity" in plain, false, "an exchange's own series sends the request it always did");
+
+  const bodies: Array<Record<string, unknown>> = [];
+  const api = apiWithResolutions([resolution(), resolution()], []);
+  const resolve = api.resolveChartContext.bind(api);
+  api.resolveChartContext = async (body, ...rest) => {
+    bodies.push(body as unknown as Record<string, unknown>);
+    return resolve(body, ...rest);
+  };
+  assert.equal((await runChartStrategyBacktest({ api, request: apple })).kind, "TERMINAL");
+  // The re-resolve before create sends the server's echo of this request, which keeps the identity.
+  assert.equal(bodies.length, 2);
+  assert.deepEqual(bodies[0]!.identity, chartContextRequestForFrozen(await freezeChartStrategyRunRequest(apple)).identity);
 });
 
 test("Pine charts compile through the real engine revision rather than the frozen example subset", async () => {

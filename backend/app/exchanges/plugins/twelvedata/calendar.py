@@ -69,13 +69,22 @@ class TwelveDataUsEquityCalendar(SessionCalendar):
     def expected_opens(self, start_ms: int, end_ms: int, interval: str):
         if self._uses_provider_dates(interval):
             return self._provider_dates.expected_opens(start_ms, end_ms, interval)
-        clipped = _clip_intraday_range(start_ms, end_ms)
-        if clipped is None or clipped != (int(start_ms), int(end_ms)):
-            raise ValueError(
-                "Twelve Data US-equity intraday calendar is available only "
-                f"from {_SCHEDULE_START.isoformat()} through {_SCHEDULE_END.isoformat()}"
-            )
+        _require_intraday_schedule(start_ms, end_ms)
         return super().expected_opens(start_ms, end_ms, interval)
+
+    # Intraday opens are the plain session grid, so one boundary is found
+    # without emitting every minute of a ten-year neighbour search.
+    def first_expected_open(self, start_ms: int, end_ms: int, interval: str) -> int | None:
+        if self._uses_provider_dates(interval):
+            return self._provider_dates.first_expected_open(start_ms, end_ms, interval)
+        _require_intraday_schedule(start_ms, end_ms)
+        return self._first_grid_open(start_ms, end_ms, interval)
+
+    def last_expected_open(self, start_ms: int, end_ms: int, interval: str) -> int | None:
+        if self._uses_provider_dates(interval):
+            return self._provider_dates.last_expected_open(start_ms, end_ms, interval)
+        _require_intraday_schedule(start_ms, end_ms)
+        return self._last_grid_open(start_ms, end_ms, interval)
 
     def bucket_end_ms(self, open_ms: int, interval: str) -> int:
         if self._uses_provider_dates(interval):
@@ -199,6 +208,15 @@ def _clip_intraday_range(start_ms: int, end_ms: int) -> tuple[int, int] | None:
     if clipped_start > clipped_end:
         return None
     return clipped_start, clipped_end
+
+
+def _require_intraday_schedule(start_ms: int, end_ms: int) -> None:
+    clipped = _clip_intraday_range(start_ms, end_ms)
+    if clipped is None or clipped != (int(start_ms), int(end_ms)):
+        raise ValueError(
+            "Twelve Data US-equity intraday calendar is available only "
+            f"from {_SCHEDULE_START.isoformat()} through {_SCHEDULE_END.isoformat()}"
+        )
 
 
 def build_provider_date_calendar(*, calendar_id: str) -> TwelveDataProviderDateCalendar:

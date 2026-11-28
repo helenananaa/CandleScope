@@ -70,6 +70,16 @@ def main() -> int:
         "test_strategy_drafts.py", "test_strategy_versions.py", "test_strategy_references.py",
         # ADR-BACKTEST-015 P4: FOLLOW equals FIXED; chart FOLLOW runs fed by the DataManager.
         "test_follow_session.py", "test_strategy_follows.py", "test_strategy_experiments.py", "test_strategy_run_derive.py", "test_strategy_experiment_robustness.py",
+        # ADR O2: Pine FOLLOW keeps the results of the 8 most recently active follows.
+        "test_native_follow_results.py",
+        # B-157a: Pine FOLLOW rebuilds extend a warm engine session.
+        "test_native_follow_sessions.py",
+        # B-333: forward runs advance on closed bars of any fixed-length signal interval.
+        "test_continuous_grid.py",
+        # B-333b: Pine forward runs, close-bar ORDER_INTENT only (runtime equality runs in pine-host-contracts).
+        "test_continuous_pine.py",
+        # B-333c: external models in forward runs (forward connections, restart equality, revocation).
+        "test_continuous_external.py",
         "test_execution_data_market.py",
         # Replay: no future data before reveal (launch non-negotiable) and revealed indicator columns.
         "test_replay_no_lookahead.py", "test_replay_indexed_indicator_closes.py",
@@ -122,6 +132,8 @@ def main() -> int:
         # Practice HEDGE money and migration, multi-chart replay finances, restart and shutdown.
         "test_trading_practice_hedge.py", "test_trading_state_shutdown.py", "test_replay_multi_interval.py",
         "test_replay_multi_interval_service.py", "test_replay_recovery.py", "test_replay_shutdown.py",
+        # ADR-DATA-002 D4: host credential vault, data-source keys and the Twelve Data provider that reads them.
+        "test_host_credential_vault.py", "test_data_source_credentials.py", "test_twelve_data_provider.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

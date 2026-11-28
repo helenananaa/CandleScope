@@ -46,6 +46,7 @@ test("Phase 8 assigns static scene ownership to all drawing kinds, including sou
     "range-measure",
     "path",
     "channel",
+    "calculated",
     "text",
     "fibonacci",
     "position",

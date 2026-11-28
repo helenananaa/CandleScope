@@ -11,6 +11,7 @@ import { drawAngleSceneEntity } from "./drawingSceneAnglePainter.js";
 import { drawRangeSceneEntity } from "./drawingSceneRangePainter.js";
 import { drawPathSceneEntity } from "./drawingScenePathPainter.js";
 import { drawChannelSceneEntity } from "./drawingSceneChannelPainter.js";
+import { drawCalculatedSceneEntity } from "./drawingSceneCalculatedPainter.js";
 import { arrowHeadScreenGeometry } from "../geometry/drawingToolGeometry.js";
 import { drawFibonacciSceneEntity } from "./drawingSceneFibonacciPainter.js";
 import { drawTextSceneEntity } from "./drawingSceneTextPainter.js";
@@ -577,6 +578,8 @@ export class DrawingSceneRenderer implements PrimitivePaneRenderer {
             drawPathSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "channel") {
             drawChannelSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
+          } else if (op === "calculated") {
+            drawCalculatedSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "range-measure") {
             drawRangeSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "angle") {

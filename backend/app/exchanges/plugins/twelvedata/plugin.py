@@ -12,6 +12,7 @@ from .adapter import (
     EXCHANGE_DATE_CALENDAR_ID,
     WEEKDAY_CALENDAR_ID,
     TwelveDataExchangeAdapter,
+    configured_twelve_data_api_key,
 )
 from .calendar import TwelveDataUsEquityCalendar, build_provider_date_calendar
 from .identity import EQUITY_MARKET_TYPES, identity_is_supported, is_us_equity_venue
@@ -117,7 +118,7 @@ class TwelveDataPlugin(BuiltinExchangePlugin):
         del descriptor
         return bool(
             getattr(config, "twelve_data_ws_enabled", True)
-            and str(getattr(config, "twelve_data_api_key", "") or "").strip()
+            and configured_twelve_data_api_key(config)
         )
 
     def create_stream_session(self, config: Any, descriptor: Any) -> Any | None:

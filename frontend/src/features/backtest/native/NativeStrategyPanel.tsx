@@ -9,7 +9,7 @@ import type { ChartStrategyTesterPanelProps } from "../chart-tester/ChartStrateg
 import type { ChartContextResolution } from "../backtestApi.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
-import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
+import { FOLLOW_OF_HEADER, loadShownNativeRun, nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import { CHART_STRATEGY_FOLLOW_ENABLED } from "../chart-tester/chartStrategyTesterFeature.js";
@@ -42,11 +42,16 @@ import { WorkbenchAccountSettings } from "./WorkbenchAccountSettings.js";
 import { defaultWorkbenchAccount, parseAccountData, workbenchAccountError, type AccountInputState, type FrozenAccountData } from "./workbenchAccountInputs.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
+const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import { pineForwardRefusal, usePineForwardSupport } from "../continuous/usePineForwardSupport.js";
+import { parsePineLibraries } from "../../indicators/pineLibraryModel.js";
+import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command, contextReference } from "../../app-control/commandRegistry.js";
 import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
 import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
 import { browserHost } from "../../../app/browserHost.js";
+import { klineSeriesIdentityField } from "../../market-data/klineSeriesIdentity.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -55,7 +60,7 @@ const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as 
 const ignoreCursor = () => undefined;
 
 
-type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult" | "continuousMarketWindow"> & {
+type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult" | "continuousMarketWindow" | "liveBarsAvailable"> & {
   signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
@@ -76,6 +81,8 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   strategies?: NativeStrategyController;
   /** A page with its own data manager (the research page) passes it; charts use the workspace's. */
   manager?: StrategyDataManager | null;
+  /** The forward run a Pine strategy in the chart's list is tracking (B-333b), for the chart overlay. */
+  onForwardOverlayRunChange?(run: StrategyOverlayRun | null): void;
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   useLocale();
@@ -188,6 +195,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [source, setSource] = useState(NATIVE_TEMPLATES.pine);
   const [advanced, setAdvanced] = useState<AdvancedInputs>(emptyAdvancedInputs);
   const [parameters, setParameters] = useState("{}");
+  // B-333b: forward tracking of this Pine strategy, from a past date or from now; null shows the fixed-history views.
+  const [forwardStart, setForwardStart] = useState<"HISTORY_LIVE" | "LIVE_ONLY" | null>(null);
   const [capabilities, setCapabilities] = useState<NativeCapabilities | null>(null);
   const [run, setRun] = useState<NativeRun | null>(null);
   const [previousRun, setPreviousRun] = useState<NativeRun | null>(null);
@@ -210,7 +219,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const storageKey = `${legacyStorageKey}:${mode}`;
   const executionDraftKey = `execution:${language}:${mode}`;
   const onRunChange = props.onRunChange;
-  useEffect(() => { if (props.active !== false) onRunChange?.(historicalRun ?? run); }, [historicalRun, run, onRunChange, props.active]);
+  // While it tracks forward, the chart shows the forward run instead (onForwardOverlayRunChange).
+  useEffect(() => { if (props.active !== false) onRunChange?.(forwardStart ? null : historicalRun ?? run); }, [forwardStart, historicalRun, run, onRunChange, props.active]);
   const instanceRef = useRef(props.instance);
   instanceRef.current = props.instance;
   const patchInstance = useRef(props.onInstanceChange);
@@ -270,7 +280,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     setBusy(true);
     const abort = new AbortController();
     if (!strategyManager) { setError(t("chartTester.error.backend")); setBusy(false); return; }
-    void strategyManager.loadNativeRun(mode, saved, abort.signal)
+    // The newest of the user's own runs here, in case the shown FOLLOW result is no longer kept.
+    const own = instanceRef.current.runHistory?.[runContext]?.find((runId) => runId !== saved);
+    void loadShownNativeRun((runId) => strategyManager.loadNativeRun(mode, runId, abort.signal), saved, own)
       .then((value) => { if (!abort.signal.aborted) receiveRun(value); })
       .catch((reason) => { if (!abort.signal.aborted) { setError(String(reason)); setBusy(false); } });
     return () => abort.abort();
@@ -426,7 +438,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             ...(automaticExecution === null ? {} : { execution: automaticExecution }),
             contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
             context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
-              interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", ...range } };
+              interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", ...range,
+              ...klineSeriesIdentityField(context.exchange, context) } };
         };
         const range = { start_time_ms: startTime, end_time_ms: endTime - 1 };
         const prepared = await prepareRun("/native-strategy", await submissionFor(range));
@@ -437,14 +450,15 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             async rebuild(next, signal) {
               const submission = await submissionFor(next);
               const job = await preparationRequest<PreparationJob>("/native-strategy", {
-                method: "POST", headers: { "Content-Type": "application/json" }, signal,
+                method: "POST", headers: { "Content-Type": "application/json", [FOLLOW_OF_HEADER]: prepared.run_id }, signal,
                 body: JSON.stringify({ ...submission, idempotency_key: await followInputKey({ route: "/native-strategy", ...submission }) }),
               });
               if (["FAILED", "BLOCKED_STORAGE", "CANCELLED"].includes(job.state)) return null;
               const created = (await waitForPreparation(job, () => undefined, signal)).result?.native_run;
               if (!created) return null;
               return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
-            } } };
+            },
+            extendable: (run) => run.follow?.extendable === true } };
         }
         if (alive.current) receiveRun(prepared);
         return;
@@ -475,6 +489,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       }) : await nativeApi<ChartContextResolution>("/chart-context/resolve", {
         exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
         interval: context.interval, range_mode: "ALL_AVAILABLE", fidelity_preference: "FAST",
+        ...klineSeriesIdentityField(context.exchange, context),
       });
       if (!alive.current) return;
       setResolution(frozen);
@@ -501,12 +516,15 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             const resolved = await nativeApi<ChartContextResolution>("/chart-context/resolve", {
               exchange: context.exchange, market_type: context.marketType, symbol: context.symbol, interval: context.interval,
               range_mode: "CUSTOM", ...next, fidelity_preference: "FAST",
+              ...klineSeriesIdentityField(context.exchange, context),
             }, undefined, signal);
             if (resolved.status !== "READY") return null;
             const payload = await chartRunPayload(resolved, next);
-            const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal);
+            const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal,
+              { followOf: result.run_id });
             return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
-          } } };
+          },
+          extendable: (run) => run.follow?.extendable === true } };
       }
       if (alive.current) receiveRun(result);
     } catch (reason) { if (alive.current) { setError(reason instanceof PreparationApiError ? `${reason.code}: ${reason.message}` : String(reason)); setBusy(false); } }
@@ -549,6 +567,22 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const percent = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? "—" : `${number.format(value)}%`;
   const returnPercent = summary?.series.at(-1)?.returnPercent ?? null;
   const runNow = () => { if (!runDisabled) void start(); };
+  // B-333b: a Pine strategy in the chart's list tracks forward only in the close-bar order subset; the backend
+  // compiles the code to say so, and the disabled entry names what the script uses instead.
+  const forwardOffered = strategyList && language === "pine" && CHART_STRATEGY_FOLLOW_ENABLED;
+  const forwardLibraries = useMemo(() => { try { return parsePineLibraries(advanced.libraries); } catch { return null; } }, [advanced.libraries]);
+  const forwardParameters = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(parameters);
+      return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    } catch { return null; }
+  }, [parameters]);
+  const forwardCheck = usePineForwardSupport(strategyManager?.continuous, source, forwardLibraries,
+    forwardOffered && !props.signalChart && props.active !== false);
+  const forwardRefusal = !forwardOffered ? null : props.signalChart ? t("strategyForward.pineSignalChart")
+    : forwardParameters === null ? t("native.parametersInvalid")
+    : forwardLibraries === null ? `${t("strategyForward.pineCheckFailed")} ${t("native.inputs.libraries")}`
+    : pineForwardRefusal(forwardCheck);
   useControlCommands(() => ({ id: `native:${props.cellScope}:${mode}`, title: "Native strategy draft, run and report",
     context: () => ({ session: props.session, dataset: props.dataset, mode, language, source, parameters, hostSettings, fidelity, fillRecalculation,
       historyStart, historyEnd, automaticContexts, executionOrigin, advanced: contextReference(advanced), executionData: contextReference(executionData), runId: run?.run_id, historicalRunId: historicalRun?.run_id, allHistory, busy, executionDataState }),
@@ -604,11 +638,41 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       command("cancelPreparation", "Cancel the current data preparation job.", empty, async () => {
         const value = await preparationRequest<PreparationJob>(`/${preparation!.id}/cancel`, { method: "POST" }); preparationSubmission.current = null; setPreparation(value);
       }, { available: () => !!preparation && !["READY", "CANCELLED"].includes(preparation.state) && preparation.stage !== "STARTING" && !preparation.cancel_requested, interrupt: true }),
+      command("forward", "Track this Pine strategy forward from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }),
+        ({ start }) => setForwardStart(start), { available: () => forwardOffered && (forwardStart !== null || forwardRefusal === null) }),
       command("tab", "Select the strategy editor/settings/report/history tab.", object({ tab: choice(["script", "settings", "overview", "trades", "history"]) }), ({ tab }) => selectTab(tab)),
       command("report", "Read a bounded page of the current report; authority, stale status and hashes are retained.", object({ section: choice(["trades", "orders", "equity", "bars", "graphics"]), offset: optional(controlNumber(0, 1e9, true)), limit: optional(controlNumber(1, 500, true)) }),
         ({ section, offset = 0, limit = 100 }) => ({ runId: reportRun?.run_id, stale: resultStale, authority: reportRun?.result?.account_authority,
           reportHash: reportRun?.result?.report_hash, total: reportRun?.result?.[section].length ?? 0, items: reportRun?.result?.[section].slice(offset, offset + limit) ?? [] }), { readOnly: true }),
     ] }), props.active !== false);
+  if (forwardStart) return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`}
+    aria-label={t("strategyForward.title")} data-testid="native-strategy-forward-view">
+    <div className="continuous-mode strategy-forward-bar" data-testid="strategy-forward-bar">
+      <strong>{t("strategyForward.title")}</strong>
+      <SegmentedControl size="sm" label={t("strategyForward.start")} value={forwardStart}
+        options={[{ value: "HISTORY_LIVE", label: t("strategyForward.fromDate") }, { value: "LIVE_ONLY", label: t("strategyForward.fromNow") }]}
+        onChange={setForwardStart} />
+      <Button size="sm" variant="ghost" onClick={() => setForwardStart(null)}>{t("strategyForward.back")}</Button>
+    </div>
+    <div className="native-dock-scroll">
+      <Suspense fallback={<p className="strategy-dock-empty">{t("continuous.loading")}</p>}>
+        <ContinuousStrategyPanel key={JSON.stringify([props.cellScope, props.session, forwardStart])}
+          {...(props.signalChart ? { signalChart: props.signalChart } : {})}
+          scope={JSON.stringify([props.cellScope, "native-forward"])} session={props.session} mode={forwardStart}
+          source={source} language="pine" parameters={{ ...forwardParameters, __pineLibrariesText: advanced.libraries }}
+          trusted={false} active={props.active !== false} chartActive={props.active !== false && props.shownOnChart !== false}
+          marketWindow={props.continuousMarketWindow ?? null} liveBars={props.liveBarsAvailable}
+          {...(props.onLocateTrade ? { onLocateTrade: props.onLocateTrade } : {})}
+          {...(props.onForwardOverlayRunChange ? { onOverlayRunChange: props.onForwardOverlayRunChange } : {})}
+          editor={(startForward) => <div className="native-code-editor native-forward-source">
+            <Suspense fallback={<div className="chart-strategy-editor-loading">{t("chartTester.editorLoading")}</div>}>
+              <StrategyScriptWorkspace source={source} language="pine" cursor={null} issues={[]} focusIssue={null} focusOnMount={false}
+                readOnly ariaLabel={t("native.source")} onSourceChange={ignoreCursor} onCursorChange={ignoreCursor} onRun={startForward} />
+            </Suspense>
+          </div>} />
+      </Suspense>
+    </div>
+  </section>;
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}
     {...(followWindow ? { "data-follow-closed-bar": closedBar ?? "", "data-follow-covered-end": follow.coveredEndMs ?? "" } : {})}>
     {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><IconButton size="sm" label={t("backtest.close")} icon={<Icon name="close" size={14} />} onClick={props.onClose} /></header>}
@@ -630,6 +694,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}
         title={t(mode === "NATIVE" ? "native.run" : "native.external.run")}>
         {t("chartTester.run")}</Button>
+      {forwardOffered && <Button size="sm" variant="ghost" data-testid="native-strategy-forward" disabled={forwardRefusal !== null}
+        title={forwardRefusal ?? t("strategyForward.title")} onClick={() => setForwardStart("HISTORY_LIVE")}>
+        {t("strategyForward.title")}</Button>}
     </div></StrategyDockSlot>
     <StrategyDockSlot name="notice">
       {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <InlineAlert

@@ -18,7 +18,7 @@ from app.core.pre_migration_copy import keep_pre_migration_copy
 
 from .models import dec_str
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -216,6 +216,13 @@ class TradingStore:
                 columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                 if "position_side" not in columns:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN position_side TEXT")
+            # v5 (ADR-DATA-002 D1c): the kline series a market follows, as
+            # canonical JSON; NULL is the exchange's own series, so older rows
+            # keep their meaning.
+            for table in ("orders", "fills", "practice_cursors"):
+                columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                if "series_identity" not in columns:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN series_identity TEXT")
             entry_columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_entries)")}
             if "trade_linked_at_ms" not in entry_columns:
                 conn.execute("ALTER TABLE journal_entries ADD COLUMN trade_linked_at_ms INTEGER")

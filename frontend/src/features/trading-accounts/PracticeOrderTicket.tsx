@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Button, Checkbox, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { chartInstrumentFields } from "./chartInstrument.js";
+import { usePracticeMarketRules } from "./practiceMarketRules.js";
 import { tradingApi } from "./tradingApi.js";
-import { formatAmount, formatPrice } from "./tradingFormat.js";
+import { formatAmount, formatPrice, formatQty, formatRate } from "./tradingFormat.js";
 import type { AccountSummary, TradingAccount, TradingChartContext } from "./tradingTypes.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
 
@@ -40,7 +42,9 @@ export default function PracticeOrderTicket({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  const hedge = account.settings.positionMode === "HEDGE" && context.marketType === "futures";
+  // The market's account model decides shorting and hedge intent (ADR-DATA-002 D5b).
+  const [rules, replaceRules] = usePracticeMarketRules(context, account.id);
+  const hedge = account.settings.positionMode === "HEDGE" && rules.hedge;
   const [action, setAction] = useState<"openLong" | "openShort" | "closeLong" | "closeShort">("openLong");
   const positionSide = action === "openLong" || action === "closeLong" ? "LONG" : "SHORT";
   const reduceOnly = hedge ? action === "closeLong" || action === "closeShort" : oneWayReduceOnly;
@@ -55,15 +59,51 @@ export default function PracticeOrderTicket({
   }, [entry, qty, stopLoss]);
   const equity = summary ? Number(summary.equity) : null;
   const notional = entry && Number(qty) > 0 ? entry * Number(qty) : null;
+  // Cash markets follow the catalog's quantity grid; the backend refuses quantities off it (D5c).
+  const quantityHint = rules.quantityStep
+    ? t("trading.ticket.quantityRule", { step: formatQty(rules.quantityStep), min: formatQty(rules.minQuantity ?? rules.quantityStep) })
+    : rules.minQuantity ? t("trading.ticket.quantityMinimum", { min: formatQty(rules.minQuantity) }) : undefined;
+  const accountCurrency = account.quoteCurrency.toUpperCase();
+  const otherCurrency = rules.currency && rules.currency !== accountCurrency ? rules.currency : null;
+  const base = rules.baseAsset || context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol;
+  // Quantities stay in base units; a contract market shows how many contracts they make (D5d).
+  const contractSize = rules.contractSize ? Number(rules.contractSize) : null;
+  const contracts = contractSize && Number(qty) > 0 ? Number(qty) / contractSize : null;
+  const perContract = rules.accountModel === "futures_margin" && contractSize !== null;
+  // A contract of one unit (Binance's USD-M) adds nothing to the quantity itself.
+  const showContracts = contractSize !== null && (contractSize !== 1 || perContract);
+  const marginPerContract = perContract && rules.marginPerContract ? Number(rules.marginPerContract) : null;
+  // The source publishes no margin per contract: the user enters the broker's figure for the account.
+  const marginEditable = perContract && rules.marginSource !== "catalog";
+  const [marginDraft, setMarginDraft] = useState<{ key: string; value: string } | null>(null);
+  const marketKey = `${context.exchange}\u0000${context.marketType}\u0000${context.symbol}\u0000${account.id}`;
+  const marginInput = marginDraft?.key === marketKey ? marginDraft.value : rules.marginPerContract ?? "";
+  const marginCurrency = rules.currency || accountCurrency;
+
+  const saveMargin = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      replaceRules(await tradingApi.setContractMargin(account.id, {
+        exchange: context.exchange,
+        marketType: context.marketType,
+        symbol: context.symbol,
+        marginPerContract: marginInput.trim() || null,
+      }));
+      setMarginDraft(null);
+    } catch (cause) {
+      setMessage({ tone: "error", text: tradingErrorMessage(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true);
     setMessage(null);
     try {
       const response = await tradingApi.placeOrder(account.id, {
-        exchange: context.exchange,
-        marketType: context.marketType,
-        symbol: context.symbol,
+        ...chartInstrumentFields(context),
         side,
         ...(hedge ? { positionSide, positionEffect: reduceOnly ? "close" : "open" } : {}),
         type,
@@ -79,7 +119,7 @@ export default function PracticeOrderTicket({
         tone: "ok",
         text: response.order.status === "filled"
           ? t("trading.ticket.filled", { price: formatPrice(response.order.fillPrice) })
-          : t("trading.ticket.working"),
+          : t(response.waitsForOpen ? "trading.ticket.waitsForOpen" : "trading.ticket.working"),
       });
       onPlaced();
     } catch (cause) {
@@ -102,8 +142,8 @@ export default function PracticeOrderTicket({
         value={side}
         onChange={setSide}
         options={[
-          { value: "buy", label: t(context.marketType === "futures" ? "trading.ticket.long" : "trading.ticket.buy") },
-          { value: "sell", label: t(context.marketType === "futures" ? "trading.ticket.short" : "trading.ticket.sell") },
+          { value: "buy", label: t(rules.shorting ? "trading.ticket.long" : "trading.ticket.buy") },
+          { value: "sell", label: t(rules.shorting ? "trading.ticket.short" : "trading.ticket.sell") },
         ]}
       />}
       <SegmentedControl
@@ -115,7 +155,7 @@ export default function PracticeOrderTicket({
         options={(["market", "limit", "stop"] as const).map((item) => ({ value: item, label: t(`trading.ticket.${item}` as const) }))}
       />
       <div className="trading-field-row">
-        <Field label={t("trading.ticket.qty", { base: context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol })}>
+        <Field label={t("trading.ticket.qty", { base })} hint={quantityHint}>
           <Input size="sm" inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
         </Field>
         {type !== "market" && (
@@ -135,6 +175,18 @@ export default function PracticeOrderTicket({
         </div>
       )}
       {!hedge && <Checkbox label={t("trading.ticket.reduceOnly")} checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} />}
+      {marginEditable && (
+        <div className="trading-field-row">
+          <Field label={`${t("trading.ticket.marginPerContract")} (${marginCurrency})`}>
+            <Input size="sm" inputMode="decimal" value={marginInput}
+              onChange={(event) => setMarginDraft({ key: marketKey, value: event.target.value })} />
+          </Field>
+          <Button size="sm" className="trading-margin-save" disabled={busy || account.archived
+            || marginInput.trim() === (rules.marginPerContract ?? "")} onClick={() => { void saveMargin(); }}>
+            {t("trading.ticket.saveMargin")}
+          </Button>
+        </div>
+      )}
       <dl className="trading-kv">
         <dt>{t("trading.ticket.reference")}</dt>
         <dd>{reference ? formatPrice(reference) : t("trading.ticket.noPrice")}</dd>
@@ -145,7 +197,27 @@ export default function PracticeOrderTicket({
           {risk === null ? "—" : formatAmount(risk)}
           {risk !== null && equity ? ` · ${formatAmount((risk / equity) * 100)}%` : ""}
         </dd>
+        <dt>{t("trading.ticket.fees")}</dt>
+        <dd>{`${formatRate(account.settings.takerFeeRate)} / ${formatRate(account.settings.makerFeeRate)}`}</dd>
+        {showContracts && <>
+          <dt>{t("trading.ticket.contractSize")}</dt>
+          <dd>{`${formatQty(contractSize)} ${base}`}</dd>
+          <dt>{t("trading.ticket.contracts")}</dt>
+          <dd>{formatQty(contracts)}</dd>
+        </>}
+        {perContract && !marginEditable && <>
+          <dt>{t("trading.ticket.marginPerContract")}</dt>
+          <dd>{`${formatAmount(marginPerContract)} ${marginCurrency}`}</dd>
+        </>}
+        {perContract && <>
+          <dt>{t("trading.ticket.margin")}</dt>
+          <dd>{contracts !== null && marginPerContract !== null ? formatAmount(contracts * marginPerContract) : "—"}</dd>
+        </>}
       </dl>
+      {marginEditable && marginPerContract === null
+        ? <InlineAlert tone="warning">{t("trading.ticket.marginMissing")}</InlineAlert>
+        : !rules.opensPositions && <InlineAlert tone="warning">{t("trading.ticket.modelUnsupported")}</InlineAlert>}
+      {otherCurrency && <InlineAlert tone="info">{t("trading.ticket.currencyMismatch", { market: otherCurrency, account: accountCurrency })}</InlineAlert>}
       {message && <InlineAlert tone={message.tone === "error" ? "danger" : "success"}>{message.text}</InlineAlert>}
       <div className="trading-actions">
         <Button

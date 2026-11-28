@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   CURSOR_VARIANTS,
   FREEHAND_VARIANTS,
@@ -12,11 +13,15 @@ import {
   RectangleIcon,
   SegmentIcon,
   SHAPE_VARIANTS,
+  TEXT_VARIANTS,
+  TextIcon,
 } from "./drawingToolbarDefinitions.js";
 import { drawingVariantLabel } from "./drawingToolbarI18n.js";
+import { useVariantToolGroup } from "./useVariantToolGroup.js";
 import { t } from "../../i18n/index.js";
-import type { LineToolbarToolId, ToolbarVariant } from "./drawingToolbarDefinitions.js";
+import type { LineToolbarToolId, TextToolbarToolId, ToolbarVariant } from "./drawingToolbarDefinitions.js";
 import type {
+  CalculatedToolId,
   DrawingToolId,
   FreehandToolId,
   PassiveCursorToolId,
@@ -31,9 +36,11 @@ export type DrawingToolbarFlyoutKey =
   | "freehand"
   | "line"
   | "shape"
+  | "text"
   | "fib-levels"
   | "position"
-  | "position-settings";
+  | "position-settings"
+  | "calculated";
 
 export interface DrawingToolbarControllerOptions {
   activeTool: DrawingToolId | null;
@@ -74,7 +81,16 @@ export function useDrawingToolbarController({
   const [lineVariant, setLineVariant] = useState<LineToolbarToolId>("line-segment");
   const [shapeVariant, setShapeVariant] = useState<ShapeToolId>("shape-rectangle");
   const [posVariant, setPosVariant] = useState<PositionToolId>("position-long");
+  const [textVariant, setTextVariant] = useState<TextToolbarToolId>("text");
   const [flyoutOpen, setFlyoutOpen] = useState<DrawingToolbarFlyoutKey | null>(null);
+  const calculatedGroup = useVariantToolGroup<CalculatedToolId, DrawingToolbarFlyoutKey>({
+    activeTool,
+    flyoutKey: "calculated",
+    initialVariant: "fib-extension",
+    variants: CALCULATED_VARIANTS,
+    onToolChange,
+    setFlyoutOpen,
+  });
 
   const chartTypeBtnRef = useRef<HTMLDivElement | null>(null);
   const cursorBtnRef = useRef<HTMLDivElement | null>(null);
@@ -89,6 +105,8 @@ export function useDrawingToolbarController({
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shapeClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const posClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textBtnRef = useRef<HTMLDivElement | null>(null);
 
   const activeCursorVariant = CURSOR_VARIANTS.find((variant) => variant.id === activeTool);
   const activeFreehandVariant = FREEHAND_VARIANTS.find((variant) => variant.id === activeTool);
@@ -100,7 +118,8 @@ export function useDrawingToolbarController({
   const isEraserActive = activeTool === "eraser";
   const isLineActive = activeLineVariant != null;
   const isShapeActive = activeShapeVariant != null;
-  const isTextActive = activeTool === "text";
+  const activeTextVariant = TEXT_VARIANTS.find((variant) => variant.id === activeTool);
+  const isTextActive = activeTextVariant != null;
   const isFibonacciActive = activeTool === "fibonacci";
   const isPositionActive = activePositionVariant != null;
 
@@ -194,10 +213,35 @@ export function useDrawingToolbarController({
     setFlyoutOpen(null);
   }, [isEraserActive, onToolChange]);
 
-  const handleTextClick = useCallback(() => {
-    onToolChange(isTextActive ? null : "text");
-    setFlyoutOpen(null);
-  }, [isTextActive, onToolChange]);
+  const handleTextClick = useCallback((event?: MouseEvent<HTMLButtonElement>) => {
+    if ((event?.detail ?? 0) > 1) return;
+    if (!isTextActive) {
+      onToolChange(textVariant);
+      setFlyoutOpen(null);
+      return;
+    }
+    if (textClickTimerRef.current) return;
+    // A double-click opens the variants instead of leaving the tool.
+    textClickTimerRef.current = setTimeout(() => {
+      textClickTimerRef.current = null;
+      onToolChange(null);
+      setFlyoutOpen(null);
+    }, 200);
+  }, [isTextActive, onToolChange, textVariant]);
+
+  const toggleTextFlyout = useCallback((event?: MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    if (textClickTimerRef.current) {
+      clearTimeout(textClickTimerRef.current);
+      textClickTimerRef.current = null;
+    }
+    setFlyoutOpen((prev) => (prev === "text" ? null : "text"));
+  }, []);
+
+  const handleSelectTextVariant = useCallback((id: TextToolbarToolId) => {
+    setTextVariant(id);
+    onToolChange(id);
+  }, [onToolChange]);
 
   const handleFibonacciClick = useCallback(() => {
     onToolChange(isFibonacciActive ? null : "fibonacci");
@@ -352,8 +396,10 @@ export function useDrawingToolbarController({
   const currentLine = activeLineVariant ?? findVariant(LINE_VARIANTS, lineVariant);
   const currentShape = findVariant(SHAPE_VARIANTS, shapeVariant);
   const currentPosition = findVariant(POSITION_VARIANTS, posVariant);
+  const currentText = activeTextVariant ?? findVariant(TEXT_VARIANTS, textVariant);
 
   return {
+    calculatedGroup,
     chartType,
     chartTypeBtnRef,
     closeFlyout,
@@ -377,6 +423,9 @@ export function useDrawingToolbarController({
       ? drawingVariantLabel(currentPosition)
       : t("drawing.variant.position-long"),
     currentShapeIcon: currentShape?.icon || RectangleIcon,
+    currentTextIcon: currentText?.icon || TextIcon,
+    currentTextId: currentText?.id ?? "text",
+    currentTextLabel: currentText ? drawingVariantLabel(currentText) : t("drawing.textNote"),
     currentShapeLabel: currentShape
       ? drawingVariantLabel(currentShape)
       : t("drawing.variant.shape-rectangle"),
@@ -414,6 +463,9 @@ export function useDrawingToolbarController({
     handleShapeContextMenu,
     handleShapeDblClick,
     handleTextClick,
+    handleTextContextMenu: toggleTextFlyout,
+    handleTextDblClick: toggleTextFlyout,
+    handleSelectTextVariant,
     handleToggleFibonacciSettings,
     handleTogglePositionSettings,
     isCursorActive,
@@ -430,11 +482,13 @@ export function useDrawingToolbarController({
     posVariant,
     shapeBtnRef,
     shapeVariant,
+    textBtnRef,
     showFibonacciOptions: isFibonacciActive,
     showLineOptions: isLineActive,
     showPenOptions: isFreehandActive,
     showPositionOptions: isPositionActive,
     showShapeOptions: isShapeActive,
-    showTextOptions: isTextActive,
+    // Price labels show a price, so only typed text offers font controls.
+    showTextOptions: activeTool === "text" || activeTool === "callout",
   };
 }

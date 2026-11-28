@@ -2,6 +2,17 @@
 
 ## Current combined Host source
 
+`host-contracts-v6.patch` is the current patch. It is v5 plus
+`HistoricalSession.extend(bars, execution_times=None)` for Pine FOLLOW
+(ADR-BACKTEST-015 O1, B-157a). A session advanced to its horizon accepts bars
+that follow its last bar, and executing them gives the same result as one
+dataset of every bar. The exceptions are scripts that read the horizon on
+earlier bars (`barstate.islast`, `last_bar_index`) and scripts whose first
+window depends on the dataset length (`calc_bars_count`); hosts keep full
+rebuilds for those. `python/tests/test_historical_extension.py` pins this.
+v6 applies to the same commit and keeps the `0.3.3+cs.1` label, as v3–v5 did;
+runtime identities bind the installed code digests.
+
 `host-contracts-v2.patch` applies to Core 0.3.3 commit
 `c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc` and versions the downstream wheel
 as `0.3.3+cs.1`. It preserves the upstream Renko event rows, metadata, calendar,

@@ -1,6 +1,6 @@
 """Window-local arithmetic shared by full, incremental and replay indicators.
 
-Keep this algorithm in sync with replayWindowMath.ts. Compensated, anchored
+Keep this algorithm in sync with builtinWindowMath.ts. Compensated, anchored
 sums depend only on the selected window, not on discarded historical prices.
 """
 

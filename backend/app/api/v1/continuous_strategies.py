@@ -10,16 +10,17 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ACCOUNT_MODELS,INTERVALS,LANGUAGES,ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
+from app.backtest.continuous_contracts import ACCOUNT_MODELS,LANGUAGES,ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,PineForwardSupport,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
 from app.backtest.strategy.python_bundle import editor_parameter_defaults
 from app.backtest.continuous_provider import SCHEMA as PROVIDER_SCHEMA
+from app.backtest.continuous_pine import forward_support as pine_forward_support
 from app.data_engine.data_manager.continuous_strategy import MAX_REQUESTS
 from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
-from app.core.executors import run_storage
+from app.core.executors import run_script_wait,run_storage
 from app.core.operator_origin import is_trusted_operator_origin,origin_from
 from .stream_utils import send_text_with_timeout
 
@@ -124,10 +125,15 @@ def _request_key(request):
 async def capabilities(request:Request):
     try:
         access=_access(request);controller=access.controller()
+        settings=access.owner.service.settings
+        # External models only where the Host enables their connections (B-333c).
+        external=settings.enabled and settings.external_provider_enabled
         return _reply({"available":True,"execution_enabled":controller.execution_enabled,
             "runtime_mode":controller.runtime_mode,"protocol":PROTOCOL,
-            "modes":["HISTORY_LIVE","LIVE_ONLY"],"languages":list(LANGUAGES),
-            "intervals":list(INTERVALS),"account_models":list(ACCOUNT_MODELS),
+            "modes":["HISTORY_LIVE","LIVE_ONLY"],
+            "languages":[language for language in LANGUAGES if language!="external" or external],
+            # Any fixed-length interval of whole minutes (B-333): no list to enumerate.
+            "intervals":None,"fixed_intervals_only":True,"account_models":list(ACCOUNT_MODELS),
             "python_editor_authorized":is_trusted_operator_origin(origin_from(request.headers)),
             "provider_schema":PROVIDER_SCHEMA,"python_author_contract":AUTHOR_CONTRACT,
             "repair_available":bool(controller.execution_enabled and callable(getattr(controller,"repair",None))),
@@ -145,6 +151,16 @@ async def editor_parameters(request: Request):
             raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
         payload = await _body(request, EditorParameters)
         return _reply({"fields": await run_storage(editor_parameter_defaults, payload.source_text)})
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+
+@router.post("/pine/support")
+async def pine_support(request: Request):
+    """Whether this Pine code can run forward; the strategy list asks before it offers forward tracking."""
+    try:
+        payload = await _body(request, PineForwardSupport)
+        return _reply(await run_script_wait(pine_forward_support, payload.source_text, payload.libraries))
     except WIRE_ERRORS as failure:
         return _error(failure)
 

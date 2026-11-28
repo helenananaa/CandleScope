@@ -104,7 +104,7 @@ async def start_replay_runtime(
     instrument_metadata_resolver: (
         Callable[[str, str, str], Mapping[str, object] | None] | None
     ) = None,
-    instrument_metadata_refresher: Callable[[str, str], Awaitable[object]] | None = None,
+    instrument_metadata_refresher: Callable[[str, str, str], Awaitable[object]] | None = None,
 ) -> ReplayRuntime:
     """Start replay only when enabled; disabled mode has no DB or task side effect."""
 

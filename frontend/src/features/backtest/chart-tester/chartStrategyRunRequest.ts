@@ -23,6 +23,7 @@ import {
 import type { ResultProjectionIdentity } from "./chartStrategyTesterState.js";
 import type { ChartStrategyRunRequest } from "./chartStrategyTesterUiModel.js";
 import { parsePineLibraries } from "../../indicators/pineLibraryModel.js";
+import { klineSeriesIdentityField } from "../../market-data/klineSeriesIdentity.js";
 import { freezePineChartContexts, restoreAdvancedInputs } from "../native/nativeInputs.js";
 
 export type ChartStrategyRunApi = Pick<BacktestApiClient,
@@ -214,6 +215,7 @@ export function chartContextRequestForFrozen(
     end_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.endMs
       - (rangeMode === "CUSTOM" && frozen.attachment.fidelityPreference === "PRECISE" ? 1 : 0),
     fidelity_preference: frozen.attachment.fidelityPreference,
+    ...klineSeriesIdentityField(frozen.session.exchange, frozen.session),
   };
 }
 

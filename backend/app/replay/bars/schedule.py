@@ -1,10 +1,22 @@
-"""Deterministic base-bar schedule with explicitly verified market halts."""
+"""Deterministic base-bar schedule with verified halts or a trading calendar.
+
+A series on a session calendar (ADR-DATA-002 D2, e.g. US equities on XNYS)
+expects bars only while its market trades. The schedule then steps from each
+session's last bar to the next session's first, so closures are neither gaps
+nor sequence numbers. Halts are a Binance exception and never share a
+schedule with a calendar.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
 
+from app.data_engine.history.expected_bars import (
+    offset_open,
+    open_at_or_after,
+    open_runs,
+)
 from app.data_engine.interval_policy import (
     compute_bucket_end_ms,
     compute_bucket_start_ms,
@@ -19,6 +31,7 @@ from ..market_halts import ReplayBarHalt
 
 BAR_SCHEDULE_SCHEMA_VERSION = "replay-bar-schedule.v1"
 VERIFIED_HALT_GAP_POLICY = "verified_market_halts_v2"
+TRADING_CALENDAR_GAP_POLICY = "trading_calendar_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,12 +42,13 @@ class ScheduledBarSegment:
 
 
 class ReplayBarSchedule:
-    """Expected BAR opens after subtracting only pinned halt intervals."""
+    """Expected BAR opens: the interval grid minus pinned halts, or a session calendar."""
 
     def __init__(
         self,
         base_interval: str,
         verified_halts: Iterable[ReplayBarHalt] = (),
+        calendar: object | None = None,
     ) -> None:
         interval_ms = parse_interval_ms(base_interval)
         if interval_ms is None or interval_ms <= 0:
@@ -49,6 +63,11 @@ class ReplayBarSchedule:
             raise ReplayDomainError(
                 ReplayErrorCode.UNSUPPORTED_INTERVAL,
                 "verified market halts require a fixed BAR interval",
+            )
+        if calendar is not None and (halts or is_monthly_interval(base_interval)):
+            raise ReplayDomainError(
+                ReplayErrorCode.UNSUPPORTED_INTERVAL,
+                "a trading-calendar BAR schedule needs a fixed interval and no halts",
             )
         if halts != tuple(sorted(halts)):
             raise ReplayDomainError(
@@ -84,18 +103,29 @@ class ReplayBarSchedule:
         self.base_interval = base_interval
         self.interval_ms = interval_ms
         self.verified_halts = halts
-        self.gap_policy = VERIFIED_HALT_GAP_POLICY if halts else "reject"
-        self.fingerprint = canonical_sha256(
-            {
-                "schema_version": BAR_SCHEDULE_SCHEMA_VERSION,
-                "base_interval": base_interval,
-                "verified_halts": [halt.to_dict() for halt in halts],
-            }
+        self.calendar = calendar
+        self.gap_policy = (
+            VERIFIED_HALT_GAP_POLICY if halts
+            else TRADING_CALENDAR_GAP_POLICY if calendar is not None
+            else "reject"
         )
+        fingerprint: dict[str, object] = {
+            "schema_version": BAR_SCHEDULE_SCHEMA_VERSION,
+            "base_interval": base_interval,
+            "verified_halts": [halt.to_dict() for halt in halts],
+        }
+        if calendar is not None:
+            fingerprint["calendar_id"] = calendar.calendar_id
+        self.fingerprint = canonical_sha256(fingerprint)
 
     @property
     def has_verified_halts(self) -> bool:
         return bool(self.verified_halts)
+
+    @property
+    def skips_closures(self) -> bool:
+        """Whether expected opens can jump: verified halts or a session calendar."""
+        return bool(self.verified_halts) or self.calendar is not None
 
     def natural_next_open(self, open_time_ms: int) -> int:
         return compute_bucket_end_ms(
@@ -114,12 +144,20 @@ class ReplayBarSchedule:
             != open_time_ms
         ):
             return False
+        if self.calendar is not None:
+            return self.calendar.first_expected_open(
+                open_time_ms, open_time_ms, self.base_interval
+            ) == open_time_ms
         return not any(
             halt.start_open_ms <= open_time_ms <= halt.end_open_ms
             for halt in self.verified_halts
         )
 
     def next_expected_at_or_after(self, open_time_ms: int) -> int:
+        if self.calendar is not None:
+            return self._calendar_call(
+                open_at_or_after, self.calendar, open_time_ms, self.base_interval
+            )
         candidate = open_time_ms
         while True:
             containing = next(
@@ -148,6 +186,10 @@ class ReplayBarSchedule:
                 ReplayErrorCode.DATASET_MISMATCH,
                 "BAR sequence starts inside a verified halt",
             )
+        if self.calendar is not None:
+            return self._calendar_call(
+                offset_open, self.calendar, cursor, offset, self.base_interval
+            )
         if not self.verified_halts:
             if not is_monthly_interval(self.base_interval):
                 return cursor + offset * self.interval_ms
@@ -174,6 +216,8 @@ class ReplayBarSchedule:
 
         if start_ms >= end_ms:
             return 0
+        if self.calendar is not None:
+            return int(self.calendar.count_expected(start_ms, end_ms - 1, self.base_interval))
         if not is_monthly_interval(self.base_interval):
             duration_ms = end_ms - start_ms
             if duration_ms % self.interval_ms:
@@ -214,6 +258,10 @@ class ReplayBarSchedule:
         count = self.expected_count(start_ms, end_ms)
         if count == 0:
             return 0, None, None
+        if self.calendar is not None:
+            first = self.calendar.first_expected_open(start_ms, end_ms - 1, self.base_interval)
+            last = self.calendar.last_expected_open(start_ms, end_ms - 1, self.base_interval)
+            return count, int(first), int(last)
         first = self.next_expected_at_or_after(start_ms)
         last = self.nth_expected_open(first, count - 1)
         if first < start_ms or last >= end_ms:
@@ -240,6 +288,13 @@ class ReplayBarSchedule:
                 ReplayErrorCode.DATASET_MISMATCH,
                 "BAR schedule boundary falls inside a verified halt",
             )
+        if self.calendar is not None:
+            return tuple(
+                self._segment(first, last)
+                for first, last in self._calendar_call(
+                    open_runs, self.calendar, start_open_ms, terminal_open_ms, self.base_interval
+                )
+            )
         segments: list[ScheduledBarSegment] = []
         cursor = start_open_ms
         for halt in self.verified_halts:
@@ -259,6 +314,16 @@ class ReplayBarSchedule:
                 "BAR schedule contains no replayable rows",
             )
         return tuple(segments)
+
+    @staticmethod
+    def _calendar_call(function, *args):
+        try:
+            return function(*args)
+        except LookupError as exc:
+            raise ReplayDomainError(
+                ReplayErrorCode.DATASET_MISMATCH,
+                "BAR schedule runs past its trading calendar",
+            ) from exc
 
     def _segment(self, start_ms: int, end_ms: int) -> ScheduledBarSegment:
         duration_ms = end_ms - start_ms

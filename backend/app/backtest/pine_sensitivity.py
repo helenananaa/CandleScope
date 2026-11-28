@@ -21,7 +21,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
     primary_policy = canonical_hash(planner.report())
 
     def evaluate(replay):
-        from .service import _new_host_planner, _pine_account_view, _planning_context
+        from .host_bar import _new_host_planner, _pine_account_view, _planning_context
         check_deadline(deadline)
         control()
         fresh = PineEngineProvider()

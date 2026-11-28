@@ -25,6 +25,7 @@ from app.market_dataset.snapshot import MarketEvent
 
 from .continuous_bar_host import ContinuousBarHost
 from .errors import BacktestError
+from .follow_timeline import GridTimeline, follow_timeline
 from .strategy.protocol import canonical_hash
 
 ID_PREFIX = "fl_"
@@ -44,7 +45,7 @@ class FollowSession:
     """One FOLLOW run's live state: consecutive closed base bars in, the current result out."""
 
     def __init__(self, follow_id: str, definition: Mapping[str, Any], provider_factory, *, interval: str,
-                 generation: int = 1) -> None:
+                 generation: int = 1, timeline: GridTimeline | None = None) -> None:
         from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 
         spec = parse_interval_spec(interval)
@@ -56,6 +57,9 @@ class FollowSession:
         self.definition = definition
         self.interval = interval
         self.step_ms = step
+        # Which bars follow each other: the interval grid, or a session calendar (ADR-DATA-002 D2c).
+        self.timeline = timeline if timeline is not None else follow_timeline(spec)
+        self.last_open_ms: int | None = None
         # A recomputation (processed bars were revised) starts a new generation of the same run.
         self.generation = generation
         # CATCHING_UP until the run first reaches the latest closed bar; then LIVE.
@@ -79,16 +83,18 @@ class FollowSession:
             if self.failed is not None:
                 raise BacktestError("FOLLOW_FAILED", "This FOLLOW run failed; recompute it from its start")
             batch: list[MarketEvent] = []
-            sequence, through = self.sequence, self.through_ms
+            sequence, through, last_open = self.sequence, self.through_ms, self.last_open_ms
+            timeline = self.timeline
             for event in events:
                 payload = event.payload
                 opened, close = payload.get("open_time_ms"), payload.get("close_time_ms")
                 if (event.role != "BARS" or not _closed(payload) or type(opened) is not int or type(close) is not int
-                        or close != opened + self.step_ms - 1 or event.event_time_ms != close):
+                        or close != timeline.close(opened) or event.event_time_ms != close):
                     raise _invalid("FOLLOW takes closed bars of the chart interval only")
-                if event.sequence != sequence + 1 or (through is not None and opened != through + 1):
+                if event.sequence != sequence + 1 or (
+                        through is not None and not timeline.continues(last_open, through, opened)):
                     raise _invalid("FOLLOW bars must continue exactly where the run is")
-                sequence, through = event.sequence, close
+                sequence, through, last_open = event.sequence, close, opened
                 batch.append(event)
             if not batch:
                 return self.revision
@@ -101,7 +107,7 @@ class FollowSession:
             finally:
                 if self.closed:  # stopped while this batch ran: release what close() could not
                     self._release()
-            self.sequence, self.through_ms = sequence, through
+            self.sequence, self.through_ms, self.last_open_ms = sequence, through, last_open
             self.revision += 1
             return self.revision
 
@@ -146,6 +152,7 @@ class _Entry:
         self.session = session
         self.identity = identity
         self.interval = interval
+        self.timeline = session.timeline
         self.leases: dict[str, float] = {}
 
 
@@ -172,7 +179,7 @@ class FollowSessions:
         self._counter = 0
 
     def open(self, definition: Mapping[str, Any], *, interval: str, holder: str,
-             from_ms: int | None = None) -> tuple[FollowSession, bool]:
+             from_ms: int | None = None, timeline: GridTimeline | None = None) -> tuple[FollowSession, bool]:
         """The FOLLOW run for this input, shared if one exists; returns (session, created)."""
         identity = follow_identity(definition, interval, from_ms)
         with self.lock:
@@ -186,7 +193,7 @@ class FollowSessions:
                 raise BacktestError("FOLLOW_CAPACITY_EXCEEDED", "Too many charts follow strategies at once")
             self._counter += 1
             follow_id = f"{ID_PREFIX}{identity[7:39]}{self._counter:04x}"
-            session = FollowSession(follow_id, definition, self.provider_factory, interval=interval)
+            session = FollowSession(follow_id, definition, self.provider_factory, interval=interval, timeline=timeline)
             entry = _Entry(session, identity, interval)
             self._entries[follow_id] = entry
             self._by_identity[identity] = follow_id
@@ -209,7 +216,7 @@ class FollowSessions:
                 raise BacktestError("RUN_NOT_FOUND", "unknown or stopped FOLLOW run")
             old = entry.session
             entry.session = FollowSession(follow_id, old.definition, self.provider_factory, interval=entry.interval,
-                                          generation=old.generation + 1)
+                                          generation=old.generation + 1, timeline=entry.timeline)
             old.close()
             return entry.session
 

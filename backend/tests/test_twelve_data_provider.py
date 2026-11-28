@@ -234,9 +234,13 @@ def test_symbol_search_preserves_provider_symbol_venue_and_entitlement() -> None
     assert stock.entitlement == "basic"
     assert stock.price_adjustment == "raw"
     assert stock.volume_semantics == "shares"
+    # Whole shares, bought outright (ADR-DATA-002 D5b/D5c).
+    assert stock.to_dict().items() >= {"accountModel": "cash", "quantityStep": "1", "minQuantity": "1",
+                                       "quantityOrigin": "0", "quantityRuleModel": "fixed_step"}.items()
 
     forex = by_symbol["EUR/USD"]
     assert forex.market_type == "forex"
+    assert "quantityStep" not in forex.to_dict() and "accountModel" not in forex.to_dict()
     assert forex.session_variant == "continuous_24x5"
     assert forex.volume_semantics == "unavailable"
 

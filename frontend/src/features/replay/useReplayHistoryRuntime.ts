@@ -401,8 +401,10 @@ export function useReplayHistoryRuntime(
         historyViewportTransfer,
         pendingViewportBeforeMs,
       );
-      const gapNotice = page.excluded_ranges.length > 0
-        ? t("replay.history.excludedGaps", { count: page.excluded_ranges.length })
+      // A market closure is not a gap in the data (ADR-DATA-002 D2).
+      const sourceGaps = page.excluded_ranges.filter((range) => range.reason !== "market_closed").length;
+      const gapNotice = sourceGaps > 0
+        ? t("replay.history.excludedGaps", { count: sourceGaps })
         : null;
       const nextNotice = !page.has_more
         ? (page.history_policy.visible_history_lookback.mode === "DURATION"

@@ -7,6 +7,7 @@ import weakref
 import pytest
 
 from app.backtest.native import NativeBacktests, digest, encoded
+from app.backtest.native_follow_results import FollowResults
 from app.core.committed_updates import CommittedUpdates
 
 
@@ -18,6 +19,7 @@ def service():
     native.run_updates = CommittedUpdates()
     native.db.execute("CREATE TABLE runs(id TEXT PRIMARY KEY, record TEXT)")
     native.db.execute("CREATE TABLE native_run_summaries(id TEXT PRIMARY KEY, record TEXT)")
+    native.follows = FollowResults(native.db)
     record = {"run_id":"run", "state":"RUNNING", "execution_mode":"CANDLESCOPE", "error":None,
         "config":{"source":"strategy", "frozen_input":"x"*2000000}, "result":None}
     native.db.execute("INSERT INTO runs VALUES (?,?)", ("run", encoded(record)))

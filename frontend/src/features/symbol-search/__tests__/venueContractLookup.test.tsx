@@ -91,6 +91,9 @@ test("a Pine report finds its market from the run's exchange, market and context
   };
   assert.deepEqual(nativeReportMarket({ config } as Parameters<typeof nativeReportMarket>[0]),
     { exchange: "binance", marketType: "futures", symbol: "XAUUSDT" });
+  const apple = { ...config, exchange: "twelvedata", market_type: "stock", context: { symbol: "TWELVEDATA:AAPL:NASDAQ", timeframe: "1" } };
+  assert.deepEqual(nativeReportMarket({ config: apple } as Parameters<typeof nativeReportMarket>[0]),
+    { exchange: "twelvedata", marketType: "stock", symbol: "AAPL:NASDAQ" });
   const { exchange: _exchange, ...withoutExchange } = config;
   assert.equal(nativeReportMarket({ config: withoutExchange } as Parameters<typeof nativeReportMarket>[0]), null);
   assert.equal(nativeReportMarket({}), null);

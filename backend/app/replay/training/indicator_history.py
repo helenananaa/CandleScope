@@ -9,11 +9,19 @@ from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
 )
+from app.data_engine.history.expected_bars import opens_before
 from app.replay.bars.builder import ReplayDisplayBar
+from app.replay.display_time import SourceBucketTimeMapper
 from app.replay.models import ReplaySessionConfig
 
 from .errors import TrainingRunError
-from .history import MAX_HISTORY_PAGE_BARS, _decode_bar_snapshot, build_history_page
+from .history import (
+    MARKET_CLOSED_REASON,
+    MAX_HISTORY_PAGE_BARS,
+    _decode_bar_snapshot,
+    _snapshot_calendar,
+    build_history_page,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +30,8 @@ class IndicatorHistoryChunk:
     stop_ms: int
     bars: tuple[ReplayDisplayBar, ...]
     gaps: tuple[tuple[int, int], ...] = ()  # inclusive public bounds
+    # ADR-DATA-002 D2: market closures cover time but never restart an indicator.
+    closures: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +49,7 @@ class IndicatorCloseChunk:
     stop_ms: int
     bars: tuple[IndicatorCloseBar, ...]
     gaps: tuple[tuple[int, int], ...] = ()
+    closures: tuple[tuple[int, int], ...] = ()
 
 
 class IndicatorHistoryPreparing(Exception):
@@ -88,6 +99,22 @@ class PinnedIndicatorHistory:
         self.snapshot, self.config = snapshot, config
         self.interval = display_interval
         self.interval_ms = parse_interval_ms(display_interval)
+        # ADR-DATA-002 D2: a session-calendar series continues across closures.
+        # The calendar runs on the actual timeline; bars are public.
+        self.calendar = _snapshot_calendar(snapshot, 0)
+        self.public_minus_actual_ms = 0
+        if self.calendar is not None:
+            mapper = SourceBucketTimeMapper.create(
+                interval=display_interval,
+                actual_replay_start_ms=int(binding["history_policy"]["actual_replay_start_ms"]),
+                public_replay_start_ms=snapshot.replay_start_ms,
+                source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"),
+            )
+            if mapper.monthly_count is None:
+                self.public_minus_actual_ms = mapper.public_anchor_ms - mapper.actual_anchor_ms
+            else:
+                # Every calendar month trades: monthly bars are contiguous.
+                self.calendar = None
         self.base_ms = parse_interval_ms(config.base_interval)
         if not self.interval_ms or not self.base_ms:
             raise TrainingRunError(
@@ -185,12 +212,16 @@ class PinnedIndicatorHistory:
                 raise ValueError("indicator history cursor did not progress")
             cursor = next_before
         bars = tuple(collected[key] for key in sorted(collected))
-        gaps = tuple(
-            (max(start_ms, gap["start_ms"]), min(stop - 1, gap["end_ms"]))
-            for gap in exclusions
-            if gap["end_ms"] >= start_ms and gap["start_ms"] < stop
-        )
-        chunk = IndicatorHistoryChunk(start_ms, stop, bars, gaps)
+
+        def clipped(closed):
+            return tuple(
+                (max(start_ms, gap["start_ms"]), min(stop - 1, gap["end_ms"]))
+                for gap in exclusions
+                if gap["end_ms"] >= start_ms and gap["start_ms"] < stop
+                and (gap["reason"] == MARKET_CLOSED_REASON) == closed
+            )
+
+        chunk = IndicatorHistoryChunk(start_ms, stop, bars, clipped(False), clipped(True))
         validate_chunk(chunk, self.revealed_boundary_ms)
         return chunk
 
@@ -212,7 +243,7 @@ def validate_chunk(chunk: IndicatorHistoryChunk | IndicatorCloseChunk, revealed_
             raise ValueError("indicator history chunk has an invalid closed bar")
         previous = bar.close_time_ms
         spans.append((bar.open_time_ms, bar.close_time_ms))
-    for start, end in chunk.gaps:
+    for start, end in (*chunk.gaps, *chunk.closures):
         if start < chunk.start_ms or end >= chunk.stop_ms or end < start:
             raise ValueError("indicator history gap is outside its chunk")
         if any(
@@ -227,3 +258,48 @@ def validate_chunk(chunk: IndicatorHistoryChunk | IndicatorCloseChunk, revealed_
         cursor = max(cursor, end + 1)
     if cursor != chunk.stop_ms:
         raise ValueError("indicator history did not cover its requested prefix")
+
+
+def continues(history, last_close_ms: int, open_ms: int) -> bool:
+    """Whether a bar opening at ``open_ms`` carries on from one closing at ``last_close_ms``.
+
+    ADR-DATA-002 D2: time in which a session-calendar market trades no minute
+    is a closure, so an indicator keeps its state across it. Any traded
+    minute in between is missing data and still restarts the indicator.
+    """
+    if open_ms == last_close_ms + 1:
+        return True
+    calendar = getattr(history, "calendar", None)
+    if calendar is None or open_ms <= last_close_ms + 1:
+        return False
+    delta = history.public_minus_actual_ms
+    try:
+        return not calendar.count_expected(last_close_ms + 1 - delta, open_ms - 1 - delta, "1m")
+    except (LookupError, ValueError):
+        return False
+
+
+def traded_boundary(history, before_ms: int, count: int) -> int | None:
+    """The open of the ``count``-th traded display bucket before ``before_ms``.
+
+    None when the series has no session calendar (the caller keeps the grid).
+    The result is not clamped to the history origin.
+    """
+    calendar = getattr(history, "calendar", None)
+    if calendar is None:
+        return None
+    interval = history.identity["identity"]["display_interval"]
+    width = parse_interval_ms(interval)
+    delta = history.public_minus_actual_ms
+    cursor = before_ms
+    try:
+        if width <= 60_000:
+            return opens_before(calendar, cursor - delta, count, "1m")[0] + delta if count > 0 else cursor
+        for _ in range(count):
+            if cursor <= history.origin_ms:
+                break
+            last = opens_before(calendar, cursor - delta, 1, "1m")[0] + delta
+            cursor = compute_bucket_start_ms(last, width, interval=interval)
+    except LookupError:
+        return history.origin_ms
+    return cursor

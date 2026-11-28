@@ -21,6 +21,9 @@ def describe():
     result["historical_session"] = "fixed-history/1"
     if getattr(pine_compat, "BAR_BOUNDARY_SCHEMA", None) == "host-bar-boundaries/1":
         result["bar_boundaries"] = "host-bar-boundaries/1"
+    from .native_follow import FOLLOW_CONTRACT, available
+    if available():
+        result["follow_session"] = FOLLOW_CONTRACT
     return result
 
 

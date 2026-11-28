@@ -6,7 +6,7 @@ from .pine_callbacks import ChartFillCallbacks
 
 class ChartRealtimeTicks(ChartFillCallbacks):
     def observe(self,bar,*,confirmed,is_new=False,trigger=None):
-        from .service import _pine_account_view,_planning_context
+        from .host_bar import _pine_account_view, _planning_context
         from .errors import BacktestError
         import time
         if time.monotonic()>=self.deadline:

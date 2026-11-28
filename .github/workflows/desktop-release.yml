@@ -128,9 +128,15 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          shopt -s nullglob
-          files=(release/*.dmg release/*.zip release/*.exe release/SHA256SUMS release/build-manifests.json)
-          test "${#files[@]}" -eq 7
+          # Upload the packages assemble verified, as SHA256SUMS lists them, so a
+          # new package format needs no change here.
+          files=()
+          while read -r _ name; do files+=("release/$name"); done < release/SHA256SUMS
+          test "${#files[@]}" -gt 0
+          files+=(release/SHA256SUMS release/build-manifests.json)
+          for file in "${files[@]}"; do
+            if [[ ! -f "$file" ]]; then echo "::error::Missing $file"; exit 1; fi
+          done
           if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
             # A rerun refreshes its own draft; a published release is never replaced.
             if [[ "$draft" != "true" ]]; then

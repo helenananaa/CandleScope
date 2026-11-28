@@ -7,6 +7,7 @@ readers. This private controller is not yet a public API or default live owner.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
@@ -22,6 +23,7 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged, PrefixReceipt
 from .continuous_bar_host import ContinuousBarHost, ContinuousExecutionStopping
 from .continuous_bar_source import ContinuousMarketBarSource, STEP
+from .continuous_grid import bar_grid
 from .continuous_definition import prepare_definition
 from .continuous_inputs import ContinuousInputs, ProfileLease, reject_path_links
 from .continuous_provider import ContinuousProviderFactory
@@ -29,6 +31,8 @@ from .continuous_runtime import ContinuousStrategyRuntime, WAKE_EVENTS
 from .continuous_store import ContinuousStrategyStore, _wire, MAX_DEFINITION_BYTES
 from .continuous_repairs import ContinuousRepairs
 from .errors import BacktestError
+
+logger = logging.getLogger(__name__)
 
 
 def _key(definition):
@@ -292,23 +296,36 @@ class ContinuousStrategyController:
         job.task.add_done_callback(lambda done:None if done.cancelled() else done.exception())
         return job
 
+    def _calendar(self,series):
+        """The series' trading calendar, or None (ADR-DATA-002 D2c)."""
+        series_calendar=getattr(self.manager,"series_calendar",None)
+        if series_calendar is None or not isinstance(series,SeriesKey):return None
+        try:
+            return series_calendar(series.symbol,series.interval,exchange=series.exchange,
+                market_type=series.market_type,series_identity=series.identity)
+        except Exception:
+            logger.warning("Continuous creation could not resolve the calendar of %s",series,exc_info=True)
+            return None
+
     async def create(self,key,*,provider,execution,series,mode,from_ms=None,warmup_bars=0):
         self._live()
-        definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars)
+        definition=await run_storage(prepare_definition,provider,execution,series,warmup_bars=warmup_bars,
+            calendar=self._calendar(series),bind_external=getattr(self.runtime.provider_factory,"bind_external",None))
+        grid=bar_grid(series.interval)
         now=self.clock_ms()
         if type(now) is not int or now<STEP:raise BacktestError("CONTINUOUS_INPUT_INVALID","Backend UTC clock is unavailable")
-        cutoff=(now//STEP)*STEP-1
+        cutoff=grid.closed_through(now)
         # Journal validation must run before any reservation, job or demand.
         from .continuous_store import _text
         _text(key,128)
         if (type(mode) is not str or mode not in {"HISTORY_LIVE","LIVE_ONLY"}
                 or (mode=="LIVE_ONLY" and from_ms is not None)
-                or (mode=="HISTORY_LIVE" and (type(from_ms) is not int or from_ms<STEP or from_ms%STEP))):
+                or (mode=="HISTORY_LIVE" and (type(from_ms) is not int or from_ms<STEP or not grid.aligned(from_ms)))):
             raise BacktestError("CONTINUOUS_INPUT_INVALID","Creation mode and closed input window are invalid")
         try:row=await run_storage(self.store.creations.describe,key)
         except BacktestError as failure:
             if failure.code!="CONTINUOUS_CREATION_NOT_FOUND":raise
-            if mode=="HISTORY_LIVE" and not 1<=(cutoff+1-from_ms)//STEP<=200_000:
+            if mode=="HISTORY_LIVE" and not 1<=grid.count(from_ms,cutoff)<=200_000:
                 raise BacktestError("CONTINUOUS_INPUT_INVALID","Creation history exceeds its closed input budget")
         else:
             if (_wire(row["definition"],MAX_DEFINITION_BYTES)!=_wire(definition,MAX_DEFINITION_BYTES) or row["mode"]!=mode
@@ -457,6 +474,19 @@ class ContinuousStrategyController:
             await run_storage(self._collect_cancelled,row)
             row=await run_storage(self.store.creations.clear_cancelled_input,key,revision=row["revision"])
         return row
+
+    async def cancel_external(self,connection_id):
+        """Cancel the forward runs a revoked external connection served (B-333c).
+
+        Their committed accounts and results stay. A creation still preparing fails at its
+        first model call, which a revoked connection no longer admits.
+        """
+        self._ready()
+        cancelled=[]
+        for run_id in await run_storage(self.store.external_connection_runs,connection_id):
+            await self.runtime.cancel(run_id)
+            cancelled.append(run_id)
+        return cancelled
 
     def _collect_cancelled(self,row):
         proof=row["input"]["proof"] if row["input"] else row["watch"]

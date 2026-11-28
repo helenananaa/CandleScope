@@ -732,6 +732,19 @@ async def test_phase17_rules_drawing_marker_review_control_and_fork_routes(
         assert binary_float_drawing.json()["error"]["code"] == (
             "REVIEW_DRAWING_INVALID"
         )
+        # The response names the drawing, so the client can save the others.
+        assert binary_float_drawing.json()["error"]["details"] == {
+            "rejected": [
+                {
+                    "chart": None,
+                    "id": "line-float",
+                    "kind": "line",
+                    "reason": "INVALID",
+                    "fields": [],
+                }
+            ],
+            "rejected_count": 1,
+        }
         drawing = await _request(
             app,
             "POST",

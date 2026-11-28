@@ -45,6 +45,9 @@ class Session:
 
 
 def factory(request):
+    from .native_follow import FOLLOW_CONTRACT, open_follow
+    if request.get("follow_contract") == FOLLOW_CONTRACT:
+        return open_follow(request)
     return Session(request)
 
 

@@ -6,6 +6,7 @@ import re
 
 from app.data_engine.interval_policy import parse_interval_spec
 from app.backtest.native import timeframe
+from app.backtest.pine_ticker import pine_ticker_symbol
 
 from .models import PreparationError, Requirement
 
@@ -129,16 +130,20 @@ def plan_inputs(context, dependencies):
             raise PreparationError("DEPENDENCY_RANGE_UNAVAILABLE", "No complete historical bars cover the requested input")
         # Publication and subsequent context resolution must use the same
         # canonical market identity, including aliases such as usdm -> futures.
+        # A non-default series (ADR-DATA-002 D1) keeps its identity through acquisition and binding.
+        series = market.identity.to_dict() if market.identity is not None else None
         binding = {"exchange": market.exchange, "market_type": market.market_type,
             "symbol": market.symbol, "interval": spec.canonical,
             "binding_symbol": dependency.get("binding_symbol", f"{market.exchange.upper()}:{market.symbol}"),
-            "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": start, "end_time_ms": end - 1}
+            "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": start, "end_time_ms": end - 1,
+            **({"identity": series} if series is not None else {})}
         bindings.append(binding)
-        identity = (binding["exchange"], binding["market_type"], binding["symbol"])
+        identity = (binding["exchange"], binding["market_type"], binding["symbol"],
+                    tuple(sorted(series.items())) if series is not None else None)
         previous = physical.get(identity)
         physical[identity] = Requirement(exchange=identity[0], market_type=identity[1], symbol=identity[2],
             start_ms=min(start, previous.start_ms) if previous else start,
-            end_ms=max(end, previous.end_ms) if previous else end)
+            end_ms=max(end, previous.end_ms) if previous else end, identity=series)
     return list(physical.values()), bindings
 
 
@@ -159,9 +164,11 @@ def freeze_bindings(runtime, bindings):
 
 def launch(runtime, intent, inputs, job_id):
     from app.backtest.native_contracts import NativeRunRequest, ExternalRunRequest
+    # A FOLLOW rebuild names the user's run it rebuilds (ADR-BACKTEST-015 O2).
+    follow_of = intent.get("follow_of")
     if "frozen_payload" in intent:
         payload = ExternalRunRequest.model_validate(intent["frozen_payload"]).model_dump()
-        return runtime.native.create(payload, f"preparation:{job_id}")
+        return runtime.native.create(payload, f"preparation:{job_id}", follow_of=follow_of)
     main, *contexts = inputs
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
@@ -176,7 +183,7 @@ def launch(runtime, intent, inputs, job_id):
     if intent.get("execution") is not None:
         contract = ExternalRunRequest
         payload.update(intent["execution"], execution_mode="CANDLESCOPE")
-    return runtime.native.create(contract.model_validate(payload).model_dump(), f"preparation:{job_id}")
+    return runtime.native.create(contract.model_validate(payload).model_dump(), f"preparation:{job_id}", follow_of=follow_of)
 
 
 def validate_frozen_external(runtime, payload):
@@ -205,5 +212,5 @@ def validate_frozen_external(runtime, payload):
             runtime.native._freeze(item)
         except (BacktestError, MarketDatasetError) as exc:
             raise PreparationError(exc.code, str(exc)) from exc
-        if pair[0].split(":")[-1] != manifest["symbol"] or pair[1] != timeframe(item["interval"]):
+        if pine_ticker_symbol(pair[0]) != manifest["symbol"] or pair[1] != timeframe(item["interval"]):
             raise PreparationError("DATA_SNAPSHOT_MISMATCH", "Signal metadata differs from frozen dataset")

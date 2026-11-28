@@ -574,6 +574,11 @@ HISTORY_ARCHIVE_CACHE_MAX_BYTES = int(
 OKX_HISTORY_ARCHIVE_ENABLED = os.getenv(
     "OKX_HISTORY_ARCHIVE_ENABLED", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
+# Per-symbol history planner (ADR-DATA-001). Off until the RC scenarios are
+# measured with it; the per-request backfill path is unchanged while off.
+HISTORY_SYMBOL_PLANNER_ENABLED = os.getenv(
+    "HISTORY_SYMBOL_PLANNER_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 # Manual continuous history download ships enabled after its release gates.
 # Explicitly setting the flag to 0 must stop new jobs without disabling the

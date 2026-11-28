@@ -943,3 +943,91 @@ async def test_continuous_research_prepares_exact_warmup_range_and_model(tmp_pat
     finally:
         await service.shutdown()
         runtime.shutdown()
+
+
+# ADR-DATA-002 D1: a requirement names its series beyond the route.
+STOCK_IDENTITY = {
+    "provider_id": "twelvedata", "venue": "xngs", "asset_class": "stock", "series_variant": "ohlcv",
+    "price_adjustment": "raw", "session_variant": "regular", "volume_semantics": "shares",
+}
+
+
+def _stock_requirement(**changes):
+    return Requirement(**{"exchange": "twelvedata", "market_type": "stock", "symbol": "AAPL",
+                          "start_ms": START, "end_ms": START + 120_000, "identity": STOCK_IDENTITY, **changes})
+
+
+def test_a_default_identity_keeps_requirement_dumps_and_fingerprints():
+    from app.data_preparation.models import fingerprint
+
+    legacy = request()
+    explicit = PreparationRequest(idempotency_key="request-0001", consumer="PREFETCH", requirements=[
+        Requirement(exchange="binance", market_type="spot", symbol="BTCUSDT", start_ms=START,
+                    end_ms=START + 120_000, identity={"provider_id": "binance", "venue": "binance"})])
+    assert explicit.requirements[0].identity is None
+    assert explicit.identity() == legacy.identity() == fingerprint({
+        "consumer": "PREFETCH", "intent": {}, "max_bytes": 512 * 1024 * 1024, "progressive": False,
+        "requirements": [{"exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT", "role": "BARS",
+                          "interval": "1m", "start_ms": START, "end_ms": START + 120_000}]})
+    stock = _stock_requirement(end_ms=START + 2 * 86_400_000)
+    assert stock.model_dump()["identity"] == STOCK_IDENTITY
+    assert all(part.identity == STOCK_IDENTITY for part in split_requirement(stock))
+    with pytest.raises(ValueError):
+        _stock_requirement(identity={"region": "us"})
+
+
+@async_test
+async def test_bar_adapter_reads_and_repairs_the_requirement_series(tmp_path):
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    reads, repairs, stored = [], [], []
+
+    def query(*_args, series_identity=None, **_kwargs):
+        reads.append(series_identity)
+        return list(stored) if series_identity is not None else []
+
+    class Coordinator:
+        async def request_and_wait(self, repair):
+            repairs.append(repair)
+            stored.extend(bars())
+
+    class ReplayArchive:
+        def query_bars(self, *_args, **_kwargs):
+            raise AssertionError("replay archives hold exchange-native series only")
+
+    adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=Coordinator(),
+                                    replay_service=NS(_repository=ReplayArchive()), query=query)
+    await adapter.acquire(_stock_requirement(), "key")
+    assert len(repairs) == 1
+    assert repairs[0].metadata["series_identity"] == STOCK_IDENTITY
+    assert reads and all(read == KlineSeriesIdentity(**STOCK_IDENTITY) for read in reads)
+
+
+@async_test
+async def test_a_replay_market_serves_only_the_series_it_holds(tmp_path):
+    pytest.importorskip("pyarrow")
+    from app.data_engine.series_identity import identity_from_mapping
+    from app.replay.catalog import ReplaySeriesIdentity
+    from app.replay.history_archive import ReplayHistoryArchiveWriter, ReplayHistoryRepository
+
+    root = tmp_path / "archive"
+
+    def query(*_args, series_identity=None, **_kwargs):
+        return bars() if series_identity is not None else []
+
+    replay = NS(_repository=ReplayHistoryRepository(root),
+                settings=NS(replay_history_archive_dir=root, replay_history_origin_uri=None))
+    adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=None, replay_service=replay, query=query)
+    stock = _stock_requirement(symbol="AAPL:NASDAQ")
+    receipt, _ = await adapter.acquire(stock, "stock")
+    assert receipt["origin"] != "replay_archive"
+    request = PreparationRequest(idempotency_key="replay-stock-1", consumer="REPLAY", requirements=[stock])
+    await adapter.publish(request, [{"key": "stock", "requirement": stock.model_dump(), "receipt": receipt}], "job-1")
+
+    manifest = ReplayHistoryArchiveWriter(root).current_manifest(
+        ReplaySeriesIdentity("twelvedata", "stock", "AAPL:NASDAQ"), "1m")
+    assert manifest.identity.series == identity_from_mapping("twelvedata", STOCK_IDENTITY)
+    # The market's own series comes back from the archive; the route's exchange default does not.
+    again, _ = await adapter.acquire(stock, "again")
+    assert again["origin"] == "replay_archive"
+    assert adapter._archive_rows(stock.model_copy(update={"identity": None})) is None

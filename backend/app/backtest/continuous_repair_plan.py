@@ -11,10 +11,10 @@ import json
 
 from app.data_engine.storage.prefix_watches import PrefixReceipt
 from .continuous_contracts import CommittedIdentity
+from .continuous_grid import bar_grid
 from .continuous_source_identity import source_owner
 from .continuous_store import MAX_RETAINED_CHECKPOINTS, fail
 
-STEP = 60_000
 
 
 def preview(store, manager, run_id, *, expected, resume_after, now_ms):
@@ -34,6 +34,10 @@ def preview(store, manager, run_id, *, expected, resume_after, now_ms):
             if store.results.identity(current) != expected or current["phase"] != "REPAIR_REQUIRED":
                 raise fail("CONTINUOUS_COMMIT_CONFLICT", "Observed repair-required account changed")
             definition = store.describe(run_id)["definition"]
+            if (definition.get("provider") or {}).get("language") == "external":
+                # B-333c: its journal holds one decision per bar, which corrected bars cannot replay.
+                raise fail("FIDELITY_UNSUPPORTED",
+                    "An external model decided each bar once; a corrected history needs a new forward run")
             if definition.get("source_kind") != "MARKET_BAR":
                 raise fail("FIDELITY_UNSUPPORTED", "Repair requires the owned market BAR source")
             # Extract just one source receipt. Do not decode historical engine,
@@ -53,7 +57,8 @@ def preview(store, manager, run_id, *, expected, resume_after, now_ms):
                  current["event_time_ms"], MAX_RETAINED_CHECKPOINTS))]
         finally:
             store.db.execute("ROLLBACK")
-    through = (now_ms // STEP) * STEP - 1
+    # The newest closed bar of the run's own interval (B-333).
+    through = bar_grid(point.series[3]).closed_through(now_ms)
     if through < max(point.through_ms, point.from_ms):
         raise fail("LOOKAHEAD_VIOLATION", "Repair cutoff must cover the committed closed BARs")
     observed = manager.bars.prefixes.inspect(point.owner)

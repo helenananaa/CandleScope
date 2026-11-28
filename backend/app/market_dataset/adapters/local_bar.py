@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.data_engine.history.expected_bars import calendar_by_id, follows
 from app.data_engine.interval_policy import parse_interval_spec
 from app.local_data.service import LocalDatasetError, LocalDatasetService
 from app.market_dataset.models import DatasetRef
@@ -75,6 +76,11 @@ class LocalBarSnapshotProvider:
         interval = parse_interval_spec(str(ref.interval or manifest["interval"]))
         if interval is None:
             raise MarketDatasetError("invalid BAR interval", code="DATA_QUALITY_FAILED")
+        # ADR-DATA-002 D2: on a session calendar a closure is not a missing bar.
+        try:
+            calendar = calendar_by_id(ref.calendar_id)
+        except LookupError as exc:
+            raise MarketDatasetError(str(exc), code="DATA_QUALITY_FAILED") from exc
         sequence = 0
         previous_open_ms: int | None = None
         for row in bars:
@@ -85,7 +91,11 @@ class LocalBarSnapshotProvider:
             sequence += (
                 1
                 if previous_open_ms is None
-                or interval.is_successor(previous_open_ms, open_ms)
+                or (
+                    interval.is_successor(previous_open_ms, open_ms)
+                    if calendar is None
+                    else follows(calendar, interval.canonical, previous_open_ms, open_ms)
+                )
                 else 2
             )
             selected.append(

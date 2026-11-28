@@ -88,7 +88,7 @@ export async function waitForPreparation(
 
 export async function prepareReplay(
   setup: TrainingRunCreatePayload,
-  market: { exchange: string; market_type: string; symbol: string; display_interval?: string; progressive?: boolean; random_by_market?: boolean },
+  market: { exchange: string; market_type: string; symbol: string; identity?: Record<string, string>; display_interval?: string; progressive?: boolean; random_by_market?: boolean },
   onProgress: (job: PreparationJob) => void,
   signal?: AbortSignal,
   idempotencyKey: string = crypto.randomUUID(),

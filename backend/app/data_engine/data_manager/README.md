@@ -212,6 +212,19 @@ The component dependency direction is explicit:
   API, request ids and retained outcomes, and
   [backfill_execution.py](backfill_execution.py) runs one request with retries,
   verifies it and hands its bars to the cache.
+- [symbol_history/](symbol_history/__init__.py) is the per-symbol history
+  planner (ADR-DATA-001): demands from every chart and stream of a symbol are
+  merged on source slots, cut into pieces by urgency and recency, and run by an
+  injected executor. It is off by default (`HISTORY_SYMBOL_PLANNER_ENABLED=0`).
+  When on, `DataManager.enable_history_planner` routes base history for
+  single-base derived intervals on 1m-or-wider Binance/OKX bases (89m on 1m) to
+  it: chart reads' missing base ranges (for a cold mixed read, which reports
+  the closed target buckets themselves, their base slots), and the warm-start seed's forming-bucket
+  components (`forming`) and tail rebuild (`tail`). Pieces run as source-interval
+  coordinator repairs (`coordinator_executor`) and a read's ids go back to the
+  API; a served read or tail then sends its target window to the existing target
+  path, which only derives when the base is present, and a served seed needs
+  nothing more (`router`). Everything else keeps the per-request path.
 
 `BackfillCoordinator` is deliberately separate from `BackfillEngine`:
 

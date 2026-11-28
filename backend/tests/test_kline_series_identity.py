@@ -333,3 +333,19 @@ def test_shared_series_key_retains_one_public_identity_type():
     assert replace(key, interval='97m').identity == key.identity
     with pytest.raises(FrozenInstanceError):
         key.symbol = 'OTHER'
+
+
+def test_requested_identity_treats_an_explicit_default_as_absent():
+    """ADR-DATA-002 §3: only a non-default identity changes what a request names."""
+    import pytest
+
+    from app.data_engine.series_identity import KlineSeriesIdentity, requested_series_identity
+
+    assert requested_series_identity("binance", None) is None
+    assert requested_series_identity("binance", {}) is None
+    assert requested_series_identity("Binance", {"provider_id": "binance", "asset_class": "crypto"}) is None
+    stock = requested_series_identity("twelvedata", {"venue": "XNGS", "asset_class": "Stock"})
+    assert stock == KlineSeriesIdentity.for_exchange("twelvedata", venue="xngs", asset_class="stock")
+    for malformed in (["twelvedata"], {"region": "us"}, {"venue": 3}):
+        with pytest.raises(ValueError):
+            requested_series_identity("twelvedata", malformed)

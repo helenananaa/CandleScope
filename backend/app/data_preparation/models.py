@@ -4,7 +4,13 @@ import hashlib
 import json
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from app.data_engine.series_identity import (
+    KlineSeriesIdentity,
+    identity_from_mapping,
+    requested_series_identity,
+)
 
 # Strategy preparation acquires one-minute BAR rows; one strategy input holds at most this many.
 STRATEGY_BAR_INPUT_LIMIT = 200_000
@@ -36,6 +42,29 @@ class Requirement(BaseModel):
     # these endpoints as retries cross the current time.
     start_ms: int = Field(ge=0)
     end_ms: int = Field(gt=0)
+    # ADR-DATA-002 D1: the series beyond its route. Absent for the exchange's own
+    # series (an explicit default is stored as absent), and left out of every
+    # dump then, so existing fingerprints and series keys do not change.
+    identity: dict[str, str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_identity(cls, values):
+        if isinstance(values, dict) and values.get("identity") is not None:
+            identity = requested_series_identity(
+                str(values.get("exchange") or "").strip().lower(), values["identity"])
+            values = {**values, "identity": identity.to_dict() if identity is not None else None}
+        return values
+
+    @model_serializer(mode="wrap")
+    def _omit_default_identity(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get("identity") is None:
+            data.pop("identity", None)
+        return data
+
+    def series_identity(self) -> KlineSeriesIdentity | None:
+        return identity_from_mapping(self.exchange, self.identity) if self.identity is not None else None
 
     @model_validator(mode="after")
     def valid_range(self):

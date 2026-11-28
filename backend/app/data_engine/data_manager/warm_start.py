@@ -12,6 +12,7 @@ from app.core.executors import run_storage
 
 from app.data_engine.interval_policy import (
     is_monthly_interval,
+    last_closed_bar_open_ms,
     parse_custom_interval,
     parse_interval_spec,
     parse_monthly_count,
@@ -41,6 +42,8 @@ logger = logging.getLogger("data_manager.warm_start")
 
 StorageProvider = Callable[[], StorageBackend | None]
 BackfillProvider = Callable[[], BackfillTrigger | None]
+# () -> symbol_history.router.HistoryDemandRouter | None (None unless HISTORY_SYMBOL_PLANNER_ENABLED)
+HistoryRouterProvider = Callable[[], Any]
 
 
 def _base_row_is_final(row: dict) -> bool:
@@ -77,12 +80,14 @@ class AggregatorWarmStartService:
         storage_provider: StorageProvider,
         backfill_trigger_provider: BackfillProvider,
         interval_resolver: IntervalResolver | None = None,
+        history_router_provider: HistoryRouterProvider | None = None,
     ) -> None:
         self._cache = cache
         self._bar_aggregator = bar_aggregator
         self._base_interval = base_interval
         self._storage_provider = storage_provider
         self._backfill_trigger_provider = backfill_trigger_provider
+        self._history_router_provider = history_router_provider
         self._interval_resolver = interval_resolver or IntervalResolver()
         self.history_prefix_runtime = None
         self._tail_repair_buckets: dict[SeriesKey, tuple[int, object | None]] = {}
@@ -539,7 +544,22 @@ class AggregatorWarmStartService:
             if not uncovered:
                 return False
             start_ms = uncovered[0]
-        submitted = self._call_backfill_trigger(
+        metadata = {
+            "focus_scope": focus_scope,
+            "subscription_tier": subscription_tier,
+            "requested_interval": target.interval,
+            "base_interval": base_interval,
+            "had_stream": True,
+            "requires_trusted_finality": True,
+        }
+        # With the planner the components are one more range of the symbol's base history
+        # (forming, most urgent), fetched once with the chart's own history (ADR-DATA-001 S5b).
+        submitted = self._plan_base_demand(
+            symbol=target.symbol, target_interval=target.interval, base_interval=base_interval,
+            start_ms=start_ms, last_open_ms=closed_edge - base_ms, exchange=target.exchange,
+            market_type=target.market_type, reason=reason, requester="warm_start_custom_seed",
+            metadata=metadata, series_identity=series_identity,
+        ) or self._call_backfill_trigger(
             symbol=target.symbol,
             interval=base_interval,
             start_ms=start_ms,
@@ -548,14 +568,7 @@ class AggregatorWarmStartService:
             market_type=target.market_type,
             reason=reason,
             requester="warm_start_custom_seed",
-            metadata={
-                "focus_scope": focus_scope,
-                "subscription_tier": subscription_tier,
-                "requested_interval": target.interval,
-                "base_interval": base_interval,
-                "had_stream": True,
-                "requires_trusted_finality": True,
-            },
+            metadata=metadata,
             series_identity=series_identity,
         )
         if not submitted:
@@ -720,26 +733,31 @@ class AggregatorWarmStartService:
                 7 * 24 * 60 * 60 * 1000,
             )
         start_ms = max(0, now_ms - repair_window_ms)
+        base_interval = route.base_interval if route is not None else self._base_interval
+        reason = self._warmup_reason(focus_scope, subscription_tier)
+        metadata = {
+            "focus_scope": focus_scope,
+            "subscription_tier": subscription_tier,
+            "requested_interval": interval,
+            "base_interval": base_interval,
+            "had_stream": False,
+        }
 
         try:
-            submitted = self._call_backfill_trigger(
+            submitted = self._plan_custom_tail(
+                symbol.upper(), interval, base_interval, start_ms, now_ms,
+                exchange=exchange, market_type=self._normalize_market_type(market_type),
+                reason=reason, metadata=metadata, series_identity=series_identity,
+            ) or self._call_backfill_trigger(
                 symbol=symbol.upper(),
                 interval=interval,
                 start_ms=start_ms,
                 end_ms=now_ms,
                 exchange=exchange,
                 market_type=self._normalize_market_type(market_type),
-                reason=self._warmup_reason(focus_scope, subscription_tier),
+                reason=reason,
                 requester="warm_start_custom_tail",
-                metadata={
-                    "focus_scope": focus_scope,
-                    "subscription_tier": subscription_tier,
-                    "requested_interval": interval,
-                    "base_interval": (
-                        route.base_interval if route is not None else self._base_interval
-                    ),
-                    "had_stream": False,
-                },
+                metadata=metadata,
                 series_identity=series_identity,
             )
             if submitted and repair_bucket_ms is not None:
@@ -757,6 +775,76 @@ class AggregatorWarmStartService:
                 exc,
                 exc_info=True,
             )
+
+    def _plan_custom_tail(
+        self,
+        symbol: str,
+        interval: str,
+        base_interval: str | None,
+        start_ms: int,
+        now_ms: int,
+        *,
+        exchange: str,
+        market_type: str,
+        reason: str,
+        metadata: dict[str, Any],
+        series_identity: KlineSeriesIdentity | None,
+    ) -> bool:
+        """The tail rebuild as ``tail`` demand on the base from its first target bucket (S5b).
+
+        Served, it runs as the same target repair as without the planner, with the base present.
+        """
+        if not base_interval or self._history_router_provider is None:
+            return False
+        first_bucket = self._bar_aggregator.compute_bucket(
+            interval, start_ms, exchange=exchange, series_identity=series_identity,
+        )
+        last_open = last_closed_bar_open_ms(now_ms, base_interval)
+        if first_bucket is None or last_open is None:
+            return False
+        # A full-subscription warmup stays prefetch; a chart's tail is less urgent than its history.
+        tail_reason = reason if reason == "full_subscription_warmup" else "tail_gap"
+        return self._plan_base_demand(
+            symbol=symbol, target_interval=interval, base_interval=base_interval,
+            start_ms=first_bucket, last_open_ms=last_open, exchange=exchange, market_type=market_type,
+            reason=tail_reason, requester="warm_start_custom_tail", metadata=metadata,
+            series_identity=series_identity,
+        )
+
+    def _plan_base_demand(
+        self,
+        *,
+        symbol: str,
+        target_interval: str,
+        base_interval: str,
+        start_ms: int,
+        last_open_ms: int,
+        exchange: str,
+        market_type: str,
+        reason: str,
+        requester: str,
+        metadata: dict[str, Any],
+        series_identity: KlineSeriesIdentity | None,
+    ) -> bool:
+        """Hand base opens ``[start_ms, last_open_ms]`` to the per-symbol planner.
+
+        False keeps the existing repair: no planner, a route it does not take,
+        a non-default identity, or nothing of the range left to plan.
+        """
+        router = self._history_router_provider() if self._history_router_provider is not None else None
+        if router is None or last_open_ms < start_ms:
+            return False
+        if series_identity is not None and not series_identity.is_legacy_default_for(exchange):
+            return False
+        details = {key: value for key, value in metadata.items() if value is not None}
+        if not router.takes(exchange=exchange, market_type=market_type, target_interval=target_interval,
+                            base_interval=base_interval, requester=requester, metadata=details):
+            return False
+        return bool(router.register(
+            symbol=symbol, exchange=exchange, market_type=market_type, target_interval=target_interval,
+            base_interval=base_interval, start_ms=start_ms, end_ms=last_open_ms, reason=reason,
+            requester=requester, metadata=details,
+        ))
 
     def _call_backfill_trigger(
         self,

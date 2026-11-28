@@ -165,23 +165,65 @@ entitlement、delay_seconds、redistribution、上市/到期时间。还需要�
 - provider 必须为每个市场（可选：每个品种）声明 `calendar_id`。未注册的日历直接拒绝，这是现有行为。
 - 第一版只用一个日历：同一序列的盘前盘后作为另一条 `session_variant` 序列，不混进常规时段。
 
+D5 的拆分（模拟账户）：
+
+- **D5a 休市和跳空。** 练习账户在休市时不成交：休市时下的市价单和可立即成交的限价单挂到下次开盘，按开盘价成交；
+  隔休市的挂单按开盘价判断（限价单在开盘价更优时按开盘价成交，止损单按开盘价加滑点成交），之后照常按 K 线路径撮合。
+  只对有交易日历的市场生效，24×7 市场按构造不变。回测内核已经按开盘价处理跳空（`_adverse_stop_fill_price`、
+  `_limit_gapped`），持续策略的前向运行在 D2c3 已拒绝有交易时段的市场，都不用改。
+- **D5b 账户模型来自品种。** `SymbolInfo.account_model`：`cash`（全额、只做多：现货加密、股票、ETF；§4.1 的
+  `cash_equity` 合进这里，因为现货加密规则相同）、`crypto_linear`、`crypto_inverse`、`futures_margin`。
+  合约规则（`contract_rules.py`）按现货/线性/反向填写，Twelve Data 的股票和 ETF 声明 `cash`，期权不声明。
+  练习账户按它决定杠杆、做空和对冲，替换 `market_type == "futures"`：其他交易所的线性永续（如 Gate `swap.linear`）
+  由此可以做空和加杠杆；反向合约和每手保证金期货暂不能开仓（`TRADING_ACCOUNT_MODEL_UNSUPPORTED`），已有持仓仍可平仓。
+  没有声明或目录还没加载的品种保持原规则（`futures` 按线性，其他全额只做多）；
+  `GET /trading/market-rules` 让下单面板和后端用同一个答案。
+- **D5c 现金股票。** 全额买入、不能卖空（D5b 的 `cash` 已经如此）。数量按品种的数量网格（`quantityStep`、
+  `quantityOrigin`、`minQuantity`，单位是基础资产，股票就是股）：Twelve Data 的股票和 ETF 声明交易所的整股（步长 1、
+  最少 1），声明碎股步长的来源按它的步长；不在网格上的数量拒绝（`TRADING_QUANTITY_RULE`），一次平掉整个持仓的单子除外，
+  因为持仓可能早于网格。网格只用于 `cash`：合约品种的网格按张数计，练习账户的数量是基础资产，留给 D5d。
+  手续费用账户自己的费率，下单面板显示出来；现有来源都不发布按品种的手续费（CCXT 的 maker/taker 是交易所默认档位，
+  不代表用户的实际费率），所以 `fee_defaults` 暂不填，不猜。账户币种和品种报价币种不一致时（如 USDT 账户交易 USD 股票），
+  下单面板明确提示练习账户按一比一记账、不换算货币。
+- **D5d 期货每手保证金。** 练习账户的数量始终是基础资产（期货是标的单位），所以盈亏 = 价格变动 × 数量
+  = 价格变动 × 合约乘数 × 手数。合约品种的数量网格按张数计，换算成基础资产：步长、origin、最小值都乘以
+  `contractMultiplier`（OKX 每手 0.01 张、每张 0.01 BTC，步长就是 0.0001 BTC）；反向合约和没有合约大小的品种不套网格。
+  `futures_margin` 可以做多做空，保证金 = `margin_per_contract` × 手数，与价格和账户杠杆无关。`SymbolInfo.margin_per_contract`
+  由来源填写；来源没给就让用户为这个账户填经纪商的数字（`PUT /trading/accounts/{id}/contract-margins`），不猜，
+  没填之前开仓返回 `TRADING_MARGIN_REQUIRED`。有持仓时可以改，不能清空。没有合约大小的 `futures_margin` 品种不能开仓。
+  现有来源还没有声明 `futures_margin` 的品种，D7、D8 的期货来源会用到；手续费仍按账户费率乘名义价值。
+
 ## 5. 用能力声明替换名字判断
 
-能力声明挂在 `ExchangeCapabilities.channels`（schema v3 的 `history_policy` 等），新增具名角色：
+能力声明挂在 `ExchangeCapabilities`：通道矩阵（`channels`，schema v3 的 `history_policy` 等）之外，新增具名角色
+`roles`（`CapabilityRole(role, market_types, contract)`）。消费方问"这个市场声明了哪个角色、由哪个契约提供"，
+不再比较交易所名字。`contract` 写明具体实现，所以只有一种实现的功能仍可以拒绝其他契约。
 
-| 现有判断 | 改成能力 |
-| --- | --- |
-| `replay/trade_import.py:492/559`、`replay/remote_trade_archive.py:209/1398`、`replay/official_trade_history.py:73`、`data_preparation/trade_adapter.py:50`、前端 `trade-flow/tradeFlowHistoryApi.ts:31` | `trades.history.archive`（逐笔成交归档） |
-| `replay/training/historical_book.py:274/869`、`replay/training/hedge_inputs.py:1965`、`replay/training/admission_rules.py:427/435`、前端 `replay/trainingHubModel.ts:104/370`、`advanced-market-data/useAdvancedMarketDataRuntime.ts` 三处 | `book.history`、`funding.history`、`mark.history`、`contract_rules` 各按需要 |
-| `replay/training/display_service.py:345` | 由具体用途决定，同上 |
-| `backtest/continuous_definition.py:51`、前端 `strategy-research/researchSelectedVersion.ts:51`、`backtest/continuous/ContinuousStrategyPanel.tsx:96` | `realtime.finality`（FOLLOW）+ `funding.history`（期货）+ 日历 |
-| `backtest/pine_risk_stops.py:17` | `contract_rules` |
-| `data_preparation/market_random.py:50` | `symbol.lifecycle.listed_at` |
-| `data_preparation/replay_origin.py:156` | `history.archive` |
-| `backtest/pine_requested_data.py:53`、`indicator/pine_host_inputs.py:69/201` | 这是 Pine ticker 命名（`.P` 后缀），移到 provider 的 symbol normalizer（`pine_ticker()`） |
+不能直接用通道代替：OKX、Bybit 等从 CCXT 通道合并得到资金费、持仓量历史，按通道放开会改变 OKX 的现有行为。
+所以这些判断都改成显式角色，目前由原生 Binance 声明（Gate 只声明 5m 持仓量网格）；CCXT 的 `binanceusdm`、OKX 等场所不声明。
+查询走交易所注册表；命令行工具和测试未初始化注册表时，内置的 Binance、OKX 直接读静态能力文档
+（`app/exchanges/roles.py`，前端 `features/exchange-support/capabilityRoles.ts`）。
+
+| 现有判断 | 改成 | 阶段 |
+| --- | --- | --- |
+| `replay/trade_import.py`（2 处）、`replay/remote_trade_archive.py`（2 处）、`replay/official_trade_history.py`、`data_preparation/trade_adapter.py`、`market_data/trade_flow_service.py` 缺口修复、前端 `trade-flow/tradeFlowHistoryApi.ts` | `trades.history.archive`（契约 `binance.public-data.um-agg-trades.daily/1`，Binance futures） | D3a |
+| `replay/training/historical_book.py`（2 处）、`replay/training/admission_rules.py` 盘口辅助 | `book.history`（契约即归档来源 `BINANCE_USDM_DIFF_DEPTH_CAPTURE`） | D3b |
+| `replay/training/hedge_inputs.py`、`admission_rules.py` 双向持仓、前端 `replay/trainingHubModel.ts` 双向持仓（改看后端计划的拒绝原因） | `hedge.public_history`（契约 `binance.usdm.hedge-public-history/1`：规则、费率、标记价、资金费归档） | D3b |
+| `replay/training/display_service.py` 严格原生周期 | `history.native_archive`（契约 `binance-public-kline-v1`，Binance spot） | D3b |
+| `data_preparation/replay_origin.py`、`data_preparation/market_random.py` | `history.earliest_page`（契约 `binance.klines.start-time-ascending/1`：按 startTime 升序翻页，能探到最早一根；Binance spot、futures） | D3b |
+| 前端 `trainingHubModel.ts` 默认选中 | 优先选声明了 `hedge.public_history` 的市场；拿不到交易所目录时选第一个可用市场 | D3b |
+| `backtest/continuous_definition.py` 期货、前端 `strategy-research/researchSelectedVersion.ts`、`ContinuousStrategyPanel.tsx` | `contract_rules`（契约 `BINANCE_USDM_LINEAR_BASE_QUANTITY`：线性、按基础资产数量，Binance futures）；实时和日历已在 D2c3 改完；前端在交易所目录未加载时交给后端判断 | D3c |
+| `backtest/pine_risk_stops.py` | 市场声明的日历是 `crypto.24x7.utc`（OKX 由此可用 Pine 日内风控；窗口契约 id `BINANCE_UTC_24_7_V1` 进 hash，保留原名） | D3c |
+| `backtest/pine_requested_data.py`、`indicator/pine_host_inputs.py`（2 处）、`backtest/strategy/pine_engine.py` | Pine ticker 命名（`.P` 后缀）移到 symbol normalizer：`pine_ticker()` / `storage_symbol_from_pine()`，默认原样返回，Binance 对 futures/usdm/swap 加减 `.P` | D3c |
+| `market_data/service.py` 混合资金费、前端 `useAdvancedMarketDataRuntime.ts` 请求 `view=hybrid` | `funding.hybrid_history`（契约 `binance-premium-index-cumavg-v2`：结算之间按 1m 溢价指数估算，Binance futures） | D3d |
+| `market_data/service.py` 有界资金费结算页 | `funding.settlement_history`（契约 `binance-usdm-regular-settlement-v1`：固定结算周期，能证明哪些结算已覆盖，Binance futures） | D3d |
+| `market_data/service.py` 持仓量网格（Binance 全部周期、Gate 5m 名字判断）、前端 `useAdvancedMarketDataRuntime.ts`（3 处） | `open_interest.native_grid`（契约 `binance-oi-grid-v2`，Binance futures，所有周期；`gate-oi-grid-v1`，Gate `swap.linear`/`swap.inverse`，只有 5m，由 CCXT 目录声明）；前端只对覆盖所有周期的 `binance-oi-grid-v2` 走网格，Gate 前端行为不变 | D3d |
+
+错误码保持原样（如 `HEDGE_BINANCE_USDM_REQUIRED`），前端和测试按它们映射提示。
 
 只读账户里的 OKX 判断（前端 `readonly-accounts/*`）属于账户领域，由 #176 处理；`utils/symbolKey.ts:35` 的
-Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功能开关。这些不在本 ADR 内。
+Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功能开关。数据引擎内部（`ingestion`、`storage` 围栏、
+`ccxt_ext`）按场所实现协议，也不在本 ADR 内。
 新代码规则：消费方出现 `exchange ==` 一类判断时，评审要求改成能力。
 
 ## 6. 实时数据：先临时，后最终修正
@@ -313,9 +355,9 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 | D0b | 1.1 | 其他 CCXT 交易所的 TradFi 合约按 `venue_underlyings.py` 分类，并逐家核对交易时段；Hyperliquid HIP-3 加载 | 至少一个非 Binance 交易所的黄金、原油合约可用，非 24×7 的品种不报缺口 |
 | D1 | 1.1 | SeriesRef 贯穿策略测试、研究来源、回放、数据准备、练习账户；hash 规则按 §3 | 用 Twelve Data AAPL 1m（环境变量 key）跑通图表 → 策略测试 → 回放 → 练习账户；现有运行和回放的 hash 不变 |
 | D2 | 1.1 | 完整性改用日历；持续策略去掉加密限定，改看日历和能力 | 美股休市、节假日、半日市不报不完整；Binance 和 OKX 现有结果不变 |
-| D3 | 1.1 | §5 的名字判断全部改成能力 | 对 Binance/OKX 行为不变；无该能力的来源明确提示不支持 |
+| D3 | 1.1 | §5 的名字判断全部改成能力（D3a 逐笔成交归档；D3b 回放训练；D3c 策略；D3d 高级行情） | 对 Binance/OKX 行为不变；无该能力的来源明确提示不支持 |
 | D4 | 1.1 | 宿主凭据库 + 设置页「数据源」；Twelve Data key 迁到界面 | 不设环境变量即可使用 Twelve Data；macOS 和 Windows 都能用 |
-| D5 | 1.1 | 模拟账户：现金股票、期货每手保证金、休市不成交和开盘跳空 | 美股和期货品种在练习账户里能开平仓，财务结果有测试 |
+| D5 | 1.1 | 模拟账户：现金股票、期货每手保证金、休市不成交和开盘跳空（D5a 休市和跳空；D5b 账户模型来自品种；D5c 现金股票；D5d 期货每手保证金） | 美股和期货品种在练习账户里能开平仓，财务结果有测试 |
 | D6 | 1.2 | 契约 v2 + 宿主侧适配；本地 provider（与 #169 合并）；网关凭据注入；CCXT 连接器拆边界并做版本检查 | mock provider v2 产出非加密身份序列，进入策略和回放；v1 manifest 仍可用 |
 | D7 | 1.2 | Alpaca provider：IEX 实时分钟 K 线，收盘后用 SIP 历史修正为 final | 美股盘中实时 K 线；修正后序列与 REST 历史一致 |
 | D8 | 1.2 之后 | 天勤 provider；单月合约与连续合约（换月规则） | 国内期货 au/sc 主连可用于策略和回放 |

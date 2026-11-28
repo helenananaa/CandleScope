@@ -250,6 +250,36 @@ test("declared exchange gaps remain empty while history continues before them", 
   assert.deepEqual(page.excluded_ranges, payload.excluded_ranges);
 });
 
+test("declared market closures connect session bars without a gap notice (ADR-DATA-002 D2)", async () => {
+  const closure = {
+    start_ms: 1_800_000_180_000,
+    end_ms: 1_800_000_299_999,
+    reason: "market_closed",
+    source_reason: "twelvedata.exchange-date.weekdays.utc",
+  } as const;
+  const payload = response({ bars: [bar(1_800_000_120_000)], excluded_ranges: [closure] });
+  const runtime = provider(async () => new Response(JSON.stringify(payload), { status: 200 }));
+  const page = await runtime.loadBefore({
+    beforeMs: BOUNDARY_MS,
+    revealedBoundaryMs: BOUNDARY_MS,
+    dataEpoch: DATA_EPOCH,
+    limit: 250,
+  });
+  const store = new SeriesWindowStore({ maxBars: 100 });
+  store.replace([{ time: 1_800_000_300, open: 103, high: 104, low: 102, close: 103.5, volume: 8 }]);
+  // The closure runs up to the replay cursor, so the page still connects.
+  applyReplayHistoryPage(store, page, { expectedBeforeMs: BOUNDARY_MS, contextHistory: true });
+  assert.deepEqual(store.snapshot().map((row) => Number(row.time)), [1_800_000_120, 1_800_000_300]);
+  assert.deepEqual(page.excluded_ranges, [closure]);
+
+  const unknown = provider(async () => new Response(JSON.stringify(response({
+    bars: [bar(1_800_000_120_000)], excluded_ranges: [{ ...closure, reason: "holiday" }],
+  })), { status: 200 }));
+  await assert.rejects(unknown.loadBefore({
+    beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH, limit: 250,
+  }), ReplayHistoryProtocolError);
+});
+
 test("all-available policy may expose more rows than the execution warmup", async () => {
   const payload = response({
     history_policy: {

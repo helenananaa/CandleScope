@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from app.backtest.errors import BacktestError
 from app.backtest.native import timeframe
 from app.backtest.native_contracts import RequestedNativeData
+from app.backtest.pine_ticker import pine_ticker_symbol, venue_storage_symbol
+from app.data_engine.history.expected_bars import FIXED_UTC_CALENDAR_ID, bucket_end_ms, calendar_by_id, follows
 from app.data_engine.interval_policy import parse_interval_spec
 from app.local_data.service import LocalDatasetError, LocalDatasetService
 from app.market_dataset.adapters.local_bar import LocalBarSnapshotProvider
@@ -49,9 +51,8 @@ def load_contexts(root, references):
     try:
         for item in references:
             manifest = local.revision_details(item["dataset_id"], item["data_epoch"])["manifest"]
-            ticker = item["symbol"].split(":")[-1]
-            if item["exchange"].lower() == "binance" and item["market_type"] in {"usdm", "futures", "swap"}:
-                ticker = ticker.removesuffix(".P")
+            ticker = venue_storage_symbol(item["exchange"].lower(), item["market_type"],
+                                          pine_ticker_symbol(item["symbol"]))
             if ticker != manifest["symbol"]:
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Requested symbol differs from its frozen dataset.")
             venue, separator, _ = item["symbol"].partition(":")
@@ -63,17 +64,24 @@ def load_contexts(root, references):
             ref = DatasetRef(dataset_id=item["dataset_id"], data_epoch=item["data_epoch"], snapshot_hash=item["snapshot_hash"],
                 venue=item["exchange"], market_type=item["market_type"], symbol=manifest["symbol"],
                 start_time_ms=item["start_time_ms"], end_time_ms=item["end_time_ms"], roles=("BARS",),
-                interval=item["interval"], calendar_id="UTC_FIXED", source="local_immutable", retention_policy="user_local")
+                interval=item["interval"], calendar_id=str(manifest.get("calendar_id") or FIXED_UTC_CALENDAR_ID),
+                source="local_immutable", retention_policy="user_local")
             snapshot = provider.open(ref)
             try:
                 bars, closes = [], []
                 interval = parse_interval_spec(item["interval"])
+                try:
+                    calendar = calendar_by_id(ref.calendar_id)
+                except LookupError as exc:
+                    raise BacktestError("DATA_QUALITY_FAILED", str(exc)) from exc
                 for event in snapshot.events:
                     row = event.payload
                     opened, closed = int(row["open_time_ms"]), int(row["close_time_ms"])
                     if (opened < item["start_time_ms"] or closed > item["end_time_ms"]
-                            or closed != interval.next_ms(opened) - 1
-                            or (bars and not interval.is_successor(bars[-1]["time"] * 1000, opened))):
+                            or closed != (interval.next_ms(opened) if calendar is None
+                                          else bucket_end_ms(calendar, opened, interval.canonical)) - 1
+                            or (bars and not (interval.is_successor(bars[-1]["time"] * 1000, opened) if calendar is None
+                                              else follows(calendar, interval.canonical, bars[-1]["time"] * 1000, opened)))):
                         raise BacktestError("DATA_QUALITY_FAILED", "Requested data needs complete consecutive confirmed bars.")
                     if row["volume"] is None:
                         raise BacktestError("DATA_QUALITY_FAILED", "Requested Pine datasets require volume observations.")

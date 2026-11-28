@@ -478,6 +478,32 @@ export async function prepareSubscriptionRoutes(preview: string, nodes: string[]
   return data.routes;
 }
 
+/** The last automatic check of one saved subscription; times are epoch milliseconds. */
+export interface SubscriptionRefreshState {
+  last_attempt_ms?: number;
+  last_success_ms?: number;
+  last_change_ms?: number;
+  updated?: number;
+  missing?: number;
+  error?: string | null;
+}
+
+export interface SubscriptionRefreshStatus {
+  interval_hours: number;
+  /** Keyed by subscription source id. */
+  sources: Record<string, SubscriptionRefreshState>;
+}
+
+export async function fetchSubscriptionRefresh() {
+  return await request(`${API_BASE}/settings/proxy/subscriptions/refresh`) as SubscriptionRefreshStatus;
+}
+
+export async function updateSubscriptionRefresh(interval_hours: number) {
+  return await request(`${API_BASE}/settings/proxy/subscriptions/refresh`, {
+    method: "PUT", body: { interval_hours },
+  }) as SubscriptionRefreshStatus;
+}
+
 export async function fetchProxySettings(): Promise<unknown> {
   return request(`${API_BASE}/settings/proxy`);
 }

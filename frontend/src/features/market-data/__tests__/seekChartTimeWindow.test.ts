@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { seekChartTimeWindow } from "../seekChartTimeWindow.js";
+import { CHART_TIME_SEEK_REPAIR_BUDGET_MS, seekChartTimeWindow } from "../seekChartTimeWindow.js";
 import { planChartTimeSeek } from "../chartTimeNavigation.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import { epochSeconds, partialMock } from "../../../test/testHelpers.js";
@@ -129,6 +129,54 @@ test("a repair that never settles gives up at the budget, and an endpoint that a
   // Instant answers are paced by the retry floor: 10 s / 0.5 s, plus the read at the deadline.
   assert.ok(calls >= 20 && calls <= 21, String(calls));
   assert.equal(fake.now(), 10_000);
+});
+
+// RC 32 (Binance spot BTCUSDT 1m, 2017-08-17 02:00): the pre-listing proof
+// queued behind a gap audit's monthly archive import, and the backend finished
+// after 117 s. Every answer meanwhile said it had joined a repair of the window.
+const repairing = (missing: number, times: number[] = []): FeedResult => ({ ...pending(missing, times), backfill_triggered: true });
+
+test("a seek keeps waiting past the budget while the backend is still repairing the window", async () => {
+  const fake = clock();
+  let calls = 0;
+  const listed = { ...response([180]), excluded_ranges: [{ start_ms: 60_000, end_ms: 179_999, disposition: "terminal", reason: "source_exhausted" }] };
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { beginEpoch: () => 0, getRange: async () => {
+      calls += 1; fake.advance(5_000);
+      return fake.now() < 117_000 ? repairing(2, [180]) : listed;
+    } },
+    commit: () => {},
+  });
+  assert.deepEqual(result, { status: "located", requestedTimeMs: 120_000, actualTimeMs: 180_000, exact: false });
+  assert.equal(fake.now(), 120_000);
+  assert.equal(calls, 24);
+});
+
+test("past the budget, a seek stops once the backend no longer reports a repair of the window", async () => {
+  const fake = clock();
+  let calls = 0;
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { beginEpoch: () => 0, getRange: async () => {
+      calls += 1; fake.advance(5_000);
+      return fake.now() < 70_000 ? repairing(3) : pending(3);
+    } },
+    commit: () => assert.fail("must not commit"),
+  });
+  assert.equal(result.status, "unavailable");
+  assert.equal(fake.now(), 70_000);
+  assert.equal(calls, 14);
+});
+
+test("a repair that is never finished gives up at the repair budget", async () => {
+  const fake = clock();
+  let calls = 0;
+  const result = await seekChartTimeWindow({ ...input(), now: fake.now, delay: fake.delay,
+    feed: { beginEpoch: () => 0, getRange: async () => { calls += 1; fake.advance(5_000); return repairing(3); } },
+    commit: () => assert.fail("must not commit"),
+  });
+  assert.equal(result.status, "unavailable");
+  assert.equal(fake.now(), CHART_TIME_SEEK_REPAIR_BUDGET_MS);
+  assert.equal(calls, CHART_TIME_SEEK_REPAIR_BUDGET_MS / 5_000);
 });
 
 test("a terminal refusal is reported at once instead of being retried", async () => {

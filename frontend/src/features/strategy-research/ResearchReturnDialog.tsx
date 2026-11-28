@@ -9,12 +9,14 @@ import {
   loadResearchReturn, projectSelectedVersion, ResearchReturnUnsupported, type ResearchReturnReference, type ResearchSelectedVersion,
 } from "./researchSelectedVersion.js";
 import { researchReturnError } from "./researchReturnError.js";
+import { useVenueRoles } from "../exchange-support/useVenueRoles.js";
 
 export default function ResearchReturnDialog({ id, workspace, onClose, onApplied }: {
   id: string; workspace: ChartWorkspaceRuntime; onClose(): void; onApplied(cellId: string): void;
 }) {
   const locale = useLocale();
   const manager = useStrategyDataManager();
+  const venueRoles = useVenueRoles();
   // undefined while the reference is read from the backend; null when it is missing or invalid.
   const [reference, setReference] = useState<ResearchReturnReference | null | undefined>(undefined);
   useEffect(() => {
@@ -41,12 +43,13 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
         if (!reference) throw new ResearchReturnUnsupported("reference");
         const selected = await manager.loadSelectedRunVersion(reference.runId, controller.signal);
         if (selected.version_hash !== reference.versionHash) throw new ResearchReturnUnsupported("version");
-        projectSelectedVersion(selected);
+        projectSelectedVersion(selected, venueRoles(String(selected.configuration.exchange)));
         if (!controller.signal.aborted) setVersion(selected);
       } catch (failure) { if (!controller.signal.aborted) setError(researchReturnError(failure)); }
     })();
     return () => controller.abort();
-  }, [manager, reference]);
+    // Validated again once the exchange catalog (venue roles) is ready.
+  }, [manager, reference, venueRoles]);
   const originCell = reference?.origin?.workspaceId === workspace.view.activeWorkspaceId ? reference.origin.cellId : "";
   const cellId = workspace.view.layoutCellIds.includes(cell) ? cell
     : workspace.view.layoutCellIds.includes(originCell) ? originCell : workspace.view.activeCellId;
@@ -65,8 +68,9 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
     // rejects edits, workspace switches, closed targets and window changes.
     const expectation = { workspaceId: workspace.view.activeWorkspaceId, windowId: workspace.view.window.id,
       expectedRevision: workspace.view.document.revision };
-    const projection = projectSelectedVersion(version);
     try {
+      // The venue's roles may have arrived after the version was first checked.
+      const projection = projectSelectedVersion(version, venueRoles(String(version.configuration.exchange)));
       const draft = await getChartStrategyDraftStore().save({ id: createChartStrategyDraftId(), displayName: version.program.name,
         language: version.program.language, source: version.program.source_text, cursor: null });
       if (!alive.current) return;
@@ -78,6 +82,7 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
       if (alive.current) { submitting.current = false; setBusy(false); setError(researchReturnError(failure)); }
     }
   }
+  // Display only: the load effect and apply() check the venue's roles.
   const projected = version ? projectSelectedVersion(version) : null;
   return <Dialog open onClose={onClose} dismissible={!busy}
     title={t("researchReturn.title")} description={t("researchReturn.help")}

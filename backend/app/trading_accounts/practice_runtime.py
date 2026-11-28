@@ -5,6 +5,12 @@ positions from its cursor up to the present. Live matching and catch-up after do
 the same operation; a history gap pauses the instrument (status
 ``catching_up``) instead of guessing what happened inside it.
 
+A market on a session calendar (Twelve Data's US equities, ADR-DATA-002 D2)
+has no candles while it is closed. A closure is neither a gap nor catching
+up: windows count trading minutes, and a hole the calendar has no trading in
+connects the bars on either side of it. Always-open markets have no session
+calendar and keep the plain minute grid.
+
 Steps are triggered two ways:
 
 - a live 1m update (DataManager ``BAR_*`` event) for an instrument wakes the
@@ -27,8 +33,12 @@ from typing import Any
 
 from app.core.executors import run_storage
 from app.data_engine.data_manager.models import DataEvent, DataEventType
+from app.data_engine.history.calendar import TradingCalendar
+from app.data_engine.history.expected_bars import open_at_or_after, opens_after, session_calendar
 
+from .series import market_series
 from .service import Instrument, TradingAccountService
+from .sessions import closed_between, market_calendar
 
 logger = logging.getLogger("trading_accounts.practice")
 
@@ -38,6 +48,10 @@ MAX_BARS_PER_TICK = 1_000
 # Live updates arriving while a step runs are folded into the next step; this
 # bounds steps per instrument without adding more than a blink of latency.
 EVENT_MIN_GAP_SECONDS = 0.1
+# A market whose 1m stream cannot open is retried after 1 s, doubling up to
+# this. History-only providers such as Twelve Data (ADR-DATA-002 D1c) never
+# open one; their sweeps still match from history.
+STREAM_RETRY_MAX_SECONDS = 60.0
 STEP_EVENTS = frozenset({DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED, DataEventType.BAR_CLOSED})
 
 
@@ -56,19 +70,63 @@ def _wall_ms() -> int:
     return int(time.time() * 1000)
 
 
+# Catalog rows are scanned per lookup; matching asks for them every step.
+SYMBOL_INFO_TTL_S = 60.0
+
+
 class DataManagerMarket:
     """``MarketPort`` over the live DataManager (call from worker threads)."""
 
-    def __init__(self, data_manager: Any) -> None:
+    def __init__(self, data_manager: Any, *, symbol_metadata: Any = None) -> None:
         self.data_manager = data_manager
+        self._calendars: dict[tuple[str, str, str, Any], Any] = {}
+        self._symbol_metadata = symbol_metadata
+        self._symbol_infos: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
-    def latest_bar(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None:
+    def symbol_info(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None:
+        """The symbol's catalog row (ADR-DATA-002 D5b account model); None when not loaded."""
+        key = (exchange, market_type, symbol)
+        now = time.monotonic()
+        cached = self._symbol_infos.get(key)
+        if cached is not None and now - cached[0] < SYMBOL_INFO_TTL_S:
+            return cached[1]
+        lookup = self._symbol_metadata
+        if lookup is None:
+            from app.exchanges.symbol_catalog import get_cached_symbol_metadata as lookup
+        found = lookup(exchange, market_type, symbol)
+        if found is not None:
+            # Catalog rows change rarely; a row not loaded yet is asked again.
+            self._symbol_infos[key] = (now, found)
+        return found
+
+    def calendar(
+        self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,
+    ) -> TradingCalendar | None:
+        """The session calendar of this market's 1m series; None for the plain minute grid."""
+        key = (exchange, market_type, symbol, series_identity)
+        found = self._calendars.get(key)
+        if found is None:
+            series_calendar = getattr(self.data_manager, "series_calendar", None)
+            if series_calendar is None:
+                return None
+            found = series_calendar(symbol, INTERVAL, exchange=exchange, market_type=market_type,
+                                    series_identity=series_identity)
+            if found is None:
+                # Not known yet (a provider still loading): ask again next time.
+                return None
+            self._calendars[key] = found
+        return session_calendar(found)
+
+    def latest_bar(
+        self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,
+    ) -> dict[str, Any] | None:
         result = self.data_manager.query_latest(
             symbol,
             INTERVAL,
             limit=1,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
             auto_backfill=False,
             backfill_reason=None,
             backfill_requester="trading_accounts",
@@ -85,6 +143,8 @@ class DataManagerMarket:
         start_ms: int,
         end_ms: int | None,
         limit: int,
+        *,
+        series_identity: Any = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         result = self.data_manager.query(
             symbol,
@@ -94,6 +154,7 @@ class DataManagerMarket:
             limit=limit,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
             auto_backfill=True,
             backfill_reason="practice_replay",
             backfill_requester="trading_accounts",
@@ -108,18 +169,45 @@ def contiguous_bars(
     start_time: int,
     *,
     complete: bool,
+    calendar: TradingCalendar | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Bars from ``start_time`` without unexplained gaps; second value = gap hit."""
+    """Bars from ``start_time`` without unexplained gaps; second value = gap hit.
+
+    A hole the market was closed for is explained by its ``calendar``.
+    """
     out: list[dict[str, Any]] = []
     expected = start_time
     for bar in sorted(bars, key=lambda item: item["time"]):
         if bar["time"] < expected:
             continue
-        if bar["time"] > expected and not complete:
+        if (bar["time"] > expected and not complete
+                and not closed_between(calendar, expected * 1000, bar["time"] * 1000 - 1)):
             return out, True
         out.append(bar)
         expected = bar["time"] + BAR_SECONDS
     return out, False
+
+
+def window_end_ms(calendar: TradingCalendar | None, start_ms: int, now_ms: int) -> int:
+    """End of one step's read: ``MAX_BARS_PER_TICK`` minutes, trading minutes on a calendar."""
+    end_ms = start_ms + (MAX_BARS_PER_TICK - 1) * BAR_SECONDS * 1000
+    if calendar is not None and end_ms < now_ms:
+        # A night or a weekend is longer than one window of clock minutes.
+        try:
+            end_ms = opens_after(calendar, start_ms, MAX_BARS_PER_TICK - 1, INTERVAL)[-1]
+        except LookupError:
+            end_ms = now_ms
+    return min(now_ms, end_ms)
+
+
+def due_since_ms(calendar: TradingCalendar | None, start_ms: int) -> int | None:
+    """When the cursor's candle was due: its own open, or the next one on a calendar."""
+    if calendar is None:
+        return start_ms
+    try:
+        return open_at_or_after(calendar, start_ms, INTERVAL)
+    except LookupError:
+        return None
 
 
 class PracticeRuntime:
@@ -138,6 +226,10 @@ class PracticeRuntime:
         self._task: asyncio.Task[None] | None = None
         self._streams: set[Instrument] = set()
         self._handles: dict[Instrument, Any] = {}
+        # The kline series each stream was opened on (None: the exchange's own).
+        self._series: dict[Instrument, Any] = {}
+        # Instrument -> (monotonic time of the next stream attempt, current delay).
+        self._stream_retry: dict[Instrument, tuple[float, float]] = {}
         # Instrument -> wall time of its oldest live update not yet applied.
         self._pending: dict[Instrument, int] = {}
         self._stepped: set[Instrument] = set()
@@ -192,8 +284,18 @@ class PracticeRuntime:
     async def tick(self) -> None:
         """Sweep: sync streams, then step instruments that events did not."""
         instruments = set(await run_storage(self.service.working_instruments))
+        for instrument in instruments & self._streams:
+            # A market that went idle and was ordered again on another series
+            # in between two sweeps reopens its stream on the new series.
+            if await run_storage(self.service.instrument_series, instrument) != self._series.get(instrument):
+                await self._release(instrument)
+        for instrument in set(self._stream_retry) - instruments:
+            del self._stream_retry[instrument]
+        now = time.monotonic()
         for instrument in instruments - self._streams:
-            await self._ensure(instrument)
+            retry = self._stream_retry.get(instrument)
+            if retry is None or now >= retry[0]:
+                await self._ensure(instrument)
         for instrument in self._streams - instruments:
             await self._release(instrument)
         stepped, self._stepped = self._stepped, set()
@@ -221,6 +323,8 @@ class PracticeRuntime:
 
     async def _ensure(self, instrument: Instrument) -> None:
         exchange, market_type, symbol = instrument
+        series = await run_storage(self.service.instrument_series, instrument)
+        on_series = market_series(series)
 
         async def _on_event(event: DataEvent) -> None:
             if event.bar is not None:
@@ -238,12 +342,22 @@ class PracticeRuntime:
                 INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **on_series,
                 focus_scope="background",
                 subscription_tier="alerts",
                 consumer_id=self._consumer(instrument),
             )
             self._streams.add(instrument)
+            self._series[instrument] = series
+            self._stream_retry.pop(instrument, None)
         except Exception as exc:
+            previous = self._stream_retry.get(instrument)
+            delay = 1.0 if previous is None else min(STREAM_RETRY_MAX_SECONDS, previous[1] * 2)
+            self._stream_retry[instrument] = (time.monotonic() + delay, delay)
+            if previous is not None:
+                # Steps from history report live or catching_up since then.
+                logger.debug("Practice stream still unavailable for %s: %s", instrument, exc)
+                return
             logger.warning("Practice stream unavailable for %s: %s", instrument, exc)
             await run_storage(self.service.set_feed_status, instrument, "unavailable", str(exc))
             return
@@ -255,6 +369,7 @@ class PracticeRuntime:
                 interval=INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **on_series,
                 event_types=set(STEP_EVENTS),
             )
         except Exception:
@@ -264,6 +379,7 @@ class PracticeRuntime:
     async def _release(self, instrument: Instrument) -> None:
         self._streams.discard(instrument)
         self._pending.pop(instrument, None)
+        series = self._series.pop(instrument, None)
         handle = self._handles.pop(instrument, None)
         if handle is not None:
             try:
@@ -277,6 +393,7 @@ class PracticeRuntime:
                 INTERVAL,
                 exchange=exchange,
                 market_type=market_type,
+                **market_series(series),
                 focus_scope="background",
                 subscription_tier="alerts",
                 consumer_id=self._consumer(instrument),
@@ -302,15 +419,20 @@ class PracticeRuntime:
         if start_ms is None:
             return None
         now = _wall_ms()
-        end_ms = min(now, start_ms + (MAX_BARS_PER_TICK - 1) * BAR_SECONDS * 1000)
+        series = self.service.instrument_series(instrument)
+        calendar = market_calendar(self.market, instrument, series)
+        end_ms = window_end_ms(calendar, start_ms, now)
         try:
-            bars, complete = self.market.bars(*instrument, INTERVAL, start_ms, end_ms, MAX_BARS_PER_TICK)
+            bars, complete = self.market.bars(*instrument, INTERVAL, start_ms, end_ms, MAX_BARS_PER_TICK,
+                                              **market_series(series))
         except Exception as exc:
             self.service.set_feed_status(instrument, "unavailable", str(exc))
             return None
         queried = time.perf_counter()
-        usable, gap = contiguous_bars(bars, start_ms // 1000, complete=complete)
-        behind = now - start_ms > 3 * BAR_SECONDS * 1000
+        usable, gap = contiguous_bars(bars, start_ms // 1000, complete=complete, calendar=calendar)
+        # A closed market owes no candle until it opens again.
+        due_ms = due_since_ms(calendar, start_ms)
+        behind = due_ms is not None and now - due_ms > 3 * BAR_SECONDS * 1000
         fills = 0
         if gap or (not usable and behind):
             status, detail = "catching_up", "Waiting for 1m history before matching further"
@@ -320,7 +442,9 @@ class PracticeRuntime:
             fills = self.service.apply_market_bars(
                 instrument, usable, observed_ms=now, status=status, detail=detail,
             )
-        elif status != "live":
+        else:
+            # Also replaces "unavailable" from a stream that cannot open: a
+            # history-only market that is closed owes no candles yet.
             self.service.set_feed_status(instrument, status, detail)
         done = time.perf_counter()
         timing = {
