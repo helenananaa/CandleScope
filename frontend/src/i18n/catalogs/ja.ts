@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
@@ -8,9 +9,15 @@ import { readonlyAccountJapanese, researchBatchJapanese, workbenchJapanese, pine
 import type { MessageCatalog } from "../messageCatalog.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ja = {
   ...unifiedMessages["ja"],
+  ...drawingAnnotationMessages["ja"],
   ...syntheticEnglish,
   ...continuousJapanese,
   ...researchBatchJapanese,
@@ -1560,6 +1567,15 @@ export const ja = {
   "settings.proxy.previewNodes": "ノードをプレビュー",
   "settings.proxy.useNodes": "選択したノードを使用",
   "settings.proxy.skippedNodes": "未対応のノードを {count} 件スキップしました",
+  "settings.proxy.autoRefresh": "自動更新",
+  "settings.proxy.autoRefreshOff": "オフ",
+  "settings.proxy.autoRefreshEvery": "{duration}ごと",
+  "settings.proxy.autoRefreshHelp": "保存済みの購読をこの間隔で確認します。使用中のノードはプロバイダーの現在の設定に更新されます。新しいノードは追加されず、プロバイダーが削除したノードは最後の設定のまま残ります。",
+  "settings.proxy.refreshPending": "まだ自動確認していません",
+  "settings.proxy.refreshChecked": "前回の確認: {time}",
+  "settings.proxy.refreshFailed": "自動更新に失敗しました: {time}",
+  "settings.proxy.refreshUpdated": "更新したノード: {count} · {time}",
+  "settings.proxy.refreshMissing": "購読から削除されたノード: {count}",
   "settings.proxy.archiveConcurrency": "ZIP 同時実行数 ≤ {count}",
   "settings.proxy.exchanges": "取引所 ID（カンマ区切り、空欄はすべて）",
   "settings.proxy.enabled": "有効",
@@ -4007,6 +4023,13 @@ export const ja = {
   "chartTester.prepareDataRun": "データを準備して実行",
   "chartTester.run.resolving": "確認中…",
   "chartTester.run.waitingForChart": "チャートデータを読み込み中…",
+  "appUpdate.available": "CandleScope {version} が公開されました",
+  "appUpdate.current": "現在のバージョンは {version} です。新しいバージョンはリリースページからダウンロードできます。",
+  "appUpdate.view": "リリースを表示",
+  "appUpdate.skip": "このバージョンをスキップ",
+  "settings.updates.title": "アップデート",
+  "settings.updates.check": "アップデートを確認",
+  "settings.updates.checkHint": "起動時と1日1回、CandleScope の新しいリリースがあるか GitHub に問い合わせます。ダウンロードやインストールは行いません。",
   "chartTester.run.queued": "キュー待ち",
   "chartTester.run.running": "実行中",
   "chartTester.stopObserving": "待機を停止",
@@ -4534,4 +4557,9 @@ export const ja = {
   "chartTester.deleteRetiredDraft": "廃止された下書き {name} を削除",
   "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
+  ...drawingSelectionMessages["ja"],
+  ...drawingCalculatedMessages["ja"],
+  ...replayDrawingSaveMessages["ja"],
+  ...chartTimeZoneMessages["ja"],
+  ...chartTimeShortcutMessages["ja"],
 } as const satisfies MessageCatalog;

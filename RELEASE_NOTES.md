@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.0.1 (2026-11-26)
+
+A patch release for 1.0.0. Install it over 1.0.0: your data and settings carry over, and nothing in the data folder changes format, so 1.0.0 still opens it.
+
+- **Update notice (desktop).** CandleScope now tells you when a newer version is out, with a link to its release page. It asks GitHub once at startup and at most once a day, never downloads anything itself, and stays quiet if GitHub can't be reached. You can turn it off in **Settings → About & support → Check for updates**. This release still has to be downloaded by hand; later releases are announced in the app.
+- **Fixed: the chart could open zoomed in.** On a slow first launch the chart could open zoomed in on about 9 bars and stay that way on every reopen. It now fits again when the history arrives, and a zoom that 1.0.0 saved this way is reset on reopen. A zoom you made yourself is kept.
+- **History loads sooner when an archive server is slow.** When an exchange's archive download server (for Binance, data.binance.vision) is slow or unreachable, a chart waiting for history switches to the regular exchange API within about 8 seconds, and an archive server that keeps failing is skipped for 5 minutes.
+- **Custom intervals do less repeated work.** Charts such as 89m no longer request the same history again every second while a bar is forming, and several charts on one symbol no longer download the same data twice. Bars of other custom intervals are no longer thrown away when a daily bar is imported, and the app stays responsive while it rebuilds a forming bar. The first load of a large custom interval can still take a minute or more; the larger rework is planned for 1.1.
+- **Forward runs start with the practice fee.** A new forward run (**Run mode → History + live** or **Live only**) now starts with the practice account's taker fee instead of 0 bps.
+- **Windows ZIP.** Windows also ships a ZIP. Extract it to a folder and run `CandleScope.exe`; nothing is installed, and deleting the folder removes it. It uses the same data folder as the installed app (`%APPDATA%\CandleScope Replay`), so run one or the other.
+
+## 1.0.0 (2026-11-25)
+
 This is the first public release of the CandleScope desktop app, for Windows and macOS (Apple Silicon and Intel). The same app also runs in the browser at [app.candlescope.app](https://app.candlescope.app). If you used the 0.3.0 test build from 2026-10-25, this release opens and upgrades your profile; read [Going back to 0.3.0](#going-back-to-030-after-upgrading) first if you may want to return to it.
 
 ### New since 0.3.0
@@ -10,12 +23,14 @@ This is the first public release of the CandleScope desktop app, for Windows and
 
 - A redesigned interface with light and dark themes, one Settings dialog with the Plugin Center inside it, visible keyboard focus everywhere, and less motion when your system asks for it.
 - 30 interface languages, including right-to-left Arabic and Hebrew.
+- On first launch the app uses your system language when it is one of the 30, and English otherwise. A language you already chose stays.
 
 **Charts and drawing**
 
 - New drawing tools: arrows, multi-point arrow paths, editable polylines, parallel channels, rectangle zones, and price and time rulers.
 - Each chart keeps its own appearance, and you can link styles across charts.
 - Go to any date on a live chart.
+- New drawings are blue by default. Drawings you already made keep their colour.
 
 **Indicators and alerts**
 
@@ -52,6 +67,7 @@ This is the first public release of the CandleScope desktop app, for Windows and
 
 - A Windows installer. Uninstalling keeps your data.
 - If the backend stops unexpectedly, the app restarts it and tells you.
+- A data folder that was moved, copied or restored from a backup to another location still starts.
 - When an exchange is unreachable, its charts say they are offline instead of loading without end.
 - Before upgrading a database, the app keeps a copy of it for going back; see [Going back to 0.3.0](#going-back-to-030-after-upgrading).
 - Import a Clash proxy subscription and route market data through its nodes.

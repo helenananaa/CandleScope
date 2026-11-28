@@ -5,8 +5,15 @@ import { request as httpRequest } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { DesktopControlService } from "./control-service.mjs";
+import { DesktopControlService, windowsSystemTool } from "./control-service.mjs";
 import { DESKTOP_IPC } from "./ipc-contract.mjs";
+
+test("Windows credential tools come from System32, never from PATH", () => {
+  assert.equal(windowsSystemTool("whoami.exe", { SystemRoot: "D:\\Win", PATH: "C:\\Program Files\\Git\\usr\\bin" }),
+    "D:\\Win\\System32\\whoami.exe");
+  assert.equal(windowsSystemTool("icacls.exe", { windir: "C:\\WINDOWS" }), "C:\\WINDOWS\\System32\\icacls.exe");
+  assert.equal(windowsSystemTool("icacls.exe", {}), "C:\\Windows\\System32\\icacls.exe");
+});
 
 function fixture(options = {}) {
   const contents = new EventEmitter(); const window = new EventEmitter();

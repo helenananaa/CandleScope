@@ -492,13 +492,30 @@ class BacktestRepository:
         )
         self.connection.commit()
 
+    def _located_bundle(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        """A frozen bundle lives in this database's folder, wherever that folder is now.
+
+        ``store_path`` records an absolute path. After the data folder moves it
+        would name a missing directory, and after a copy the original profile's
+        bundle. A bundle kept in the standard layout is read from this folder.
+        """
+        if row is None:
+            return None
+        bundle = dict(row)
+        recorded = Path(str(bundle["store_path"]))
+        if recorded.name == bundle["bundle_id"] and recorded.parent.name == "python-strategy-bundles":
+            current = self.path.parent / "python-strategy-bundles" / str(bundle["bundle_id"])
+            if recorded != current:
+                bundle["store_path"] = str(current)
+        return bundle
+
     @_locked
     def get_strategy_bundle(self, bundle_id: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM backtest_strategy_bundles WHERE bundle_id = ?",
             (bundle_id,),
         ).fetchone()
-        return dict(row) if row is not None else None
+        return self._located_bundle(row)
 
     @_locked
     def get_strategy_bundle_by_hash(self, bundle_hash: str) -> dict[str, Any] | None:
@@ -506,7 +523,7 @@ class BacktestRepository:
             "SELECT * FROM backtest_strategy_bundles WHERE bundle_hash = ?",
             (bundle_hash,),
         ).fetchone()
-        return dict(row) if row is not None else None
+        return self._located_bundle(row)
 
     @_locked
     def count_strategy_bundles(self) -> int:

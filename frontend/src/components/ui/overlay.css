@@ -348,4 +348,12 @@
   overflow-wrap: anywhere;
 }
 
+/* Two actions sit under the message, the main one first. */
+.ui-toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 /* Reduced motion: the global rule in reset.css stops these animations. */

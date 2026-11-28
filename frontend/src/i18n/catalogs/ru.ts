@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyRussian, replayNoteRussian, tradeHistoryRussian, readonlyAccountRussian, continuousRussian, tradingAccountsRu, nativeRussian } from "./russianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ru = {
   ...unifiedMessages["ru"],
+  ...drawingAnnotationMessages["ru"],
   ...syntheticEnglish,
   ...continuousRussian,
   ...tradeHistoryRussian,
@@ -1245,6 +1252,15 @@ export const ru = {
   "settings.proxy.previewNodes": "Показать узлы",
   "settings.proxy.useNodes": "Использовать выбранные узлы",
   "settings.proxy.skippedNodes": "Пропущено неподдерживаемых узлов: {count}",
+  "settings.proxy.autoRefresh": "Автообновление",
+  "settings.proxy.autoRefreshOff": "Выкл.",
+  "settings.proxy.autoRefreshEvery": "Каждые {duration}",
+  "settings.proxy.autoRefreshHelp": "Проверяет сохранённые подписки с этим интервалом. Используемые узлы получают текущие настройки поставщика. Новые узлы не добавляются, а узел, удалённый поставщиком, сохраняет последние настройки.",
+  "settings.proxy.refreshPending": "Автоматическая проверка ещё не выполнялась",
+  "settings.proxy.refreshChecked": "Последняя проверка: {time}",
+  "settings.proxy.refreshFailed": "Ошибка автообновления: {time}",
+  "settings.proxy.refreshUpdated": "Обновлено узлов: {count} · {time}",
+  "settings.proxy.refreshMissing": "Больше нет в подписке: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID бирж (через запятую; пусто — все)",
   "settings.proxy.enabled": "Включён",
@@ -3673,6 +3689,13 @@ export const ru = {
   "chartTester.prepareDataRun": "Подготовить данные и запустить",
   "chartTester.run.resolving": "Проверка…",
   "chartTester.run.waitingForChart": "Данные графика ещё загружаются…",
+  "appUpdate.available": "Доступна версия CandleScope {version}",
+  "appUpdate.current": "У вас версия {version}. Новую версию можно скачать на странице выпуска.",
+  "appUpdate.view": "Открыть выпуск",
+  "appUpdate.skip": "Пропустить эту версию",
+  "settings.updates.title": "Обновления",
+  "settings.updates.check": "Проверять обновления",
+  "settings.updates.checkHint": "При запуске и раз в день запрашивает у GitHub, вышла ли новая версия CandleScope. Ничего не скачивается и не устанавливается.",
   "chartTester.run.queued": "В очереди",
   "chartTester.run.running": "Выполняется",
   "chartTester.stopObserving": "Прекратить ожидание",
@@ -4166,4 +4189,9 @@ export const ru = {
   "chartTester.deleteDraft": "Удалить",
   "chartTester.deleteRetiredDraft": "Удалить снятый с поддержки черновик {name}",
   "chartTester.deleteRetiredDraftFailed": "Не удалось удалить снятый с поддержки черновик. Повторите попытку.",
+  ...drawingSelectionMessages["ru"],
+  ...drawingCalculatedMessages["ru"],
+  ...replayDrawingSaveMessages["ru"],
+  ...chartTimeZoneMessages["ru"],
+  ...chartTimeShortcutMessages["ru"],
 } as const satisfies MessageCatalog;

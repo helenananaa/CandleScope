@@ -21,6 +21,7 @@ from app.data_engine.interval_policy import (
 from app.data_engine.market_data.models import MarketChannel
 from app.data_engine.series_identity import KlineSeriesIdentity
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
+from app.exchanges.registry import read_capabilities
 
 
 class IntervalPurpose(str, Enum):
@@ -339,7 +340,7 @@ class IntervalResolver:
             bootstrap_default_adapters()
             registry = get_exchange_registry()
         try:
-            return registry.get_capabilities(exchange)
+            return read_capabilities(registry, exchange)
         except KeyError as exc:
             raise self._error(
                 IntervalResolutionErrorCode.UNKNOWN_EXCHANGE,

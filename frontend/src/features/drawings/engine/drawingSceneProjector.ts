@@ -60,6 +60,7 @@ import {
 } from "../geometry/drawingToolGeometry.js";
 import type {
   AngleDrawingRenderEntity,
+  CalculatedDrawingRenderEntity,
   ChannelDrawingRenderEntity,
   PathDrawingRenderEntity,
   RangeMeasureDrawingRenderEntity,
@@ -81,6 +82,10 @@ import {
   formatDrawingPositionPrice,
 } from "../drawingPositionPresentation.js";
 import { positionInfoPanelLeft } from "../positionInfoPanelLayout.js";
+import {
+  CALCULATED_PROJECTION_FAILED,
+  projectCalculatedDrawing,
+} from "./drawingCalculatedProjection.js";
 
 export interface DrawingSceneTextMeasureRequest {
   readonly text: string;
@@ -1031,6 +1036,33 @@ function projectChannel(
   });
 }
 
+function projectCalculated(
+  entity: CalculatedDrawingRenderEntity,
+  frame: DrawingFrameSnapshot,
+  adapter: DrawingSceneProjectionAdapter,
+  selected: boolean,
+): EntityProjection {
+  const result = projectCalculatedDrawing(entity, {
+    seriesData: frame.seriesData,
+    project: (points) => {
+      const projected = projectBatch(adapter, frame, points);
+      return projected === PROJECTION_FAILED ? null : projected;
+    },
+    formatPrice: formatDrawingPositionPrice,
+    paintAlpha: legacyPaintAlpha,
+  }, selected);
+  if (result === CALCULATED_PROJECTION_FAILED) return PROJECTION_FAILED;
+  if (!result) return null;
+  return createProjectedEntity(entity, result.values, {
+    bbox: bboxFromValues(result.values),
+    handles: result.handles,
+    handleNames: result.handleNames,
+    handleResults: result.handleResults,
+    hitZones: result.hitZones,
+    renderSpec: result.renderSpec,
+  });
+}
+
 function projectAxisLine(
   entity: AxisLineDrawingRenderEntity,
   frame: DrawingFrameSnapshot,
@@ -1593,15 +1625,19 @@ function projectText(
   adapter: DrawingSceneProjectionAdapter,
   selected: boolean,
 ): EntityProjection {
+  const target = entity.geometry.target;
+  const priceLabel = entity.style.priceLabel;
   const projected = projectBatch(
     adapter,
     frame,
-    [entity.geometry.dataPoint],
+    target ? [entity.geometry.dataPoint, target] : [entity.geometry.dataPoint],
     entity.geometry,
   );
   if (projected === PROJECTION_FAILED) return projected;
   const anchor = screenPointAt(projected, 0);
-  if (!anchor) return null;
+  const targetPoint = target ? screenPointAt(projected, 1) : null;
+  // A callout without a resolvable target would draw a leader to nowhere.
+  if (!anchor || (target && !targetPoint)) return null;
   const requestBase = {
     fontFamily: entity.style.fontFamily,
     fontSize: entity.style.fontSize,
@@ -1613,7 +1649,11 @@ function projectText(
   const innerWidthCap = entity.style.widthPx
     ? Math.max(0, entity.style.widthPx - 2 * padding)
     : null;
-  const lines = entity.style.text.split("\n").flatMap(
+  // A price label reads its anchor's source price, never a stored string.
+  const content = priceLabel
+    ? formatDrawingPositionPrice(entity.geometry.dataPoint.price)
+    : entity.style.text;
+  const lines = content.split("\n").flatMap(
     (line) => wrapTextLine(line, innerWidthCap, measure),
   );
   if (lines.length === 0) lines.push("");
@@ -1629,13 +1669,44 @@ function projectText(
   const lineHeight = entity.style.fontSize * 1.3;
   const width = innerWidth + padding * 2;
   const height = measuredLines.length * lineHeight + padding * 2;
-  const right = anchor.x + width;
-  const bottom = anchor.y + height;
-  return createProjectedEntity(entity, new Float64Array([
-    anchor.x, anchor.y,
-    right, bottom,
-  ]), {
-    bbox: Object.freeze([anchor.x, anchor.y, right, bottom]),
+  const box = priceLabelBox(anchor, width, height, priceLabel);
+  const right = box.x + width;
+  const bottom = box.y + height;
+  const pointer = priceLabel ? anchor : targetPoint;
+  const leader = pointer ? textLeaderStart(pointer, box.x, box.y, right, bottom) : null;
+  const values = [box.x, box.y, right, bottom];
+  if (pointer && leader) values.push(leader.x, leader.y, pointer.x, pointer.y);
+  const handles = boxHandles(box.x, box.y, right, bottom);
+  const boxHandleResults = BOX_HANDLE_NAMES.map((handle) => Object.freeze({ handle }));
+  const hitZones: DrawingDisplayHitZone[] = [];
+  if (pointer && !priceLabel) {
+    // The target dot is a hit zone too, so an unselected callout's pointer can be grabbed.
+    hitZones.push(Object.freeze({
+      kind: "point" as const, name: "target", pointOffset: 3, pointCount: 1, tolerance: 7,
+      result: Object.freeze({ zone: "target", pointIndex: 1 }),
+    }));
+  }
+  hitZones.push(Object.freeze({
+    kind: "box" as const,
+    name: "body",
+    pointOffset: 0,
+    pointCount: 2,
+    tolerance: 2,
+    result: Object.freeze({ body: true }),
+  }));
+  if (pointer && leader) {
+    hitZones.push(Object.freeze({
+      kind: "polyline" as const, name: "leader", pointOffset: 2, pointCount: 2, tolerance: 5,
+      // A price label is one anchor: grabbing its pointer moves it like the box.
+      result: Object.freeze(priceLabel ? { body: true } : { zone: "leader", pointIndex: -1 }),
+    }));
+  }
+  const withTarget = pointer && leader && !priceLabel;
+  return createProjectedEntity(entity, new Float64Array(values), {
+    bbox: Object.freeze(pointer
+      ? [Math.min(box.x, pointer.x), Math.min(box.y, pointer.y),
+        Math.max(right, pointer.x), Math.max(bottom, pointer.y)]
+      : [box.x, box.y, right, bottom]),
     renderSpec: Object.freeze({
       op: "text" as const,
       strokeColor: entity.style.color,
@@ -1656,20 +1727,49 @@ function projectText(
       paddingCssPx: padding,
       lineHeightCssPx: lineHeight,
       selectionColor: "#3b82f6",
+      ...(pointer && leader ? {
+        leaderPointOffset: 2,
+        leaderColor: entity.style.borderColor ?? entity.style.bgColor ?? entity.style.color,
+      } : {}),
     }),
-    handles: boxHandles(anchor.x, anchor.y, right, bottom),
-    handleNames: BOX_HANDLE_NAMES,
+    handles: withTarget
+      ? new Float64Array([...handles, pointer.x, pointer.y])
+      : handles,
+    handleNames: withTarget ? Object.freeze([...BOX_HANDLE_NAMES, "target"]) : BOX_HANDLE_NAMES,
     handleTolerance: 7,
-    handleResults: Object.freeze(BOX_HANDLE_NAMES.map((handle) => Object.freeze({ handle }))),
-    hitZones: Object.freeze([Object.freeze({
-      kind: "box" as const,
-      name: "body",
-      pointOffset: 0,
-      pointCount: 2,
-      tolerance: 2,
-      result: Object.freeze({ body: true }),
-    })]),
+    handleResults: Object.freeze(withTarget
+      ? [...boxHandleResults, Object.freeze({ zone: "target", pointIndex: 1 })]
+      : boxHandleResults),
+    hitZones: Object.freeze(hitZones),
   });
+}
+
+/** Screen gap between a price label's anchor and its box. */
+export const PRICE_LABEL_OFFSET_CSS_PX = Object.freeze({ x: 10, y: 12 });
+
+/** A price label sits up and to the right of its anchor; other text boxes start at it. */
+function priceLabelBox(
+  anchor: ScreenPoint,
+  width: number,
+  height: number,
+  priceLabel: boolean,
+): ScreenPoint {
+  return priceLabel
+    ? { x: anchor.x + PRICE_LABEL_OFFSET_CSS_PX.x, y: anchor.y - PRICE_LABEL_OFFSET_CSS_PX.y - height }
+    : anchor;
+}
+
+/** The leader leaves the box at its nearest border point; a target inside the box has none. */
+function textLeaderStart(
+  pointer: ScreenPoint,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): ScreenPoint | null {
+  const x = Math.min(Math.max(pointer.x, left), right);
+  const y = Math.min(Math.max(pointer.y, top), bottom);
+  return x === pointer.x && y === pointer.y ? null : { x, y };
 }
 
 function horizontalAnchorDataPoint(
@@ -3661,6 +3761,7 @@ function projectEntity(
     case "range-measure": return projectRangeMeasure(entity, frame, adapter, selected);
     case "path": return projectPath(entity, frame, adapter, selected);
     case "channel": return projectChannel(entity, frame, adapter, selected);
+    case "calculated": return projectCalculated(entity, frame, adapter, selected);
     case "angle-measure": return projectAngle(entity, frame, adapter, selected);
     case "text": return projectText(entity, frame, adapter, selected);
     case "fibonacci": return projectFibonacci(entity, frame, adapter, selected);

@@ -492,6 +492,14 @@ class HistoricalArchiveCache:
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE archive_objects ADD COLUMN {name} {definition}")
+            # Objects are content-addressed under this root. A path recorded
+            # under an earlier root (the data folder was moved, copied or
+            # restored elsewhere) names this root's copy of the same object.
+            for table, key in (("archive_objects", "object_key"), ("archive_blob_cleanup", "content_sha256")):
+                for row in connection.execute(f"SELECT {key}, content_sha256, path FROM {table}").fetchall():
+                    current = self._relocated_content_path(str(row["path"]), str(row["content_sha256"]))
+                    if current is not None:
+                        connection.execute(f"UPDATE {table} SET path = ? WHERE {key} = ?", (current, row[key]))
 
     async def set_pinned(self, object_key: str, pinned: bool) -> None:
         """Protect an explicitly retained object from both import cleanup and LRU."""
@@ -707,6 +715,16 @@ class HistoricalArchiveCache:
 
     def _content_path(self, digest: str) -> Path:
         return self.objects_dir / digest[:2] / f"{digest}.zip"
+
+    def _relocated_content_path(self, recorded: str, digest: str) -> str | None:
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            return None
+        current = str(self._content_path(digest))
+        path = Path(recorded)
+        if (recorded == current or path.name != f"{digest}.zip" or path.parent.name != digest[:2]
+                or path.parent.parent.name != self.objects_dir.name):
+            return None
+        return current
 
 
 async def _read_bounded(response: aiohttp.ClientResponse, *, max_bytes: int,

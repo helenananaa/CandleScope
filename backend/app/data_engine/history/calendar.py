@@ -22,6 +22,9 @@ from app.data_engine.interval_policy import (
 _UTC = timezone.utc
 _DAY_MS = 86_400_000
 _SEARCH_HORIZON_MS = 10 * 366 * _DAY_MS
+# First window of a neighbour search, and how fast it widens.
+_NEIGHBOUR_WINDOW_MS = 8 * _DAY_MS
+_NEIGHBOUR_WINDOW_GROWTH = 8
 
 
 def _interval_width_ms(interval: str) -> int:
@@ -470,9 +473,14 @@ class SessionCalendar:
 
         return generate()
 
+    def _uses_session_grid(self) -> bool:
+        return getattr(self.expected_opens, "__func__", None) is SessionCalendar.expected_opens
+
     def first_expected_open(
         self, start_ms: int, end_ms: int, interval: str
     ) -> int | None:
+        if self._uses_session_grid():
+            return self._first_grid_open(start_ms, end_ms, interval)
         return next(iter(self.expected_opens(start_ms, end_ms, interval)), None)
 
     def last_expected_open(
@@ -481,23 +489,58 @@ class SessionCalendar:
         # Custom expected-open policies retain their own semantics. For the
         # built-in grid, locating one boundary must not emit every minute in
         # a multi-year search horizon just to throw those timestamps away.
-        if getattr(self.expected_opens, "__func__", None) is SessionCalendar.expected_opens:
-            if end_ms < start_ms:
-                return None
-            width_ms = _interval_width_ms(interval)
-            if is_monthly_interval(interval) or width_ms >= _DAY_MS:
-                candidates = self._coarse_expected_opens(start_ms, end_ms, interval, width_ms)
-                return candidates[-1] if candidates else None
-            for session_start, session_end in reversed(self._session_segments(start_ms, end_ms)):
-                last_ms = min(end_ms, session_end - 1)
-                candidate = session_start + ((last_ms - session_start) // width_ms) * width_ms
-                if candidate >= start_ms:
-                    return candidate
-            return None
+        if self._uses_session_grid():
+            return self._last_grid_open(start_ms, end_ms, interval)
         result: int | None = None
         for result in self.expected_opens(start_ms, end_ms, interval):
             pass
         return result
+
+    # Neighbour lookups (next/previous open) search a ten-year horizon, and
+    # history walks call them once per bar. Building ten years of intraday
+    # sessions costs milliseconds per call, so the search starts near the
+    # edge it looks from and widens only when that window has no open.
+    def _first_grid_open(self, start_ms: int, end_ms: int, interval: str) -> int | None:
+        """First session-grid open in ``[start_ms, end_ms]``."""
+        if end_ms < start_ms:
+            return None
+        width_ms = _interval_width_ms(interval)
+        if is_monthly_interval(interval) or width_ms >= _DAY_MS:
+            return next(iter(SessionCalendar.expected_opens(self, start_ms, end_ms, interval)), None)
+        window_ms = _NEIGHBOUR_WINDOW_MS
+        while True:
+            # Every window starts at start_ms, where the full range is cut too;
+            # a session reaching past one window has an open inside it.
+            high_ms = min(end_ms, start_ms + window_ms - 1)
+            found = next(iter(SessionCalendar.expected_opens(self, start_ms, high_ms, interval)), None)
+            if found is not None or high_ms == end_ms:
+                return found
+            window_ms *= _NEIGHBOUR_WINDOW_GROWTH
+
+    def _last_grid_open(self, start_ms: int, end_ms: int, interval: str) -> int | None:
+        """Last session-grid open in ``[start_ms, end_ms]``."""
+        if end_ms < start_ms:
+            return None
+        width_ms = _interval_width_ms(interval)
+        if is_monthly_interval(interval) or width_ms >= _DAY_MS:
+            candidates = self._coarse_expected_opens(start_ms, end_ms, interval, width_ms)
+            return candidates[-1] if candidates else None
+        window_ms = _NEIGHBOUR_WINDOW_MS
+        while True:
+            low_ms = max(start_ms, end_ms - window_ms + 1)
+            for session_start, session_end in reversed(self._session_segments(low_ms, end_ms)):
+                if session_start <= low_ms and low_ms > start_ms:
+                    # Cut by this window: abutting earlier sessions merge
+                    # into it and move its grid, so look further back.
+                    break
+                last_ms = min(end_ms, session_end - 1)
+                candidate = session_start + ((last_ms - session_start) // width_ms) * width_ms
+                if candidate >= start_ms:
+                    return candidate
+            else:
+                if low_ms == start_ms:
+                    return None
+            window_ms *= _NEIGHBOUR_WINDOW_GROWTH
 
     def next_expected_open(self, open_ms: int, interval: str) -> int | None:
         start_ms = int(open_ms) + 1

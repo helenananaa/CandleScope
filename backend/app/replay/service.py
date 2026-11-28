@@ -7,11 +7,13 @@ import hashlib
 import inspect
 import json
 import secrets
+import sqlite3
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
+from functools import partial
 from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Callable, Mapping, Sequence, TypeVar
@@ -129,6 +131,25 @@ from .sources.trade_source import TradeReplaySource
 from .storage.sqlite_store import ReplaySQLiteStore, StoredCommand
 from .training.raw_trade_retention import register_store as register_trade_reference_store
 from .training.service import TrainingRunService
+
+
+def _legacy_progressive_scope(path: Path) -> str:
+    return hashlib.sha256(str(Path(path).resolve()).encode("utf-8")).hexdigest()
+
+
+def _saved_progressive_scope(default: str, connection: sqlite3.Connection) -> str:
+    """The progressive-pin scope saved in this replay database.
+
+    A database first saves the hash of the path it had then, which is the
+    scope its existing pins already use, and keeps it after a move.
+    """
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS replay_progressive_owner "
+        "(singleton INTEGER PRIMARY KEY CHECK (singleton=1), scope TEXT NOT NULL)",
+    )
+    connection.execute("INSERT OR IGNORE INTO replay_progressive_owner VALUES (1, ?)", (default,))
+    row = connection.execute("SELECT scope FROM replay_progressive_owner WHERE singleton=1").fetchone()
+    return str(row[0])
 
 
 SYNTHETIC_TIME_ANCHOR_MS = 946_684_800_000
@@ -329,7 +350,18 @@ class ReplayService:
         return self._raw_trade_archive
 
     def _progressive_owner_scope(self) -> str:
-        return hashlib.sha256(str(self.store.path.resolve()).encode("utf-8")).hexdigest()
+        # Pins name the scope saved in this database, not a hash of its current
+        # path: after the data folder moves, its sessions still release them.
+        scope = getattr(self, "_progressive_scope", None)
+        return scope or _legacy_progressive_scope(self.store.path)
+
+    async def _load_progressive_owner_scope(self) -> None:
+        try:
+            scope = await self.store.run_extension_write(
+                partial(_saved_progressive_scope, _legacy_progressive_scope(self.store.path)))
+        except (OSError, ReplayDomainError, sqlite3.Error):
+            scope = None
+        self._progressive_scope = scope if isinstance(scope, str) and scope else None
 
     def _progressive_session_owner(self, session_id: str) -> str:
         return "session:" + self._progressive_owner_scope() + ":" + session_id
@@ -376,6 +408,7 @@ class ReplayService:
         """Recover non-ended sessions without ever resuming PLAYING."""
 
         await register_trade_reference_store(self.store, self._raw_trade_archive)
+        await self._load_progressive_owner_scope()
         archive_dir = self.settings.replay_history_archive_dir
         if archive_dir is not None and (Path(archive_dir) / "progressive-index.sqlite3").exists():
             await asyncio.to_thread(self.progressive_history.reconcile_sessions,

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -10,9 +11,15 @@ import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const en = {
   ...unifiedMessages["en"],
+  ...drawingAnnotationMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
@@ -1560,6 +1567,15 @@ export const en = {
   "settings.proxy.previewNodes": "Preview nodes",
   "settings.proxy.useNodes": "Use selected nodes",
   "settings.proxy.skippedNodes": "Unsupported nodes skipped: {count}",
+  "settings.proxy.autoRefresh": "Automatic refresh",
+  "settings.proxy.autoRefreshOff": "Off",
+  "settings.proxy.autoRefreshEvery": "Every {duration}",
+  "settings.proxy.autoRefreshHelp": "Checks saved subscriptions on this schedule. Nodes you use take the provider’s current settings; new nodes aren’t added, and a node the provider removed keeps its last settings.",
+  "settings.proxy.refreshPending": "Not checked automatically yet",
+  "settings.proxy.refreshChecked": "Last checked: {time}",
+  "settings.proxy.refreshFailed": "Automatic refresh failed: {time}",
+  "settings.proxy.refreshUpdated": "Nodes updated: {count} · {time}",
+  "settings.proxy.refreshMissing": "No longer in the subscription: {count}",
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
@@ -4037,6 +4053,13 @@ export const en = {
   "chartTester.prepareDataRun": "Prepare data and run",
   "chartTester.run.resolving": "Checking…",
   "chartTester.run.waitingForChart": "Chart data is still loading…",
+  "appUpdate.available": "CandleScope {version} is available",
+  "appUpdate.current": "You're using {version}. Download the new version from its release page.",
+  "appUpdate.view": "View release",
+  "appUpdate.skip": "Skip this version",
+  "settings.updates.title": "Updates",
+  "settings.updates.check": "Check for updates",
+  "settings.updates.checkHint": "At startup and once a day, asks GitHub whether a newer CandleScope release is out. Nothing is downloaded or installed.",
   "chartTester.run.queued": "Queued",
   "chartTester.run.running": "Running",
   "chartTester.stopObserving": "Stop waiting",
@@ -4564,4 +4587,9 @@ export const en = {
   "chartTester.deleteRetiredDraft": "Delete retired draft {name}",
   "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
+  ...drawingSelectionMessages["en"],
+  ...drawingCalculatedMessages["en"],
+  ...replayDrawingSaveMessages["en"],
+  ...chartTimeZoneMessages["en"],
+  ...chartTimeShortcutMessages["en"],
 } as const satisfies MessageCatalog;

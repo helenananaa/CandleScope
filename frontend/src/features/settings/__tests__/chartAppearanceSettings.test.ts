@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { detectSystemLocale, systemLanguages } from "../../../i18n/index.js";
 import {
   normalizeSettings,
   parseStoredSettings,
@@ -94,7 +95,8 @@ test("settings storage changes synchronize the complete settings snapshot across
   assert.equal(russian?.locale, "ru");
   assert.equal(parseStoredSettings(JSON.stringify({ locale: "ru" })).locale, "ru");
   assert.equal(settingsFromStorageChange("unrelated-key", "{}"), null);
-  assert.equal(settingsFromStorageChange(null, null)?.locale, "zh-CN");
+  // Clearing storage in another window is a fresh profile: it follows the system like a first launch.
+  assert.equal(settingsFromStorageChange(null, null)?.locale, detectSystemLocale() ?? (systemLanguages().length > 0 ? "en" : "zh-CN"));
   const spanish = settingsFromStorageChange("candlescope-settings", JSON.stringify({
     locale: "es-MX",
   }));
@@ -259,4 +261,31 @@ test("a stored custom app theme becomes dark or light by its background", () => 
   assert.equal(dark.customBg, "#102030", "the colour stays as the starting value for a chart's own background");
   assert.equal(settingsFromStorageChange("candlescope-settings", JSON.stringify({ theme: "custom", customBg: "#ffffff" }))?.theme, "light");
   assert.equal(normalizeSettings({ theme: "custom" }).theme, "custom", "per-chart settings may still be custom");
+});
+
+test("first launch follows the first supported system language", () => {
+  assert.equal(parseStoredSettings(null, ["ja-JP", "en-US"]).locale, "ja");
+  assert.equal(parseStoredSettings(undefined, ["sw-KE", "de-AT", "en"]).locale, "de");
+  assert.equal(parseStoredSettings("", ["zh-Hant-TW"]).locale, "zh-TW");
+  assert.equal(parseStoredSettings(null, ["zh-HK"]).locale, "zh-HK");
+  assert.equal(parseStoredSettings(null, ["pt-BR"]).locale, "pt-BR");
+  assert.equal(parseStoredSettings(null, ["ar-EG"]).locale, "ar");
+});
+
+test("first launch falls back to English when no system language is supported", () => {
+  assert.equal(parseStoredSettings(null, ["sw-KE", "pt", "not a tag"]).locale, "en");
+  assert.equal(parseStoredSettings("{broken", ["sw"]).locale, "en");
+});
+
+test("first launch keeps zh-CN when the system names no language", () => {
+  assert.equal(parseStoredSettings(null, []).locale, "zh-CN");
+});
+
+test("an unreadable save is treated as first launch", () => {
+  assert.equal(parseStoredSettings("{broken", ["fr-CA"]).locale, "fr");
+});
+
+test("saved settings keep their language whatever the system prefers", () => {
+  assert.equal(parseStoredSettings(JSON.stringify({ locale: "ko" }), ["en-US"]).locale, "ko");
+  assert.equal(parseStoredSettings(JSON.stringify({ theme: "light" }), ["en-US"]).locale, "zh-CN");
 });

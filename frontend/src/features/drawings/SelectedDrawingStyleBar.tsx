@@ -15,6 +15,15 @@ import DrawingCoordinateInputs from "./DrawingCoordinateInputs.js";
 import DrawingStyleTemplates from "./DrawingStyleTemplates.js";
 import { coordinateDraft, parseCoordinateDraft, sameCoordinates, type CoordinateDraft, type DrawingCoordinate } from "./drawingProperties.js";
 import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
+import { DEFAULT_DRAWING_RENDER_COLOR } from "./rendering/drawingRenderDefaults.js";
+import {
+  DEFAULT_REGRESSION_DEVIATION,
+  DEFAULT_VOLUME_PROFILE_ROWS,
+  MAX_REGRESSION_DEVIATION,
+  MAX_VOLUME_PROFILE_ROWS,
+  MIN_REGRESSION_DEVIATION,
+  MIN_VOLUME_PROFILE_ROWS,
+} from "./geometry/calculatedDrawingMath.js";
 
 function CommitNumberInput({ value, min, max, step, onCommit }: {
   value: number;
@@ -119,7 +128,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
     const levels = drawing.levels ?? [];
     if (newLevel.trim() === "" || !Number.isFinite(level) || levels.length >= 32
       || levels.some((item) => Math.abs(item.level - level) < 0.0001)) return;
-    onPatch({ levels: [...levels, { level, color: drawing.color ?? "#f59e0b", enabled: true }]
+    onPatch({ levels: [...levels, { level, color: drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR, enabled: true }]
       .sort((left, right) => left.level - right.level) });
     setNewLevel("");
   };
@@ -146,7 +155,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       {hasStroke && <>
         <CommitColorInput
           key={`${drawing.id}-stroke`}
-          color={drawing.color ?? "#f59e0b"}
+          color={drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR}
           label={t("drawing.settings.lineColor")}
           onCommit={(color) => onPatch({ color })}
         />
@@ -173,7 +182,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       <div id={`${editorId}-panel-style`} role={canEditCoordinates ? "tabpanel" : undefined} aria-labelledby={canEditCoordinates ? `${editorId}-tab-style` : undefined} hidden={tab !== "style"} className="drawing-style-fields">
       <DrawingStyleTemplates drawing={drawing} onApply={onPatch} />
       {currentInterval && onSave && <DrawingVisibilityInputs value={drawing.visibleIntervals} currentInterval={currentInterval} onChange={visibleIntervals => onPatch({ visibleIntervals })} />}
-      {hasStroke && <div className="drawing-property-row"><span>{t("drawing.settings.lineColor")}</span><CommitColorInput color={drawing.color ?? "#f59e0b"} label={t("drawing.settings.lineColor")} onCommit={(color) => onPatch({ color })} /></div>}
+      {hasStroke && <div className="drawing-property-row"><span>{t("drawing.settings.lineColor")}</span><CommitColorInput color={drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR} label={t("drawing.settings.lineColor")} onCommit={(color) => onPatch({ color })} /></div>}
       {hasStroke && <label>{t("drawing.settings.lineWidth", { size: drawing.lineWidth ?? 2 })}
         <CommitNumberInput key={resetRevision} value={drawing.lineWidth ?? 2} min={1} max={10} step={1}
           onCommit={(lineWidth) => onPatch({ lineWidth })} />
@@ -182,7 +191,7 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
         <div className="drawing-property-row"><span>{t("drawing.settings.fillColor")}</span>
           <CommitColorInput
             key={`${drawing.id}-fill`}
-            color={drawing.fillColor ?? drawing.color ?? "#f59e0b"}
+            color={drawing.fillColor ?? drawing.color ?? DEFAULT_DRAWING_RENDER_COLOR}
             label={t("drawing.settings.fillColor")}
             onCommit={(fillColor) => onPatch({ fillColor })}
           />
@@ -257,6 +266,16 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
       {isPosition && <label>{t("drawing.settings.positionSize")}
         <CommitNumberInput key={resetRevision} value={drawing.positionSize ?? 1000} min={1} step={100}
           onCommit={(positionSize) => onPatch({ positionSize })} />
+      </label>}
+      {drawing.type === "regression-channel" && <label>{t("drawing.calculated.deviation")}
+        <CommitNumberInput key={resetRevision} value={drawing.deviation ?? DEFAULT_REGRESSION_DEVIATION}
+          min={MIN_REGRESSION_DEVIATION} max={MAX_REGRESSION_DEVIATION} step={0.5}
+          onCommit={(deviation) => onPatch({ deviation })} />
+      </label>}
+      {drawing.type === "volume-profile" && <label>{t("drawing.calculated.rows")}
+        <CommitNumberInput key={resetRevision} value={drawing.rows ?? DEFAULT_VOLUME_PROFILE_ROWS}
+          min={MIN_VOLUME_PROFILE_ROWS} max={MAX_VOLUME_PROFILE_ROWS} step={1}
+          onCommit={(rows) => onPatch({ rows: Math.round(rows) })} />
       </label>}
       </div>
       {canEditCoordinates && points && <div id={`${editorId}-panel-coordinates`} role="tabpanel" aria-labelledby={`${editorId}-tab-coordinates`} hidden={tab !== "coordinates"}>

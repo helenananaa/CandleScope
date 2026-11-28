@@ -98,9 +98,38 @@ def _registry_lease(directory: Path, *, shared: bool) -> AbstractContextManager[
     )
 
 
+def _forget_moved_registrations(directory: Path, database: Path, store_id: str) -> int:
+    """Drop this store's registrations from locations that no longer hold a database.
+
+    A registration names the store's own id and the path it had then. After
+    the data folder moves, the old path is empty and every later scan would
+    report that store as unavailable, so saved references could never be
+    certified complete again. A registration whose path still holds a file
+    (a copied profile, or a volume that is mounted) stays registered.
+    """
+    removed = 0
+    try:
+        paths = sorted(islice(directory.glob("*.json"), 4 * _MAX_STORE_REGISTRATIONS))
+    except OSError:
+        return 0
+    for path in paths:
+        try:
+            registered, registered_id = _read_registration(path)
+            if registered_id != store_id or registered == database:
+                continue
+            if registered.exists() or registered.is_symlink():
+                continue
+            path.unlink()
+            removed += 1
+        except (OSError, ValueError):
+            continue
+    return removed
+
+
 def _register_store_with_lease(directory: Path, database: Path, store_id: str) -> None:
     with _registry_lease(directory, shared=True):
         _register_store(directory, database, store_id)
+        _forget_moved_registrations(directory, database, store_id)
 
 
 async def register_store(store: ReplaySQLiteStore, archive: object) -> None:

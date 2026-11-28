@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import type {
+  AnnotationToolId,
   ArrowToolId,
   BasicLineToolId,
+  CalculatedToolId,
   ChannelToolId,
   PathToolId,
   RangeMeasureToolId,
@@ -18,6 +20,8 @@ export interface ToolbarVariant<TId extends string = string> {
   description?: string;
   icon: ReactNode;
 }
+
+export type TextToolbarToolId = "text" | AnnotationToolId;
 
 export type LineToolbarToolId = BasicLineToolId
   | ArrowToolId
@@ -60,6 +64,24 @@ const TextIcon = (
     <path d="M4 7V4h16v3" />
     <line x1="12" y1="4" x2="12" y2="20" />
     <line x1="8" y1="20" x2="16" y2="20" />
+  </svg>
+);
+
+const CalloutIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="3" width="12" height="9" rx="1.5" />
+    <path d="M12 7h6" />
+    <path d="M10 12 4 19" />
+    <circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const PriceLabelIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 4h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4-5z" />
+    <path d="M10 9h6" />
+    <circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none" />
+    <path d="M7 14 4.5 18" />
   </svg>
 );
 
@@ -378,6 +400,44 @@ const ChartHistogramIcon = (
   </svg>
 );
 
+const FibExtensionIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 20 8 8l4 6" strokeDasharray="2 2.5" />
+    <line x1="12" y1="14" x2="21" y2="14" />
+    <line x1="12" y1="9" x2="21" y2="9" opacity="0.6" />
+    <line x1="12" y1="4" x2="21" y2="4" opacity="0.6" />
+    <circle cx="3" cy="20" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="14" r="1.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const AnchoredVwapIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 16c3-1 4-6 7-6s4 4 6 3 3-5 4-6" />
+    <path d="M4 16v5" opacity="0.6" />
+    <circle cx="4" cy="16" r="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const VolumeProfileIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="3" x2="3" y2="21" opacity="0.5" />
+    <rect x="3" y="4" width="6" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.55" />
+    <rect x="3" y="8.4" width="11" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.7" />
+    <rect x="3" y="12.8" width="17" height="2.6" rx="0.6" fill="currentColor" stroke="none" />
+    <rect x="3" y="17.2" width="8" height="2.6" rx="0.6" fill="currentColor" stroke="none" opacity="0.55" />
+  </svg>
+);
+
+const RegressionChannelIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="14" x2="21" y2="4" />
+    <line x1="3" y1="20" x2="21" y2="10" />
+    <line x1="3" y1="17" x2="21" y2="7" strokeDasharray="2 2.5" opacity="0.7" />
+  </svg>
+);
+
 const CURSOR_VARIANTS: ToolbarVariant<PassiveCursorToolId>[] = [
   { id: "cursor-default", label: "Default cursor", icon: MouseDefaultIcon },
   { id: "cursor-crosshair", label: "Crosshair", icon: MouseCrosshairIcon },
@@ -431,12 +491,36 @@ const SHAPE_VARIANTS: ToolbarVariant<ShapeToolId>[] = [
 
 const SHAPE_TOOL_IDS = new Set(SHAPE_VARIANTS.map((v) => v.id));
 
+const TEXT_VARIANTS: ToolbarVariant<TextToolbarToolId>[] = [
+  { id: "text", label: "Text", icon: TextIcon },
+  {
+    id: "callout",
+    label: "Callout",
+    description: "Click the point to annotate, then click where the note goes",
+    icon: CalloutIcon,
+  },
+  {
+    id: "price-label",
+    label: "Price label",
+    description: "Click a point to label its price",
+    icon: PriceLabelIcon,
+  },
+];
+
 const POSITION_VARIANTS: ToolbarVariant<PositionToolId>[] = [
   { id: "position-long", label: "Long position", icon: LongPositionIcon },
   { id: "position-short", label: "Short position", icon: ShortPositionIcon },
 ];
 
 const POSITION_TOOL_IDS = new Set(POSITION_VARIANTS.map((v) => v.id));
+
+/** Drawings whose values come from the chart's bars (PL-3). */
+const CALCULATED_VARIANTS: ToolbarVariant<CalculatedToolId>[] = [
+  { id: "fib-extension", label: "Fib extension", description: "Click the move's start and end, then the pullback", icon: FibExtensionIcon },
+  { id: "anchored-vwap", label: "Anchored VWAP", description: "Click the bar the average starts from", icon: AnchoredVwapIcon },
+  { id: "volume-profile", label: "Fixed range volume profile", description: "Click the first and last bar; estimated from bar volume", icon: VolumeProfileIcon },
+  { id: "regression-channel", label: "Regression channel", description: "Click the first and last bar; rails at 2 standard deviations", icon: RegressionChannelIcon },
+];
 
 const CHART_TYPE_VARIANTS: ToolbarVariant<MainChartType>[] = [
   { id: "candlestick", label: "Candles", description: "Open, high, low and close candles", icon: CandlestickChartIcon },
@@ -457,6 +541,7 @@ const CHART_TYPE_VARIANTS: ToolbarVariant<MainChartType>[] = [
 ];
 
 export {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
   AutoSelectIcon,
@@ -478,5 +563,6 @@ export {
   SegmentIcon,
   SHAPE_TOOL_IDS,
   SHAPE_VARIANTS,
+  TEXT_VARIANTS,
   TextIcon,
 };

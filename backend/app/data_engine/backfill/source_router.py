@@ -32,6 +32,12 @@ from .archive_cache import (
 from .config import BackfillConfig
 from .archive_cleanup import ArchiveImportCleanup, ImportProofLookup
 from .models import BackfillTask, FetchedBar
+from .route_health import (
+    URGENT_ARCHIVE_MIN_REST_PAGES,
+    ArchiveRouteHealth,
+    counts_against_health,
+    is_urgent_history_demand,
+)
 
 
 logger = logging.getLogger("backfill.HistoricalSourceRouter")
@@ -182,6 +188,9 @@ class HistoricalSourceRouter:
         )
         self._providers: dict[str, HistoricalArchiveProvider] = {}
         self._disabled_providers: dict[str, str] = {}
+        # Per-provider transport health: a host that keeps failing is skipped
+        # for a cooldown instead of costing every new object its full budget.
+        self.route_health = ArchiveRouteHealth()
         self._metrics = LayerMetrics("HistoricalSourceRouter")
 
     @property
@@ -319,6 +328,7 @@ class HistoricalSourceRouter:
 
             for run in _task_runs(group, interval):
                 route_start_ms, route_end_ms = _archive_decision_range(run)
+                urgent = any(is_urgent_history_demand(task.metadata) for task in run)
                 candidates = provider.plan_objects(
                     market_type=market_type,
                     symbol=symbol,
@@ -342,6 +352,30 @@ class HistoricalSourceRouter:
                 cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
                 warm = [ref for ref in cached if ref is not None]
                 cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
+                if cold and urgent:
+                    # A chart is waiting: a download is worth it only when REST
+                    # would need many pages. Local ZIPs are always used.
+                    worth_downloading = {
+                        ref.object_key
+                        for ref in _filter_daily_candidates(
+                            candidates,
+                            range_start_ms=route_start_ms,
+                            range_end_ms=route_end_ms,
+                            interval=interval,
+                            rest_page_size=capabilities.rest_page_size,
+                            minimum_pages=max(
+                                URGENT_ARCHIVE_MIN_REST_PAGES,
+                                self._cfg.history_archive_min_rest_pages,
+                            ),
+                        )
+                    }
+                    kept = [ref for ref in cold if ref.object_key in worth_downloading]
+                    self._metrics.inc("archive_urgent_rest_routes", len(cold) - len(kept))
+                    cold = kept
+                if cold and not self.route_health.available(exchange):
+                    self._metrics.inc("archive_unhealthy_rest_routes", len(cold))
+                    self._metrics.set("last_route_skip_reason", f"unhealthy:{exchange}")
+                    cold = []
                 if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
                     probe = await self._probe_provider(exchange, provider)
                     if not probe.get("enabled"):
@@ -651,6 +685,7 @@ class HistoricalSourceRouter:
                 int(self._cfg.history_archive_min_rest_pages),
             ),
             "singleflight_inflight": len(self._inflight),
+            "route_health": self.route_health.snapshot(),
             "capability_probes_inflight": len(self._probe_tasks),
             "deferred_prefetch_launchers": len(self._background_launchers),
             "deferred_prefetch_objects": len(self._deferred_objects),
@@ -865,10 +900,16 @@ class HistoricalSourceRouter:
             except RateLimitDeferred:
                 self._metrics.inc("archive_admission_deferred")
                 raise
-            except BaseException:
+            except BaseException as exc:
                 self._metrics.inc("archive_object_errors")
                 self._metrics.mark("last_error_at")
+                if counts_against_health(exc) and self.route_health.record_failure(ref.exchange, exc):
+                    self._metrics.inc("archive_route_unhealthy")
+                    logger.warning("archive route unhealthy exchange=%s; using REST for %.0fs: %s",
+                                   ref.exchange, self.route_health.snapshot()[ref.exchange]["skip_remaining_s"], exc)
                 raise
+        if not cached.cache_hit:
+            self.route_health.record_success(ref.exchange, cache_elapsed_ms)
 
         bars = tuple(
             FetchedBar(

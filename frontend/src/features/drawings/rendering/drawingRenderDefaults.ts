@@ -3,7 +3,14 @@ import {
   normalizeFreehandStroke,
   normalizeLegacyFreehandDataPoints,
 } from "../freehandStrokeModel.js";
+import {
+  DEFAULT_REGRESSION_DEVIATION,
+  DEFAULT_VOLUME_PROFILE_ROWS,
+  MAX_VOLUME_PROFILE_ROWS,
+  MIN_VOLUME_PROFILE_ROWS,
+} from "../geometry/calculatedDrawingMath.js";
 import type {
+  CalculatedDrawingType,
   AxisLineType,
   BasicLineToolId,
   BrushShape,
@@ -20,7 +27,7 @@ import type {
   TextAlign,
 } from "../drawingTypes.js";
 
-export const DEFAULT_DRAWING_RENDER_COLOR = "#f59e0b";
+export const DEFAULT_DRAWING_RENDER_COLOR = "#3b82f6";
 export const DEFAULT_DRAWING_RENDER_LINE_WIDTH = 2;
 export const DEFAULT_FIBONACCI_RENDER_COLOR = "#0ea5e9";
 export const DEFAULT_TEXT_RENDER_COLOR = "#e2e8f0";
@@ -80,6 +87,18 @@ export type ChannelDrawingRenderEntity = DrawingRenderEntityBase<"channel", {
   fillOpacity: number;
 }>;
 
+export type CalculatedDrawingRenderEntity = DrawingRenderEntityBase<"calculated", {
+  kind: "calculated";
+  calcType: CalculatedDrawingType;
+  dataPoints: readonly DrawingDataPoint[];
+}, {
+  kind: "calculated";
+  color: string;
+  lineWidth: number;
+  deviation: number;
+  rows: number;
+}>;
+
 export type AxisLineDrawingRenderEntity = DrawingRenderEntityBase<"axis-line", {
   kind: "axis-line";
   axisLineType: AxisLineType;
@@ -108,9 +127,12 @@ export type AngleDrawingRenderEntity = DrawingRenderEntityBase<"angle-measure", 
 export type TextDrawingRenderEntity = DrawingRenderEntityBase<"text", {
   kind: "text";
   dataPoint: DrawingDataPoint;
+  /** Callout leader target; absent for plain text and price labels. */
+  target: DrawingDataPoint | null;
 }, {
   kind: "text";
   text: string;
+  priceLabel: boolean;
   color: string;
   fontSize: number;
   fontFamily: string;
@@ -182,6 +204,7 @@ export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "
 export type DrawingRenderEntity =
   | PathDrawingRenderEntity
   | ChannelDrawingRenderEntity
+  | CalculatedDrawingRenderEntity
   | LineDrawingRenderEntity
   | AxisLineDrawingRenderEntity
   | RangeMeasureDrawingRenderEntity
@@ -349,6 +372,27 @@ export function normalizeDrawingEntityForRender(
           fillOpacity: renderOpacity(style.fillOpacity, DEFAULT_CHANNEL_RENDER_FILL_OPACITY),
         }),
       });
+    case "calculated":
+      if (entity.kind !== "calculated" || style.kind !== "calculated") return null;
+      return Object.freeze({
+        ...renderBase(entity, "calculated"),
+        geometry: Object.freeze({
+          kind: "calculated" as const,
+          calcType: geometry.calcType,
+          dataPoints: cloneFrozen(geometry.dataPoints),
+        }),
+        style: Object.freeze({
+          kind: "calculated" as const,
+          color: renderColor(style.color),
+          lineWidth: renderLineWidth(style.lineWidth),
+          deviation: typeof style.deviation === "number" && Number.isFinite(style.deviation) && style.deviation > 0
+            ? style.deviation
+            : DEFAULT_REGRESSION_DEVIATION,
+          rows: typeof style.rows === "number" && Number.isInteger(style.rows)
+            ? Math.min(MAX_VOLUME_PROFILE_ROWS, Math.max(MIN_VOLUME_PROFILE_ROWS, style.rows))
+            : DEFAULT_VOLUME_PROFILE_ROWS,
+        }),
+      });
     case "axis-line":
       if (entity.kind !== "axis-line" || style.kind !== "axis-line") return null;
       return Object.freeze({
@@ -396,10 +440,12 @@ export function normalizeDrawingEntityForRender(
           dataPoint: geometry.dataPoint
             ? cloneFrozen(geometry.dataPoint)
             : Object.freeze({ logical: 0, price: 0 }),
+          target: geometry.target ? cloneFrozen(geometry.target) : null,
         }),
         style: Object.freeze({
           kind: "text" as const,
           text: style.text ?? "Text",
+          priceLabel: style.priceLabel === true,
           color: renderColor(style.color, DEFAULT_TEXT_RENDER_COLOR),
           fontSize: style.fontSize || DEFAULT_TEXT_RENDER_FONT_SIZE,
           fontFamily: style.fontFamily || DEFAULT_TEXT_RENDER_FONT_FAMILY,

@@ -29,7 +29,9 @@ class SnapshotStore:
             else:
                 raise SubscriptionError("Subscription storage requires macOS or Windows")
             vault = Keyring()
-            profile = hashlib.sha256(str(self.root.resolve()).encode()).hexdigest()
+            # The namespace follows the data folder when it moves (see secret_namespace_origin).
+            from app.core.profile_relocation import secret_namespace_origin
+            profile = hashlib.sha256(secret_namespace_origin(self.root).encode()).hexdigest()
             service = "CandleScope.proxy-subscriptions"
             key = vault.get_password(service, profile)
             if key is None and create:
