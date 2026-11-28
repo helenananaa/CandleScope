@@ -63,6 +63,8 @@ _MAINTENANCE_BACKFILL_REASONS = (
 )
 
 _SCHEDULER_OUTCOME_HISTORY_LIMIT = 256
+# ``RepairRetryDeferred.reason``: a chunk waiting out its own retry backoff.
+_RETRY_BACKOFF_REASON = "repair_retry"
 _PROBE_RECHECK_SECONDS = 0.25
 _PERSISTENT_INTEREST_LIMIT = 64
 _INTEREST_METADATA_KEYS = (
@@ -273,6 +275,7 @@ class BackfillScheduler:
         self.fairness_rotations = 0
         self.max_dispatch_bypass = 8
         self.aged_dispatches = 0
+        self.retry_lane_skips = 0
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -879,6 +882,7 @@ class BackfillScheduler:
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
             "aged_dispatches": self.aged_dispatches,
+            "retry_lane_skips": self.retry_lane_skips,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
             "active": active,
@@ -1174,6 +1178,9 @@ class BackfillScheduler:
             return
         skipped: list[tuple[int, int, int, str]] = []
         next_delay: float | None = None
+        # Read once per pass: a gap audit can queue thousands of chunks, and
+        # this pass changes no deferred chunk it would find.
+        retrying_series = self._series_with_foreground_retry()
         try:
             # The extra candidate slot exists only for the deliberately
             # single-lane configuration. It is admitted below solely for one
@@ -1214,6 +1221,14 @@ class BackfillScheduler:
                     or (chunk.dispatch_bypasses < self.max_dispatch_bypass
                         and self._has_foreground_work(skipped))
                 ):
+                    skipped.append(item)
+                    continue
+                if (
+                    chunk.request.series_key in retrying_series
+                    and self._is_background(chunk.request)
+                    and chunk.dispatch_bypasses < self.max_dispatch_bypass
+                ):
+                    self.retry_lane_skips += 1
                     skipped.append(item)
                     continue
                 fairness_lane = (
@@ -1425,6 +1440,32 @@ class BackfillScheduler:
             if state is not None and not state.stale and state.failed is None:
                 return True
         return False
+
+    def _series_with_foreground_retry(self) -> set[tuple[str, ...]]:
+        """Return series whose foreground request waits out a retry backoff.
+
+        A retry backoff (``RepairRetryDeferred``) hands the series lane back,
+        but the request needs it again in seconds: a range that starts before
+        a listing is proven empty by seeing the same empty page on two
+        attempts. A background chunk that took the lane in between ran ahead
+        of it for as long as it held the lane. In RC 32 that was a gap audit's
+        monthly archive import (61 s, retried on family changes), so Go to
+        date before the listing gave up after its 60 s budget. ``_drain``
+        keeps background chunks off these series only; background work on
+        other series and work that already holds a lane are unaffected, and
+        the usual bypass limit still lets a background chunk through.
+        """
+        series: set[tuple[str, ...]] = set()
+        for chunk in self._chunks.values():
+            if (chunk.defer_reason != _RETRY_BACKOFF_REASON
+                    or chunk.request.series_key in series
+                    or self._is_background(chunk.request)):
+                continue
+            state = self._requests.get(chunk.parent_id)
+            if (state is not None and not state.stale and state.failed is None
+                    and not state.cancel_requested):
+                series.add(chunk.request.series_key)
+        return series
 
     def has_foreground_work(self) -> bool:
         """Return whether runnable/active foreground work needs execution capacity.

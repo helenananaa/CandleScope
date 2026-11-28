@@ -9,6 +9,7 @@ import { isSyntheticTransform, type SyntheticSettings, type BackendSyntheticSour
 
 const idleSubscribe = () => () => {};
 const idleStatus = () => "";
+const idleLimit = () => null;
 
 export function useBackendSyntheticSeries(input: {
   source: BackendSyntheticSource | null; reader: SeriesWindowView | null; chartType: MainChartType;
@@ -33,6 +34,7 @@ export function useBackendSyntheticSeries(input: {
   }, [binding]);
   useEffect(() => () => owned.closeAll(), [owned]);
   const status = useSyncExternalStore(binding?.subscribe ?? idleSubscribe, binding?.status ?? idleStatus, idleStatus);
+  const pageLimit = useSyncExternalStore(binding?.subscribe ?? idleSubscribe, binding?.pageLimit ?? idleLimit, idleLimit);
   const display = useMemo(() => {
     if (!binding || !input.reader) return input.display;
     const reader = input.reader, original = input.display ?? reader;
@@ -45,5 +47,5 @@ export function useBackendSyntheticSeries(input: {
       },
     };
   }, [binding, input.display, input.reader]);
-  return { binding, status, display };
+  return { binding, status, pageLimit, display };
 }

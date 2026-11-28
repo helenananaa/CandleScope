@@ -2223,11 +2223,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       leftHistoryDemandDatasetRef.current = null;
       return { demanded: false, shouldRequest: false };
     }
+    // A synthetic chart first pages older outputs of its current definition
+    // (#381); only once they are all loaded does the left edge ask for older
+    // source bars, which starts a new definition.
+    const synthetic = backendBindingRef.current;
+    const pagesOutputs = synthetic?.hasOlderOutputs() === true;
     const decision = resolveLeftHistoryDemand({
-      canLoad: canLoadMoreLeftRef.current,
+      canLoad: pagesOutputs || canLoadMoreLeftRef.current,
       consumedInteractionGeneration: leftHistoryConsumedGenerationRef.current,
       hasData: currentData.length > 0,
-      hasHandler: Boolean(onNeedMoreLeftRef.current),
+      hasHandler: pagesOutputs || Boolean(onNeedMoreLeftRef.current),
       interactionGeneration,
       ...(range?.from === undefined ? {} : { rangeFrom: range.from }),
       triggerBars: LEFT_EDGE_TRIGGER_BARS,
@@ -2245,6 +2250,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     // turn one drag into an unbounded sequence of continuation pages.
     leftHistoryConsumedGenerationRef.current = interactionGeneration;
     leftHistoryDemandDatasetRef.current = null;
+    if (pagesOutputs) {
+      synthetic.loadOlder();
+      return decision;
+    }
     const loadMoreLeft = onNeedMoreLeftRef.current;
     const firstRow = currentData[0];
     if (loadMoreLeft && firstRow) void loadMoreLeft(firstRow.time);
@@ -2366,14 +2375,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return true;
   }, [scheduleLatestWindowScroll]);
 
-  const handleRestoreLatestWindow = useCallback(() => {
+  // The promise settles true once the view has scrolled to the restored edge;
+  // null means the restore could not start (nothing to call, or loading).
+  const handleRestoreLatestWindow = useCallback((): Promise<boolean> | null => {
     const restore = onRestoreLatestWindowRef.current ?? onNeedMoreRightRef.current;
     if (
       !restore
       || !canRestoreLatestWindowRef.current
       || explicitLatestWindowRestoreRef.current != null
       || rightWindowRestoreRef.current != null
-    ) return;
+    ) return null;
 
     const requestedDatasetKey = datasetKeyRef.current;
     const store = seriesStoreRef.current;
@@ -2398,11 +2409,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         setLatestWindowRestorePending(false);
       });
     explicitLatestWindowRestoreRef.current = promise;
+    return promise;
   }, [scheduleLatestWindowScroll]);
 
   const returnToLatest = useCallback(() => {
     if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
-      handleRestoreLatestWindow();
+      void handleRestoreLatestWindow();
     } else {
       jumpToLatest();
     }
@@ -2557,7 +2569,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
   const publishViewportRangeChange = useCallback((visibleRange: ChartSurfaceVisibleRange | null = null) => {
     const range = visibleRange || captureVisibleRange();
-    if (range) onViewportRangeChangeRef.current?.(range);
+    if (!range) return;
+    backendBindingRef.current?.noteVisibleSourceTime(range.time?.from);
+    onViewportRangeChangeRef.current?.(range);
   }, [captureVisibleRange]);
 
   const scheduleVisibleRangeSave = useCallback((visibleRange: ChartSurfaceVisibleRange | null = null) => {
@@ -2574,6 +2588,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (chartRef.current !== chart || datasetKeyRef.current !== key) return;
       const settled = captureVisibleRange();
       if (settled) {
+        backendBindingRef.current?.noteVisibleSourceTime(settled.time?.from);
         // Programmatic navigation publishes before LWC's next draw. Notify
         // data consumers again with the painted range: persistence alone does
         // not hydrate indicators at the newly selected historical viewport.
@@ -2671,6 +2686,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const currentRange = savedViewport ?? captureVisibleRange();
     const logical = currentRange?.logical;
     if (!logical) return false;
+    const synthetic = backendBindingRef.current;
+    if (synthetic && !synthetic.coversSourceTime(time)) {
+      // Older synthetic outputs page in by cursor; callers retry once they paint.
+      synthetic.cover(time);
+      return false;
+    }
     const span = logical.to - logical.from;
     const targetIndex = findDisplayIndexForAxisAnchor(displayRowsRef.current, time);
     if (!Number.isFinite(span) || span <= 0 || targetIndex < 0) return false;
@@ -2722,6 +2743,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   ): boolean => {
     const chart = chartRef.current;
     if (!chart) return false;
+    const synthetic = backendBindingRef.current;
+    if (synthetic && !synthetic.coversSourceTime(range.from)) {
+      synthetic.cover(range.from);
+      return false;
+    }
     const logicalRange = surfaceAxisModeRef.current === "derived-ordinal"
       ? createViewportTimeScale(displayRowsRef.current, intervalRef.current, futureTimeAxisDataRef.current)?.logicalRange(range)
       : mapSourceTimeRangeToDisplayLogicalRange(displayRowsRef.current, range, futureTimeAxisDataRef.current);
@@ -5619,6 +5645,25 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useImperativeHandle(ref, () => ({
     getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
+    // Same as the chart's button, but says whether the view got there.
+    returnToLatest: () => {
+      if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
+        return handleRestoreLatestWindow() ?? Promise.resolve(false);
+      }
+      if (displayRowsRef.current.length === 0) return Promise.resolve(false);
+      jumpToLatest();
+      return Promise.resolve(true);
+    },
+    // Centres the bar half a view in, so the oldest loaded bar sits at the left edge.
+    showFirstLoadedBar: () => {
+      const rows = seriesStoreRef.current?.snapshot() ?? [];
+      const first = Number(rows[0]?.time);
+      const logical = captureVisibleRange()?.logical;
+      if (!Number.isFinite(first) || !logical) return null;
+      const half = Math.max(0, Math.floor((logical.to - logical.from) / 2));
+      const anchor = Number(rows[Math.min(rows.length - 1, half)]?.time);
+      return Number.isFinite(anchor) && centerVisibleTime(anchor) ? first : null;
+    },
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
     centerVisibleTime,
@@ -5708,6 +5753,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     setLinkedDrawingRevision,
     setDrawingsHidden,
     updateSelectedDrawingStyle,
+    handleRestoreLatestWindow,
+    jumpToLatest,
   ]);
 
   const latestWindowMissing = rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated);
@@ -5901,6 +5948,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       {backendSynthetic.binding && backendSynthetic.status !== "ready" && !loading && (
         <div className="chart-indicator-status" role="status">
           {t(backendSynthetic.status === "preparing" ? "chart.syntheticPreparing" : "chart.syntheticUnavailable", {}, locale)}
+        </div>
+      )}
+      {backendSynthetic.binding && backendSynthetic.status === "ready" && backendSynthetic.pageLimit && !loading && (
+        <div className="chart-indicator-status" role="status">
+          {t(/budget/i.test(backendSynthetic.pageLimit) ? "chart.syntheticOlderLimit" : "chart.syntheticOlderFailed", {}, locale)}
         </div>
       )}
       <ChartLoadingStatus

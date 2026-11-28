@@ -77,3 +77,34 @@ test("spot sessions expose a contract-only reason and no market studies", () => 
   assert.equal(snapshot.channels.funding_rate.supported, false);
   assert.equal(snapshot.channels.funding_rate.reason, "仅合约市场支持");
 });
+
+test("hybrid funding and the OI sample grid follow the venue's declared roles", () => {
+  const channels = [channel("funding_rate", { history: true }), channel("open_interest", { history: true })];
+  const roles = [
+    { role: "funding.hybrid_history", market_types: ["futures"], contract: "binance-premium-index-cumavg-v2" },
+    { role: "open_interest.native_grid", market_types: ["futures"], contract: "binance-oi-grid-v2" },
+  ];
+  const declared = resolveAdvancedMarketCapabilities({ marketType: "futures", raw: { channels, roles } });
+  assert.equal(declared.hybridFunding, true);
+  assert.equal(declared.openInterestGrid, true);
+
+  // OKX's funding and OI history come from CCXT channels without a role.
+  const undeclared = resolveAdvancedMarketCapabilities({ marketType: "futures", raw: { channels } });
+  assert.equal(undeclared.hybridFunding, false);
+  assert.equal(undeclared.openInterestGrid, false);
+
+  // Another market of the same venue, or Gate's 5m-only grid, is not the every-period grid.
+  const spot = resolveAdvancedMarketCapabilities({ marketType: "spot", raw: { channels, roles } });
+  assert.equal(spot.hybridFunding, false);
+  const gate = resolveAdvancedMarketCapabilities({
+    marketType: "swap.linear",
+    raw: {
+      channels: [channel("open_interest", { market_types: ["swap.linear"], history: true })],
+      roles: [{ role: "open_interest.native_grid", market_types: ["swap.linear"], contract: "gate-oi-grid-v1" }],
+    },
+  });
+  assert.equal(gate.openInterestGrid, false);
+
+  const malformed = resolveAdvancedMarketCapabilities({ marketType: "futures", raw: { channels, roles: "x" } });
+  assert.equal(malformed.hybridFunding, false);
+});

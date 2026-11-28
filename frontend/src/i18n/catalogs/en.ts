@@ -1,4 +1,6 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -10,9 +12,16 @@ import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const en = {
   ...unifiedMessages["en"],
+  ...syntheticPagingMessages["en"],
+  ...drawingAnnotationMessages["en"],
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
@@ -1566,6 +1575,15 @@ export const en = {
   "settings.proxy.previewNodes": "Preview nodes",
   "settings.proxy.useNodes": "Use selected nodes",
   "settings.proxy.skippedNodes": "Unsupported nodes skipped: {count}",
+  "settings.proxy.autoRefresh": "Automatic refresh",
+  "settings.proxy.autoRefreshOff": "Off",
+  "settings.proxy.autoRefreshEvery": "Every {duration}",
+  "settings.proxy.autoRefreshHelp": "Checks saved subscriptions on this schedule. Nodes you use take the provider’s current settings; new nodes aren’t added, and a node the provider removed keeps its last settings.",
+  "settings.proxy.refreshPending": "Not checked automatically yet",
+  "settings.proxy.refreshChecked": "Last checked: {time}",
+  "settings.proxy.refreshFailed": "Automatic refresh failed: {time}",
+  "settings.proxy.refreshUpdated": "Nodes updated: {count} · {time}",
+  "settings.proxy.refreshMissing": "No longer in the subscription: {count}",
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
@@ -4050,6 +4068,58 @@ export const en = {
   "settings.updates.title": "Updates",
   "settings.updates.check": "Check for updates",
   "settings.updates.checkHint": "At startup and once a day, asks GitHub whether a newer CandleScope release is out. Nothing is downloaded or installed.",
+  "settings.category.dataSources": "Data sources",
+  "dataSources.intro": "Connect sources that need your own key. Keys stay in this computer's password store (macOS Keychain or Windows Credential Manager) and are only sent to the source they belong to.",
+  "dataSources.desktopOnly": "Add data source keys in the desktop app.",
+  "dataSources.loading": "Loading…",
+  "dataSources.vaultUnavailable": "Keys can't be saved on this computer; only an environment variable works here.",
+  "dataSources.deletionPending": "An old key will be deleted from the password store at the next launch. CandleScope no longer uses it.",
+  "dataSources.twelvedata.description": "Price history and live prices for US stocks, ETFs, forex, indices and commodities. Get a free key at {site}.",
+  "dataSources.state.saved": "Using saved key",
+  "dataSources.state.environment": "Using environment variable",
+  "dataSources.state.none": "No key",
+  "dataSources.state.unreadable": "Save again",
+  "dataSources.savedKey": "Saved key",
+  "dataSources.savedKeyValue": "{masked}, saved {time}",
+  "dataSources.notSaved": "None",
+  "dataSources.environmentVariable": "Environment variable",
+  "dataSources.environmentSet": "Set {masked}",
+  "dataSources.environmentNotSet": "Not set",
+  "dataSources.environmentActive": "CandleScope uses the key from the environment variable. Once you save a key here, it uses that one instead.",
+  "dataSources.environmentShadowed": "The environment variable also has a key, but CandleScope uses the one saved here. Remove the saved key to go back to the environment variable.",
+  "dataSources.savedUnreadable": "The saved key couldn't be read: the password store denied access, or the entry was deleted. Save the key again.",
+  "dataSources.keyLabel": "API key",
+  "dataSources.keyPlaceholder": "Paste your {source} API key",
+  "dataSources.keyPlaceholderReplace": "Paste a new key to replace it",
+  "dataSources.save": "Save",
+  "dataSources.replace": "Replace",
+  "dataSources.saving": "Saving…",
+  "dataSources.check": "Test connection",
+  "dataSources.checking": "Testing…",
+  "dataSources.remove": "Remove key",
+  "dataSources.removing": "Removing…",
+  "dataSources.removeTitle": "Remove the {source} key?",
+  "dataSources.removeMessage": "The key is deleted from this computer's password store. {source} charts can't load data until you add a key again.",
+  "dataSources.removeMessageEnvironment": "The key is deleted from this computer's password store. CandleScope then uses the key from the environment variable.",
+  "dataSources.removeConfirm": "Remove",
+  "dataSources.saved": "Key saved.",
+  "dataSources.removed": "Key removed.",
+  "dataSources.reopenCharts": "Reopen any open {source} charts to switch their live prices to this change.",
+  "dataSources.checkOk": "Connected",
+  "dataSources.plan": "Plan",
+  "dataSources.minuteCredits": "Credits per minute",
+  "dataSources.dailyCredits": "Credits per day",
+  "dataSources.creditsUsed": "{used} of {limit} used",
+  "dataSources.creditsLimit": "Up to {limit}",
+  "dataSources.websocketSymbols": "Live price symbol limit",
+  "dataSources.checkedAt": "Tested",
+  "dataSources.error.valueInvalid": "That doesn't look like a key: use 4–256 characters with no spaces.",
+  "dataSources.error.keyRejected": "{source} didn't accept this key. Check that you copied all of it.",
+  "dataSources.error.rateLimited": "{source}'s request limit is used up for now. Try again shortly.",
+  "dataSources.error.unreachable": "Couldn't reach {source}. Check your network or proxy settings and try again.",
+  "dataSources.error.storeFailed": "Couldn't save the key to the password store. Try again; on macOS, unlock the login keychain first.",
+  "dataSources.error.missing": "There's no key to test yet.",
+  "dataSources.error.generic": "That didn't work. Try again shortly.",
   "chartTester.run.queued": "Queued",
   "chartTester.run.running": "Running",
   "chartTester.stopObserving": "Stop waiting",
@@ -4577,4 +4647,9 @@ export const en = {
   "chartTester.deleteRetiredDraft": "Delete retired draft {name}",
   "chartTester.deleteRetiredDraftFailed": "The retired draft could not be deleted. Try again.",
   ...tradingAccountsEn,
+  ...drawingSelectionMessages["en"],
+  ...drawingCalculatedMessages["en"],
+  ...replayDrawingSaveMessages["en"],
+  ...chartTimeZoneMessages["en"],
+  ...chartTimeShortcutMessages["en"],
 } as const satisfies MessageCatalog;

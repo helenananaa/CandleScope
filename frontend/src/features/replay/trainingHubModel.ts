@@ -3,6 +3,8 @@ export const formatUtcReplayStartInput = formatUtcDateTimeInput;
 export const parseUtcReplayStartInput = parseUtcDateTimeInput;
 import { t } from "../../i18n/index.js";
 import type { ReplayCapabilities, ReplayCatalog, ReplayCatalogEntry } from "./replayTypes.js";
+import { capabilityRoleContract, HEDGE_PUBLIC_HISTORY } from "../exchange-support/capabilityRoles.js";
+import type { ExchangeCapabilityPayload } from "../../services/apiPayloadParsers.js";
 import type {
   ReplayLaunchContext,
   ReplayAccountHistoryRef,
@@ -99,22 +101,34 @@ export function getPhase6Boundaries(): TrainingHubUnsupportedCapabilities {
   };
 }
 
-function firstEntry(catalog: ReplayCatalog): ReplayCatalogEntry | undefined {
-  return catalog.entries.find((entry) => (
-    entry.identity.exchange === "binance"
-    && entry.identity.market_type === "futures"
-    && entry.selected_base_interval !== null
-  ))
-    ?? catalog.entries.find((entry) => entry.selected_base_interval !== null)
+/** Which catalog entries a new draft should prefer, from the venues' declared roles. */
+export type ReplayEntryPreference = (entry: ReplayCatalogEntry) => boolean;
+
+/** Prefer markets whose venue supplies hedge-mode public history (the widest training setup). */
+export function preferHedgeCapableEntries(
+  exchanges: readonly Pick<ExchangeCapabilityPayload, "exchange" | "roles">[],
+): ReplayEntryPreference {
+  return (entry) => capabilityRoleContract(
+    exchanges.find((item) => item.exchange === entry.identity.exchange),
+    entry.identity.market_type,
+    HEDGE_PUBLIC_HISTORY,
+  ) !== null;
+}
+
+function firstEntry(catalog: ReplayCatalog, preferred?: ReplayEntryPreference): ReplayCatalogEntry | undefined {
+  const usable = catalog.entries.filter((entry) => entry.selected_base_interval !== null);
+  return (preferred === undefined ? undefined : usable.find(preferred))
+    ?? usable[0]
     ?? catalog.entries[0];
 }
 
 export function createTrainingRunDraft(
   catalog?: ReplayCatalog,
   launchContext?: ReplayLaunchContext,
+  preferred?: ReplayEntryPreference,
 ): TrainingRunDraft {
   const entry = launchContext === undefined
-    ? (catalog === undefined ? undefined : firstEntry(catalog))
+    ? (catalog === undefined ? undefined : firstEntry(catalog, preferred))
     : catalog?.entries.find((candidate) => (
         candidate.identity.exchange === launchContext.exchange
         && candidate.identity.market_type === launchContext.market_type
@@ -367,12 +381,12 @@ export function evaluateTrainingRunDraft(
     if (draft.accountDataMode !== "DETERMINISTIC_SIMULATION") {
       errors.push(t("replay.err.hedgeSim"));
     }
-    if (draft.exchange !== "binance" || draft.marketType !== "futures") {
-      errors.push(t("replay.err.hedgeBinance"));
-    }
+    // The backend decides from the venue's declared hedge history role.
     const hedgePlan = segmentPlan?.hedge_inputs ?? null;
     if (hedgePlan === null) {
       errors.push(t("replay.err.hedgeUnchecked"));
+    } else if (hedgePlan.reason === "BINANCE_USDM_REQUIRED") {
+      errors.push(t("replay.err.hedgeBinance"));
     } else if (hedgePlan.requested_position_mode !== "HEDGE"
       || (hedgePlan.capability_state !== "AVAILABLE_EXACT"
         && hedgePlan.capability_state !== "AVAILABLE_APPROX")

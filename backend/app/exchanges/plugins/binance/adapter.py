@@ -17,6 +17,7 @@ from app.data_engine.market_data.kline_metrics import KLINE_DERIVED_FIELDS
 from app.exchanges.catalog_http import fetch_catalog_json
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
+    CapabilityRole,
     ExchangeCapabilities,
     ExchangeMarket,
     HistoryAvailabilityPolicy,
@@ -530,6 +531,22 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
     ]
 
 
+def _capability_roles() -> list[CapabilityRole]:
+    from app.exchanges import roles
+
+    return [
+        CapabilityRole(roles.TRADES_HISTORY_ARCHIVE, ("futures",), roles.BINANCE_USDM_AGG_TRADES_ARCHIVE),
+        CapabilityRole(roles.BOOK_HISTORY, ("futures",), roles.BINANCE_USDM_DIFF_DEPTH_CAPTURE),
+        CapabilityRole(roles.HEDGE_PUBLIC_HISTORY, ("futures",), roles.BINANCE_USDM_HEDGE_PUBLIC_HISTORY),
+        CapabilityRole(roles.HISTORY_NATIVE_ARCHIVE, ("spot",), roles.BINANCE_PUBLIC_KLINE_ARCHIVE),
+        CapabilityRole(roles.HISTORY_EARLIEST_PAGE, ("spot", "futures"), roles.BINANCE_KLINES_START_TIME_ASCENDING),
+        CapabilityRole(roles.CONTRACT_RULES, ("futures",), roles.BINANCE_USDM_LINEAR_BASE_QUANTITY),
+        CapabilityRole(roles.FUNDING_HYBRID_HISTORY, ("futures",), roles.BINANCE_PREMIUM_INDEX_CUMAVG),
+        CapabilityRole(roles.FUNDING_SETTLEMENT_HISTORY, ("futures",), roles.BINANCE_USDM_REGULAR_SETTLEMENT),
+        CapabilityRole(roles.OPEN_INTEREST_NATIVE_GRID, ("futures",), roles.BINANCE_OI_GRID),
+    ]
+
+
 class BinanceExchangeAdapter:
     """Legacy facade for Binance exchange integration.
 
@@ -582,6 +599,7 @@ class BinanceExchangeAdapter:
                 "rest.kline.max_limit": 1000,
                 "rest.depth.max_limit": 5000,
             },
+            roles=_capability_roles(),
         )
 
     async def list_symbols(self, market_type: str = "") -> list[SymbolInfo]:
@@ -662,7 +680,7 @@ class BinanceExchangeAdapter:
                     raw=item,
                     listed_at_ms=_timestamp_ms(item.get("onboardDate")),
                     price_tick_size=_price_tick_size(item),
-                    **binance_contract_rules(item),
+                    **binance_contract_rules(item, spot=True),
                 ),
             )
         return symbols
@@ -708,7 +726,7 @@ class BinanceExchangeAdapter:
                     ),
                     price_tick_size=_price_tick_size(item),
                     **underlying,
-                    **binance_contract_rules(item),
+                    **binance_contract_rules(item, spot=False),
                 ),
             )
         warn_unknown_underlyings(self.id, unknown_tradfi)

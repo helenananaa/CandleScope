@@ -52,6 +52,7 @@ import { t } from "../../i18n/index.js";
 import { useReplayCellViewport } from "./useReplayCellViewport.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
+import { replayRejectedDrawingsMessage } from "./replayDrawingRejections.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { replayWorkspaceSelectionCommand } from "./replayWorkspaceSelection.js";
 import { ContractPriceBadge } from "../symbol-search/ContractPriceBadge.js";
@@ -512,6 +513,8 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
       featureSurfaces={<><div ref={hostRefs.featureSurfaces} className="replay-workspace-host" />
         {drawings.error && <InlineAlert tone="danger" className="replay-workspace-error"
           action={<Button size="sm" onClick={drawings.retry}>{t("replay.retry")}</Button>}>{drawings.error}</InlineAlert>}
+        {drawings.rejected.length > 0 && <InlineAlert tone="warning" className="replay-workspace-error">
+          {replayRejectedDrawingsMessage(drawings.rejected)}</InlineAlert>}
         {error && <InlineAlert tone="danger" className="replay-workspace-error"
           action={<Button size="sm" onClick={() => { setError(null); setSelectionAttempt((attempt) => attempt + 1); }}>{t("replay.retry")}</Button>}>{error}</InlineAlert>}
       </>}

@@ -55,9 +55,19 @@ test("an unpublished archive day schedules no polling or retry", async (context)
     new AbortController().signal);
   assert.equal(result, "unavailable");
   assert.equal(fetch.mock.callCount(), 1);
-  assert.equal(supportsTradeHistoryArchive(identity), true);
-  assert.equal(supportsTradeHistoryArchive({ ...identity, marketType: "spot" }), false);
-  assert.equal(supportsTradeHistoryArchive({ ...identity, exchange: "okx" }), false);
+});
+
+test("history downloads follow the venue's declared trade archive, not its name", () => {
+  const archive = { roles: [{
+    role: "trades.history.archive", market_types: ["futures"],
+    contract: "binance.public-data.um-agg-trades.daily/1",
+  }] };
+  assert.equal(supportsTradeHistoryArchive(identity, archive), true);
+  assert.equal(supportsTradeHistoryArchive({ ...identity, marketType: "spot" }, archive), false);
+  assert.equal(supportsTradeHistoryArchive({ ...identity, exchange: "okx" }, { roles: [] }), false);
+  assert.equal(supportsTradeHistoryArchive(identity, undefined), false);
+  assert.equal(supportsTradeHistoryArchive({ ...identity, exchange: "acme" }, archive), true);
+  assert.equal(supportsTradeHistoryArchive(identity, { roles: [{ ...archive.roles[0]!, contract: "acme/1" }] }), false);
 });
 
 test("a retained archive without verified minute coverage requests a local readback", async (context) => {

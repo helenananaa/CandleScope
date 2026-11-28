@@ -7,6 +7,7 @@ import type { DrawingEngineApi } from "./DrawingEngineHost.js";
 import type { DrawingObjectApi } from "./drawingObjectApi.js";
 import { savedDrawingFromEntity } from "./core/drawingCodec.js";
 import { drawingName } from "./drawingObjectLabels.js";
+import { formatDrawingPositionPrice } from "./drawingPositionPresentation.js";
 import { drawingVisibleAtInterval } from "./drawingVisibility.js";
 import { StyleIcon } from "./DrawingStyleInputs.js";
 import { useDrawingSurfacePlacement } from "./useDrawingEditorLayout.js";
@@ -24,12 +25,19 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
     const entity = document.entities.get(id);
     const drawing = entity && savedDrawingFromEntity(entity);
     if (!drawing) return [];
-    const typeName = drawing.type === "text" ? t("drawing.objects.text")
+    const typeName = drawing.type === "text"
+      ? (drawing.priceLabel ? drawingName("price-label")
+        : drawing.target ? drawingName("callout") : t("drawing.objects.text"))
       : drawingName(drawing.type === "shape" ? drawing.shapeType ?? "rectangle"
         : drawing.type === "path" ? (drawing.arrowEnd ? "path-arrow" : "path-line")
         : drawing.type === "line" ? (drawing.arrowEnd ? "line-arrow" : drawing.lineType ?? "line")
-        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line" : drawing.type);
-    const name = drawing.type === "text" ? drawing.text || typeName : typeName;
+        : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line"
+        : drawing.type === "calculated" ? drawing.calcType : drawing.type);
+    const name = drawing.type === "text"
+      ? (drawing.priceLabel && drawing.dataPoint
+        ? `${typeName} ${formatDrawingPositionPrice(drawing.dataPoint.price)}`
+        : drawing.text || typeName)
+      : typeName;
     const intervalHidden = !drawingVisibleAtInterval({ visibleIntervals: drawing.visibleIntervals ?? null }, interval);
     const searchable = `${typeName} ${name} ${id}`.toLocaleLowerCase();
     if (!words.every(word => searchable.includes(word))) return [];
