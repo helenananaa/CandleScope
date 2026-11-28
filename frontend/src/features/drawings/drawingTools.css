@@ -546,3 +546,11 @@
 .selected-drawing-style-bar .drawing-template-content input:not([type='range']):not([type='checkbox']):not([type='color']), .drawing-template-content select { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--drawing-border); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-0); }
 
 .drawing-object-search input { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--drawing-border); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-0); font-size: var(--font-size-sm); }
+
+/* Favorite tools (PL-4): their own strip in the toolbar, and a star on each tool menu row. */
+.drawing-toolbar-favorites { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.tool-flyout-row { display: flex; align-items: center; gap: 2px; }
+.tool-flyout-row > .tool-flyout-item { flex: 1; min-width: 0; }
+.tool-flyout-favorite { color: var(--text-muted); }
+.tool-flyout-favorite[aria-pressed='true'] { color: var(--color-warning); }
+.drawing-multi-selection-bar strong { white-space: nowrap; padding: 0 6px; }

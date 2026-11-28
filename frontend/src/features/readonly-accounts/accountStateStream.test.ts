@@ -88,3 +88,13 @@ test("account controls delegate authenticated writes and a closed lifecycle reje
     assert.equal(calls.length, 3);
   });
 });
+
+test("the proxy route is optional, and a malformed one rejects the state", async () => {
+  const { validateAccountStatus } = await import("./accountApi.js");
+  assert.equal(validateAccountStatus(state).proxyRoute, undefined);
+  assert.equal(validateAccountStatus({ ...state, proxyRoute: null }).proxyRoute, null);
+  assert.deepEqual(validateAccountStatus({ ...state, proxyRoute: { id: "hk", name: "HK 01" } }).proxyRoute, { id: "hk", name: "HK 01" });
+  for (const proxyRoute of [{ id: "hk" }, "HK 01", { id: 1, name: "HK 01" }]) {
+    assert.throws(() => validateAccountStatus({ ...state, proxyRoute }), /ACCOUNT_RESPONSE_INVALID/);
+  }
+});

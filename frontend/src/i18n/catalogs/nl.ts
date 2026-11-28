@@ -1,11 +1,20 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyDutch, replayNoteDutch, tradeHistoryDutch, readonlyAccountDutch, continuousDutch, tradingAccountsNl, nativeDutch } from "./dutchFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const nl = {
   ...unifiedMessages["nl"],
+  ...syntheticPagingMessages["nl"],
+  ...drawingAnnotationMessages["nl"],
   ...syntheticEnglish,
   ...continuousDutch,
   ...tradeHistoryDutch,
@@ -1252,6 +1261,15 @@ export const nl = {
   "settings.proxy.previewNodes": "Knooppunten bekijken",
   "settings.proxy.useNodes": "Geselecteerde knooppunten gebruiken",
   "settings.proxy.skippedNodes": "Overgeslagen niet-ondersteunde knooppunten: {count}",
+  "settings.proxy.autoRefresh": "Automatisch vernieuwen",
+  "settings.proxy.autoRefreshOff": "Uit",
+  "settings.proxy.autoRefreshEvery": "Elke {duration}",
+  "settings.proxy.autoRefreshHelp": "Controleert opgeslagen abonnementen met deze tussenpoos. Gebruikte knooppunten nemen de huidige instellingen van de aanbieder over. Nieuwe knooppunten worden niet toegevoegd, en een knooppunt dat de aanbieder heeft verwijderd houdt zijn laatste instellingen.",
+  "settings.proxy.refreshPending": "Nog niet automatisch gecontroleerd",
+  "settings.proxy.refreshChecked": "Laatst gecontroleerd: {time}",
+  "settings.proxy.refreshFailed": "Automatisch vernieuwen mislukt: {time}",
+  "settings.proxy.refreshUpdated": "Bijgewerkte knooppunten: {count} · {time}",
+  "settings.proxy.refreshMissing": "Niet meer in het abonnement: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Beurs-ID's (gescheiden door komma's; leeg betekent alle)",
   "settings.proxy.enabled": "Ingeschakeld",
@@ -4220,4 +4238,9 @@ export const nl = {
   "chartTester.deleteDraft": "Verwijderen",
   "chartTester.deleteRetiredDraft": "Stopgezet concept {name} verwijderen",
   "chartTester.deleteRetiredDraftFailed": "Het stopgezette concept kon niet worden verwijderd. Probeer het opnieuw.",
+  ...drawingSelectionMessages["nl"],
+  ...drawingCalculatedMessages["nl"],
+  ...replayDrawingSaveMessages["nl"],
+  ...chartTimeZoneMessages["nl"],
+  ...chartTimeShortcutMessages["nl"],
 } as const satisfies MessageCatalog;

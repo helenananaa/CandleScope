@@ -1,8 +1,15 @@
 import { validDrawingIntervals } from "../drawingVisibility.js";
+import { isDrawingGroupId } from "../drawingGroups.js";
+import {
+  DRAWING_COMMON_STYLE_KEYS,
+  DRAWING_GEOMETRY_KEYS,
+  DRAWING_STYLE_KEYS,
+} from "./drawingWireContract.js";
 import type {
   AxisLineType,
   BasicLineToolId,
   BrushShape,
+  CalculatedDrawingType,
   DrawingDataPoint,
   DrawingKind,
   FibonacciLevel,
@@ -40,6 +47,11 @@ export type CanonicalDrawingGeometry =
       dataPoints: readonly DrawingDataPoint[];
     }>
   | Readonly<{
+      kind: "calculated";
+      calcType: CalculatedDrawingType;
+      dataPoints: readonly DrawingDataPoint[];
+    }>
+  | Readonly<{
       kind: "range-measure";
       measureType: RangeMeasureType;
       dataPoints: readonly DrawingDataPoint[];
@@ -61,6 +73,7 @@ export type CanonicalDrawingGeometry =
   | Readonly<{
       kind: "text";
       dataPoint?: DrawingDataPoint;
+      target?: DrawingDataPoint;
     }>
   | Readonly<{
       kind: "fibonacci";
@@ -87,7 +100,7 @@ export type CanonicalDrawingGeometry =
       dataPoints?: readonly DrawingDataPoint[];
     }>;
 
-export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null }> & (
+export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null; groupId?: string }> & (
   | Readonly<{
       kind: "axis-line" | "angle-measure" | "range-measure";
       color?: string;
@@ -112,8 +125,16 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
       fillOpacity?: number;
     }>
   | Readonly<{
+      kind: "calculated";
+      color?: string;
+      lineWidth?: number;
+      deviation?: number;
+      rows?: number;
+    }>
+  | Readonly<{
       kind: "text";
       text?: string;
+      priceLabel?: boolean;
       color?: string;
       fontSize?: number;
       fontFamily?: string;
@@ -262,49 +283,26 @@ function validEntityId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value !== "__preview__";
 }
 
+const GEOMETRY_ALLOWED: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  Object.entries(DRAWING_GEOMETRY_KEYS).map(([kind, keys]) => [kind, new Set<string>(keys)]),
+);
+const STYLE_ALLOWED: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  Object.entries(DRAWING_STYLE_KEYS).map(([kind, keys]) => [
+    kind, new Set<string>([...keys, ...DRAWING_COMMON_STYLE_KEYS]),
+  ]),
+);
+
 function matchingKind(
   kind: DrawingKind,
   geometry: CanonicalDrawingGeometry,
   style: DrawingStyle,
 ): boolean {
   if (geometry.kind !== kind || style.kind !== kind) return false;
-  const geometryKeys: Record<DrawingKind, readonly string[]> = {
-    path: ["dataPoints", "kind"],
-    channel: ["dataPoints", "kind"],
-    "range-measure": ["dataPoints", "measureType", "kind"],
-    "angle-measure": ["dataPoints", "kind"],
-    "axis-line": ["axisLineType", "dataPoint", "kind"],
-    fibonacci: ["dataPoints", "inverted", "kind"],
-    freehand: ["dataPoints", "kind", "stroke"],
-    highlighter: ["dataPoints", "kind", "stroke"],
-    line: ["dataPoints", "kind", "lineType"],
-    position: ["direction", "entryPrice", "kind", "slPrice", "timeRange", "tpPrice"],
-    shape: ["dataPoints", "extendRight", "kind", "shapeType"],
-    text: ["dataPoint", "kind"],
-  };
-  const styleKeys: Record<DrawingKind, readonly string[]> = {
-    path: ["arrowEnd", "color", "kind", "lineWidth"],
-    channel: ["color", "fillOpacity", "kind", "lineWidth"],
-    "range-measure": ["color", "kind", "lineWidth"],
-    "angle-measure": ["color", "kind", "lineWidth"],
-    "axis-line": ["color", "kind", "lineWidth"],
-    fibonacci: ["color", "kind", "levels", "lineWidth"],
-    freehand: ["color", "kind", "lineWidth"],
-    highlighter: ["brushShape", "color", "compositeOperation", "kind", "lineWidth", "opacity"],
-    line: ["arrowEnd", "color", "kind", "lineWidth"],
-    position: ["infoPanelOffset", "kind", "positionSize"],
-    shape: [
-      "color", "fillColor", "fillOpacity", "kind", "label", "lineStyle", "lineWidth", "midline",
-      "priceLabels",
-    ],
-    text: [
-      "align", "bgColor", "bold", "borderColor", "borderWidth", "color", "fontFamily",
-      "fontSize", "italic", "kind", "padding", "text", "underline", "widthPx",
-    ],
-  };
-  const geometryAllowed = new Set(geometryKeys[kind]);
-  const styleAllowed = new Set([...styleKeys[kind], "hidden", "locked", "visibleIntervals"]);
+  const geometryAllowed = GEOMETRY_ALLOWED.get(kind);
+  const styleAllowed = STYLE_ALLOWED.get(kind);
+  if (!geometryAllowed || !styleAllowed) return false;
   if (!validDrawingIntervals(style.visibleIntervals)) return false;
+  if (style.groupId !== undefined && !isDrawingGroupId(style.groupId)) return false;
   if (style.hidden !== undefined && typeof style.hidden !== "boolean") return false;
   if (style.locked !== undefined && typeof style.locked !== "boolean") return false;
   if (Object.keys(geometry).some((key) => !geometryAllowed.has(key))

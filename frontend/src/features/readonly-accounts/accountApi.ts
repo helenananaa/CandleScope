@@ -17,6 +17,8 @@ export interface AccountStatus {
   snapshots: Record<string, { receivedMs: number; data: unknown }>;
   stream: { state: string; lastReceivedMs: number | null; error: string | null };
   reconciliation: string;
+  /** The proxy pool route the private session uses; absent or null outside pool mode. */
+  proxyRoute?: { id: string; name: string } | null;
 }
 export interface JournalVersion {
   noteId: string;
@@ -109,6 +111,8 @@ export function validateAccountStatus(value: unknown): AccountStatus {
     || typeof value.available !== "boolean" || !record(value.snapshots) || !record(value.counts)
     || (value.credentialStore !== undefined && value.credentialStore !== null && !CREDENTIAL_STORES.includes(value.credentialStore))
     || (value.serviceError !== undefined && !nullableString(value.serviceError))
+    || (value.proxyRoute !== undefined && value.proxyRoute !== null
+      && (!record(value.proxyRoute) || typeof value.proxyRoute.id !== "string" || typeof value.proxyRoute.name !== "string"))
     || !Array.isArray(value.scans) || !Array.isArray(value.coverage) || !Array.isArray(value.gaps)
     || !value.scans.every((scan: unknown) => range(scan) && record(scan) && typeof scan.pages === "number" && (scan.complete === 0 || scan.complete === 1))
     || !value.coverage.every(range) || !value.gaps.every((gap: unknown) => range(gap) && record(gap) && typeof gap.reason === "string")
@@ -136,6 +140,11 @@ export async function getAccountFacts(kind: FactKind, before: FactPage["next"] =
     || (value.next !== null && (!record(value.next) || typeof value.next.beforeTime !== "number"
       || !nullableTime(value.next.beforeTime) || typeof value.next.beforeId !== "string"))) throw new AccountApiError("ACCOUNT_RESPONSE_INVALID");
   return value as unknown as FactPage;
+}
+
+/** The last funding history read (deposits, withdrawals, transfers); see fundingRows.ts. */
+export async function getFundingHistory(signal?: AbortSignal): Promise<unknown> {
+  return await accountRequest("/funding-history", "GET", undefined, signal);
 }
 
 export async function connectAccount(credentials: { apiKey: string; secret: string; password: string }): Promise<void> {

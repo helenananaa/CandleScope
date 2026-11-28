@@ -34,6 +34,7 @@ test("unknown authentication failures stay generic and existing account guidance
   assert.equal(accountErrorHelp("HEDGE_ACCOUNT_REQUIRED"), "account.hedgeHelp");
   assert.equal(accountErrorHelp("KEYCHAIN_STORE_FAILED"), "account.keychainHelp");
   assert.equal(accountErrorHelp("ACCOUNT_IDENTITY_CHANGED"), "account.identityHelp");
+  assert.equal(accountErrorHelp("ACCOUNT_PROXY_ROUTE_UNAVAILABLE"), "account.proxyRouteHelp");
 });
 
 test("key-store help names the store that keeps the key (Keychain on macOS, Credential Manager on Windows)", async () => {

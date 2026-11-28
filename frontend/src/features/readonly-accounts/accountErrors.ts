@@ -34,5 +34,6 @@ export function accountErrorHelp(code: string, store: CredentialStore | null = h
     return store === "windows-credential-manager" ? "account.credentialManagerHelp" : "account.keychainHelp";
   }
   if (code.includes("DIFFERENT_ACCOUNT") || code === "ACCOUNT_IDENTITY_CHANGED") return "account.identityHelp";
+  if (code === "ACCOUNT_PROXY_ROUTE_UNAVAILABLE") return "account.proxyRouteHelp";
   return "account.errorHelp";
 }

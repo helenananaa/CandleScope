@@ -1,11 +1,20 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyPolish, replayNotePolish, tradeHistoryPolish, readonlyAccountPolish, continuousPolish, tradingAccountsPl, nativePolish } from "./polishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const pl = {
   ...unifiedMessages["pl"],
+  ...syntheticPagingMessages["pl"],
+  ...drawingAnnotationMessages["pl"],
   ...syntheticEnglish,
   ...continuousPolish,
   ...tradeHistoryPolish,
@@ -1251,6 +1260,15 @@ export const pl = {
   "settings.proxy.previewNodes": "Podgląd węzłów",
   "settings.proxy.useNodes": "Użyj wybranych węzłów",
   "settings.proxy.skippedNodes": "Pominięte nieobsługiwane węzły: {count}",
+  "settings.proxy.autoRefresh": "Automatyczne odświeżanie",
+  "settings.proxy.autoRefreshOff": "Wyłączone",
+  "settings.proxy.autoRefreshEvery": "Co {duration}",
+  "settings.proxy.autoRefreshHelp": "Sprawdza zapisane subskrypcje w tym odstępie. Używane węzły przyjmują bieżące ustawienia dostawcy. Nowe węzły nie są dodawane, a węzeł usunięty przez dostawcę zachowuje ostatnie ustawienia.",
+  "settings.proxy.refreshPending": "Jeszcze nie sprawdzono automatycznie",
+  "settings.proxy.refreshChecked": "Ostatnie sprawdzenie: {time}",
+  "settings.proxy.refreshFailed": "Automatyczne odświeżanie nie powiodło się: {time}",
+  "settings.proxy.refreshUpdated": "Zaktualizowane węzły: {count} · {time}",
+  "settings.proxy.refreshMissing": "Nie ma już w subskrypcji: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID giełd (oddzielone przecinkami; puste oznacza wszystkie)",
   "settings.proxy.enabled": "Włączona",
@@ -4230,5 +4248,10 @@ export const pl = {
   "chartTester.deleteDraft": "Usuń",
   "chartTester.deleteRetiredDraft": "Usuń wycofany szkic {name}",
   "chartTester.deleteRetiredDraftFailed": "Nie udało się usunąć wycofanego szkicu. Spróbuj ponownie.",
+  ...drawingSelectionMessages["pl"],
+  ...drawingCalculatedMessages["pl"],
+  ...replayDrawingSaveMessages["pl"],
+  ...chartTimeZoneMessages["pl"],
+  ...chartTimeShortcutMessages["pl"],
 } as const satisfies MessageCatalog;
 
