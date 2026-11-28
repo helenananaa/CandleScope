@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyItalian, replayNoteItalian, tradeHistoryItalian, readonlyAccountItalian, continuousItalian, tradingAccountsIt, nativeItalian } from "./italianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const it = {
   ...unifiedMessages["it"],
+  ...drawingAnnotationMessages["it"],
   ...syntheticEnglish,
   ...continuousItalian,
   ...tradeHistoryItalian,
@@ -1251,6 +1258,15 @@ export const it = {
   "settings.proxy.previewNodes": "Anteprima nodi",
   "settings.proxy.useNodes": "Usa i nodi selezionati",
   "settings.proxy.skippedNodes": "Nodi non supportati ignorati: {count}",
+  "settings.proxy.autoRefresh": "Aggiornamento automatico",
+  "settings.proxy.autoRefreshOff": "Disattivato",
+  "settings.proxy.autoRefreshEvery": "Ogni {duration}",
+  "settings.proxy.autoRefreshHelp": "Controlla gli abbonamenti salvati con questa frequenza. I nodi in uso adottano le impostazioni attuali del fornitore. Non vengono aggiunti nuovi nodi e un nodo rimosso dal fornitore mantiene le ultime impostazioni.",
+  "settings.proxy.refreshPending": "Non ancora controllato automaticamente",
+  "settings.proxy.refreshChecked": "Ultimo controllo: {time}",
+  "settings.proxy.refreshFailed": "Aggiornamento automatico non riuscito: {time}",
+  "settings.proxy.refreshUpdated": "Nodi aggiornati: {count} · {time}",
+  "settings.proxy.refreshMissing": "Non più nell’abbonamento: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID degli exchange (separati da virgole; vuoto significa tutti)",
   "settings.proxy.enabled": "Attivato",
@@ -4225,5 +4241,10 @@ export const it = {
   "chartTester.deleteDraft": "Elimina",
   "chartTester.deleteRetiredDraft": "Elimina la bozza ritirata {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossibile eliminare la bozza ritirata. Riprova.",
+  ...drawingSelectionMessages["it"],
+  ...drawingCalculatedMessages["it"],
+  ...replayDrawingSaveMessages["it"],
+  ...chartTimeZoneMessages["it"],
+  ...chartTimeShortcutMessages["it"],
 } as const satisfies MessageCatalog;
 

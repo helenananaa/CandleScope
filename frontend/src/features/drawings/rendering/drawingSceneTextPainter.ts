@@ -47,7 +47,29 @@ function validTextSpec(spec: TextSceneRenderSpec): boolean {
     && finiteNonNegative(spec.paddingCssPx)
     && finiteNonNegative(spec.lineHeightCssPx)
     && spec.lineHeightCssPx > 0
-    && typeof spec.selectionColor === "string";
+    && typeof spec.selectionColor === "string"
+    && (spec.leaderPointOffset === undefined
+      || (Number.isInteger(spec.leaderPointOffset) && typeof spec.leaderColor === "string"));
+}
+
+/** Leader from the box border to the target, ending in a dot on the target. */
+function drawTextLeader(
+  context: CanvasRenderingContext2D,
+  spec: TextSceneRenderSpec,
+  from: CssPoint,
+  to: CssPoint,
+): void {
+  const color = spec.leaderColor ?? spec.textColor;
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = Math.max(1, spec.borderWidthCssPx || 1);
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(to.x, to.y);
+  context.stroke();
+  context.beginPath();
+  context.arc(to.x, to.y, 3, 0, Math.PI * 2);
+  context.fill();
 }
 
 function cssPoint(
@@ -138,8 +160,17 @@ export function drawTextSceneEntity(
   const boxY = topLeft.y;
   const innerWidth = Math.max(0, boxWidth - spec.paddingCssPx * 2);
 
+  const leaderFrom = spec.leaderPointOffset === undefined
+    ? null
+    : cssPoint(entity, list, spec.leaderPointOffset);
+  const leaderTo = spec.leaderPointOffset === undefined
+    ? null
+    : cssPoint(entity, list, spec.leaderPointOffset + 1);
+
   context.save();
   context.scale(horizontalPixelRatio, verticalPixelRatio);
+  // The leader goes under the box so an opaque background hides its start.
+  if (leaderFrom && leaderTo) drawTextLeader(context, spec, leaderFrom, leaderTo);
   context.font = fontString(spec);
   context.textAlign = "left";
   context.textBaseline = "top";
@@ -202,6 +233,13 @@ export function drawTextSceneEntity(
         handleSize,
         handleSize,
       );
+      context.fill();
+      context.stroke();
+    }
+    // A callout's target is the one handle that is not on the box.
+    if (leaderTo && spec.leaderColor !== undefined && entity.handleCount > TEXT_HANDLE_KEYS.length) {
+      context.beginPath();
+      context.arc(leaderTo.x, leaderTo.y, 4.5, 0, Math.PI * 2);
       context.fill();
       context.stroke();
     }

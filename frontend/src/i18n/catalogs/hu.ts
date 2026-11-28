@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHungarian, replayNoteHungarian, tradeHistoryHungarian, readonlyAccountHungarian, continuousHungarian, tradingAccountsHu, nativeHungarian } from "./hungarianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hu = {
   ...unifiedMessages["hu"],
+  ...drawingAnnotationMessages["hu"],
   ...syntheticEnglish,
   ...continuousHungarian,
   ...tradeHistoryHungarian,
@@ -1252,6 +1259,15 @@ export const hu = {
   "settings.proxy.previewNodes": "Csomópontok megtekintése",
   "settings.proxy.useNodes": "Kijelölt csomópontok használata",
   "settings.proxy.skippedNodes": "Kihagyott nem támogatott csomópontok: {count}",
+  "settings.proxy.autoRefresh": "Automatikus frissítés",
+  "settings.proxy.autoRefreshOff": "Ki",
+  "settings.proxy.autoRefreshEvery": "Időköz: {duration}",
+  "settings.proxy.autoRefreshHelp": "Ebben az időközben ellenőrzi a mentett előfizetéseket. A használt csomópontok átveszik a szolgáltató aktuális beállításait. Új csomópontok nem kerülnek hozzáadásra, a szolgáltató által eltávolított csomópont pedig megtartja utolsó beállításait.",
+  "settings.proxy.refreshPending": "Még nem volt automatikus ellenőrzés",
+  "settings.proxy.refreshChecked": "Utolsó ellenőrzés: {time}",
+  "settings.proxy.refreshFailed": "Az automatikus frissítés sikertelen: {time}",
+  "settings.proxy.refreshUpdated": "Frissített csomópontok: {count} · {time}",
+  "settings.proxy.refreshMissing": "Már nincs az előfizetésben: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Tőzsdeazonosítók (vesszővel elválasztva; üres = mind)",
   "settings.proxy.enabled": "Bekapcsolva",
@@ -4220,4 +4236,9 @@ export const hu = {
   "chartTester.deleteDraft": "Törlés",
   "chartTester.deleteRetiredDraft": "A megszűnt {name} piszkozat törlése",
   "chartTester.deleteRetiredDraftFailed": "A megszűnt piszkozatot nem sikerült törölni. Próbálja újra.",
+  ...drawingSelectionMessages["hu"],
+  ...drawingCalculatedMessages["hu"],
+  ...replayDrawingSaveMessages["hu"],
+  ...chartTimeZoneMessages["hu"],
+  ...chartTimeShortcutMessages["hu"],
 } as const satisfies MessageCatalog;

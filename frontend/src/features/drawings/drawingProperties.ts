@@ -1,5 +1,5 @@
 import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
-import type { DrawingDataPoint, SavedDrawing } from "./drawingTypes.js";
+import type { DrawingDataPoint, SavedCalculatedDrawing, SavedDrawing } from "./drawingTypes.js";
 import type { DrawingStylePatch } from "./drawingInteractionController.js";
 
 export interface DrawingCoordinate {
@@ -27,7 +27,7 @@ export function parseCoordinateDraft(draft: readonly CoordinateDraft[], original
 export function drawingCoordinates(saved: SavedDrawing): readonly DrawingCoordinate[] | null {
   let points: readonly DrawingDataPoint[];
   if (saved.type === "axis-line") points = saved.dataPoint ? [saved.dataPoint] : [];
-  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure" || saved.type === "channel" || saved.type === "path") points = saved.dataPoints ?? [];
+  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure" || saved.type === "channel" || saved.type === "path" || saved.type === "calculated") points = saved.dataPoints ?? [];
   else return null;
   if (!points.length || (saved.type !== "path" && points.length > 3) || points.some((point) =>
     typeof point.time !== "number" || !Number.isFinite(point.time) || !Number.isFinite(point.price)
@@ -92,6 +92,12 @@ export function drawingPropertiesCandidate(
   }
   if (saved.type === "fibonacci" && patch.levels) candidate.levels = patch.levels;
   if (saved.type === "position" && typeof patch.positionSize === "number") candidate.positionSize = patch.positionSize;
+  if (saved.type === "calculated" && saved.calcType === "regression-channel" && typeof patch.deviation === "number") {
+    (candidate as SavedCalculatedDrawing).deviation = patch.deviation;
+  }
+  if (saved.type === "calculated" && saved.calcType === "volume-profile" && typeof patch.rows === "number") {
+    (candidate as SavedCalculatedDrawing).rows = Math.round(patch.rows);
+  }
   if (coordinates) {
     if (saved.locked) return null;
     const current = drawingCoordinates(saved);
@@ -100,7 +106,7 @@ export function drawingPropertiesCandidate(
       || coordinates.some((point) => !Number.isFinite(point.price) || !formatCoordinateTime(point.time))) return null;
     if (candidate.type === "axis-line" && candidate.dataPoint && coordinates[0]) {
       candidate.dataPoint = { ...candidate.dataPoint, ...coordinates[0] };
-    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure" || candidate.type === "channel" || candidate.type === "path") {
+    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure" || candidate.type === "channel" || candidate.type === "path" || candidate.type === "calculated") {
       candidate.dataPoints = (candidate.dataPoints ?? []).map((point, index) => ({ ...point, ...coordinates[index] }));
     } else return null;
   }

@@ -137,3 +137,9 @@ def test_position_history_retains_get_only_perpetual_boundary():
     validate_rest('account/positions-history','private','GET',{'instType':'SWAP'})
     with pytest.raises(AccountDataError):validate_rest('account/positions-history','private','POST',{'instType':'SWAP'})
     with pytest.raises(AccountDataError):validate_rest('account/positions-history','private','GET',{'instType':'FUTURES'})
+
+
+def test_fee_rates_retain_get_only_perpetual_boundary():
+    validate_rest('account/trade-fee','private','GET',{'instType':'SWAP'})
+    with pytest.raises(AccountDataError):validate_rest('account/trade-fee','private','POST',{'instType':'SWAP'})
+    with pytest.raises(AccountDataError):validate_rest('account/trade-fee','private','GET',{'instType':'SPOT'})

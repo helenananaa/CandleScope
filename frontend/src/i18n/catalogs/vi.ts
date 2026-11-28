@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyVietnamese, replayNoteVietnamese, tradeHistoryVietnamese, readonlyAccountVietnamese, continuousVietnamese, tradingAccountsVi, nativeVietnamese } from "./vietnameseFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const vi = {
   ...unifiedMessages["vi"],
+  ...drawingAnnotationMessages["vi"],
   ...syntheticEnglish,
   ...continuousVietnamese,
   ...tradeHistoryVietnamese,
@@ -1251,6 +1258,15 @@ export const vi = {
   "settings.proxy.previewNodes": "Xem trước các nút",
   "settings.proxy.useNodes": "Dùng các nút đã chọn",
   "settings.proxy.skippedNodes": "Số nút không được hỗ trợ đã bỏ qua: {count}",
+  "settings.proxy.autoRefresh": "Tự động làm mới",
+  "settings.proxy.autoRefreshOff": "Tắt",
+  "settings.proxy.autoRefreshEvery": "Mỗi {duration}",
+  "settings.proxy.autoRefreshHelp": "Kiểm tra các gói đăng ký đã lưu theo lịch này. Các nút bạn đang dùng sẽ nhận cài đặt hiện tại của nhà cung cấp. Không thêm nút mới, và nút mà nhà cung cấp đã gỡ bỏ giữ nguyên cài đặt cuối cùng.",
+  "settings.proxy.refreshPending": "Chưa kiểm tra tự động",
+  "settings.proxy.refreshChecked": "Kiểm tra lần cuối: {time}",
+  "settings.proxy.refreshFailed": "Tự động làm mới thất bại: {time}",
+  "settings.proxy.refreshUpdated": "Số nút đã cập nhật: {count} · {time}",
+  "settings.proxy.refreshMissing": "Không còn trong gói đăng ký: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID sàn (phân tách bằng dấu phẩy; để trống là tất cả)",
   "settings.proxy.enabled": "Đã bật",
@@ -4220,5 +4236,10 @@ export const vi = {
   "chartTester.deleteDraft": "Xóa",
   "chartTester.deleteRetiredDraft": "Xóa bản nháp đã ngừng hỗ trợ {name}",
   "chartTester.deleteRetiredDraftFailed": "Không xóa được bản nháp đã ngừng hỗ trợ. Hãy thử lại.",
+  ...drawingSelectionMessages["vi"],
+  ...drawingCalculatedMessages["vi"],
+  ...replayDrawingSaveMessages["vi"],
+  ...chartTimeZoneMessages["vi"],
+  ...chartTimeShortcutMessages["vi"],
 } as const satisfies MessageCatalog;
 

@@ -32,6 +32,23 @@ export function replayDateNavigationEnabled({
   return active && !reviewing && publicTimePolicy === "NONE" && !loading;
 }
 
+/**
+ * What view navigation a replay chart offers (PL-8). With absolute time
+ * disclosed it is Go to date with its shortcuts. Under a `HIDE_*` policy it is
+ * the dates-hidden variant: relative moves and Latest / First loaded bar /
+ * Last viewed, which never show a time. Both move the view inside revealed
+ * history only; moving the replay clock stays with the replay controls.
+ */
+export function replayViewNavigationMode(input: {
+  readonly active: boolean;
+  readonly reviewing: boolean;
+  readonly publicTimePolicy: ReplayV2TimeDisclosurePolicy;
+  readonly loading: boolean;
+}): "dates" | "relative" | null {
+  if (!input.active || input.reviewing || input.loading) return null;
+  return replayDateNavigationEnabled(input) ? "dates" : "relative";
+}
+
 export interface ReplayPublicTimeFormatterOptions {
   readonly policy: ReplayV2TimeDisclosurePolicy;
   readonly originMs: number | null;

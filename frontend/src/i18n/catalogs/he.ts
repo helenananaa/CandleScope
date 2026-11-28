@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHebrew, replayNoteHebrew, tradeHistoryHebrew, readonlyAccountHebrew, continuousHebrew, tradingAccountsHe, nativeHebrew } from "./hebrewFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const he = {
   ...unifiedMessages["he"],
+  ...drawingAnnotationMessages["he"],
   ...syntheticEnglish,
   ...continuousHebrew,
   ...tradeHistoryHebrew,
@@ -1249,6 +1256,15 @@ export const he = {
   "settings.proxy.previewNodes": "תצוגה מקדימה של הצמתים",
   "settings.proxy.useNodes": "שימוש בצמתים שנבחרו",
   "settings.proxy.skippedNodes": "צמתים לא נתמכים שדולגו: {count}",
+  "settings.proxy.autoRefresh": "רענון אוטומטי",
+  "settings.proxy.autoRefreshOff": "כבוי",
+  "settings.proxy.autoRefreshEvery": "כל {duration}",
+  "settings.proxy.autoRefreshHelp": "בודק מנויים שמורים לפי מרווח זה. צמתים שבשימוש מקבלים את ההגדרות הנוכחיות של הספק. צמתים חדשים אינם נוספים, וצומת שהספק הסיר שומר על ההגדרות האחרונות שלו.",
+  "settings.proxy.refreshPending": "עדיין לא נבדק אוטומטית",
+  "settings.proxy.refreshChecked": "בדיקה אחרונה: {time}",
+  "settings.proxy.refreshFailed": "הרענון האוטומטי נכשל: {time}",
+  "settings.proxy.refreshUpdated": "צמתים שעודכנו: {count} · {time}",
+  "settings.proxy.refreshMissing": "כבר לא במנוי: {count}",
   "settings.proxy.address": "כתובת הפרוקסי",
   "settings.proxy.egressGroup": "קבוצת יציאה",
   "settings.proxy.concurrency": "בקשות במקביל",
@@ -4225,4 +4241,9 @@ export const he = {
   "chartTester.deleteRetiredDraft": "מחיקת הטיוטה שהופסקה {name}",
   "chartTester.deleteRetiredDraftFailed": "לא ניתן למחוק את הטיוטה שהופסקה. נסו שוב.",
   ...tradingAccountsHe,
+  ...drawingSelectionMessages["he"],
+  ...drawingCalculatedMessages["he"],
+  ...replayDrawingSaveMessages["he"],
+  ...chartTimeZoneMessages["he"],
+  ...chartTimeShortcutMessages["he"],
 } as const satisfies MessageCatalog;

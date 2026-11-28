@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyCzech, replayNoteCzech, tradeHistoryCzech, readonlyAccountCzech, continuousCzech, tradingAccountsCs, nativeCzech } from "./czechFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const cs = {
   ...unifiedMessages["cs"],
+  ...drawingAnnotationMessages["cs"],
   ...syntheticEnglish,
   ...continuousCzech,
   ...tradeHistoryCzech,
@@ -1252,6 +1259,15 @@ export const cs = {
   "settings.proxy.previewNodes": "Zobrazit uzly",
   "settings.proxy.useNodes": "Použít vybrané uzly",
   "settings.proxy.skippedNodes": "Počet přeskočených nepodporovaných uzlů: {count}",
+  "settings.proxy.autoRefresh": "Automatické obnovení",
+  "settings.proxy.autoRefreshOff": "Vypnuto",
+  "settings.proxy.autoRefreshEvery": "Každých {duration}",
+  "settings.proxy.autoRefreshHelp": "Kontroluje uložená předplatná v tomto intervalu. Používané uzly převezmou aktuální nastavení poskytovatele. Nové uzly se nepřidávají a uzel, který poskytovatel odebral, si ponechá poslední nastavení.",
+  "settings.proxy.refreshPending": "Zatím automaticky nezkontrolováno",
+  "settings.proxy.refreshChecked": "Naposledy zkontrolováno: {time}",
+  "settings.proxy.refreshFailed": "Automatické obnovení selhalo: {time}",
+  "settings.proxy.refreshUpdated": "Aktualizované uzly: {count} · {time}",
+  "settings.proxy.refreshMissing": "Již nejsou v předplatném: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID burz (oddělená čárkami; prázdné znamená všechny)",
   "settings.proxy.enabled": "Zapnuto",
@@ -4230,4 +4246,9 @@ export const cs = {
   "chartTester.deleteDraft": "Smazat",
   "chartTester.deleteRetiredDraft": "Smazat ukončený koncept {name}",
   "chartTester.deleteRetiredDraftFailed": "Ukončený koncept se nepodařilo smazat. Zkuste to znovu.",
+  ...drawingSelectionMessages["cs"],
+  ...drawingCalculatedMessages["cs"],
+  ...replayDrawingSaveMessages["cs"],
+  ...chartTimeZoneMessages["cs"],
+  ...chartTimeShortcutMessages["cs"],
 } as const satisfies MessageCatalog;

@@ -1,4 +1,5 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
@@ -7,9 +8,15 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } from "./traditionalFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhHK = {
   ...unifiedMessages["zh-HK"],
+  ...drawingAnnotationMessages["zh-HK"],
   ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,
@@ -1253,6 +1260,15 @@ export const zhHK = {
   "settings.proxy.previewNodes": "預覽節點",
   "settings.proxy.useNodes": "使用所選節點",
   "settings.proxy.skippedNodes": "已略過 {count} 個不支援的節點",
+  "settings.proxy.autoRefresh": "自動重新整理",
+  "settings.proxy.autoRefreshOff": "關閉",
+  "settings.proxy.autoRefreshEvery": "每 {duration}",
+  "settings.proxy.autoRefreshHelp": "依此間隔檢查已儲存的訂閱。正在使用的節點會套用服務商目前的參數；不會自動加入新節點，服務商已移除的節點會保留最後一次的參數。",
+  "settings.proxy.refreshPending": "尚未自動檢查",
+  "settings.proxy.refreshChecked": "上次檢查：{time}",
+  "settings.proxy.refreshFailed": "自動重新整理失敗：{time}",
+  "settings.proxy.refreshUpdated": "已更新節點：{count} · {time}",
+  "settings.proxy.refreshMissing": "訂閱中已不存在：{count}",
   "settings.proxy.address": "代理位址",
   "settings.proxy.egressGroup": "出口群組",
   "settings.proxy.concurrency": "並行請求上限",
@@ -4252,4 +4268,9 @@ export const zhHK = {
   "chartTester.deleteRetiredDraft": "刪除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
+  ...drawingSelectionMessages["zh-HK"],
+  ...drawingCalculatedMessages["zh-HK"],
+  ...replayDrawingSaveMessages["zh-HK"],
+  ...chartTimeZoneMessages["zh-HK"],
+  ...chartTimeShortcutMessages["zh-HK"],
 } as const satisfies MessageCatalog;

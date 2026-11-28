@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyGerman, replayNoteGerman, tradeHistoryGerman, readonlyAccountGerman, continuousGerman, tradingAccountsDe, nativeGerman } from "./germanFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const de = {
   ...unifiedMessages["de"],
+  ...drawingAnnotationMessages["de"],
   ...syntheticEnglish,
   ...continuousGerman,
   ...tradeHistoryGerman,
@@ -1248,6 +1255,15 @@ export const de = {
   "settings.proxy.previewNodes": "Knoten anzeigen",
   "settings.proxy.useNodes": "Ausgewählte Knoten verwenden",
   "settings.proxy.skippedNodes": "Übersprungene, nicht unterstützte Knoten: {count}",
+  "settings.proxy.autoRefresh": "Automatisch aktualisieren",
+  "settings.proxy.autoRefreshOff": "Aus",
+  "settings.proxy.autoRefreshEvery": "Alle {duration}",
+  "settings.proxy.autoRefreshHelp": "Prüft gespeicherte Abonnements in diesem Abstand. Verwendete Knoten übernehmen die aktuellen Einstellungen des Anbieters. Neue Knoten werden nicht hinzugefügt, und ein vom Anbieter entfernter Knoten behält seine letzten Einstellungen.",
+  "settings.proxy.refreshPending": "Noch nicht automatisch geprüft",
+  "settings.proxy.refreshChecked": "Zuletzt geprüft: {time}",
+  "settings.proxy.refreshFailed": "Automatische Aktualisierung fehlgeschlagen: {time}",
+  "settings.proxy.refreshUpdated": "Aktualisierte Knoten: {count} · {time}",
+  "settings.proxy.refreshMissing": "Nicht mehr im Abonnement: {count}",
   "settings.proxy.address": "Proxy-Adresse",
   "settings.proxy.egressGroup": "Ausgangsgruppe",
   "settings.proxy.concurrency": "Gleichzeitige Anfragen",
@@ -4220,5 +4236,10 @@ export const de = {
   "chartTester.deleteDraft": "Löschen",
   "chartTester.deleteRetiredDraft": "Eingestellten Entwurf {name} löschen",
   "chartTester.deleteRetiredDraftFailed": "Der eingestellte Entwurf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
+  ...drawingSelectionMessages["de"],
+  ...drawingCalculatedMessages["de"],
+  ...replayDrawingSaveMessages["de"],
+  ...chartTimeZoneMessages["de"],
+  ...chartTimeShortcutMessages["de"],
 } as const satisfies MessageCatalog;
 

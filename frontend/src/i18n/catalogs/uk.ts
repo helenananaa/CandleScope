@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyUkrainian, replayNoteUkrainian, tradeHistoryUkrainian, readonlyAccountUkrainian, continuousUkrainian, tradingAccountsUk, nativeUkrainian } from "./ukrainianFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const uk = {
   ...unifiedMessages["uk"],
+  ...drawingAnnotationMessages["uk"],
   ...syntheticEnglish,
   ...continuousUkrainian,
   ...tradeHistoryUkrainian,
@@ -1252,6 +1259,15 @@ export const uk = {
   "settings.proxy.previewNodes": "Переглянути вузли",
   "settings.proxy.useNodes": "Використати вибрані вузли",
   "settings.proxy.skippedNodes": "Пропущено непідтримуваних вузлів: {count}",
+  "settings.proxy.autoRefresh": "Автооновлення",
+  "settings.proxy.autoRefreshOff": "Вимк.",
+  "settings.proxy.autoRefreshEvery": "Кожні {duration}",
+  "settings.proxy.autoRefreshHelp": "Перевіряє збережені підписки з цим інтервалом. Вузли, що використовуються, отримують поточні налаштування постачальника. Нові вузли не додаються, а вузол, який постачальник вилучив, зберігає останні налаштування.",
+  "settings.proxy.refreshPending": "Автоматична перевірка ще не виконувалася",
+  "settings.proxy.refreshChecked": "Остання перевірка: {time}",
+  "settings.proxy.refreshFailed": "Помилка автооновлення: {time}",
+  "settings.proxy.refreshUpdated": "Оновлено вузлів: {count} · {time}",
+  "settings.proxy.refreshMissing": "Більше немає в підписці: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID бірж (через кому; порожньо — усі)",
   "settings.proxy.enabled": "Увімкнено",
@@ -4230,4 +4246,9 @@ export const uk = {
   "chartTester.deleteDraft": "Видалити",
   "chartTester.deleteRetiredDraft": "Видалити зняту з підтримки чернетку {name}",
   "chartTester.deleteRetiredDraftFailed": "Не вдалося видалити зняту з підтримки чернетку. Спробуйте ще раз.",
+  ...drawingSelectionMessages["uk"],
+  ...drawingCalculatedMessages["uk"],
+  ...replayDrawingSaveMessages["uk"],
+  ...chartTimeZoneMessages["uk"],
+  ...chartTimeShortcutMessages["uk"],
 } as const satisfies MessageCatalog;

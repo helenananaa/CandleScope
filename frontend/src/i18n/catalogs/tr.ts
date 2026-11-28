@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyTurkish, replayNoteTurkish, tradeHistoryTurkish, readonlyAccountTurkish, continuousTurkish, tradingAccountsTr, nativeTurkish } from "./turkishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const tr = {
   ...unifiedMessages["tr"],
+  ...drawingAnnotationMessages["tr"],
   ...syntheticEnglish,
   ...continuousTurkish,
   ...tradeHistoryTurkish,
@@ -1251,6 +1258,15 @@ export const tr = {
   "settings.proxy.previewNodes": "Düğümleri önizle",
   "settings.proxy.useNodes": "Seçili düğümleri kullan",
   "settings.proxy.skippedNodes": "Atlanan desteklenmeyen düğüm sayısı: {count}",
+  "settings.proxy.autoRefresh": "Otomatik yenileme",
+  "settings.proxy.autoRefreshOff": "Kapalı",
+  "settings.proxy.autoRefreshEvery": "{duration} aralıkla",
+  "settings.proxy.autoRefreshHelp": "Kayıtlı abonelikleri bu aralıkla denetler. Kullandığınız düğümler sağlayıcının güncel ayarlarını alır. Yeni düğüm eklenmez; sağlayıcının kaldırdığı bir düğüm son ayarlarını korur.",
+  "settings.proxy.refreshPending": "Henüz otomatik denetlenmedi",
+  "settings.proxy.refreshChecked": "Son denetim: {time}",
+  "settings.proxy.refreshFailed": "Otomatik yenileme başarısız: {time}",
+  "settings.proxy.refreshUpdated": "Güncellenen düğüm sayısı: {count} · {time}",
+  "settings.proxy.refreshMissing": "Artık abonelikte olmayan: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Borsa kimlikleri (virgülle ayrılmış; boş tümü demektir)",
   "settings.proxy.enabled": "Etkin",
@@ -4220,5 +4236,10 @@ export const tr = {
   "chartTester.deleteDraft": "Sil",
   "chartTester.deleteRetiredDraft": "Kullanımdan kaldırılan {name} taslağını sil",
   "chartTester.deleteRetiredDraftFailed": "Kullanımdan kaldırılan taslak silinemedi. Yeniden deneyin.",
+  ...drawingSelectionMessages["tr"],
+  ...drawingCalculatedMessages["tr"],
+  ...replayDrawingSaveMessages["tr"],
+  ...chartTimeZoneMessages["tr"],
+  ...chartTimeShortcutMessages["tr"],
 } as const satisfies MessageCatalog;
 
