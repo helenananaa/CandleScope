@@ -212,6 +212,11 @@ The component dependency direction is explicit:
   API, request ids and retained outcomes, and
   [backfill_execution.py](backfill_execution.py) runs one request with retries,
   verifies it and hands its bars to the cache.
+- [symbol_history/](symbol_history/__init__.py) is the per-symbol history
+  planner (ADR-DATA-001): demands from every chart and stream of a symbol are
+  merged on source slots, cut into pieces by urgency and recency, and run by an
+  injected executor. It is off (`HISTORY_SYMBOL_PLANNER_ENABLED=0`) and not yet
+  wired in.
 
 `BackfillCoordinator` is deliberately separate from `BackfillEngine`:
 

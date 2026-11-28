@@ -207,6 +207,9 @@ planner 会选择需要的 source streams。对于自定义周期，可能会启
   它继承从中拆出的两个 mixin（ADR-DATA-001 §8）：
   [backfill_admission.py](backfill_admission.py) 是请求与需求 API、请求 id 和保留的结果；
   [backfill_execution.py](backfill_execution.py) 带重试执行一个请求、校验并把 K 线交给缓存。
+- [symbol_history/](symbol_history/__init__.py) 是按品种的历史规划器（ADR-DATA-001）：同一品种所有图表和
+  实时流的需求在源格子上合并，按紧急度和由新到旧切片，由注入的执行器执行。默认关闭
+  （`HISTORY_SYMBOL_PLANNER_ENABLED=0`），尚未接入。
 
 `BackfillCoordinator` 和 `BackfillEngine` 分离：
 
