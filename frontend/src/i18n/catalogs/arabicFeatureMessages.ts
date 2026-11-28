@@ -570,7 +570,7 @@ export const continuousArabic: Record<keyof typeof continuousEnglish, string> = 
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "تستخدم عمليات التشغيل المستمرة كود المحرر ومعاملاته الحالية. لا تسري التغييرات إلا في تشغيل جديد. إغلاق هذا العرض يترك التشغيل مستمراً في الخدمة المحلية.",
   "continuous.scopeHint": "تبديل السوق أو الفترة، أو إزالة هذه الاستراتيجية، يغيّر فقط ما يعرضه هذا الرسم. يستمر التشغيل في الخدمة المحلية.",
   "continuous.detach": "إزالة من هذا الرسم",

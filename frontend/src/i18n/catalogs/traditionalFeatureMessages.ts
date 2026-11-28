@@ -212,7 +212,7 @@ export const continuousTraditional: Record<keyof typeof continuousEnglish, strin
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "連續執行使用目前編輯器的程式碼和參數。修改後需新建執行才會生效。關閉檢視後，本機服務會繼續執行。",
   "continuous.scopeHint": "切換商品或週期、移除策略，只會改變目前圖表觀察的內容。本機服務中的執行會繼續。",
   "continuous.detach": "從目前圖表移除",

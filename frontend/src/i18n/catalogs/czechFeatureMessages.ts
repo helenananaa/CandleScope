@@ -570,7 +570,7 @@ export const continuousCzech: Record<keyof typeof continuousEnglish, string> = {
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Průběžné běhy používají aktuální kód a parametry z editoru. Změny platí až v novém běhu. Zavřením tohoto zobrazení běh v lokální službě pokračuje.",
   "continuous.scopeHint": "Změna trhu či intervalu nebo odebrání této strategie mění jen to, co zobrazuje tento graf. Běh v lokální službě pokračuje.",
   "continuous.detach": "Odebrat z tohoto grafu",

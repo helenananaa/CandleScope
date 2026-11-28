@@ -28,6 +28,8 @@
 .native-code-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; min-height: 0; }
 .native-code-side > .ui-field { flex: 1; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 .native-parameters { min-height: 80px; resize: none; font: var(--font-size-sm)/1.6 var(--font-mono); }
+/* Forward tracking (B-333b): the script the forward run uses, read-only. */
+.native-forward-source { height: 220px; margin-block: var(--space-2); }
 
 /* Settings */
 .native-dock-settings { padding-top: var(--space-1); }

@@ -570,7 +570,7 @@ export const continuousTurkish: Record<keyof typeof continuousEnglish, string> =
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Sürekli çalıştırmalar düzenleyicinin güncel kodunu ve parametrelerini kullanır. Değişiklikler yalnızca yeni bir çalıştırmada geçerli olur. Bu görünümü kapatmak, yerel hizmetteki çalıştırmayı durdurmaz.",
   "continuous.scopeHint": "Piyasayı veya aralığı değiştirmek ya da bu stratejiyi kaldırmak yalnızca bu grafiğin gösterdiğini değiştirir. Çalıştırma yerel hizmette sürer.",
   "continuous.detach": "Bu grafikten kaldır",

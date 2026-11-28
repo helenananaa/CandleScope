@@ -11,12 +11,13 @@ import pytest
 
 from app.backtest.continuous_bar_host import ContinuousBarHost
 from app.backtest.continuous_definition import prepare_definition
+from app.backtest.continuous_pine import forward_support
 from app.backtest.continuous_provider import ContinuousProviderFactory, execution_inputs, prepare_provider
 from app.backtest.errors import BacktestError
 from app.backtest.strategy import pine_engine
 from app.backtest.strategy.pine_engine import PineEngineProvider
 from app.backtest.strategy.pine_planner import PineHostPlanner, host_identity
-from app.backtest.strategy.protocol import ProviderCapabilities
+from app.backtest.strategy.protocol import ProviderCapabilities, StrategyProviderError
 from app.backtest.strategy.workspace import pine_dependency_hash, pine_execution_source
 from tests.test_continuous_bar_host import apply, prepare
 from tests.test_continuous_definition import KEY
@@ -88,6 +89,51 @@ def test_invalid_pine_editor_input_is_refused_before_compiling(analyzed, payload
     with pytest.raises(BacktestError) as raised:
         prepare_provider(payload)
     assert raised.value.code == code and analyzed["calls"] == []
+
+
+def test_support_check_names_what_a_forward_run_would_refuse(analyzed):
+    assert forward_support(SOURCE, None) == {"supported": True, "uses": [], "reason": None}
+    analyzed["analysis"]["requirements"]["execution"]["calcOnOrderFills"] = True
+    analyzed["analysis"]["requirements"]["requests"] = [{"function": "request.security"}]
+    checked = forward_support(SOURCE, {})
+    assert checked["supported"] is False and checked["uses"] == ["calc_on_order_fills", "request.* datasets"]
+    assert checked["reason"].startswith("Forward runs place close-bar Pine orders; this script uses calc_on_order_fills")
+    assert analyzed["calls"] == [SOURCE, SOURCE]
+
+
+def test_support_check_reports_editor_and_compile_failures(analyzed, monkeypatch):
+    for source, libraries, code in (("  ", None, "CONTINUOUS_INPUT_INVALID"), (SOURCE, {"bad key": "x"}, "PINE_HOST_LIBRARIES_INVALID")):
+        with pytest.raises(BacktestError) as raised:
+            forward_support(source, libraries)
+        assert raised.value.code == code
+    assert analyzed["calls"] == []
+
+    def broken(source, libraries=None):
+        raise StrategyProviderError("PINE_COMPILE_FAILED", "line 3: mismatched input")
+    monkeypatch.setattr(pine_engine, "analyze", broken)
+    with pytest.raises(BacktestError, match="mismatched input") as raised:
+        forward_support(SOURCE, None)
+    assert raised.value.code == "PINE_COMPILE_FAILED"
+
+
+def test_support_route_answers_without_a_strategy_manager(analyzed):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.v1.backtests import router
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    url = "/api/v1/backtests/continuous/pine/support"
+    with TestClient(app) as client:
+        response = client.post(url, json={"source_text": SOURCE, "libraries": {}})
+        assert response.status_code == 200 and response.json() == {"supported": True, "uses": [], "reason": None}
+        analyzed["analysis"]["requirements"]["execution"]["calcOnEveryTick"] = True
+        refused = client.post(url, json={"source_text": SOURCE}).json()
+        assert refused["supported"] is False and refused["uses"] == ["calc_on_every_tick"]
+        for body in ({"source_text": ""}, {"source_text": SOURCE, "extra": 1}, {"source_text": "x" * 262145}):
+            invalid = client.post(url, json=body)
+            assert invalid.status_code == 422 and "xxxx" not in invalid.text
+    assert analyzed["calls"] == [SOURCE, SOURCE]
 
 
 def _definition(tmp_path, monkeypatch, prepared, **configuration):

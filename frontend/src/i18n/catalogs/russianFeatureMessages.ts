@@ -570,7 +570,7 @@ export const continuousRussian: Record<keyof typeof continuousEnglish, string> =
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Непрерывные запуски используют текущие код и параметры редактора. Изменения действуют только в новом запуске. Если закрыть этот вид, запуск продолжится в локальной службе.",
   "continuous.scopeHint": "Смена рынка или интервала либо удаление этой стратегии меняет только то, что показывает этот график. Запуск продолжается в локальной службе.",
   "continuous.detach": "Убрать с этого графика",

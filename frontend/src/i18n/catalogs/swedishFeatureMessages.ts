@@ -570,7 +570,7 @@ export const continuousSwedish: Record<keyof typeof continuousEnglish, string> =
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Kontinuerliga körningar använder redigerarens aktuella kod och parametrar. Ändringar gäller bara i en ny körning. Om du stänger vyn fortsätter körningen i den lokala tjänsten.",
   "continuous.scopeHint": "Att byta marknad eller intervall, eller ta bort strategin, ändrar bara vad diagrammet visar. Körningen fortsätter i den lokala tjänsten.",
   "continuous.detach": "Ta bort från det här diagrammet",

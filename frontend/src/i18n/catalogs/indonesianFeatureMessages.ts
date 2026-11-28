@@ -570,7 +570,7 @@ export const continuousIndonesian: Record<keyof typeof continuousEnglish, string
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Run berkelanjutan memakai kode dan parameter editor saat ini. Perubahan hanya berlaku pada run baru. Menutup tampilan ini membiarkan run tetap berjalan di layanan lokal.",
   "continuous.scopeHint": "Mengganti pasar atau interval, atau menghapus strategi ini, hanya mengubah apa yang ditampilkan grafik ini. Run tetap berjalan di layanan lokal.",
   "continuous.detach": "Hapus dari grafik ini",

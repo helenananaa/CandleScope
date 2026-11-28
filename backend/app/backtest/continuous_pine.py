@@ -35,17 +35,52 @@ def _unsupported(message):
     raise BacktestError("FIDELITY_UNSUPPORTED", message)
 
 
+def refusal_message(refused):
+    return ("Forward runs place close-bar Pine orders; this script uses " + ", ".join(refused)
+            + ". Run it over history instead.")
+
+
 def _refuse(refused):
     if refused:
-        _unsupported("Forward runs place close-bar Pine orders; this script uses " + ", ".join(refused)
-                     + ". Run it over history instead.")
+        _unsupported(refusal_message(refused))
+
+
+def _compile(source, libraries):
+    """Analyze Pine code on the installed runtime: its execution source, identity and forward refusals."""
+    from .strategy.pine_engine import analyze
+    from .strategy.protocol import StrategyProviderError
+    from .strategy.workspace import pine_dependency_hash, pine_execution_source
+    try:
+        analysis = analyze(source, libraries)
+    except StrategyProviderError as failure:
+        raise BacktestError(failure.code, str(failure)) from failure
+    execution_source = pine_execution_source(source, libraries, analysis)
+    refused = forward_pine_refusals(json.loads(execution_source), (analysis.get("requirements") or {}).get("requests"))
+    return execution_source, pine_dependency_hash(analysis, libraries), refused
+
+
+def forward_support(source: str, libraries: object) -> dict[str, object]:
+    """Whether a Pine script can run forward, compiled as creation would compile it; no run is made.
+
+    The chart's strategy list asks before it offers forward tracking for a Pine strategy.
+    """
+    from .strategy.pine_engine import validate_libraries
+    from .strategy.protocol import StrategyProviderError
+    if type(source) is not str or not source.strip():
+        _invalid("Pine source is required")
+    try:
+        checked = validate_libraries(libraries if libraries is not None else {})
+    except StrategyProviderError as failure:
+        raise BacktestError(failure.code, str(failure)) from failure
+    _source, _identity, refused = _compile(source, checked)
+    return {"supported": not refused, "uses": refused, "reason": refusal_message(refused) if refused else None}
 
 
 def prepare_pine(payload: Mapping[str, object], source: str, mode: str, *, stored: bool) -> dict[str, object]:
     """Compile current Pine code, or check a stored compilation, without running the script."""
-    from .strategy.pine_engine import ORDER_CONTRACT, SOURCE_SCHEMA, analyze, validate_libraries
+    from .strategy.pine_engine import ORDER_CONTRACT, SOURCE_SCHEMA, validate_libraries
     from .strategy.protocol import StrategyProviderError
-    from .strategy.workspace import pine_dependency_hash, pine_execution_source
+    from .strategy.workspace import pine_dependency_hash
 
     if mode != "ORDER_INTENT":
         _unsupported("A Pine forward run places the script's own orders: choose ORDER_INTENT")
@@ -71,14 +106,9 @@ def prepare_pine(payload: Mapping[str, object], source: str, mode: str, *, store
             _invalid("A stored Pine compilation must match its source, libraries and runtime")
         _refuse(forward_pine_refusals(envelope))
         return {"libraries": libraries, "pine": dict(compiled)}
-    try:
-        analysis = analyze(source, libraries)
-    except StrategyProviderError as failure:
-        raise BacktestError(failure.code, str(failure)) from failure
-    execution_source = pine_execution_source(source, libraries, analysis)
-    _refuse(forward_pine_refusals(json.loads(execution_source), (analysis.get("requirements") or {}).get("requests")))
-    return {"libraries": libraries,
-            "pine": {"execution_source": execution_source, "dependency_hash": pine_dependency_hash(analysis, libraries)}}
+    execution_source, dependency_hash, refused = _compile(source, libraries)
+    _refuse(refused)
+    return {"libraries": libraries, "pine": {"execution_source": execution_source, "dependency_hash": dependency_hash}}
 
 
 def refuse_before_compile(provider: object, execution: Mapping[str, object], *, follow: bool) -> None:

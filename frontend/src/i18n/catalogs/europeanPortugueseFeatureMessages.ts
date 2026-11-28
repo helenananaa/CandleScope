@@ -570,7 +570,7 @@ export const continuousEuropeanPortuguese: Record<keyof typeof continuousEnglish
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "As execuções contínuas usam o código e os parâmetros actuais do editor. As alterações só se aplicam numa nova execução. Fechar esta vista deixa a execução a decorrer no serviço local.",
   "continuous.scopeHint": "Mudar o mercado ou o intervalo, ou remover esta estratégia, altera apenas o que este gráfico mostra. A execução continua no serviço local.",
   "continuous.detach": "Remover deste gráfico",
