@@ -32,7 +32,9 @@ const chartFirstFit = process.argv.includes("--chart-first-fit");
 // Screenshots a fixture requests through window.__replayNoteCapture.
 const captureScreens = process.argv.includes("--capture");
 const replayNotes = process.argv.includes("--replay-notes");
-const fixture = chartIndicator ? "chart-indicator-browser.html" : backendSyntheticPinned ? "backend-synthetic-pinned-browser.html" : backendSynthetic ? "backend-synthetic-browser.html" : chartMarketPrepend ? "chart-market-prepend-browser.html" : chartMarketCalculation ? "chart-market-calculation-browser.html" : chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : chartReopenLiveTail ? "chart-reopen-live-tail-browser.html" : chartFirstFit ? "chart-first-fit-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const chartViewport = process.argv.includes("--chart-viewport");
+const practiceOrderTicket = process.argv.includes("--practice-order-ticket");
+const fixture = chartViewport ? "chart-viewport-browser.html" : practiceOrderTicket ? "practice-order-ticket-browser.html" : chartIndicator ? "chart-indicator-browser.html" : backendSyntheticPinned ? "backend-synthetic-pinned-browser.html" : backendSynthetic ? "backend-synthetic-browser.html" : chartMarketPrepend ? "chart-market-prepend-browser.html" : chartMarketCalculation ? "chart-market-calculation-browser.html" : chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : chartReopenLiveTail ? "chart-reopen-live-tail-browser.html" : chartFirstFit ? "chart-first-fit-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -80,10 +82,10 @@ class CDP {
 }
 
 let server, child, browser, page;
-const receipt = { scope: native ? "Isolated Electron host, production-minified renderer and controlled market transport; not installed-release qualification" : (replay || accountOverlays || rangeMeasure) ? "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification" : "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", output };
+const receipt = { scope: native ? "Isolated Electron host, production-minified renderer and controlled market transport; not installed-release qualification" : (replay || accountOverlays || rangeMeasure || chartViewport) ? "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification" : "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", fixture, output };
 try {
   const destination = path.join(output, "dist");
-  await build({ root, ...((replay || accountOverlays || rangeMeasure) ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
+  await build({ root, ...((replay || accountOverlays || rangeMeasure || chartViewport) ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
   server = await preview({ root, build: { outDir: destination }, preview: { host: "127.0.0.1", port: 0, strictPort: false } });
   const url = server.resolvedUrls.local[0] + "scripts/" + fixture
     + (replayNotes ? "?backend=" + encodeURIComponent(process.env.CANDLESCOPE_QA_BACKEND_URL ?? "") : captureScreens ? "?capture=1" : "");
@@ -153,7 +155,9 @@ app.on("window-all-closed",()=>app.quit());
     expression: `window.${checkName}()`,
 
     awaitPromise: true, returnByValue: true,
-  }, backendSynthetic ? 90_000 : 30_000);
+  }, Math.max(backendSynthetic ? 90_000 : chartViewport ? 120_000 : 30_000,
+    // Shared CI runners are slower than a desk machine; let them widen, never narrow, the gate.
+    Math.min(600_000, Number(process.env.CANDLESCOPE_TEST_CHECK_TIMEOUT_MS) || 0)));
   if (replayNotes || captureScreens) {
     let completed = false;
     void pendingResult.then(() => { completed = true; }, () => { completed = true; });

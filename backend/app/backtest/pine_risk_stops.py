@@ -2,10 +2,14 @@
 from copy import deepcopy
 
 from app.data_engine.interval_policy import parse_interval_spec
+from app.exchanges.models import CRYPTO_24X7_CALENDAR_ID
+from app.exchanges.roles import venue_market_calendar_id
 from .errors import BacktestError
 from .pine_risk_state import PineRiskState, STOP_FUNCTIONS, ENTRY_FUNCTIONS
 
 CONTRACT = "candlescope.pine-risk-stops/1"
+# The window contract id is hashed into run identities; its name is historical.
+UTC_24_7_WINDOW_POLICY = "BINANCE_UTC_24_7_V1"
 DAY_MS = 86_400_000
 LIVE = {"OPEN", "PARTIAL"}
 
@@ -14,9 +18,14 @@ def window_contract(config, functions):
     windowed = any(name.endswith(("max_cons_loss_days", "max_intraday_loss", "max_intraday_filled_orders")) for name in functions)
     if not windowed:
         return {"policy": "NON_WINDOWED_V1"}
-    if (str(config.get("exchange") or "").lower() != "binance"
-            or str(config.get("market_type") or "").lower() not in {"spot", "usdm", "futures", "swap"}):
-        raise BacktestError("FIDELITY_UNSUPPORTED", "Pine daily risk requires explicit Binance continuous-market metadata")
+    # UTC-day windows need a market that never closes (ADR-DATA-002 D3c).
+    market = str(config.get("market_type") or "").lower()
+    if (market not in {"spot", "usdm", "futures", "swap"}
+            or venue_market_calendar_id(str(config.get("exchange") or ""),
+                                        "futures" if market in {"usdm", "swap"} else market)
+            != CRYPTO_24X7_CALENDAR_ID):
+        raise BacktestError("FIDELITY_UNSUPPORTED",
+            "Pine daily risk requires a market that trades around the clock on UTC days")
     interval = config.get("signal_interval") or config.get("interval")
     if not isinstance(interval, str):
         raise BacktestError("FIDELITY_UNSUPPORTED", "Pine daily risk requires an explicit chart interval")
@@ -25,7 +34,7 @@ def window_contract(config, functions):
     if (above_day and config.get("fidelity_mode") == "BAR_APPROX"
             and "strategy.risk.max_cons_loss_days" in functions):
         raise BacktestError("FIDELITY_UNSUPPORTED", "consecutive loss days require daily account observations, not multi-day OHLC bars")
-    return {"policy": "BINANCE_UTC_24_7_V1", "interval": interval, "intraday_per_bar": above_day}
+    return {"policy": UTC_24_7_WINDOW_POLICY, "interval": interval, "intraday_per_bar": above_day}
 
 
 class PineRiskStops:
@@ -95,7 +104,7 @@ class PineRiskStops:
     def _observe(self, time_ms, order_id=None):
         from .external import account_feedback_profit
         session = intraday = None
-        if self.windows["policy"] == "BINANCE_UTC_24_7_V1":
+        if self.windows["policy"] == UTC_24_7_WINDOW_POLICY:
             session = time_ms // DAY_MS
             spec = parse_interval_spec(self.windows["interval"])
             intraday = (spec.floor_ms(time_ms) - spec.floor_ms(0) if self.windows["intraday_per_bar"] else session)

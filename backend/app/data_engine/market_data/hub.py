@@ -216,6 +216,16 @@ class MarketEventHub:
             return StateContinuitySubscription(subscription, continuity)
         return subscription
 
+    def reset_state(self, keys: Iterable[MarketStreamKey]) -> None:
+        """Forget retained state so a restarted source may begin a new sequence.
+
+        Record revisions stay monotonic, so consumers that deduplicate by
+        revision never see the next feed's first record as a repeat.
+        """
+
+        for key in keys:
+            self._latest.pop(key, None)
+
     def mark_source_gap(self, keys, *, reason: str) -> None:
         for key in keys:
             if key not in self._source_gaps:

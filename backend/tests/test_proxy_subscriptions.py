@@ -1,8 +1,21 @@
+import base64
+import json
+import os
+from pathlib import Path
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import httpx
 import pytest
+import requests
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 
@@ -191,3 +204,303 @@ def test_real_core_two_independent_upstreams_and_no_direct_fallback():
         core.reconfigure({"first": nodes["first"]})
         assert core.endpoints == {"first": original}
         assert session.get(target, proxies={"http": original}, timeout=3).text == "first"
+
+
+# --- PL-11a: occupied listener ports and process reaping -------------------------------------
+
+BACKEND = Path(__file__).resolve().parents[1]
+posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX fake core and SIGKILL; Windows Mihomo CI is PL-11b")
+
+
+def _mihomo():
+    return os.getenv("CANDLESCOPE_MIHOMO") or shutil.which("mihomo")
+
+
+class _QuietHandler(BaseHTTPRequestHandler):
+    def reply(self, status):
+        self.send_response(status)
+        if status == 407:
+            self.send_header("Proxy-Authenticate", 'Basic realm="other"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+class _ForeignProxy(_QuietHandler):
+    """Another local proxy on the port: it wants its own credentials for everything."""
+
+    def do_GET(self):
+        self.reply(407)
+
+
+class _PlainServer(_QuietHandler):
+    def do_GET(self):
+        self.reply(200)
+
+
+class _OwnListener(_QuietHandler):
+    """How Mihomo answers an origin-form request on a listener with our password."""
+
+    def do_GET(self):
+        token = base64.b64encode(("candlescope:" + self.server.password).encode()).decode()
+        self.reply(400 if self.headers.get("Proxy-Authorization") == "Basic " + token else 407)
+
+
+@contextmanager
+def _serve(handler, **attributes):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    for name, value in attributes.items():
+        setattr(server, name, value)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _listener(port, password="p" * 48):
+    return {"name": "in-test", "type": "http", "listen": "127.0.0.1", "port": port, "proxy": "node",
+            "users": [{"username": "candlescope", "password": password}]}
+
+
+def _free_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _until(condition, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.02)
+    return condition()
+
+
+def _closed(port):
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+    except OSError:
+        return True
+    return False
+
+
+def _gone(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+def test_listener_check_never_adopts_a_port_held_by_another_local_service():
+    from app.proxy_subscriptions.core import Core
+
+    password = "s" * 48
+    with _serve(_ForeignProxy) as foreign, _serve(_PlainServer) as plain, \
+            _serve(_OwnListener, password=password) as own:
+        assert not Core._owns_listener(_listener(foreign.server_port, password))
+        assert not Core._owns_listener(_listener(plain.server_port, password))
+        assert Core._owns_listener(_listener(own.server_port, password))
+        # A listener with someone else's password is not ours either.
+        assert not Core._owns_listener(_listener(own.server_port, "o" * 48))
+    # Nothing bound yet is an OSError, which _ready() retries until its deadline.
+    with pytest.raises(OSError):
+        Core._owns_listener(_listener(_free_port(), password))
+
+
+def test_real_core_refuses_an_occupied_listener_port_and_reaps_its_processes(monkeypatch):
+    from app.proxy_subscriptions import core as core_module
+
+    if not _mihomo():
+        pytest.skip("Mihomo required for native listener integration")
+    reserved, launched = [], []
+    real_reserve, real_popen = core_module._reserve, subprocess.Popen
+    with _serve(_ForeignProxy) as foreign, _serve(_PlainServer) as upstream:
+        def reserve(stack):
+            # The controller gets a free port. The listener's port is then taken
+            # by another local proxy, as a racing app could between our
+            # reservation and Mihomo's bind.
+            port = foreign.server_port if reserved else real_reserve(stack)
+            reserved.append(port)
+            return port
+
+        def popen(*args, **kwargs):
+            launched.append(real_popen(*args, **kwargs))
+            return launched[-1]
+
+        monkeypatch.setattr(core_module, "_reserve", reserve)
+        monkeypatch.setattr(core_module.subprocess, "Popen", popen)
+        started = time.monotonic()
+        with pytest.raises(SubscriptionError, match="could not start all selected listeners"):
+            core_module.Core({"node": {"type": "http", "server": "127.0.0.1", "port": upstream.server_port}})
+        assert time.monotonic() - started < 15
+        assert reserved[1:] == [foreign.server_port] and len(launched) == 1
+        # The guard was reaped, and Mihomo with it: its controller no longer accepts.
+        assert launched[0].poll() is not None
+        assert _until(lambda: _closed(reserved[0]))
+        # The other proxy keeps its port and is never routed through.
+        assert requests.get(f"http://127.0.0.1:{foreign.server_port}/", timeout=2).status_code == 407
+
+
+FAKE_CORE = """
+import json, os, signal, sys, time
+record, mode, args = sys.argv[1], sys.argv[2], sys.argv[3:]
+config = sys.stdin.buffer.read()
+if mode == "ignore-term":
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+directory = args[args.index("-d") + 1]
+state = {"pid": os.getpid(), "args": args, "dir": directory, "dirExisted": os.path.isdir(directory),
+         "config": config.decode()}
+with open(record + ".tmp", "w") as out:
+    json.dump(state, out)
+os.replace(record + ".tmp", record)
+if mode == "exit":
+    sys.exit(3)
+while True:
+    time.sleep(0.1)
+"""
+
+
+@pytest.fixture
+def fake_core(tmp_path):
+    """An executable standing in for Mihomo; it records how the guard ran it."""
+    script = tmp_path / "fake_core.py"
+    script.write_text(FAKE_CORE, encoding="utf-8")
+
+    def make(mode="run"):
+        record = tmp_path / f"core-{mode}.json"
+        binary = tmp_path / f"mihomo-{mode}"
+        binary.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "{record}" "{mode}" "$@"\n')
+        binary.chmod(0o755)
+        return binary, record
+
+    return make
+
+
+def _record(path, timeout=10.0):
+    assert _until(path.exists, timeout), "fake core never started"
+    return json.loads(path.read_text())
+
+
+def _launch(monkeypatch, binary):
+    from app.proxy_subscriptions.core import Core
+
+    monkeypatch.setenv("CANDLESCOPE_MIHOMO", str(binary))
+    core = Core.__new__(Core)
+    core.process = None
+    core.session = requests.Session()
+    core._launch({"listeners": [], "secret": "fixture"})
+    return core
+
+
+@posix_only
+def test_guard_gives_the_core_its_config_and_removes_its_directory_on_close(monkeypatch, fake_core):
+    binary, record = fake_core()
+    core = _launch(monkeypatch, binary)
+    state = _record(record)
+    assert state["args"] == ["-d", state["dir"], "-f", "-"] and state["dirExisted"]
+    assert json.loads(state["config"]) == {"listeners": [], "secret": "fixture"}
+    assert core.alive
+    core.close()
+    assert core.process.poll() is not None and not core.alive
+    assert _until(lambda: _gone(state["pid"])) and not os.path.exists(state["dir"])
+
+
+@posix_only
+def test_guard_kills_a_core_that_ignores_terminate(monkeypatch, fake_core):
+    binary, record = fake_core("ignore-term")
+    core = _launch(monkeypatch, binary)
+    state = _record(record)
+    started = time.monotonic()
+    core.close()
+    # The guard asks once, waits two seconds, then kills; close() never needs its own kill.
+    assert 1.5 <= time.monotonic() - started < 5
+    assert core.process.returncode is not None
+    assert _until(lambda: _gone(state["pid"])) and not os.path.exists(state["dir"])
+
+
+@posix_only
+def test_killed_backend_leaves_no_core_behind(fake_core):
+    binary, record = fake_core()
+    backend = subprocess.Popen([sys.executable, "-c", f"""
+import sys, time
+sys.path.insert(0, {str(BACKEND)!r})
+import requests
+from app.proxy_subscriptions.core import Core
+core = Core.__new__(Core)
+core.process = None
+core._launch({{"listeners": []}})
+print(core.process.pid, flush=True)
+time.sleep(600)
+"""], stdout=subprocess.PIPE, env={**os.environ, "CANDLESCOPE_MIHOMO": str(binary)})
+    try:
+        guard = int(backend.stdout.readline())
+        state = _record(record)
+        # No close(), no atexit: the backend dies and only the pipe closing tells the guard.
+        os.kill(backend.pid, signal.SIGKILL)
+        backend.wait(timeout=5)
+        assert _until(lambda: _gone(state["pid"])) and _until(lambda: _gone(guard))
+        assert not os.path.exists(state["dir"])
+    finally:
+        if backend.poll() is None:
+            backend.kill()
+            backend.wait()
+        backend.stdout.close()
+
+
+@posix_only
+def test_core_that_exits_at_startup_fails_fast_and_is_not_restarted_by_the_guard(monkeypatch, fake_core):
+    binary, record = fake_core("exit")
+    core = _launch(monkeypatch, binary)
+    state = _record(record)
+    assert core.process.wait(timeout=5) == 3  # The guard reports the core's own status.
+    started = time.monotonic()
+    with pytest.raises(SubscriptionError, match="could not start"):
+        core._ready({"node": {}}, {"node": _listener(_free_port())})
+    assert time.monotonic() - started < 1  # Not the 8 s listener deadline.
+    assert _gone(state["pid"])
+    core.close()
+
+
+@posix_only
+def test_guard_without_a_config_never_starts_the_core(fake_core):
+    from app.proxy_subscriptions import core as core_module
+
+    binary, record = fake_core()
+    guard = Path(core_module.__file__).with_name("guard.py")
+    process = subprocess.Popen([sys.executable, "-I", str(guard), str(binary)], stdin=subprocess.PIPE)
+    process.stdin.close()
+    assert process.wait(timeout=5) == 1
+    assert not record.exists()
+
+
+@posix_only
+def test_real_core_exits_when_its_backend_is_killed():
+    if not _mihomo():
+        pytest.skip("Mihomo required for native listener integration")
+    with _serve(_PlainServer) as upstream:
+        backend = subprocess.Popen([sys.executable, "-c", f"""
+import sys, time
+from urllib.parse import urlsplit
+sys.path.insert(0, {str(BACKEND)!r})
+from app.proxy_subscriptions.core import Core
+core = Core({{"node": {{"type": "http", "server": "127.0.0.1", "port": {upstream.server_port}}}}})
+print(urlsplit(core.controller).port, urlsplit(core.endpoints["node"]).port, flush=True)
+time.sleep(600)
+"""], stdout=subprocess.PIPE)
+        try:
+            controller, listener = map(int, backend.stdout.readline().split())
+            assert not _closed(controller) and not _closed(listener)
+            os.kill(backend.pid, signal.SIGKILL)
+            backend.wait(timeout=5)
+            assert _until(lambda: _closed(controller) and _closed(listener))
+        finally:
+            if backend.poll() is None:
+                backend.kill()
+                backend.wait()
+            backend.stdout.close()

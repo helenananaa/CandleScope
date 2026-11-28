@@ -1,5 +1,13 @@
 import { t } from "../../i18n/index.js";
 import {
+  BINANCE_OI_GRID,
+  BINANCE_PREMIUM_INDEX_CUMAVG,
+  capabilityRoleContract,
+  FUNDING_HYBRID_HISTORY,
+  OPEN_INTEREST_NATIVE_GRID,
+  type RoleSource,
+} from "../exchange-support/capabilityRoles.js";
+import {
   ADVANCED_MARKET_CHANNELS,
   type AdvancedMarketChannel,
 } from "./advancedMarketDataTypes.js";
@@ -20,6 +28,10 @@ export interface AdvancedMarketChannelSupport {
 export interface AdvancedMarketCapabilitySnapshot {
   channels: Record<AdvancedMarketChannel, AdvancedMarketChannelSupport>;
   summarySupported: boolean;
+  /** The venue rebuilds funding between settlements from the premium index (`view=hybrid`). */
+  hybridFunding: boolean;
+  /** Open-interest history sits on a sample grid for every chart period. */
+  openInterestGrid: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,7 +62,7 @@ export function resolveAdvancedMarketCapabilities({
     ADVANCED_MARKET_CHANNELS.map((channel) => [channel, unsupported(reason)]),
   ) as Record<AdvancedMarketChannel, AdvancedMarketChannelSupport>;
 
-  if (!raw) return { channels, summarySupported: false };
+  if (!raw) return { channels, summarySupported: false, hybridFunding: false, openInterestGrid: false };
 
   const normalizedMarketType = marketType.trim().toLowerCase();
   const rawChannels = Array.isArray(raw.channels) ? raw.channels : [];
@@ -89,5 +101,13 @@ export function resolveAdvancedMarketCapabilities({
       }
     : unsupported(reason);
 
-  return { channels, summarySupported };
+  const roles = raw as RoleSource;
+  return {
+    channels,
+    summarySupported,
+    hybridFunding: capabilityRoleContract(roles, normalizedMarketType, FUNDING_HYBRID_HISTORY)
+      === BINANCE_PREMIUM_INDEX_CUMAVG,
+    openInterestGrid: capabilityRoleContract(roles, normalizedMarketType, OPEN_INTEREST_NATIVE_GRID)
+      === BINANCE_OI_GRID,
+  };
 }

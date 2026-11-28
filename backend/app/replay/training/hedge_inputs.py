@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from app.exchanges.roles import (
+    BINANCE_USDM_HEDGE_PUBLIC_HISTORY,
+    HEDGE_PUBLIC_HISTORY,
+    venue_role_contract,
+)
 from app.replay.broker.models import canonical_decimal
 from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.models import validate_identifier, validate_timestamp_ms
@@ -1962,7 +1967,8 @@ class HedgeInputArchiveManager:
                 "hedge_public_history_ref": None,
                 "simulation_manifest_ref": None,
             }
-        if request.exchange != "binance" or request.market_type != "futures":
+        if venue_role_contract(request.exchange, request.market_type,
+                               HEDGE_PUBLIC_HISTORY) != BINANCE_USDM_HEDGE_PUBLIC_HISTORY:
             return {
                 **base,
                 "capability_state": "UNSUPPORTED_SOURCE_MODE",

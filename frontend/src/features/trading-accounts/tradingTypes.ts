@@ -1,3 +1,4 @@
+import type { KlineSeriesIdentityWire } from "../market-data/klineSeriesIdentity.js";
 import type { JournalApi } from "./journalApi.js";
 /** Wire contracts for `/api/v1/trading`. Decimals stay strings end to end. */
 
@@ -83,6 +84,8 @@ export interface Trade {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   direction: "long" | "short";
   status: TradeStatus;
   openedAtMs: number;
@@ -196,6 +199,8 @@ export interface PracticeOrder {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   side: "buy" | "sell";
   type: "market" | "limit" | "stop";
   qty: string;
@@ -216,6 +221,8 @@ export interface PracticeFeed {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   status: string;
   detail: string;
   observedMs: number | null;
@@ -250,10 +257,23 @@ export interface Excursion {
 }
 
 /** The chart the rail is attached to: defaults for orders, notes and replay. */
+/** How practice accounts hold positions in one market (ADR-DATA-002 D5b). */
+export interface PracticeMarketRules {
+  accountModel: "cash" | "crypto_linear" | "crypto_inverse" | "futures_margin";
+  /** False when the catalog has no declaration and the market keeps the earlier rules. */
+  declared: boolean;
+  leverage: boolean;
+  shorting: boolean;
+  hedge: boolean;
+  opensPositions: boolean;
+}
+
 export interface TradingChartContext {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The chart's kline series when it is not the exchange's own; orders and fills carry it (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   interval: string;
   lastPrice: number | null;
   /** PNG data URL of the current chart, or null when capture is unavailable. */

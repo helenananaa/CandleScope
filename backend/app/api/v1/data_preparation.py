@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.data_preparation.models import STRATEGY_BAR_INPUT_LIMIT, PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
@@ -15,7 +15,30 @@ from app.api.v1.backtests import _operator_python_payload
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
 
 
-class ReplayPreparationPayload(BaseModel):
+class _ReplayMarketSeries(BaseModel):
+    """A replay market's kline series: absent, or an explicit default, is the exchange's own."""
+
+    identity: dict[str, str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_identity(cls, values):
+        if isinstance(values, dict) and values.get("identity") is not None:
+            from app.data_engine.series_identity import requested_series_identity
+            identity = requested_series_identity(str(values.get("exchange") or "").strip().lower(), values["identity"])
+            values = {**values, "identity": identity.to_dict() if identity is not None else None}
+        return values
+
+    @model_serializer(mode="wrap")
+    def _omit_default_identity(self, handler):
+        # Stored submissions of an exchange's own series keep their exact form.
+        data = handler(self)
+        if isinstance(data, dict) and data.get("identity") is None:
+            data.pop("identity", None)
+        return data
+
+
+class ReplayPreparationPayload(_ReplayMarketSeries):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
     setup: TrainingRunSetupPayload
@@ -394,7 +417,15 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
     start = max(0, first - history_ms) // 60_000 * 60_000
     end = ((last + setup["forward_cache_ms"] + 59_999) // 60_000) * 60_000
     base = Requirement(exchange=payload.exchange, market_type=payload.market_type,
-                       symbol=payload.symbol, start_ms=start, end_ms=end)
+                       symbol=payload.symbol, start_ms=start, end_ms=end, identity=payload.identity)
+    calendar_of = getattr(instance.adapter, "requirement_calendar", None)
+    calendar = calendar_of(base) if callable(calendar_of) else None
+    if calendar is not None:
+        # ADR-DATA-002 D2: warmup and forward cache count the bars the market
+        # trades, so the prepared range reaches across closures.
+        start, end = _session_replay_range(calendar, first, last, warmup_bars=history_ms // 60_000,
+                                           forward_bars=setup["forward_cache_ms"] // 60_000)
+        base = base.model_copy(update={"start_ms": start, "end_ms": end})
     requirements = [base]
     if setup["source_kind"] == "AGG_TRADE":
         # Replay's existing catalog and warmup bind bars alongside the tape.
@@ -402,7 +433,9 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
     prepared = PreparationRequest(
         idempotency_key=payload.idempotency_key, consumer="REPLAY",
         requirements=requirements,
-        progressive=payload.progressive,
+        # Progressive feeds publish fixed minute ranges; a session-calendar
+        # replay is prepared whole before it opens (ADR-DATA-002 D2).
+        progressive=payload.progressive and calendar is None,
         intent={"replay_setup": setup, "display_interval": payload.display_interval,
                 **({"submission": submission} if payload.random_by_market else {})},
     )
@@ -418,7 +451,21 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
         raise
 
 
-class ReplayMarketPreparationPayload(BaseModel):
+def _session_replay_range(calendar, first: int, last: int, *, warmup_bars: int, forward_bars: int) -> tuple[int, int]:
+    """Minute range [start, end) holding the warmup and forward bars of a session-calendar replay."""
+    from app.data_engine.history.expected_bars import offset_open, open_at_or_after
+    try:
+        first_open = open_at_or_after(calendar, first, "1m")
+        last_open = max(first_open, open_at_or_after(calendar, last, "1m"))
+        start = offset_open(calendar, first_open, -warmup_bars, "1m")
+        end = offset_open(calendar, last_open, max(forward_bars - 1, 0), "1m") + 60_000
+    except LookupError as exc:
+        raise HTTPException(422, detail={"code": "INVALID_RANGE",
+                                         "message": "The trading calendar does not cover this training range"}) from exc
+    return start, end
+
+
+class ReplayMarketPreparationPayload(_ReplayMarketSeries):
     model_config = ConfigDict(extra="forbid")
     run_id: str
     exchange: str
@@ -434,12 +481,16 @@ async def prepare_replay_market(request: Request, payload: ReplayMarketPreparati
     instance = service(request)
     replay = instance.adapter.replay_service
     try:
-        scope = await replay.training.market_track_history(**payload.model_dump())
+        scope = await replay.training.market_track_history(**payload.model_dump(exclude={"identity"}))
     except TrainingRunError as exc:
         raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    identity = (payload.identity if payload.identity is not None
+                else await call_storage(request, _recorded_replay_series, replay, scope))
+    if identity is not None:
+        scope = {**scope, "identity": identity}
     base = Requirement(**{key: scope[key] for key in (
         "exchange", "market_type", "symbol", "start_ms", "end_ms",
-    )})
+    )}, identity=identity)
     requirements = [base]
     if scope["source_kind"] == "AGG_TRADE":
         requirements.append(base.model_copy(update={"role": "TRADES"}))
@@ -449,17 +500,32 @@ async def prepare_replay_market(request: Request, payload: ReplayMarketPreparati
     )))
 
 
+def _recorded_replay_series(replay, scope) -> dict[str, str] | None:
+    """The series a replay market already holds, for a track added without one."""
+    describe = getattr(getattr(replay, "_repository", None), "describe_catalog", None)
+    if not callable(describe):
+        return None
+    from app.replay.history_archive import ReplayHistoryArchiveError
+    try:
+        recorded = describe(scope["symbol"], "1m", exchange=scope["exchange"], market_type=scope["market_type"])
+    except ReplayHistoryArchiveError:
+        return None
+    return recorded["identity"].get("series_identity")
+
+
 class TradeFlowHistoryPreparationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
-    exchange: Literal["binance"] = "binance"
-    market_type: Literal["futures"] = "futures"
+    # The venue must declare the verified trade archive (checked by the route).
+    exchange: str = Field(default="binance", min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    market_type: str = Field(default="futures", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
     symbol: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9]+$")
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=0)
 
     @model_validator(mode="after")
     def validate_minute_window(self):
+        self.exchange, self.market_type = self.exchange.lower(), self.market_type.lower()
         if self.start_ms % 60_000 or self.end_ms % 60_000:
             raise ValueError("TradeFlow history boundaries must be minute opens")
         if self.end_ms < self.start_ms or (self.end_ms - self.start_ms) // 60_000 >= 5001:
@@ -480,6 +546,11 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     from app.data_engine.market_data.trade_flow import BUCKET_INTERVAL_MS
     from app.data_preparation.models import fingerprint
     from app.data_preparation.trade_adapter import DAY_MS
+    from app.exchanges.roles import (
+        BINANCE_USDM_AGG_TRADES_ARCHIVE,
+        TRADES_HISTORY_ARCHIVE,
+        venue_role_contract,
+    )
 
     instance = service(request)
     start, end = payload.start_ms, payload.end_ms
@@ -516,6 +587,12 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     old = await existing()
     if old is not None:
         return result(old, old["request"]["intent"]["unavailable_ranges"])
+    if venue_role_contract(scope["exchange"], scope["market_type"],
+                           TRADES_HISTORY_ARCHIVE) != BINANCE_USDM_AGG_TRADES_ARCHIVE:
+        raise HTTPException(422, detail={
+            "code": "TRADE_PROVIDER_UNSUPPORTED",
+            "message": f"{scope['exchange']} {scope['market_type']} publishes no verified trade archive",
+        })
 
     dm = getattr(request.app.state, "data_manager", None)
     if not getattr(dm, "trade_flow_ready", False):

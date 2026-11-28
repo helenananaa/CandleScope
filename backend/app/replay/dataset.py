@@ -17,7 +17,7 @@ from app.data_engine.interval_policy import (
 )
 
 from .canonical import canonical_sha256
-from .catalog import EligibleWindow, ReplayCatalogEntry, ReplaySeriesIdentity
+from .catalog import EligibleWindow, ReplayCatalogEntry, ReplaySeriesIdentity, replay_calendar
 from .errors import ReplayDomainError, ReplayErrorCode
 from .history_archive import ReplayHistoryArchiveError
 from .models import (
@@ -663,9 +663,24 @@ class BarDatasetBuilder:
                 "BAR dataset open times must be strictly increasing",
             )
 
+        # ADR-DATA-002 D2: a session-calendar archive skips its closures.
+        calendar = replay_calendar(str(gap_result.get("calendar_id") or ""))
+        expected_opens = (
+            None if calendar is None
+            else tuple(calendar.expected_opens(window.warmup_start_ms, window.replay_end_open_ms, window.interval))
+        )
+        if expected_opens is not None and len(expected_opens) != expected_rows:
+            raise ReplayDomainError(
+                ReplayErrorCode.DATASET_MISMATCH,
+                "BAR dataset window does not match its trading calendar",
+            )
         rows: list[ReplayBar] = []
         for index, raw in enumerate(raw_rows):
-            expected_open = window.warmup_start_ms + index * interval_ms
+            expected_open = (
+                window.warmup_start_ms + index * interval_ms
+                if expected_opens is None
+                else expected_opens[index]
+            )
             rows.append(
                 self._validate_row(
                     raw,

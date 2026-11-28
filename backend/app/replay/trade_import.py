@@ -23,6 +23,11 @@ from urllib.parse import quote, urlencode, urlparse
 from uuid import uuid4
 from xml.etree import ElementTree
 
+from app.exchanges.roles import (
+    BINANCE_USDM_AGG_TRADES_ARCHIVE,
+    TRADES_HISTORY_ARCHIVE,
+    venue_role_contract,
+)
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     VerifiedRawAggTradeDay,
@@ -483,19 +488,28 @@ def import_local_verified_day(
     return accepted, metadata
 
 
+def require_official_trade_archive(exchange: str, market_type: str) -> str:
+    """The venue must declare the verified daily aggTrade archive this importer reads."""
+    venue, market = exchange.strip().lower(), market_type.strip().lower()
+    if venue_role_contract(venue, market, TRADES_HISTORY_ARCHIVE) != BINANCE_USDM_AGG_TRADES_ARCHIVE:
+        raise ReplayTradeImportError(
+            f"{venue or 'this venue'} {market or 'market'} publishes no verified trade archive"
+        )
+    return venue
+
+
 def redownload_official_day(
     *, archive_dir: Path, exchange: str, market_type: str, symbol: str, day: date, day_id: str,
     max_download_bytes: int, max_restore_bytes: int, download_timeout_seconds: float = 60.0,
     opener: Callable[..., BinaryIO] = urllib.request.urlopen,
 ) -> str:
-    """Explicitly rebuild an exact retired Binance day with bounded source transfer."""
-    if exchange.strip().lower() != "binance":
-        raise ReplayTradeImportError("only Binance official public data is accepted")
+    """Explicitly rebuild an exact retired archive day with bounded source transfer."""
+    venue = require_official_trade_archive(exchange, market_type)
     if type(max_download_bytes) is not int or not 1 <= max_download_bytes <= _MAX_OFFICIAL_DOWNLOAD_BYTES:
         raise ReplayTradeImportError("official redownload byte budget is outside the supported range")
     if download_timeout_seconds <= 0:
         raise ReplayTradeImportError("official download timeout must be positive")
-    identity = ("binance", market_type.strip().lower(), symbol.strip().upper())
+    identity = (venue, market_type.strip().lower(), symbol.strip().upper())
     source_url, checksum_url, filename = official_agg_trade_urls(
         market_type=identity[1], symbol=identity[2], day=day,
     )
@@ -556,8 +570,7 @@ def import_official_date_range(
     opener: Callable[..., BinaryIO] = urllib.request.urlopen,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> dict[str, object]:
-    if exchange.strip().lower() != "binance":
-        raise ReplayTradeImportError("only Binance official public data is accepted")
+    venue = require_official_trade_archive(exchange, market_type)
     if not require_checksum:
         raise ReplayTradeImportError(
             "--require-checksum is mandatory for exact replay imports"
@@ -578,7 +591,7 @@ def import_official_date_range(
         max_rows_per_file=max_rows_per_file,
     )
     results: list[dict[str, object]] = []
-    identity = ("binance", market_type.strip().lower(), symbol.strip().upper())
+    identity = (venue, market_type.strip().lower(), symbol.strip().upper())
     current = start
     while current <= end:
         archive.require_day_not_retired(identity, current.isoformat())

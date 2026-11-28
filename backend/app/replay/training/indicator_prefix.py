@@ -29,6 +29,8 @@ from .indicator_checkpoint import (
 from .indicator_history import (
     IndicatorHistoryPreparing,
     PinnedIndicatorHistory,
+    continues,
+    traded_boundary,
     validate_chunk,
 )
 
@@ -84,6 +86,10 @@ def prefix_start(history, name: str, params: dict, before: int) -> int:
     width = parse_interval_ms(interval)
     if not width:
         raise ValueError("invalid finite indicator interval")
+    traded = traded_boundary(history, before, count)
+    if traded is not None:
+        # ADR-DATA-002 D2: the window's inputs are traded bars, not grid slots.
+        return max(history.origin_ms, traded)
     cursor = before
     if is_monthly_interval(interval):
         for _ in range(count):
@@ -212,7 +218,7 @@ class CanonicalReplayIndicators:
                 raise ValueError("indicator reader changed its prefix cursor")
             validate_chunk(chunk, history.revealed_boundary_ms)
             for bar in chunk.bars:
-                if last_close is not None and bar.open_time_ms != last_close + 1:
+                if last_close is not None and not continues(history, last_close, bar.open_time_ms):
                     instance = new_indicator(name, params)
                 if close_chunk is None:
                     value = indicator_bar(bar)
@@ -261,7 +267,7 @@ class CanonicalReplayIndicators:
         # process restart cheap without storing any chart's mutable window.
         self.checkpoints.save(identity, before, last_close, dump_state(instance))
         instance = restore_state(name, params, dump_state(instance))
-        if last_close is not None and before != last_close + 1:
+        if last_close is not None and not continues(history, last_close, before):
             instance = new_indicator(name, params)
         math_seed = {
             "schema": "replay.builtin-seed.v1", "name": name, "params": params,
@@ -269,7 +275,7 @@ class CanonicalReplayIndicators:
         }
         instance.retain_outputs(len(rows))
         for row, bar in zip(rows, render_bars, strict=True):
-            if last_close is not None and row.open_time_ms != last_close + 1:
+            if last_close is not None and not continues(history, last_close, row.open_time_ms):
                 instance = new_indicator(name, params)
                 instance.retain_outputs(len(rows))
             # This state is not retained: repeated ticks, including an

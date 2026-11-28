@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core.committed_updates import committed_updates_for
 from app.backtest.pine_ticker import pine_ticker_symbol
 from app.core.config import runtime_environment
+from app.data_engine.history.expected_bars import calendar_by_id, follows
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 
@@ -216,6 +217,10 @@ class NativeBacktests:
         try:
             bars = []
             interval = parse_interval_spec(value["interval"])
+            try:
+                calendar = calendar_by_id(ref.calendar_id)
+            except LookupError as exc:
+                raise BacktestError("DATA_QUALITY_FAILED", str(exc)) from exc
             for event in snapshot.events:
                 if event.role != "BARS":
                     continue
@@ -226,7 +231,9 @@ class NativeBacktests:
                     raise BacktestError("DATA_QUALITY_FAILED", "native snapshot has an incorrect calendar close")
                 if int(bar["open_time_ms"]) < value["start_time_ms"] or int(bar["close_time_ms"]) > value["end_time_ms"]:
                     raise BacktestError("DATA_QUALITY_FAILED", "native ranges must contain whole confirmed bars")
-                if bars and (interval is None or not interval.is_successor(bars[-1]["time"] * 1000, int(bar["open_time_ms"]))):
+                if bars and (interval is None or not (
+                        interval.is_successor(bars[-1]["time"] * 1000, int(bar["open_time_ms"])) if calendar is None
+                        else follows(calendar, interval.canonical, bars[-1]["time"] * 1000, int(bar["open_time_ms"])))):
                     raise BacktestError("DATA_QUALITY_FAILED", "native snapshot has missing bars")
                 bars.append({"time": int(bar["open_time_ms"]) // 1000,
                              **{key: float(bar[key]) for key in ("open", "high", "low", "close", "volume")}})

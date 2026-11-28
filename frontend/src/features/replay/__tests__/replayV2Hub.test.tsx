@@ -19,6 +19,7 @@ import {
   createTrainingRunDraft,
   evaluateTrainingRunDraft,
   evaluateTrainingRunSetupDraft,
+  preferHedgeCapableEntries,
 } from "../trainingHubModel.js";
 import {
   formatReplayUtcDateTime,
@@ -39,6 +40,7 @@ import {
   parseTrainingRunReturnResponse,
 } from "../replayV2Types.js";
 import { parseReplaySegmentPreparePlan } from "../replaySegmentTypes.js";
+import { t } from "../../../i18n/index.js";
 import { parseReplayCapabilities, parseReplayCatalog } from "../replayParser.js";
 import { enabledCapabilities } from "./fixtures.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
@@ -1992,4 +1994,76 @@ test("archive deletion is the kit confirm dialog with a danger action", () => {
   );
   assert.match(html, /<section role="alertdialog"[^>]*class="ui-dialog ui-dialog-sm"/);
   assert.match(html, /<button[^>]*class="ui-btn ui-btn-danger[^"]*"[^>]*>确认永久删除<\/button>/);
+});
+
+test("a replay launched from a chart prepares that chart's series while the draft is still its market (ADR-DATA-002 D1)", async (context) => {
+  const series = {
+    provider_id: "twelvedata", venue: "xngs", asset_class: "stock", series_variant: "ohlcv",
+    price_adjustment: "raw", session_variant: "regular", volume_semantics: "shares",
+  };
+  const markets: Array<Record<string, unknown>> = [];
+  const lifecycle = new TrainingHubLifecycle({
+    draftStorage: null,
+    launchContext: {
+      schema_version: "replay.launch-context.v1", source: "LIVE_PAGE",
+      exchange: "twelvedata", market_type: "stock", symbol: "AAPL:NASDAQ", display_interval: "1m",
+      watchlist_snapshot: { schema_version: "replay.watchlist-snapshot.v1", groups: [] },
+    },
+    launchSeries: series,
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false } }; },
+      async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("must use durable preparation"); },
+      async prepareReplay(_setup, market) {
+        markets.push({ ...market });
+        return parseTrainingRunMutationResponse(mutationResponse());
+      },
+    },
+    navigateToRun: () => undefined,
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  const draft = lifecycle.getSnapshot().draft!;
+  assert.equal(draft.symbol, "AAPL:NASDAQ");
+  await lifecycle.createRun(draft);
+  await lifecycle.openCreate();
+  await lifecycle.createRun({ ...lifecycle.getSnapshot().draft!, symbol: "MSFT:NASDAQ" });
+  assert.deepEqual(markets.map(market => [market.symbol, market.identity]),
+    [["AAPL:NASDAQ", series], ["MSFT:NASDAQ", undefined]]);
+});
+
+test("a new draft prefers markets whose venue declares hedge history, not a venue name", () => {
+  const base = hedgeCatalog();
+  const template = base.entries[0]!;
+  const entry = (exchange: string, market_type: string) => ({
+    ...template, identity: { ...template.identity, exchange, market_type },
+  });
+  const catalog = { ...base, entries: [entry("okx", "futures"), entry("binance", "spot"), entry("binance", "futures")] };
+  const hedge = [{ role: "hedge.public_history", market_types: ["futures"], contract: "binance.usdm.hedge-public-history/1" }];
+  const venues = [{ exchange: "okx", roles: [] }, { exchange: "binance", roles: hedge }];
+  const preferred = createTrainingRunDraft(catalog, undefined, preferHedgeCapableEntries(venues));
+  assert.deepEqual([preferred.exchange, preferred.marketType], ["binance", "futures"]);
+  const unknownRoles = createTrainingRunDraft(catalog);
+  assert.deepEqual([unknownRoles.exchange, unknownRoles.marketType], ["okx", "futures"]);
+  const other = createTrainingRunDraft({ ...catalog, entries: [entry("okx", "futures"), entry("acme", "futures")] },
+    undefined, preferHedgeCapableEntries([{ exchange: "acme", roles: hedge }]));
+  assert.equal(other.exchange, "acme");
+});
+
+test("hedge drafts report the backend's venue decision instead of checking the venue name", () => {
+  const catalog = hedgeCatalog();
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  const draft = { ...createTrainingRunDraft(catalog), exchange: "okx", positionMode: "HEDGE" as const,
+    accountDataMode: "DETERMINISTIC_SIMULATION" as const };
+  const venueMessage = t("replay.err.hedgeBinance");
+  assert.ok(!evaluateTrainingRunDraft(draft, capabilities, catalog, null).errors.includes(venueMessage));
+  const refused = parseReplaySegmentPreparePlan(segmentPlanResponse({ hedge_inputs: {
+    ...segmentPlanResponse().hedge_inputs, requested_position_mode: "HEDGE",
+    capability_state: "UNSUPPORTED_SOURCE_MODE", reason: "BINANCE_USDM_REQUIRED",
+  } }));
+  const errors = evaluateTrainingRunDraft(draft, capabilities, catalog, refused).errors;
+  assert.ok(errors.includes(venueMessage));
+  assert.ok(!errors.some((message) => message.includes("BINANCE_USDM_REQUIRED")));
 });

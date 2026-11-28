@@ -17,7 +17,8 @@ from app.data_engine.interval_policy import (
 from app.replay.bars.builder import ReplayBarBuilder, ReplayDisplayBar
 from app.replay.bars.schedule import ReplayBarSchedule
 from app.replay.canonical import canonical_sha256
-from app.replay.catalog import KlinesReadRepository
+from app.data_engine.history.expected_bars import follows, open_runs, shifted_calendar
+from app.replay.catalog import KlinesReadRepository, replay_calendar
 from app.replay.dataset import (
     BarDatasetSnapshot,
     ReplayBar,
@@ -786,6 +787,127 @@ def _page_holes(
     return holes
 
 
+def _snapshot_calendar(snapshot: BarDatasetSnapshot, public_minus_actual_ms: int) -> object | None:
+    """The snapshot's session calendar on its public timeline (ADR-DATA-002 D2)."""
+    try:
+        calendar = replay_calendar(snapshot.provenance.calendar_id)
+    except ReplayDomainError as exc:
+        raise _fail(
+            "HISTORY_POLICY_INVALID",
+            "replay history trading calendar is not registered",
+            status_code=503,
+        ) from exc
+    return shifted_calendar(calendar, public_minus_actual_ms)
+
+
+MARKET_CLOSED_REASON = "market_closed"
+
+
+def declare_market_closures(
+    page: dict[str, object],
+    *,
+    calendar: object | None,
+    mapper: SourceBucketTimeMapper,
+    before_ms: int,
+) -> dict[str, object]:
+    """ADR-DATA-002 D2: declare where a session-calendar market is closed.
+
+    A page shows only traded time. A gap between its bars, or after its newest
+    bar up to ``before_ms``, in which the market trades no minute is a closure:
+    it is declared as such, never as a source gap, so charts keep continuity.
+    ``calendar`` is on the actual timeline; ``mapper`` maps the page's bars.
+    """
+    bars = page["bars"]
+    if calendar is None or mapper.monthly_count is not None or not bars:
+        return page
+    public_minus_actual = mapper.public_anchor_ms - mapper.actual_anchor_ms
+    holes = [
+        (int(earlier["close_time_ms"]) + 1, int(later["open_time_ms"]) - 1)
+        for earlier, later in zip(bars, bars[1:])
+    ]
+    holes.append((int(bars[-1]["close_time_ms"]) + 1, int(before_ms) - 1))
+    declared = sorted(
+        (int(item["start_ms"]), int(item["end_ms"])) for item in page["excluded_ranges"]
+    )
+    closures = []
+    for hole_start, hole_end in holes:
+        for start, end in _uncovered(hole_start, hole_end, declared):
+            try:
+                trades = calendar.count_expected(
+                    start - public_minus_actual, end - public_minus_actual, "1m"
+                )
+            except (LookupError, ValueError):
+                continue
+            if not trades:
+                closures.append(
+                    _HistoryExcludedRange(
+                        start_ms=start,
+                        end_ms=end,
+                        reason=MARKET_CLOSED_REASON,
+                        source_reason=str(calendar.calendar_id),
+                    ).to_dict()
+                )
+    if not closures:
+        return page
+    return {
+        **page,
+        "excluded_ranges": sorted(
+            [*page["excluded_ranges"], *closures], key=lambda item: int(item["start_ms"])
+        ),
+    }
+
+
+def _uncovered(
+    start_ms: int, end_ms: int, declared: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """The parts of ``[start_ms, end_ms]`` outside the declared inclusive ranges."""
+    pieces, cursor = [], start_ms
+    for declared_start, declared_end in declared:
+        if declared_end < cursor:
+            continue
+        if declared_start > end_ms:
+            break
+        if declared_start > cursor:
+            pieces.append((cursor, declared_start - 1))
+        cursor = max(cursor, declared_end + 1)
+    if cursor <= end_ms:
+        pieces.append((cursor, end_ms))
+    return pieces
+
+
+def _trading_holes(
+    holes: list[tuple[int, int]],
+    *,
+    snapshot: BarDatasetSnapshot,
+    public_minus_actual_ms: int,
+    source_interval: str,
+    source_interval_ms: int,
+) -> list[tuple[int, int]]:
+    """ADR-DATA-002 D2: keep only the parts of holes when the market trades.
+
+    A session-calendar series has no bars while its market is closed, so
+    closures are not holes; what remains must still be a declared source gap.
+    """
+    try:
+        calendar = replay_calendar(snapshot.provenance.calendar_id)
+    except ReplayDomainError as exc:
+        raise _fail(
+            "HISTORY_POLICY_INVALID",
+            "replay history trading calendar is not registered",
+            status_code=503,
+        ) from exc
+    if calendar is None or not holes:
+        return holes
+    offset = public_minus_actual_ms
+    return [
+        (first + offset, last + source_interval_ms - 1 + offset)
+        for start_ms, end_ms in holes
+        for first, last in open_runs(
+            calendar, start_ms - offset, end_ms - offset, source_interval
+        )
+    ]
+
+
 def _declared_page_exclusions(
     *,
     repository: KlinesReadRepository,
@@ -798,7 +920,13 @@ def _declared_page_exclusions(
     source_interval_ms: int,
     source_revision_override: str | None = None,
 ) -> tuple[_HistoryExcludedRange, ...]:
-    holes = _page_holes(bars, connection_before_ms=connection_before_ms)
+    holes = _trading_holes(
+        _page_holes(bars, connection_before_ms=connection_before_ms),
+        snapshot=snapshot,
+        public_minus_actual_ms=timeline_delta_ms,
+        source_interval=source_interval,
+        source_interval_ms=source_interval_ms,
+    )
     if not holes:
         return ()
     actual_scan_start_ms = compute_bucket_start_ms(
@@ -912,6 +1040,14 @@ def _declared_source_bucket_exclusions(
     """Explain omitted native display buckets from the revision gap index."""
 
     holes = _page_holes(bars, connection_before_ms=connection_before_ms)
+    if holes and mapper.monthly_count is None:
+        holes = _trading_holes(
+            holes,
+            snapshot=snapshot,
+            public_minus_actual_ms=mapper.public_anchor_ms - mapper.actual_anchor_ms,
+            source_interval=source_interval,
+            source_interval_ms=source_interval_ms,
+        )
     if not holes:
         return ()
     first_public_bucket = compute_bucket_start_ms(
@@ -1997,12 +2133,18 @@ def _aggregate_contiguous_base_segments(
     rows: list[ReplayBar],
     config: ReplaySessionConfig,
     interval_ms: int,
+    calendar: object | None = None,
 ) -> list[ReplayDisplayBar]:
     segments: list[list[ReplayBar]] = []
     for row in rows:
         if (
             not segments
-            or row.open_time_ms != segments[-1][-1].open_time_ms + interval_ms
+            or not (
+                row.open_time_ms == segments[-1][-1].open_time_ms + interval_ms
+                if calendar is None
+                # A session calendar's closure does not break a segment.
+                else follows(calendar, config.base_interval, segments[-1][-1].open_time_ms, row.open_time_ms)
+            )
         ):
             segments.append([row])
         else:
@@ -2021,12 +2163,12 @@ def _aggregate_contiguous_base_segments(
                 (
                     index
                     for index, row in enumerate(segment)
-                    if compute_bucket_start_ms(
+                    if _opens_display_bucket(
                         row.open_time_ms,
                         display_interval_ms,
-                        interval=config.display_interval,
+                        config=config,
+                        calendar=calendar,
                     )
-                    == row.open_time_ms
                 ),
                 None,
             )
@@ -2036,9 +2178,10 @@ def _aggregate_contiguous_base_segments(
             builder = ReplayBarBuilder(
                 base_interval=config.base_interval,
                 display_interval=config.display_interval,
-                replay_start_ms=aligned[-1].close_time_ms + 1,
+                replay_start_ms=_next_open_after(aligned[-1], config=config, calendar=calendar),
                 warmup_bars=aligned,
                 max_closed_bars=max(1, len(aligned)),
+                calendar=calendar,
             )
             bars.extend(builder.closed_bars)
     except ReplayDomainError as exc:
@@ -2049,6 +2192,28 @@ def _aggregate_contiguous_base_segments(
         ) from exc
     bars.sort(key=lambda bar: bar.open_time_ms)
     return bars
+
+
+def _opens_display_bucket(
+    open_ms: int,
+    display_interval_ms: int,
+    *,
+    config: ReplaySessionConfig,
+    calendar: object | None,
+) -> bool:
+    """Whether ``open_ms`` is its display bucket's first (expected) base bar."""
+    bucket_open_ms = compute_bucket_start_ms(
+        open_ms, display_interval_ms, interval=config.display_interval
+    )
+    if calendar is None:
+        return bucket_open_ms == open_ms
+    return calendar.first_expected_open(bucket_open_ms, open_ms, config.base_interval) == open_ms
+
+
+def _next_open_after(row: ReplayBar, *, config: ReplaySessionConfig, calendar: object | None) -> int:
+    if calendar is None:
+        return row.close_time_ms + 1
+    return ReplayBarSchedule(config.base_interval, (), calendar).next_expected_open(row.open_time_ms)
 
 
 def _build_gapped_aggregate_page(
@@ -2110,6 +2275,7 @@ def _build_gapped_aggregate_page(
         rows=public_rows,
         config=config,
         interval_ms=interval_ms,
+        calendar=_snapshot_calendar(snapshot, timeline_delta_ms),
     )
     eligible = [
         bar
@@ -2774,6 +2940,7 @@ def build_history_page(
             replay_start_ms=snapshot.replay_start_ms,
             warmup_bars=snapshot.warmup_rows,
             max_closed_bars=max(1, snapshot.row_count),
+            calendar=_snapshot_calendar(snapshot, snapshot.replay_start_ms - actual_replay_start_ms),
         )
         for replay_bar in snapshot.replay_rows:
             if replay_bar.close_time_ms > revealed_boundary_ms:
@@ -2796,7 +2963,7 @@ def build_history_page(
             next_before_ms,
             has_more,
         )
-    return {
+    page = {
         "protocol": "replay.v3",
         "schema_version": HISTORY_SCHEMA_VERSION,
         "run_id": str(binding["run_id"]),
@@ -2821,6 +2988,20 @@ def build_history_page(
         "next_before_ms": page_result.next_before_ms,
         "has_more": page_result.has_more,
     }
+    calendar = _snapshot_calendar(snapshot, 0)
+    if calendar is None:
+        return page
+    return declare_market_closures(
+        page,
+        calendar=calendar,
+        mapper=SourceBucketTimeMapper.create(
+            interval=history_config.display_interval,
+            actual_replay_start_ms=actual_replay_start_ms,
+            public_replay_start_ms=snapshot.replay_start_ms,
+            source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"),
+        ),
+        before_ms=before_ms,
+    )
 
 
 def build_display_projection(

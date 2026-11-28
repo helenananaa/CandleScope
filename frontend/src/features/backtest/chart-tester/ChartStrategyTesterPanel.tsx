@@ -226,6 +226,8 @@ export interface ChartStrategyTesterPanelProps {
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
   continuousChartActive?: boolean;
+  /** The chart's market has live bars at its interval (ADR-DATA-002 D2c). */
+  liveBarsAvailable?: boolean | undefined;
   continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
   /** The continuous panel's forward run, for the bridge to overlay in the continuous run modes. */
@@ -367,6 +369,7 @@ export function CandleScopeStrategyTesterPanel({
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
   continuousChartActive,
+  liveBarsAvailable,
   continuousMarketWindow,
   onRunModeChange,
   onContinuousOverlayRunChange,
@@ -1220,6 +1223,7 @@ export function CandleScopeStrategyTesterPanel({
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}
+          liveBars={liveBarsAvailable}
           {...(onContinuousOverlayRunChange ? { onOverlayRunChange: onContinuousOverlayRunChange } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           saveDraft={async () => { await persistCurrentDraft(); }}

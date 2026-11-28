@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import time
@@ -26,6 +27,17 @@ from .models import CcxtRawMarketEvent
 CCXT_UNIFIED_MARKER = "candlescope.ccxt.unified/1"
 _MAX_SEEN_TRADES = 4096
 _MAX_KLINE_REVISIONS = 8
+# One process-wide count for CCXT-managed book snapshots.  A live feed may
+# rebuild its projector (runtime reattach) or fall back to REST snapshots; a
+# count per object would restart at 1 there, and the partial-book engine would
+# reject every later snapshot as older than the last one it accepted.
+_ORDER_BOOK_REVISIONS = itertools.count(1)
+
+
+def next_order_book_revision() -> int:
+    """Return a book revision greater than any issued earlier in this process."""
+
+    return next(_ORDER_BOOK_REVISIONS)
 
 
 class CcxtUnifiedOrderBookOutOfSync(RuntimeError):
@@ -54,7 +66,6 @@ class CcxtUnifiedProjector:
         self._kline_rows: OrderedDict[int, list[Any]] = OrderedDict()
         self._kline_fingerprints: dict[int, tuple[Any, ...]] = {}
         self._latest_kline_open: int | None = None
-        self._book_revision = 0
 
     def source_interrupted(self) -> None:
         # A cached forming candle from before a disconnect cannot be promoted
@@ -271,13 +282,12 @@ class CcxtUnifiedProjector:
         book = dict(result)
         book["bids"] = [_copy_book_level(level) for level in bids]
         book["asks"] = [_copy_book_level(level) for level in asks]
-        self._book_revision += 1
         return [
             {
                 "schema": CCXT_UNIFIED_MARKER,
                 "kind": "order_book",
                 "value": book,
-                "local_revision": self._book_revision,
+                "local_revision": next_order_book_revision(),
             }
         ]
 

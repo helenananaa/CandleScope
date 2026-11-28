@@ -206,7 +206,7 @@ def test_trading_accounts_schema_step_keeps_one_copy(tmp_path):
     for _ in range(2):
         TradingStore(path).close()
 
-    copy = tmp_path / "trading-accounts.sqlite3.pre-trading-accounts-v3-to-v4.sqlite"
+    copy = tmp_path / "trading-accounts.sqlite3.pre-trading-accounts-v3-to-v5.sqlite"
     assert _copies(path) == [copy]
     assert _dump(copy) == before
 

@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Button, Checkbox, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { chartInstrumentFields } from "./chartInstrument.js";
+import { usePracticeMarketRules } from "./practiceMarketRules.js";
 import { tradingApi } from "./tradingApi.js";
 import { formatAmount, formatPrice } from "./tradingFormat.js";
 import type { AccountSummary, TradingAccount, TradingChartContext } from "./tradingTypes.js";
@@ -40,7 +42,9 @@ export default function PracticeOrderTicket({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  const hedge = account.settings.positionMode === "HEDGE" && context.marketType === "futures";
+  // The market's account model decides shorting and hedge intent (ADR-DATA-002 D5b).
+  const rules = usePracticeMarketRules(context);
+  const hedge = account.settings.positionMode === "HEDGE" && rules.hedge;
   const [action, setAction] = useState<"openLong" | "openShort" | "closeLong" | "closeShort">("openLong");
   const positionSide = action === "openLong" || action === "closeLong" ? "LONG" : "SHORT";
   const reduceOnly = hedge ? action === "closeLong" || action === "closeShort" : oneWayReduceOnly;
@@ -61,9 +65,7 @@ export default function PracticeOrderTicket({
     setMessage(null);
     try {
       const response = await tradingApi.placeOrder(account.id, {
-        exchange: context.exchange,
-        marketType: context.marketType,
-        symbol: context.symbol,
+        ...chartInstrumentFields(context),
         side,
         ...(hedge ? { positionSide, positionEffect: reduceOnly ? "close" : "open" } : {}),
         type,
@@ -79,7 +81,7 @@ export default function PracticeOrderTicket({
         tone: "ok",
         text: response.order.status === "filled"
           ? t("trading.ticket.filled", { price: formatPrice(response.order.fillPrice) })
-          : t("trading.ticket.working"),
+          : t(response.waitsForOpen ? "trading.ticket.waitsForOpen" : "trading.ticket.working"),
       });
       onPlaced();
     } catch (cause) {
@@ -102,8 +104,8 @@ export default function PracticeOrderTicket({
         value={side}
         onChange={setSide}
         options={[
-          { value: "buy", label: t(context.marketType === "futures" ? "trading.ticket.long" : "trading.ticket.buy") },
-          { value: "sell", label: t(context.marketType === "futures" ? "trading.ticket.short" : "trading.ticket.sell") },
+          { value: "buy", label: t(rules.shorting ? "trading.ticket.long" : "trading.ticket.buy") },
+          { value: "sell", label: t(rules.shorting ? "trading.ticket.short" : "trading.ticket.sell") },
         ]}
       />}
       <SegmentedControl
@@ -146,6 +148,7 @@ export default function PracticeOrderTicket({
           {risk !== null && equity ? ` · ${formatAmount((risk / equity) * 100)}%` : ""}
         </dd>
       </dl>
+      {!rules.opensPositions && <InlineAlert tone="warning">{t("trading.ticket.modelUnsupported")}</InlineAlert>}
       {message && <InlineAlert tone={message.tone === "error" ? "danger" : "success"}>{message.text}</InlineAlert>}
       <div className="trading-actions">
         <Button

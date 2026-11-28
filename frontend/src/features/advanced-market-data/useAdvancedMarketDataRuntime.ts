@@ -494,8 +494,7 @@ export function useAdvancedMarketDataRuntime({
       direction: "forward" | "backward";
     }> = [];
     if (context.metricChannels.includes("funding_rate")) {
-      const hybrid = context.identity.exchange === "binance"
-        && context.identity.marketType === "futures";
+      const hybrid = capabilitySnapshot.hybridFunding;
       requests.push({
         channel: "funding_rate" as const,
         period: hybrid ? context.interval : null,
@@ -515,8 +514,7 @@ export function useAdvancedMarketDataRuntime({
     }
     let scheduled = false;
     for (const descriptor of requests) {
-      const nativeOi = descriptor.channel === "open_interest"
-        && context.identity.exchange === "binance" && context.identity.marketType === "futures";
+      const nativeOi = descriptor.channel === "open_interest" && capabilitySnapshot.openInterestGrid;
       const observationHistory = !nativeOi && capabilitySnapshot.channels[descriptor.channel].observationsOnly;
       const forceRefresh = (nativeOi || observationHistory) && (refresh === true || refresh === descriptor.channel);
       const stepMs = nativeOi ? (parseIntervalSeconds(oiPeriod) ?? 0) * 1000 : 0;
@@ -810,8 +808,7 @@ export function useAdvancedMarketDataRuntime({
 
   const retryMarketHistory = useCallback((channel: MarketStateMetricChannel) => {
     const context = activeRef.current;
-    const nativeOi = channel === "open_interest"
-      && context.identity.exchange === "binance" && context.identity.marketType === "futures";
+    const nativeOi = channel === "open_interest" && capabilitySnapshot.openInterestGrid;
     if (!context.metricChannels.includes(channel)
       || (!nativeOi && !capabilitySnapshot.channels[channel].observationsOnly)) return;
     invalidateHistoryRequests();
@@ -953,8 +950,7 @@ export function useAdvancedMarketDataRuntime({
       const stateCapability = isMarketStateMetricChannel(item.channel)
         ? capabilitySnapshot.channels[item.channel]
         : null;
-      const nativeOi = item.channel === "open_interest"
-        && identity.exchange === "binance" && identity.marketType === "futures";
+      const nativeOi = item.channel === "open_interest" && capabilitySnapshot.openInterestGrid;
       const observationHistory = stateCapability?.observationsOnly && !nativeOi;
       const oiRefreshFallback = item.channel === "open_interest"
         && oiRefreshFallbackContextKey === historyContextKey

@@ -137,3 +137,20 @@ test("a research run on the practice account model continues forward on it, with
   Object.assign(c, { account_rules: "PRACTICE_V1", execution_model_revision: "EXECUTION_REALISM_V2" });
   assert.throws(() => projectSelectedVersion(selected), /execution_model_revision/);
 });
+
+test("futures versions follow the venue's declared contract rules, not its name", () => {
+  const futures = (exchange: string) => {
+    const selected = selectedFixture();
+    Object.assign(selected.configuration, { exchange, market_type: "futures", account_model: "LINEAR_PERP_ONE_WAY_V1",
+      quick_preset_id: "CRYPTO_PERP_STANDARD_V1", quick_preset_revision: "1" });
+    return selected;
+  };
+  const rules = { roles: [{ role: "contract_rules", market_types: ["futures"], contract: "BINANCE_USDM_LINEAR_BASE_QUANTITY" }] };
+  assert.equal(projectSelectedVersion(futures("binance"), rules).session.marketType, "futures");
+  assert.equal(projectSelectedVersion(futures("acme"), rules).session.exchange, "acme");
+  assert.throws(() => projectSelectedVersion(futures("okx"), { roles: [] }), /market/);
+  assert.throws(() => projectSelectedVersion(futures("binance"), null), /market/);
+  // Roles not loaded yet: the backend decides when the run is created.
+  assert.equal(projectSelectedVersion(futures("okx")).session.exchange, "okx");
+  assert.equal(projectSelectedVersion(selectedFixture(), { roles: [] }).session.marketType, "spot");
+});

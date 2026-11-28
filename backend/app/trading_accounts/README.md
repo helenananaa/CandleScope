@@ -24,6 +24,24 @@ uses the sum of both marked notionals divided by leverage. Each close and
 its bracket are scoped to one position lifecycle. Schema v4 preserves older
 orders, fills, trade IDs and journal links with a null position_side.
 
+Each market `(exchange, market_type, symbol)` follows one kline series
+(ADR-DATA-002 D1c). An order may name a provider series in an optional
+`identity` object, such as Twelve Data's AAPL:NASDAQ regular session. Schema v5
+records it as canonical JSON on orders, fills and the practice cursor; NULL is
+the exchange's own series, so older rows keep their meaning. The cursor, marks
+and excursions read that series. While a market has working orders or open
+positions in any account, an order that names another series is refused with
+`TRADING_SERIES_MISMATCH`; an order without `identity` follows the current one.
+Any market type is accepted. The symbol's catalog row declares its
+`accountModel` (ADR-DATA-002 D5b, `account_models.py`): `cash` is fully paid and
+long only; `crypto_linear` gets the account's leverage, shorting and hedge mode
+on any venue (Gate's `swap.linear` as well as Binance `futures`);
+`crypto_inverse` and `futures_margin` open no positions yet
+(`TRADING_ACCOUNT_MODEL_UNSUPPORTED`) but close existing ones. A symbol without
+a declaration, or one the catalog has not loaded, keeps the earlier rule:
+`futures` is linear, anything else is cash. `GET /trading/market-rules` gives
+the order ticket the same answer.
+
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).
 - `trades.py`: pure flat-to-flat grouping of fills into trades; reversals split
@@ -53,6 +71,14 @@ Application shutdown stops the practice matcher, then awaits
 subscriptions signals their storage tasks to stop; physical reads already in a
 thread remain owned until completion. Cancelling the shutdown waiter also drains
 those reads before propagating cancellation. `close_trading()` only signals stop.
+
+A market on a session calendar (ADR-DATA-002 D2/D5a) does not trade while it is
+closed. A market order, or a limit already through the price, placed while it is
+closed stays working (`waitsForOpen` in the response) and fills at the next
+open. The first candle after a closure starts at its open rather than at the
+previous close, so orders the open gapped through fill at the open: a limit at
+the open when that is better, a stop at the open plus slippage. Always-open
+markets have no session calendar and keep moving from the last close.
 
 A step replays the 1m candles of one instrument with working orders, from its
 cursor to now, in one storage-executor job (query, match, persist). Live

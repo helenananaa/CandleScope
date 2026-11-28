@@ -381,13 +381,18 @@ async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
     from app.exchanges.symbol_catalog import (
+        ensure_provider_symbol_metadata,
         get_cached_symbol_metadata,
         refresh_exchange_metadata,
     )
     from app.replay.runtime import start_replay_runtime
 
-    async def refresh_instrument_metadata(exchange: str, market_type: str):
-        return await refresh_exchange_metadata(exchange, market_type=market_type)
+    async def refresh_instrument_metadata(exchange: str, market_type: str, symbol: str | None = None):
+        refreshed = await refresh_exchange_metadata(exchange, market_type=market_type)
+        if symbol is not None:
+            # Query-only providers (Twelve Data stocks) have no full catalog to refresh.
+            await ensure_provider_symbol_metadata(exchange, market_type, symbol)
+        return refreshed
 
     if sys.platform == "emscripten":
         runtime = await _start_library_replay(app.state.local_data_service)
@@ -724,6 +729,7 @@ async def _startup_event_impl() -> None:
                 backtest_runtime=getattr(app.state, "backtest_runtime", None),
                 host_history_path=KLINES_DB_PATH,
                 replay_library=getattr(app.state, "replay_library", None),
+                calendar_for=getattr(getattr(app.state, "data_manager", None), "series_calendar", None),
             ),
             enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
         )

@@ -23,7 +23,13 @@ import {
   PRACTICE_ACCOUNT_RULES, defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
 } from "./continuousAccountRules.js";
 import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { continuousMarketSupported } from "../../exchange-support/capabilityRoles.js";
+import { useVenueRoles } from "../../exchange-support/useVenueRoles.js";
 import "./continuousStrategy.css";
+
+/** The backend's continuous-source rules (`continuous_definition.py`). */
+const CONTINUOUS_SERIES_VARIANTS: ReadonlySet<string> = new Set(["native", "ohlcv"]);
+const CONTINUOUS_VOLUME_SEMANTICS: ReadonlySet<string> = new Set(["base_asset", "shares"]);
 
 export interface ContinuousStrategyPanelProps {
   signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
@@ -34,6 +40,11 @@ export interface ContinuousStrategyPanelProps {
   initialExecution?: StrategyExecutionOverrides;
   initialFromMs?: number;
   chartActive?: boolean;
+  /**
+   * The chart's market has live bars at its interval. A forward run follows live closed bars, so a
+   * history-only source (Twelve Data's US equities) cannot run one (ADR-DATA-002 D2c).
+   */
+  liveBars?: boolean | undefined;
   marketWindow?: SeriesWindowView | null;
   /** The forward run the chart should overlay (ADR-BACKTEST-015 P2d), or null. */
   onOverlayRunChange?(run: StrategyOverlayRun | null): void;
@@ -86,16 +97,19 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [leverage, setLeverage] = useState(() => defaultForwardLeverage(props.session.marketType, props.initialExecution));
   const accountLeverage = forwardAccountLeverage(executionModel, props.session.marketType, leverage);
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
+  const venueRoles = useVenueRoles();
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
   const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null,
     ...(executionModel === "PRACTICE" ? [executionModel, accountLeverage] : [])]))),
     [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from, executionModel, accountLeverage]);
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
-  const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
-    && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
-    && identity.assetClass === "crypto" && identity.seriesVariant === "native" && identity.priceAdjustment === "raw"
-    && identity.sessionVariant === "continuous" && identity.volumeSemantics === "base_asset";
+  // ADR-DATA-002 D2c: the source's live bars and price semantics decide, not its asset class.
+  const liveBarsUnavailable = props.liveBars === false;
+  const qualified = props.language === "python" && hasSource && props.session.interval === "1m" && !liveBarsUnavailable
+    && continuousMarketSupported(venueRoles(props.session.exchange), props.session.marketType)
+    && CONTINUOUS_SERIES_VARIANTS.has(identity.seriesVariant) && identity.priceAdjustment === "raw"
+    && CONTINUOUS_VOLUME_SEMANTICS.has(identity.volumeSemantics);
   useEffect(() => {
     if (!references) return;
     let cancelled = false;
@@ -280,7 +294,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       fallback={props.literalParameters?.(busy)}
     />}
     {props.editor(() => { void initialize(); })}
-    {!qualified && <p role="status">{t("continuous.unsupported")}</p>}
+    {!qualified && <p role="status">{liveBarsUnavailable
+      ? t("continuous.liveBarsUnavailable", { symbol: props.session.symbol })
+      : t("continuous.unsupported")}</p>}
     {reference && reference.inputRevision !== inputRevision && <p role="status">{t("continuous.edited")}</p>}
     {reference && !reference.runId && <p role="status">{t("continuous.pending")}</p>}
     <div className="continuous-actions">

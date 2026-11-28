@@ -4,6 +4,7 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import TrainingHubDialog from "../replay/components/TrainingHubDialog.js";
 import type { ReplayLaunchContext } from "../replay/replayV2Types.js";
+import type { KlineSeriesIdentityWire } from "../market-data/klineSeriesIdentity.js";
 import {
   useTrainingHub,
   type TrainingHubRuntime,
@@ -13,6 +14,8 @@ const DataWorkbenchModal = lazy(() => import("../data-workbench/DataWorkbenchMod
 
 export interface ReplayLauncherDialogProps {
   readonly launchContext: ReplayLaunchContext;
+  /** The chart's kline series when it is not the exchange's own (ADR-DATA-002 D1). */
+  readonly launchSeries?: KlineSeriesIdentityWire | undefined;
   readonly onRequestClose: () => void;
 }
 
@@ -22,6 +25,7 @@ function replayRunUrl(runId: string): string {
 
 export default function ReplayLauncherDialog({
   launchContext,
+  launchSeries,
   onRequestClose,
 }: ReplayLauncherDialogProps) {
   useLocale();
@@ -69,7 +73,7 @@ export default function ReplayLauncherDialog({
     child.location.replace(url);
     onRequestClose();
   }, [onRequestClose]);
-  const runtime = useTrainingHub({ launchContext, navigateToRun });
+  const runtime = useTrainingHub({ launchContext, navigateToRun, ...(launchSeries ? { launchSeries } : {}) });
   const returnFromData = () => {
     setPreparingData(false);
     void runtime.actions.openCreate();

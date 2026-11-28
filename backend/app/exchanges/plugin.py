@@ -84,6 +84,14 @@ class DefaultSymbolNormalizer:
     def display(self, symbol: str, market_type: str = "spot") -> str:
         return self.normalize(symbol, market_type)
 
+    def pine_ticker(self, symbol: str, market_type: str = "spot") -> str:
+        """The symbol part of the venue's Pine ticker id for a storage symbol."""
+        return symbol
+
+    def storage_symbol_from_pine(self, ticker: str, market_type: str = "spot") -> str:
+        """The storage symbol a Pine ticker names (inverse of ``pine_ticker``)."""
+        return ticker
+
 
 class BuiltinExchangePlugin:
     """Compatibility plugin for current in-tree exchange adapters."""
