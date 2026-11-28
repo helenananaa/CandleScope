@@ -66,6 +66,7 @@ import type {
   ScreenToDrawingData,
   ShapeToolId,
   BasicLineToolId,
+  CalculatedToolId,
 } from "./drawingTypes.js";
 
 type TwoPointCreationTool = RangeMeasureToolId
@@ -75,7 +76,8 @@ type TwoPointCreationTool = RangeMeasureToolId
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
-  | ShapeToolId;
+  | ShapeToolId
+  | CalculatedToolId;
 type LegacyTwoPointTool = BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
 
 /**
@@ -87,7 +89,9 @@ function isLegacyTwoPointTool(tool: TwoPointCreationTool): tool is LegacyTwoPoin
     && tool !== "measure-time"
     && tool !== "measure-price-time"
     && tool !== "line-arrow"
-    && tool !== "path-line" && tool !== "path-arrow" && tool !== "channel-parallel";
+    && tool !== "path-line" && tool !== "path-arrow" && tool !== "channel-parallel"
+    && tool !== "fib-extension" && tool !== "anchored-vwap"
+    && tool !== "volume-profile" && tool !== "regression-channel";
 }
 type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive

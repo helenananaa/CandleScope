@@ -7,6 +7,7 @@ import TextEditOverlay from "../../components/TextEditOverlay";
 import TextFormatBar from "../../components/TextFormatBar";
 import SelectedDrawingStyleBar from "./SelectedDrawingStyleBar.js";
 import DrawingHistoryBar from "./DrawingHistoryBar.js";
+import DrawingMultiSelectionBar from "./DrawingMultiSelectionBar.js";
 import DrawingInteractionOverlay from "./rendering/DrawingInteractionOverlay.js";
 import {
     resolveDrawingHostInteractionSurfaceMode,
@@ -292,7 +293,10 @@ function DrawingEngineHost({
                 />
             )}
 
-            {!readOnly && !drawing.editingTextId && drawing.selectedTextSnapshot && (
+            {!readOnly && !drawing.editingTextId && drawing.multiSelection.count > 1 && (
+                <DrawingMultiSelectionBar selection={drawing.multiSelection} />
+            )}
+            {!readOnly && !drawing.editingTextId && drawing.multiSelection.count < 2 && drawing.selectedTextSnapshot && (
                 <TextFormatBar
                     key={drawing.selectedPrimId}
                     snapshot={drawing.selectedTextSnapshot}
@@ -301,7 +305,7 @@ function DrawingEngineHost({
                     onDelete={drawing.deleteSelected}
                 />
             )}
-            {!readOnly && !drawing.editingTextId && selectedDrawingMeta && (
+            {!readOnly && !drawing.editingTextId && drawing.multiSelection.count < 2 && selectedDrawingMeta && (
                 <SelectedDrawingStyleBar
                     drawing={selectedDrawingMeta}
                     {...(interactionSurfaceMode === "overlay" ? { onSave: drawing.saveDrawingProperties, currentInterval: drawingInterval } : {})}

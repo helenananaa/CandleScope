@@ -8,12 +8,14 @@ import {
 } from "../drawingModel.js";
 import { normalizeSavedDrawingItemStrict } from "../drawingPersistence.js";
 import { normalizeFreehandStroke } from "../freehandStrokeModel.js";
+import { createCalculatedSavedDrawing, isCalculatedToolId } from "./drawingCalculatedInteraction.js";
 import type {
   AngleToolId,
   ArrowToolId,
   AxisLineToolId,
   BasicLineToolId,
   BrushShape,
+  CalculatedToolId,
   ChannelToolId,
   PathToolId,
   DrawingDataPoint,
@@ -27,6 +29,7 @@ import type {
   SavedRangeMeasureDrawing,
   SavedAngleDrawing,
   SavedAxisLineDrawing,
+  SavedCalculatedDrawing,
   SavedChannelDrawing,
   SavedPathDrawing,
   SavedDrawing,
@@ -53,9 +56,11 @@ export type TwoPointCreationTool =
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
-  | ShapeToolId;
+  | ShapeToolId
+  | CalculatedToolId;
 
 export type SavedTwoPointDrawing =
+  | SavedCalculatedDrawing
   | SavedPathDrawing
   | SavedChannelDrawing
   | SavedRangeMeasureDrawing
@@ -93,6 +98,10 @@ export interface TextSavedDrawingOptions {
   readonly fontSize?: number;
   readonly italic?: boolean;
   readonly padding?: number;
+  /** Price labels show their anchor's price and carry no target. */
+  readonly priceLabel?: boolean;
+  /** Callout leader target. */
+  readonly target?: DrawingDataPoint;
   readonly text?: string;
   readonly underline?: boolean;
   readonly widthPx?: number | null;
@@ -159,6 +168,9 @@ export function createTwoPointSavedDrawing({
   tool,
 }: TwoPointSavedDrawingOptions): CreatedSavedDrawing<SavedTwoPointDrawing> | null {
   if (!Array.isArray(dataPoints)) return null;
+  if (isCalculatedToolId(tool)) {
+    return createCalculatedSavedDrawing({ tool, dataPoints, color, lineWidth });
+  }
   if (tool === "path-line" || tool === "path-arrow") {
     return finalizedCreatedDrawing("path", { type: "path", dataPoints: dataPoints.map((point: DrawingDataPoint) => ({ ...point })), color, lineWidth,
       arrowEnd: tool === "path-arrow" });
@@ -278,6 +290,8 @@ export function createTextSavedDrawing({
   fontSize,
   italic,
   padding,
+  priceLabel,
+  target,
   text,
   underline,
   widthPx,
@@ -285,6 +299,8 @@ export function createTextSavedDrawing({
   return finalizedCreatedDrawing("tx", {
     type: "text",
     dataPoint: { ...dataPoint },
+    ...(target === undefined ? {} : { target: { ...target } }),
+    ...(priceLabel ? { priceLabel: true } : {}),
     text: text ?? "",
     color,
     fontSize: fontSize || 14,

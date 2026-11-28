@@ -1,0 +1,933 @@
+{
+  "contract": "candlescope.drawing-wire.v1",
+  "source": "frontend/src/features/drawings/core/drawingWireContract.ts",
+  "regenerate": "UPDATE_DRAWING_WIRE_CONTRACT=1 node scripts/run-frontend-tests.mjs src/features/drawings/core/__tests__/drawingWireContract.test.ts",
+  "commonStyleKeys": [
+    "groupId",
+    "hidden",
+    "locked",
+    "visibleIntervals"
+  ],
+  "kinds": {
+    "angle-measure": {
+      "geometry": [
+        "dataPoints",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "axis-line": {
+      "geometry": [
+        "axisLineType",
+        "dataPoint",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "calculated": {
+      "geometry": [
+        "calcType",
+        "dataPoints",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "deviation",
+        "kind",
+        "lineWidth",
+        "rows"
+      ]
+    },
+    "channel": {
+      "geometry": [
+        "dataPoints",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "fillOpacity",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "fibonacci": {
+      "geometry": [
+        "dataPoints",
+        "inverted",
+        "kind"
+      ],
+      "style": [
+        "color",
+        "kind",
+        "levels",
+        "lineWidth"
+      ]
+    },
+    "freehand": {
+      "geometry": [
+        "dataPoints",
+        "kind",
+        "stroke"
+      ],
+      "style": [
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "highlighter": {
+      "geometry": [
+        "dataPoints",
+        "kind",
+        "stroke"
+      ],
+      "style": [
+        "brushShape",
+        "color",
+        "compositeOperation",
+        "kind",
+        "lineWidth",
+        "opacity"
+      ]
+    },
+    "line": {
+      "geometry": [
+        "dataPoints",
+        "kind",
+        "lineType"
+      ],
+      "style": [
+        "arrowEnd",
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "path": {
+      "geometry": [
+        "dataPoints",
+        "kind"
+      ],
+      "style": [
+        "arrowEnd",
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "position": {
+      "geometry": [
+        "direction",
+        "entryPrice",
+        "kind",
+        "slPrice",
+        "timeRange",
+        "tpPrice"
+      ],
+      "style": [
+        "infoPanelOffset",
+        "kind",
+        "positionSize"
+      ]
+    },
+    "range-measure": {
+      "geometry": [
+        "dataPoints",
+        "kind",
+        "measureType"
+      ],
+      "style": [
+        "color",
+        "kind",
+        "lineWidth"
+      ]
+    },
+    "shape": {
+      "geometry": [
+        "dataPoints",
+        "extendRight",
+        "kind",
+        "shapeType"
+      ],
+      "style": [
+        "color",
+        "fillColor",
+        "fillOpacity",
+        "kind",
+        "label",
+        "lineStyle",
+        "lineWidth",
+        "midline",
+        "priceLabels"
+      ]
+    },
+    "text": {
+      "geometry": [
+        "dataPoint",
+        "kind",
+        "target"
+      ],
+      "style": [
+        "align",
+        "bgColor",
+        "bold",
+        "borderColor",
+        "borderWidth",
+        "color",
+        "fontFamily",
+        "fontSize",
+        "italic",
+        "kind",
+        "padding",
+        "priceLabel",
+        "text",
+        "underline",
+        "widthPx"
+      ]
+    }
+  },
+  "replaySample": {
+    "runId": "wire-contract",
+    "entityCount": 17,
+    "document": {
+      "documentSchemaVersion": 2,
+      "scopeKey": "replay-run:wire-contract",
+      "charts": {
+        "chart:wire-contract": {
+          "documentSchemaVersion": 1,
+          "scopeKey": "replay-run:wire-contract",
+          "documentRevision": 0,
+          "updatedAt": 1795000000000,
+          "entities": [
+            {
+              "id": "path-arrow",
+              "kind": "path",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "path",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": {
+                      "$replay_decimal_v1": "60123.45"
+                    }
+                  },
+                  {
+                    "time": 1795000060,
+                    "price": 60150
+                  },
+                  {
+                    "time": 1795000120,
+                    "price": {
+                      "$replay_decimal_v1": "60130.5"
+                    }
+                  }
+                ]
+              },
+              "style": {
+                "kind": "path",
+                "arrowEnd": true,
+                "color": "#2962ff",
+                "lineWidth": 2,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "channel",
+              "kind": "channel",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "channel",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000120,
+                    "price": 60160
+                  },
+                  {
+                    "time": 1795000060,
+                    "price": {
+                      "$replay_decimal_v1": "60090.5"
+                    }
+                  }
+                ]
+              },
+              "style": {
+                "kind": "channel",
+                "color": "#089981",
+                "fillOpacity": {
+                  "$replay_decimal_v1": "0.15"
+                },
+                "lineWidth": 1,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "regression-channel",
+              "kind": "calculated",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "calculated",
+                "calcType": "regression-channel",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000600,
+                    "price": 60180
+                  }
+                ]
+              },
+              "style": {
+                "kind": "calculated",
+                "color": "#2962ff",
+                "lineWidth": 1,
+                "deviation": {
+                  "$replay_decimal_v1": "2.5"
+                },
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "volume-profile",
+              "kind": "calculated",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "calculated",
+                "calcType": "volume-profile",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000600,
+                    "price": 60180
+                  }
+                ]
+              },
+              "style": {
+                "kind": "calculated",
+                "color": "#787b86",
+                "lineWidth": 1,
+                "rows": 24
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "range-measure",
+              "kind": "range-measure",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "range-measure",
+                "measureType": "price-time",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000180,
+                    "price": {
+                      "$replay_decimal_v1": "60180.75"
+                    }
+                  }
+                ]
+              },
+              "style": {
+                "kind": "range-measure",
+                "color": "#2962ff",
+                "lineWidth": 1,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "line-arrow",
+              "kind": "line",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "line",
+                "lineType": "line-segment",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000060,
+                    "price": 60110
+                  }
+                ]
+              },
+              "style": {
+                "kind": "line",
+                "arrowEnd": true,
+                "color": "#f23645",
+                "lineWidth": 2,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "axis-line",
+              "kind": "axis-line",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "axis-line",
+                "axisLineType": "horizontal",
+                "dataPoint": {
+                  "time": 1795000000,
+                  "price": {
+                    "$replay_decimal_v1": "60120.5"
+                  }
+                }
+              },
+              "style": {
+                "kind": "axis-line",
+                "color": "#787b86",
+                "lineWidth": 1,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "angle-measure",
+              "kind": "angle-measure",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "angle-measure",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000060,
+                    "price": 60140
+                  }
+                ]
+              },
+              "style": {
+                "kind": "angle-measure",
+                "color": "#787b86",
+                "lineWidth": 1,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "callout",
+              "kind": "text",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "text",
+                "dataPoint": {
+                  "time": 1795000000,
+                  "price": 60100
+                },
+                "target": {
+                  "time": 1795000060,
+                  "price": {
+                    "$replay_decimal_v1": "60120.5"
+                  }
+                }
+              },
+              "style": {
+                "kind": "text",
+                "text": "Note",
+                "color": "#131722",
+                "fontSize": 14,
+                "fontFamily": "Inter",
+                "bold": true,
+                "italic": true,
+                "underline": true,
+                "align": "center",
+                "bgColor": "#ffffff",
+                "borderColor": "#2962ff",
+                "borderWidth": 1,
+                "widthPx": 160,
+                "padding": 6,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "price-label",
+              "kind": "text",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "text",
+                "dataPoint": {
+                  "time": 1795000120,
+                  "price": {
+                    "$replay_decimal_v1": "60133.25"
+                  }
+                }
+              },
+              "style": {
+                "kind": "text",
+                "text": "",
+                "priceLabel": true,
+                "color": "#2962ff"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "fibonacci",
+              "kind": "fibonacci",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "fibonacci",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60000
+                  },
+                  {
+                    "time": 1795000120,
+                    "price": 60200
+                  }
+                ],
+                "inverted": true
+              },
+              "style": {
+                "kind": "fibonacci",
+                "color": "#787b86",
+                "lineWidth": 1,
+                "levels": [
+                  {
+                    "level": 0,
+                    "color": "#787b86",
+                    "enabled": true
+                  },
+                  {
+                    "level": {
+                      "$replay_decimal_v1": "0.618"
+                    },
+                    "color": "#2962ff",
+                    "enabled": true
+                  }
+                ],
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "position",
+              "kind": "position",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "position",
+                "direction": "long",
+                "entryPrice": {
+                  "$replay_decimal_v1": "60100.5"
+                },
+                "tpPrice": 60300,
+                "slPrice": 60000,
+                "timeRange": {
+                  "start": {
+                    "time": 1795000000
+                  },
+                  "end": {
+                    "time": 1795000600
+                  }
+                }
+              },
+              "style": {
+                "kind": "position",
+                "positionSize": {
+                  "$replay_decimal_v1": "0.25"
+                },
+                "infoPanelOffset": {
+                  "anchor": "right",
+                  "x": 12,
+                  "y": -8
+                },
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "zone",
+              "kind": "shape",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "shape",
+                "shapeType": "rectangle",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000120,
+                    "price": 60150
+                  }
+                ],
+                "extendRight": true
+              },
+              "style": {
+                "kind": "shape",
+                "color": "#2962ff",
+                "lineWidth": 1,
+                "fillColor": "#2962ff",
+                "fillOpacity": {
+                  "$replay_decimal_v1": "0.2"
+                },
+                "lineStyle": "dashed",
+                "midline": true,
+                "priceLabels": true,
+                "label": "Demand",
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "pen-points",
+              "kind": "freehand",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "freehand",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000030,
+                    "price": {
+                      "$replay_decimal_v1": "60105.5"
+                    }
+                  }
+                ]
+              },
+              "style": {
+                "kind": "freehand",
+                "color": "#131722",
+                "lineWidth": 2,
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "pen-stroke",
+              "kind": "freehand",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "freehand",
+                "stroke": {
+                  "version": 3,
+                  "sourceProjection": "renko",
+                  "sourceProjectionConfig": "derived-ordinal:renko:{\"boxSize\":10}",
+                  "spans": [
+                    {
+                      "exact": {
+                        "left": {
+                          "time": 1795000000,
+                          "sourceOrdinal": 0
+                        },
+                        "right": {
+                          "time": 1795000060,
+                          "sourceOrdinal": 1
+                        }
+                      },
+                      "fallback": {
+                        "fromTime": 1795000000,
+                        "toTime": 1795000060,
+                        "leftRatio": {
+                          "$replay_decimal_v1": "0.25"
+                        },
+                        "rightRatio": {
+                          "$replay_decimal_v1": "0.75"
+                        }
+                      }
+                    }
+                  ],
+                  "points": [
+                    {
+                      "span": 0,
+                      "ratio": {
+                        "$replay_decimal_v1": "0.5"
+                      },
+                      "price": {
+                        "$replay_decimal_v1": "60100.5"
+                      }
+                    },
+                    {
+                      "time": {
+                        "$replay_decimal_v1": "1795000090.5"
+                      },
+                      "price": {
+                        "$replay_decimal_v1": "60101.25"
+                      }
+                    },
+                    {
+                      "anchor": {
+                        "time": 1795000120,
+                        "sourceOrdinal": 2
+                      },
+                      "price": 60102
+                    }
+                  ]
+                }
+              },
+              "style": {
+                "kind": "freehand",
+                "color": "#131722",
+                "lineWidth": 2
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "highlighter-points",
+              "kind": "highlighter",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "highlighter",
+                "dataPoints": [
+                  {
+                    "time": 1795000000,
+                    "price": 60100
+                  },
+                  {
+                    "time": 1795000030,
+                    "price": {
+                      "$replay_decimal_v1": "60105.5"
+                    }
+                  }
+                ]
+              },
+              "style": {
+                "kind": "highlighter",
+                "color": "#ffeb3b",
+                "lineWidth": 12,
+                "opacity": {
+                  "$replay_decimal_v1": "0.4"
+                },
+                "compositeOperation": "multiply",
+                "brushShape": "square",
+                "hidden": false,
+                "locked": true,
+                "visibleIntervals": [
+                  "1m",
+                  "4h"
+                ],
+                "groupId": "grp_wire_contract"
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            },
+            {
+              "id": "highlighter-stroke",
+              "kind": "highlighter",
+              "geometryRevision": 1,
+              "styleRevision": 1,
+              "geometry": {
+                "kind": "highlighter",
+                "stroke": {
+                  "version": 3,
+                  "sourceProjection": "renko",
+                  "sourceProjectionConfig": "derived-ordinal:renko:{\"boxSize\":10}",
+                  "spans": [
+                    {
+                      "exact": {
+                        "left": {
+                          "time": 1795000000,
+                          "sourceOrdinal": 0
+                        },
+                        "right": {
+                          "time": 1795000060,
+                          "sourceOrdinal": 1
+                        }
+                      },
+                      "fallback": {
+                        "fromTime": 1795000000,
+                        "toTime": 1795000060,
+                        "leftRatio": {
+                          "$replay_decimal_v1": "0.25"
+                        },
+                        "rightRatio": {
+                          "$replay_decimal_v1": "0.75"
+                        }
+                      }
+                    }
+                  ],
+                  "points": [
+                    {
+                      "span": 0,
+                      "ratio": {
+                        "$replay_decimal_v1": "0.5"
+                      },
+                      "price": {
+                        "$replay_decimal_v1": "60100.5"
+                      }
+                    },
+                    {
+                      "time": {
+                        "$replay_decimal_v1": "1795000090.5"
+                      },
+                      "price": {
+                        "$replay_decimal_v1": "60101.25"
+                      }
+                    },
+                    {
+                      "anchor": {
+                        "time": 1795000120,
+                        "sourceOrdinal": 2
+                      },
+                      "price": 60102
+                    }
+                  ]
+                }
+              },
+              "style": {
+                "kind": "highlighter",
+                "color": "#ffeb3b",
+                "lineWidth": 12
+              },
+              "bounds": {
+                "kind": "deferred"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

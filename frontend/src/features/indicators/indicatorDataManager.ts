@@ -1,4 +1,5 @@
-import { computeIndicatorBatch, computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
+import { computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
+import { createLiveBuiltinCompute } from "./builtinIncrementalCompute.js";
 import { buildSeriesWindowKey } from "../market-data/window/seriesWindowKey.js";
 import type { MarketSeries, KlineBar } from "../market-data/marketDataTypes.js";
 import type { SharedMarketCache } from "../market-data/manager/sharedMarketCache.js";
@@ -18,10 +19,17 @@ export interface IndicatorDataManagerOptions {
   cache: SharedMarketCache;
   gate: ForegroundPreloadGate;
   streams?: SharedIndicatorStreamCoordinator | null;
+  /** Replaces the whole compute route, browser scripts included. */
   compute?: IndicatorComputeBatchExecutor;
+  /** The backend behind the default route; defaults to HTTP compute. */
+  backendCompute?: IndicatorComputeBatchExecutor;
   range?: (options: { requests: IndicatorRangeRequest[]; signal: AbortSignal }) => Promise<IndicatorRangeBatchResponse>;
   coalesceMs?: number;
 }
+
+/** An explicit recompute must reach the server even when the browser could
+ * advance the builtin locally. The flag never goes on the wire. */
+type ManagedComputeRequest = IndicatorComputeRequest & { forceBuiltinValidation?: boolean };
 
 /** One workspace entrance for live indicator IO. The transport does not inherit
  * a chart's request scope, generation, client IDs or cancellation controller. */
@@ -34,9 +42,12 @@ export class IndicatorDataManager {
   private nextRequest = 0;
   private disposed = false;
   private readonly ranges: IndicatorRequestBroker<IndicatorRangeRequest, IndicatorPayloadEnvelope>;
-  private readonly computes: IndicatorRequestBroker<IndicatorComputeRequest, IndicatorPayloadEnvelope>;
+  private readonly computes: IndicatorRequestBroker<ManagedComputeRequest, IndicatorPayloadEnvelope>;
+  /** Per workspace, so local builtin state ends with the workspace. */
+  private readonly builtins: IndicatorComputeBatchExecutor;
 
   constructor(readonly options: IndicatorDataManagerOptions) {
+    this.builtins = createLiveBuiltinCompute(options.backendCompute);
     this.inputSource = createIndicatorCacheInputSource(options.cache);
     this.inputs = new IndicatorInputRanges(options.cache);
     this.results = new IndicatorResultManager(this.inputSource);
@@ -59,10 +70,13 @@ export class IndicatorDataManager {
         // The broker's group proves exact OHLCV equality; the wire API also
         // requires all jobs to reference the same owned input array.
         const ohlcv = requests[0]!.ohlcv;
-        const jobs = requests.map(request => { const id = this.id(); return { clientId: id, jobKey: id, request: { ...request, ohlcv } }; });
+        const jobs = requests.map(({ forceBuiltinValidation: _force, ...request }) => {
+          void _force;
+          const id = this.id(); return { clientId: id, jobKey: id, request: { ...request, ohlcv } };
+        });
         const indexes = new Map(jobs.map((job, index) => [job.jobKey, index]));
-        const response = await (options.compute ?? (input => routeIndicatorComputeBatch(input, computeIndicatorBatch)))({
-          jobs, signal, onResults: results => {
+        const response = await (options.compute ?? (input => routeIndicatorComputeBatch(input, this.builtins)))({
+          jobs, signal, force: requests.some(request => request.forceBuiltinValidation === true), onResults: results => {
             for (const item of results) {
               const index = indexes.get(item.jobKey);
               if (index === undefined || item.clientId !== jobs[index]!.clientId) throw new Error("Indicator compute response identity mismatch");
@@ -107,7 +121,7 @@ export class IndicatorDataManager {
       const cached = options.force ? null : this.results.reuseCompute(ticket);
       return (cached ? Promise.resolve(cached) : this.computes.request({
         key: indicatorRequestKey({ ...request, seriesIdentity: klineSeriesIdentityKey(series.exchange, series) }),
-        group, request, signal: options.signal, speculative,
+        group, request: { ...request, forceBuiltinValidation: options.force === true }, signal: options.signal, speculative,
         current,
       })).then(payload => {
         if (options.signal?.aborted || !current()) throw new DOMException("Indicator input changed", "AbortError");

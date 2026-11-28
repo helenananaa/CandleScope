@@ -1,13 +1,20 @@
 import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyEuropeanPortuguese, replayNoteEuropeanPortuguese, tradeHistoryEuropeanPortuguese, readonlyAccountEuropeanPortuguese, continuousEuropeanPortuguese, tradingAccountsPtPT, nativeEuropeanPortuguese } from "./europeanPortugueseFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ptPT = {
   ...unifiedMessages["pt-PT"],
   ...syntheticPagingMessages["pt-PT"],
+  ...drawingAnnotationMessages["pt-PT"],
   ...syntheticEnglish,
   ...continuousEuropeanPortuguese,
   ...tradeHistoryEuropeanPortuguese,
@@ -1248,6 +1255,15 @@ export const ptPT = {
   "settings.proxy.previewNodes": "Pré-visualizar nós",
   "settings.proxy.useNodes": "Usar nós selecionados",
   "settings.proxy.skippedNodes": "Nós incompatíveis ignorados: {count}",
+  "settings.proxy.autoRefresh": "Actualização automática",
+  "settings.proxy.autoRefreshOff": "Desactivada",
+  "settings.proxy.autoRefreshEvery": "A cada {duration}",
+  "settings.proxy.autoRefreshHelp": "Verifica as subscrições guardadas com este intervalo. Os nós em uso passam a usar as definições actuais do fornecedor. Não são adicionados nós novos, e um nó que o fornecedor removeu mantém as últimas definições.",
+  "settings.proxy.refreshPending": "Ainda não verificado automaticamente",
+  "settings.proxy.refreshChecked": "Última verificação: {time}",
+  "settings.proxy.refreshFailed": "Falha na actualização automática: {time}",
+  "settings.proxy.refreshUpdated": "Nós actualizados: {count} · {time}",
+  "settings.proxy.refreshMissing": "Já não estão na subscrição: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "IDs das exchanges (separados por vírgulas; vazio significa todas)",
   "settings.proxy.enabled": "Activada",
@@ -4169,4 +4185,9 @@ export const ptPT = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar o rascunho descontinuado {name}",
   "chartTester.deleteRetiredDraftFailed": "Não foi possível eliminar o rascunho descontinuado. Tente novamente.",
+  ...drawingSelectionMessages["pt-PT"],
+  ...drawingCalculatedMessages["pt-PT"],
+  ...replayDrawingSaveMessages["pt-PT"],
+  ...chartTimeZoneMessages["pt-PT"],
+  ...chartTimeShortcutMessages["pt-PT"],
 } as const satisfies MessageCatalog;

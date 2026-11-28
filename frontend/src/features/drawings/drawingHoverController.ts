@@ -27,6 +27,7 @@ const LINE_HOVER_TYPES = new Set<DrawingHitType>([
   "range-measure",
   "path",
   "channel",
+  "calculated",
   "fibonacci",
   "position",
   "shape",
@@ -77,7 +78,7 @@ export function cursorForLineToolHit(hit: HoverDrawingHit | null | undefined): s
     if (axisLineType === "vertical") return "ew-resize";
     return "move";
   }
-  if (hit?.type === "angle" || hit?.type === "line" || hit?.type === "range-measure" || hit?.type === "path" || hit?.type === "channel") {
+  if (hit?.type === "angle" || hit?.type === "line" || hit?.type === "range-measure" || hit?.type === "path" || hit?.type === "channel" || hit?.type === "calculated") {
     return (hit.pointIndex ?? -1) >= 0 ? "crosshair" : "move";
   }
   return "crosshair";

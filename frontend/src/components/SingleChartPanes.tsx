@@ -2375,14 +2375,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return true;
   }, [scheduleLatestWindowScroll]);
 
-  const handleRestoreLatestWindow = useCallback(() => {
+  // The promise settles true once the view has scrolled to the restored edge;
+  // null means the restore could not start (nothing to call, or loading).
+  const handleRestoreLatestWindow = useCallback((): Promise<boolean> | null => {
     const restore = onRestoreLatestWindowRef.current ?? onNeedMoreRightRef.current;
     if (
       !restore
       || !canRestoreLatestWindowRef.current
       || explicitLatestWindowRestoreRef.current != null
       || rightWindowRestoreRef.current != null
-    ) return;
+    ) return null;
 
     const requestedDatasetKey = datasetKeyRef.current;
     const store = seriesStoreRef.current;
@@ -2407,11 +2409,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         setLatestWindowRestorePending(false);
       });
     explicitLatestWindowRestoreRef.current = promise;
+    return promise;
   }, [scheduleLatestWindowScroll]);
 
   const returnToLatest = useCallback(() => {
     if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
-      handleRestoreLatestWindow();
+      void handleRestoreLatestWindow();
     } else {
       jumpToLatest();
     }
@@ -5642,6 +5645,25 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useImperativeHandle(ref, () => ({
     getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
+    // Same as the chart's button, but says whether the view got there.
+    returnToLatest: () => {
+      if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
+        return handleRestoreLatestWindow() ?? Promise.resolve(false);
+      }
+      if (displayRowsRef.current.length === 0) return Promise.resolve(false);
+      jumpToLatest();
+      return Promise.resolve(true);
+    },
+    // Centres the bar half a view in, so the oldest loaded bar sits at the left edge.
+    showFirstLoadedBar: () => {
+      const rows = seriesStoreRef.current?.snapshot() ?? [];
+      const first = Number(rows[0]?.time);
+      const logical = captureVisibleRange()?.logical;
+      if (!Number.isFinite(first) || !logical) return null;
+      const half = Math.max(0, Math.floor((logical.to - logical.from) / 2));
+      const anchor = Number(rows[Math.min(rows.length - 1, half)]?.time);
+      return Number.isFinite(anchor) && centerVisibleTime(anchor) ? first : null;
+    },
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
     centerVisibleTime,
@@ -5731,6 +5753,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     setLinkedDrawingRevision,
     setDrawingsHidden,
     updateSelectedDrawingStyle,
+    handleRestoreLatestWindow,
+    jumpToLatest,
   ]);
 
   const latestWindowMissing = rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated);
