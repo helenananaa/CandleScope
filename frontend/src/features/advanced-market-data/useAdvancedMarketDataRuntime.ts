@@ -995,8 +995,6 @@ export function useAdvancedMarketDataRuntime({
     capabilitySnapshot,
     historyContextKey,
     historyErrors,
-    identity.exchange,
-    identity.marketType,
     oiRefreshFallbackContextKey,
     liquidations.view.connectionStatus,
     liquidations.view.error,
