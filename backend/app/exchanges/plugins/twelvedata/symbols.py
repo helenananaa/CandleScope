@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.exchanges.contract_rules import fixed_quantity_rules
 from app.exchanges.models import SymbolInfo
 from app.exchanges.plugin import DefaultSymbolNormalizer
 
@@ -92,6 +93,7 @@ def parse_symbol_search_payload(
             base_asset = raw_symbol
             quote_asset = str(row.get("currency") or "LOCAL").strip().upper()
         access = row.get("access") if isinstance(row.get("access"), dict) else {}
+        shares = resolved_market in {"stock", "etf"}
         identity = identity_for_instrument(
             market_type=resolved_market,
             venue=venue_mic,
@@ -110,6 +112,12 @@ def parse_symbol_search_payload(
             venue_mic=venue_mic,
             entitlement=str(access.get("plan") or "unknown"),
             redistribution="unknown",
+            # Shares are bought outright, in whole shares: the listing venue's
+            # lot (ADR-DATA-002 D5c). Fractional shares are a broker's feature.
+            # Quotes for forex, indices and commodities are not something a
+            # cash account holds.
+            account_model="cash" if shares else "",
+            **(fixed_quantity_rules("1", "1") if shares else {}),
             raw={
                 "provider_symbol": raw_symbol,
                 "exchange": exchange_name,

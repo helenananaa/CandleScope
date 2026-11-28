@@ -558,6 +558,7 @@ function isDrawingKind(value: unknown): value is DrawingKind {
     || value === "range-measure"
     || value === "path"
     || value === "channel"
+    || value === "calculated"
     || value === "text"
     || value === "fibonacci"
     || value === "position"

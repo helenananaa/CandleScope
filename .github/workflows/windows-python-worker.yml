@@ -9,6 +9,13 @@ on:
       - "backend/app/data_engine/storage/prefix_watches.py"
       - "backend/app/core/pre_migration_copy.py"
       - "backend/app/plugin_security_v2/**"
+      - "backend/app/host_credentials/**"
+      - "backend/app/data_sources/**"
+      - "backend/app/readonly_accounts/credentials.py"
+      - "backend/app/readonly_accounts/service.py"
+      - "backend/tests/test_host_credential_vault.py"
+      - "backend/tests/test_readonly_account_windows.py"
+      - "backend/tests/test_data_source_credentials.py"
       - "backend/tests/test_python_strategy_runtime.py"
       - "backend/tests/test_continuous*.py"
       - "backend/tests/test_kline_prefix_watches.py"
@@ -74,6 +81,18 @@ jobs:
         run: >-
           python -B -m pytest -q tests/test_pre_migration_copy.py
           --basetemp="${{ runner.temp }}/migration-copy-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Check the host credential vault in Windows Credential Manager
+        working-directory: backend
+        env:
+          CANDLE_DATA_DIR: ${{ runner.temp }}/candlescope-credential-vault-data
+          # Writes, reads and deletes two records under a test namespace, and
+          # one OKX account key the account service saves, reads and forgets.
+          CANDLESCOPE_REAL_CREDENTIAL_VAULT: "1"
+        run: >-
+          python -B -m pytest -q -rs tests/test_host_credential_vault.py
+          tests/test_data_source_credentials.py tests/test_readonly_account_windows.py
+          --junitxml=../output/windows-python-worker/credential-vault-junit.xml
+          --basetemp="${{ runner.temp }}/credential-vault-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Require executed Windows cases and record source identity
         if: always()
         run: >-

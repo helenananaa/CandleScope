@@ -172,9 +172,18 @@ async def test_account_network_refresh_depends_on_bound_route(subscription, tmp_
     monkeypatch.setattr(config, "PROXY_SETTINGS_PATH", tmp_path / "settings.json")
     monkeypatch.setattr(settings, "managed", manager)
     monkeypatch.setattr(runtime, "managed", manager)
+    from app.readonly_accounts.service import saved_network_options
+
     app = FastAPI()
-    restart = AsyncMock()
-    app.state.readonly_account_service = SimpleNamespace(reconfigure_network=restart)
+    # Stands in for the account service: it reconnects with what the saved settings choose.
+    account = SimpleNamespace(network_in_use=None,
+                              network_options_now=lambda: (saved_network_options()["proxy"], False))
+
+    async def reconnect():
+        account.network_in_use = account.network_options_now()
+
+    restart = account.reconfigure_network = AsyncMock(side_effect=reconnect)
+    app.state.readonly_account_service = account
     app.include_router(settings.router)
     transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 1234))
     async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as cli:

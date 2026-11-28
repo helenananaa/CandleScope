@@ -126,6 +126,8 @@ def main() -> int:
         # Practice HEDGE money and migration, multi-chart replay finances, restart and shutdown.
         "test_trading_practice_hedge.py", "test_trading_state_shutdown.py", "test_replay_multi_interval.py",
         "test_replay_multi_interval_service.py", "test_replay_recovery.py", "test_replay_shutdown.py",
+        # ADR-DATA-002 D4: host credential vault, data-source keys and the Twelve Data provider that reads them.
+        "test_host_credential_vault.py", "test_data_source_credentials.py", "test_twelve_data_provider.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

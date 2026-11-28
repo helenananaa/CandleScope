@@ -4,11 +4,14 @@ import secrets
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel, Field, SecretStr
 
 from app.core.config import load_proxy_settings
 from app.core.proxy_pool import normalize_proxy_pool
 from app.research_data.access import require_local_research_access
+from .refresh import refresher
 from .runtime import managed
 from .source import SubscriptionError, download, source_id
 from .store import REFERENCE
@@ -21,6 +24,10 @@ _previews = {}
 class Source(BaseModel):
     url: SecretStr | None = None
     saved_route_id: str | None = None
+
+
+class RefreshSchedule(BaseModel):
+    interval_hours: Literal[0, 6, 12, 24]
 
 
 class Selection(BaseModel):
@@ -81,3 +88,16 @@ async def prepare_routes(body: Selection):
             return {"routes": normalize_proxy_pool(routes)[0]}
         except SubscriptionError as exc:
             raise HTTPException(400, str(exc)) from None
+
+
+@router.get("/refresh")
+async def refresh_status():
+    """The automatic refresh interval and the last result per subscription (by source id)."""
+    return await asyncio.to_thread(refresher.status)
+
+
+@router.put("/refresh")
+async def set_refresh_schedule(body: RefreshSchedule):
+    data = await asyncio.to_thread(refresher.set_interval, body.interval_hours)
+    refresher.wake.set()  # Re-check now; the event belongs to the event loop, not the worker thread.
+    return data

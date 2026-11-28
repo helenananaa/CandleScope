@@ -1,13 +1,13 @@
 /**
  * Drawing toolbar sits on the left side of the chart area.
  *
- * Buttons: Mouse cursor, Pen/Highlighter, Eraser, Line, Shape, Text, Fibonacci, Position (Long/Short).
+ * Buttons: Mouse cursor, Pen/Highlighter, Eraser, Line, Shape, Text, Fibonacci, Calculated, Position (Long/Short).
  * Left-click toggles the tool on/off.
  * Right-click or double-click on Cursor / Pen / Line / Shape opens a flyout to switch variants.
  *
  * All drawing is native (Plugin API), no pixel overlays.
  */
-import { memo, useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect, useMemo } from "react";
 import type { MouseEvent } from "react";
 import {
   CHART_DRAWING_ANCHOR_MODES,
@@ -21,6 +21,7 @@ import {
 } from "../features/drawings/drawingCapabilities.js";
 import { t } from "../i18n/index.js";
 import { resolveDrawingHostInteractionSurfaceMode } from "../features/drawings/interactionSurfaceMode.js";
+import { isCalculatedToolId } from "../features/drawings/drawingModel.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { markPerfOnce } from "../runtime/performance/perfMarks";
 import DrawingActionButtons from "./drawing/DrawingActionButtons.js";
@@ -29,6 +30,7 @@ import DrawingToolButton from "./drawing/DrawingToolButton.js";
 import DrawingVariantToolButton from "./drawing/DrawingVariantToolButton.js";
 import { drawingVariantLabel } from "./drawing/drawingToolbarI18n.js";
 import {
+  CALCULATED_VARIANTS,
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
   AutoSelectIcon,
@@ -40,11 +42,18 @@ import {
   MagnetIcon,
   POSITION_VARIANTS,
   SHAPE_VARIANTS,
-  TextIcon,
+  TEXT_VARIANTS,
 } from "./drawing/drawingToolbarDefinitions.js";
 import FibLevelsPanel from "./drawing/FibLevelsPanel.js";
 import PositionSettingsPanel from "./drawing/PositionSettingsPanel.js";
 import { useDrawingToolbarController } from "./drawing/useDrawingToolbarController.js";
+import type { FlyoutFavorites } from "./drawing/ToolFlyout.js";
+import {
+  favoriteShortcutIndex,
+  MAX_FAVORITE_TOOLS,
+  toggleFavoriteTool,
+  useFavoriteTools,
+} from "../features/drawings/drawingFavoriteTools.js";
 import type { ToolbarVariant } from "./drawing/drawingToolbarDefinitions.js";
 import type { DrawingStylePatch } from "../features/drawings/drawingInteractionController.js";
 import type { SelectedDrawingMeta } from "../features/drawings/drawingSelectionController.js";
@@ -94,6 +103,30 @@ const DEFAULT_LINE_VARIANT = (() => {
   if (!variant) throw new Error("Missing required line-segment toolbar variant");
   return variant;
 })();
+
+type FavoriteGroup = "cursor" | "freehand" | "line" | "shape" | "position";
+
+/** Tools that can be starred: every variant in the tool menus. */
+interface FavoriteEntry {
+  readonly group: FavoriteGroup;
+  readonly variant: ToolbarVariant<DrawingToolId>;
+}
+const favoriteEntries = (group: FavoriteGroup, variants: readonly ToolbarVariant<DrawingToolId>[]) => (
+  variants.map((variant): [string, FavoriteEntry] => [variant.id, { group, variant }])
+);
+const FAVORITE_TOOL_VARIANTS: ReadonlyMap<string, FavoriteEntry> = new Map([
+  ...favoriteEntries("cursor", CURSOR_VARIANTS),
+  ...favoriteEntries("freehand", FREEHAND_VARIANTS),
+  ...favoriteEntries("line", LINE_VARIANTS),
+  ...favoriteEntries("shape", SHAPE_VARIANTS),
+  ...favoriteEntries("position", POSITION_VARIANTS),
+]);
+const isFavoriteTool = (id: string) => FAVORITE_TOOL_VARIANTS.has(id);
+
+function shortcutTarget(target: EventTarget | null): boolean {
+  return target instanceof Element
+    && !!target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="combobox"], .monaco-editor, dialog[open]');
+}
 
 const DrawingToolbar = memo(function DrawingToolbar({
   activeTool,
@@ -151,12 +184,15 @@ const DrawingToolbar = memo(function DrawingToolbar({
   }, [drawingAnchorMode, onToolChange]);
   const isVariantDisabled = useCallback(
     (variant: ToolbarVariant<DrawingToolId>) => !supportsDrawingTool(drawingAnchorMode, variant.id)
-      || (variant.id.startsWith("measure-") && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
+      || ((variant.id.startsWith("measure-") || isCalculatedToolId(variant.id)
+        || variant.id === "callout" || variant.id === "price-label")
+        && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
     [drawingAnchorMode],
   );
 
   const {
     chartTypeBtnRef,
+    calculatedGroup,
     closeFlyout,
     currentChartType,
     currentCursorIcon,
@@ -203,6 +239,13 @@ const DrawingToolbar = memo(function DrawingToolbar({
     handleShapeContextMenu,
     handleShapeDblClick,
     handleTextClick,
+    handleTextContextMenu,
+    handleTextDblClick,
+    handleSelectTextVariant,
+    currentTextIcon,
+    currentTextId,
+    currentTextLabel,
+    textBtnRef,
     handleToggleFibonacciSettings,
     handleTogglePositionSettings,
     isCursorActive,
@@ -252,11 +295,15 @@ const DrawingToolbar = memo(function DrawingToolbar({
   const shapeToolsDisabled = drawingGestureToolsDisabled
     || !hasSupportedDrawingVariant(drawingAnchorMode, SHAPE_VARIANTS);
   const textDisabled = drawingGestureToolsDisabled
-    || !supportsDrawingTool(drawingAnchorMode, "text");
+    || !hasSupportedDrawingVariant(drawingAnchorMode, TEXT_VARIANTS);
   const fibonacciDisabled = drawingGestureToolsDisabled
     || !supportsDrawingTool(drawingAnchorMode, "fibonacci");
   const positionToolsDisabled = drawingGestureToolsDisabled
     || !hasSupportedDrawingVariant(drawingAnchorMode, POSITION_VARIANTS);
+  // Calculated drawings are painted only by the scene overlay.
+  const calculatedToolsDisabled = drawingGestureToolsDisabled
+    || !hasSupportedDrawingVariant(drawingAnchorMode, CALCULATED_VARIANTS)
+    || resolveDrawingHostInteractionSurfaceMode() !== "overlay";
   const lineVariantSupported = supportsDrawingTool(drawingAnchorMode, lineVariant);
   const displayedLineVariant = lineVariantSupported
     ? (LINE_VARIANTS.find((variant) => variant.id === lineVariant) || DEFAULT_LINE_VARIANT)
@@ -278,6 +325,49 @@ const DrawingToolbar = memo(function DrawingToolbar({
     isLineActive,
     lineVariantSupported,
   ]);
+  const favoriteIds = useFavoriteTools(isFavoriteTool);
+  const favorites = useMemo<FlyoutFavorites<DrawingToolId>>(() => ({
+    isFavorite: (id) => favoriteIds.includes(id),
+    toggle: (id) => toggleFavoriteTool(id, isFavoriteTool) !== null,
+    full: favoriteIds.length >= MAX_FAVORITE_TOOLS,
+  }), [favoriteIds]);
+  const favoriteGroupDisabled = useCallback((group: FavoriteGroup) => (
+    group === "cursor" ? cursorToolsDisabled
+      : group === "freehand" ? freehandToolsDisabled
+        : group === "line" ? lineToolsDisabled
+          : group === "shape" ? shapeToolsDisabled
+            : positionToolsDisabled
+  ), [cursorToolsDisabled, freehandToolsDisabled, lineToolsDisabled, positionToolsDisabled, shapeToolsDisabled]);
+  const favoriteDisabled = useCallback((id: DrawingToolId) => {
+    const entry = FAVORITE_TOOL_VARIANTS.get(id);
+    return !entry || favoriteGroupDisabled(entry.group) || isVariantDisabled(entry.variant);
+  }, [favoriteGroupDisabled, isVariantDisabled]);
+  const selectFavorite = useCallback((id: DrawingToolId) => {
+    const entry = FAVORITE_TOOL_VARIANTS.get(id);
+    if (!entry || favoriteDisabled(id)) return false;
+    closeFlyout();
+    if (effectiveActiveTool === id && entry.group !== "cursor") {
+      handleCapabilityToolChange(null);
+      return true;
+    }
+    if (entry.group === "cursor") handleSelectCursorVariant(id as Parameters<typeof handleSelectCursorVariant>[0]);
+    else if (entry.group === "freehand") handleSelectFreehandVariant(id as Parameters<typeof handleSelectFreehandVariant>[0]);
+    else if (entry.group === "line") handleSelectLineVariant(id as Parameters<typeof handleSelectLineVariant>[0]);
+    else if (entry.group === "shape") handleSelectShapeVariant(id as Parameters<typeof handleSelectShapeVariant>[0]);
+    else handleSelectPositionVariant(id as Parameters<typeof handleSelectPositionVariant>[0]);
+    return true;
+  }, [closeFlyout, effectiveActiveTool, favoriteDisabled, handleCapabilityToolChange, handleSelectCursorVariant, handleSelectFreehandVariant, handleSelectLineVariant, handleSelectPositionVariant, handleSelectShapeVariant]);
+  // Alt+1…Alt+9 picks the favorite in that place.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const index = favoriteShortcutIndex(event);
+      if (index === null || event.defaultPrevented || event.repeat || shortcutTarget(event.target)) return;
+      const id = favoriteIds[index];
+      if (id && selectFavorite(id)) event.preventDefault();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [favoriteIds, selectFavorite]);
   const drawingToolTitle = !drawingFeaturesEnabled
     ? t("drawing.unsupported", { chartType: drawingVariantLabel(currentChartType) })
     : t("drawing.initializing");
@@ -335,6 +425,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={cursorToolsDisabled ? drawingToolTitle : t("drawing.switch.cursor", { tool: currentCursorLabel })}
         variants={CURSOR_VARIANTS}
         isVariantDisabled={isVariantDisabled}
+        favorites={favorites}
       />
 
       <DrawingVariantToolButton
@@ -354,6 +445,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={freehandToolsDisabled ? drawingToolTitle : t("drawing.switch.pen", { tool: currentFreehandLabel })}
         variants={FREEHAND_VARIANTS}
         isVariantDisabled={isVariantDisabled}
+        favorites={favorites}
       />
 
       <DrawingToolButton
@@ -382,6 +474,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={lineToolsDisabled ? drawingToolTitle : t("drawing.switch.line", { tool: lineVariantSupported ? currentLineLabel : drawingVariantLabel(displayedLineVariant) })}
         variants={LINE_VARIANTS}
         isVariantDisabled={isVariantDisabled}
+        favorites={favorites}
       />
 
       <DrawingVariantToolButton
@@ -401,15 +494,26 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={shapeToolsDisabled ? drawingToolTitle : t("drawing.switch.shape", { tool: currentShapeLabel })}
         variants={SHAPE_VARIANTS}
         isVariantDisabled={isVariantDisabled}
+        favorites={favorites}
       />
 
-      <DrawingToolButton
+      <DrawingVariantToolButton
         active={isTextActive}
-        dataDrawingTool="text"
+        anchorRef={textBtnRef}
+        currentId={currentTextId}
+        dataDrawingTool={currentTextId}
         disabled={textDisabled}
-        icon={TextIcon}
+        flyoutKey="text"
+        flyoutOpen={flyoutOpen}
+        icon={currentTextIcon}
         onClick={handleTextClick}
-        title={textDisabled ? drawingToolTitle : t("drawing.textNote")}
+        onCloseFlyout={closeFlyout}
+        onContextMenu={handleTextContextMenu}
+        onDoubleClick={handleTextDblClick}
+        onSelect={handleSelectTextVariant}
+        title={textDisabled ? drawingToolTitle : currentTextId === "text" ? t("drawing.textNote") : currentTextLabel}
+        variants={TEXT_VARIANTS}
+        isVariantDisabled={isVariantDisabled}
       />
 
       <DrawingToolButton
@@ -441,6 +545,25 @@ const DrawingToolbar = memo(function DrawingToolbar({
       </DrawingToolButton>
 
       <DrawingVariantToolButton
+        active={calculatedGroup.active}
+        anchorRef={calculatedGroup.anchorRef}
+        currentId={calculatedGroup.currentId}
+        dataDrawingTool={calculatedGroup.currentId}
+        disabled={calculatedToolsDisabled}
+        flyoutKey="calculated"
+        flyoutOpen={flyoutOpen}
+        icon={calculatedGroup.icon}
+        onClick={calculatedGroup.onClick}
+        onCloseFlyout={closeFlyout}
+        onContextMenu={calculatedGroup.onContextMenu}
+        onDoubleClick={calculatedGroup.onDoubleClick}
+        onSelect={calculatedGroup.onSelect}
+        title={calculatedToolsDisabled ? drawingToolTitle : t("drawing.switch.calculated", { tool: calculatedGroup.label })}
+        variants={CALCULATED_VARIANTS}
+        isVariantDisabled={isVariantDisabled}
+      />
+
+      <DrawingVariantToolButton
         active={isPositionActive}
         anchorRef={posBtnRef}
         currentId={posVariant}
@@ -457,6 +580,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={positionToolsDisabled ? drawingToolTitle : t("drawing.switch.position", { tool: currentPosLabel })}
         variants={POSITION_VARIANTS}
         isVariantDisabled={isVariantDisabled}
+        favorites={favorites}
       >
         {flyoutOpen === "position-settings" && (
           <PositionSettingsPanel
@@ -467,6 +591,26 @@ const DrawingToolbar = memo(function DrawingToolbar({
           />
         )}
       </DrawingVariantToolButton>
+
+      {favoriteIds.length > 0 && <div className="drawing-toolbar-favorites" role="group" aria-label={t("drawing.favorites.title")}>
+        <div className="drawing-toolbar-divider" />
+        {favoriteIds.map((id, index) => {
+          const entry = FAVORITE_TOOL_VARIANTS.get(id);
+          if (!entry) return null;
+          const disabled = favoriteDisabled(id);
+          const label = drawingVariantLabel(entry.variant);
+          return <DrawingToolButton
+            key={id}
+            active={effectiveActiveTool === id}
+            dataDrawingTool={id}
+            disabled={disabled}
+            icon={entry.variant.icon}
+            onClick={() => { selectFavorite(id); }}
+            title={disabled ? drawingToolTitle : t("drawing.favorites.button", { tool: label, key: String(index + 1) })}
+          />;
+        })}
+        <div className="drawing-toolbar-divider" />
+      </div>}
 
       <DrawingToolButton
         active={drawingSnapEnabled}
