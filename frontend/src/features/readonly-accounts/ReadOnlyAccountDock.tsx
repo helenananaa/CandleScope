@@ -132,7 +132,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
             <Button size="sm" variant="ghost" disabled={busy || !status.account.enabled} onClick={() => { void action(() => accountManager.disconnect(false)); }}>{t("account.pause", {}, locale)}</Button></>}
         </div>
         {credentialsOpen && <form className="readonly-account-form" onSubmit={connect} autoComplete="off">
-          <p className="readonly-account-help">{t("account.credentialsHelp", {}, locale)}</p>
+          <p className="readonly-account-help">{t(status?.credentialStore === "windows-credential-manager" ? "account.credentialsHelpWindows" : "account.credentialsHelp", {}, locale)}</p>
           {([ ["apiKey", "account.key"], ["secret", "account.secret"], ["password", "account.passphrase"] ] as const).map(([name, label]) => <Field key={name} label={t(label, {}, locale)}>
             <Input size="sm" name={name} type="password" autoComplete="off" spellCheck={false} required maxLength={256} disabled={busy} />
           </Field>)}

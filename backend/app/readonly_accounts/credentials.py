@@ -2,8 +2,9 @@
 
 The records live in the ``okx-readonly`` namespace, so the Keychain service is
 ``io.candlescope.okx-readonly.<data folder>`` as before and saved keys stay readable.
-Windows support (#575 PL-5) only needs this class to accept win32 and the
-account panel to say so: the vault already stores records in Credential Manager.
+On Windows (#575 PL-5) the same records live in Credential Manager, one generic
+credential per record. The error codes keep their ``KEYCHAIN_`` names on both
+systems, because saved account statuses already carry them.
 """
 from __future__ import annotations
 
@@ -18,6 +19,13 @@ from app.host_credentials.vault import record_name
 from .normalization import AccountDataError
 
 NAMESPACE = "okx-readonly"
+# Which OS store keeps account keys, by platform; the account panel names it.
+STORES = {"darwin": "macos-keychain", "win32": "windows-credential-manager"}
+
+
+def credential_store(platform: str | None = None) -> str | None:
+    """The store account keys use here, or None where accounts are unavailable."""
+    return STORES.get(platform or sys.platform)
 
 
 def validate_credentials(value: Any) -> dict[str, str]:
@@ -30,17 +38,17 @@ def validate_credentials(value: Any) -> dict[str, str]:
     return dict(value)
 
 
-class MacKeychainVault:
+class AccountVault:
     """Only open this feature's known record ID in its data-directory namespace."""
 
     def __init__(self, root: Path, *, store=None):
         if store is None:
-            if sys.platform != "darwin":
-                raise AccountDataError("MACOS_KEYCHAIN_REQUIRED")
+            if credential_store() is None:
+                raise AccountDataError("CREDENTIAL_STORE_UNAVAILABLE")
             try:
                 store = open_host_vault(root, NAMESPACE)
             except CredentialVaultError:
-                raise AccountDataError("MACOS_KEYCHAIN_REQUIRED") from None
+                raise AccountDataError("CREDENTIAL_STORE_UNAVAILABLE") from None
         self._store = store
 
     @staticmethod
