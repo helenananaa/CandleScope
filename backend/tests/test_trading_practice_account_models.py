@@ -1,4 +1,4 @@
-"""Practice accounts follow the symbol's declared account model (ADR-DATA-002 D5b)."""
+"""Practice accounts follow the symbol's declared account model (ADR-DATA-002 D5b, D5c)."""
 from __future__ import annotations
 
 from decimal import Decimal as D
@@ -24,10 +24,12 @@ class CatalogMarket(FakeMarket):
     def __init__(self) -> None:
         super().__init__()
         self.models: dict[tuple[str, str, str], str] = {}
+        self.rows: dict[tuple[str, str, str], dict] = {}
 
     def symbol_info(self, exchange, market_type, symbol):
-        model = self.models.get((exchange, market_type, symbol))
-        return None if model is None else {"symbol": symbol, "accountModel": model}
+        key = (exchange, market_type, symbol)
+        model = self.models.get(key)
+        return None if model is None else {"symbol": symbol, **self.rows.get(key, {}), "accountModel": model}
 
 
 @pytest.fixture()
@@ -120,3 +122,67 @@ def test_data_manager_market_reads_catalog_rows_and_retries_missing_ones():
     assert market.symbol_info("gate", "swap.linear", "ETH/USDT:USDT") is None
     assert market.symbol_info("gate", "swap.linear", "ETH/USDT:USDT") is None
     assert calls == ["BTC/USDT:USDT", "ETH/USDT:USDT", "ETH/USDT:USDT"]
+
+
+WHOLE_SHARES = {"currency": "USD", "quantityStep": "1", "quantityOrigin": "0", "minQuantity": "1",
+                "quantityRuleModel": "fixed_step"}
+
+
+def test_cash_stocks_trade_whole_shares_and_say_what_currency_they_are_priced_in(practice):
+    service, market, account = practice
+    market.rows[("twelvedata", "stock", "AAPL:NASDAQ")] = WHOLE_SHARES
+    for qty, reason in (("1.5", "multiple of 1"), ("0.5", "at least 1")):
+        with pytest.raises(TradingAccountError) as refused:
+            place(service, account, APPLE, 300, qty=qty, side="buy")
+        assert refused.value.code == "TRADING_QUANTITY_RULE" and refused.value.status == 422
+        assert reason in str(refused.value)
+    place(service, account, APPLE, 300, qty="3", side="buy")
+    with pytest.raises(TradingAccountError, match="multiple of 1"):
+        place(service, account, APPLE, 300, qty="1.5", side="sell")
+    assert place(service, account, APPLE, 300, qty="3", side="sell")["order"]["status"] == "filled"
+    assert service.market_rules(APPLE) == {**APPLE, "accountModel": "cash", "declared": True, "leverage": False,
+                                           "shorting": False, "hedge": False, "opensPositions": True,
+                                           "currency": "USD", "quantityStep": "1", "minQuantity": "1"}
+
+
+def test_a_position_from_before_the_grid_can_still_be_closed_whole(practice):
+    service, market, account = practice
+    place(service, account, APPLE, 300, qty="2.5", side="buy")
+    market.rows[("twelvedata", "stock", "AAPL:NASDAQ")] = WHOLE_SHARES
+    place(service, account, APPLE, 300, qty="1", side="sell")
+    with pytest.raises(TradingAccountError, match="at least 1"):
+        place(service, account, APPLE, 300, qty="0.7", side="sell")
+    assert place(service, account, APPLE, 300, qty="1.5", side="sell")["order"]["status"] == "filled"
+    assert service.account_summary(account)["positions"] == []
+
+
+def test_grids_with_an_origin_a_minimum_or_only_significant_digits(practice):
+    service, market, account = practice
+    spot = {"exchange": "acme", "marketType": "spot", "symbol": "XYZ"}
+    market.models[("acme", "spot", "XYZ")] = "cash"
+    # Binance LOT_SIZE: quantity = minQty + k * stepSize.
+    market.rows[("acme", "spot", "XYZ")] = {"quoteAsset": "usdt", "quantityStep": "0.25", "quantityOrigin": "2",
+                                             "minQuantity": "2", "quantityRuleModel": "fixed_step"}
+    with pytest.raises(TradingAccountError, match="at least 2"):
+        place(service, account, spot, 10, qty="1.75", side="buy")
+    with pytest.raises(TradingAccountError, match="multiple of 0.25"):
+        place(service, account, spot, 10, qty="2.1", side="buy")
+    place(service, account, spot, 10, qty="2.25", side="buy")
+    assert service.market_rules(spot)["currency"] == "USDT"
+    # A step with no minimum starts at the step; significant digits fix no step.
+    market.rows[("acme", "spot", "XYZ")] = {"quantityStep": "0.001"}
+    assert market_rules(market, ("acme", "spot", "XYZ")).to_dict()["minQuantity"] == "0.001"
+    market.rows[("acme", "spot", "XYZ")] = {"quantityStep": "0.001", "minQuantity": "0.5",
+                                             "quantityRuleModel": "significant_digits"}
+    rules = market_rules(market, ("acme", "spot", "XYZ")).to_dict()
+    assert "quantityStep" not in rules and rules["minQuantity"] == "0.5"
+    place(service, account, spot, 10, qty="0.5123", side="buy")
+
+
+def test_contract_rows_count_contracts_so_practice_leaves_their_grid_to_d5d(practice):
+    service, market, account = practice
+    market.rows[("gate", "swap.linear", "BTC/USDT:USDT")] = {"quantityStep": "1", "minQuantity": "1",
+                                                              "contractMultiplier": "0.0001", "quoteAsset": "USDT"}
+    order = place(service, account, GATE, 100, qty="0.5", positionSide="LONG", positionEffect="open")["order"]
+    assert order["status"] == "filled"
+    assert "quantityStep" not in service.market_rules(GATE)

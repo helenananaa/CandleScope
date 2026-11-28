@@ -266,6 +266,11 @@ export interface PracticeMarketRules {
   shorting: boolean;
   hedge: boolean;
   opensPositions: boolean;
+  /** What the market's prices are quoted in; practice books them in the account's currency one for one. */
+  currency?: string;
+  /** The cash market's quantity grid (ADR-DATA-002 D5c), in base units such as shares. */
+  quantityStep?: string;
+  minQuantity?: string;
 }
 
 export interface TradingChartContext {

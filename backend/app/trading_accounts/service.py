@@ -948,6 +948,11 @@ class TradingAccountService(JournalService):
         if not reduce_only and not settings.allow_short and side == "sell" and position - qty < 0:
             raise conflict("Spot practice cannot sell more than you hold", code="TRADING_INSUFFICIENT_POSITION")
         increases = not reduce_only and (position == 0 or (position > 0) == (direction > 0))
+        # Off-grid quantities are refused, except one closing the whole position:
+        # it may predate the market's declared grid (ADR-DATA-002 D5c).
+        closes_all = not increases and qty == abs(position)
+        if not closes_all and (off_grid := rules.quantity_error(qty)):
+            raise invalid(off_grid, code="TRADING_QUANTITY_RULE")
         if increases and not rules.opens_positions:
             # Closing what is already open stays possible.
             raise conflict(

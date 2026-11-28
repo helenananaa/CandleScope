@@ -5,7 +5,7 @@ import { useLocale } from "../../i18n/useLocale.js";
 import { chartInstrumentFields } from "./chartInstrument.js";
 import { usePracticeMarketRules } from "./practiceMarketRules.js";
 import { tradingApi } from "./tradingApi.js";
-import { formatAmount, formatPrice } from "./tradingFormat.js";
+import { formatAmount, formatPrice, formatQty, formatRate } from "./tradingFormat.js";
 import type { AccountSummary, TradingAccount, TradingChartContext } from "./tradingTypes.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
 
@@ -59,6 +59,12 @@ export default function PracticeOrderTicket({
   }, [entry, qty, stopLoss]);
   const equity = summary ? Number(summary.equity) : null;
   const notional = entry && Number(qty) > 0 ? entry * Number(qty) : null;
+  // Cash markets follow the catalog's quantity grid; the backend refuses quantities off it (D5c).
+  const quantityHint = rules.quantityStep
+    ? t("trading.ticket.quantityRule", { step: formatQty(rules.quantityStep), min: formatQty(rules.minQuantity ?? rules.quantityStep) })
+    : rules.minQuantity ? t("trading.ticket.quantityMinimum", { min: formatQty(rules.minQuantity) }) : undefined;
+  const accountCurrency = account.quoteCurrency.toUpperCase();
+  const otherCurrency = rules.currency && rules.currency !== accountCurrency ? rules.currency : null;
 
   const submit = async () => {
     setBusy(true);
@@ -117,7 +123,7 @@ export default function PracticeOrderTicket({
         options={(["market", "limit", "stop"] as const).map((item) => ({ value: item, label: t(`trading.ticket.${item}` as const) }))}
       />
       <div className="trading-field-row">
-        <Field label={t("trading.ticket.qty", { base: context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol })}>
+        <Field label={t("trading.ticket.qty", { base: context.symbol.replace(/USDT$|USDC$|USD$/, "") || context.symbol })} hint={quantityHint}>
           <Input size="sm" inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
         </Field>
         {type !== "market" && (
@@ -147,8 +153,11 @@ export default function PracticeOrderTicket({
           {risk === null ? "—" : formatAmount(risk)}
           {risk !== null && equity ? ` · ${formatAmount((risk / equity) * 100)}%` : ""}
         </dd>
+        <dt>{t("trading.ticket.fees")}</dt>
+        <dd>{`${formatRate(account.settings.takerFeeRate)} / ${formatRate(account.settings.makerFeeRate)}`}</dd>
       </dl>
       {!rules.opensPositions && <InlineAlert tone="warning">{t("trading.ticket.modelUnsupported")}</InlineAlert>}
+      {otherCurrency && <InlineAlert tone="info">{t("trading.ticket.currencyMismatch", { market: otherCurrency, account: accountCurrency })}</InlineAlert>}
       {message && <InlineAlert tone={message.tone === "error" ? "danger" : "success"}>{message.text}</InlineAlert>}
       <div className="trading-actions">
         <Button
