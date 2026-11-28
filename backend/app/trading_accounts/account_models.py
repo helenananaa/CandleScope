@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from typing import Any
 
 from app.exchanges.models import ACCOUNT_MODELS
@@ -67,7 +68,8 @@ class MarketRules:
         """Why ``qty`` is off the market's grid, or None when it is on it."""
         if self.min_quantity is not None and qty < self.min_quantity:
             return f"Quantity must be at least {_text(self.min_quantity)}"
-        if self.quantity_step is not None and (qty - self.quantity_origin) % self.quantity_step:
+        # Exact rational remainder: Decimal's % fails once the quotient outgrows its precision.
+        if self.quantity_step is not None and (Fraction(qty) - Fraction(self.quantity_origin)) % Fraction(self.quantity_step):
             return f"Quantity must be a multiple of {_text(self.quantity_step)}"
         return None
 

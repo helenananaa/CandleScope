@@ -169,6 +169,8 @@ def test_grids_with_an_origin_a_minimum_or_only_significant_digits(practice):
         place(service, account, spot, 10, qty="2.1", side="buy")
     place(service, account, spot, 10, qty="2.25", side="buy")
     assert service.market_rules(spot)["currency"] == "USDT"
+    fine = market_rules(market, ("acme", "spot", "XYZ"))
+    assert fine.quantity_error(D("1" + "0" * 30 + ".1")) == "Quantity must be a multiple of 0.25"  # no Decimal overflow
     # A step with no minimum starts at the step; significant digits fix no step.
     market.rows[("acme", "spot", "XYZ")] = {"quantityStep": "0.001"}
     assert market_rules(market, ("acme", "spot", "XYZ")).to_dict()["minQuantity"] == "0.001"
