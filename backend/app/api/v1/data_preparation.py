@@ -1,7 +1,7 @@
 """Preparation tasks are durable; disconnecting an HTTP observer never cancels one."""
 from datetime import datetime, timezone
 from typing import Literal
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.data_preparation.models import STRATEGY_BAR_INPUT_LIMIT, PreparationError, PreparationRequest, Requirement
@@ -166,8 +166,23 @@ class NativePreparationPayload(BaseModel):
         return self
 
 
+def _link_follow(request: Request, job: dict, follow_of: str) -> None:
+    """A reused preparation's run is now also a FOLLOW rebuild of ``follow_of`` (ADR-BACKTEST-015 O2)."""
+    run_id = ((job.get("result") or {}).get("native_run") or {}).get("run_id")
+    runtime = getattr(request.app.state, "backtest_runtime", None)
+    if run_id is None or runtime is None:
+        return  # not launched yet: the job links the base named when it was created
+    from app.backtest.errors import BacktestError
+    try:
+        runtime.native.link_follow(run_id, follow_of)
+    except BacktestError as exc:
+        raise HTTPException(409, detail={"code": exc.code, "message": exc.message}) from exc
+
+
 @router.post("/native-strategy", status_code=202)
-async def prepare_native_strategy(request: Request, payload: NativePreparationPayload):
+async def prepare_native_strategy(request: Request, payload: NativePreparationPayload,
+                                  follow_of: str | None = Header(default=None, alias="Strategy-Follow-Of",
+                                                                 pattern=r"^native_[0-9a-f]{32}$")):
     import time
     from app.data_engine.interval_policy import parse_interval_spec
     from app.data_preparation.models import canonical
@@ -189,6 +204,8 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
         if (canonical(preparation_identity(prior["request"]["intent"].get("submission"), field="execution"))
                 != canonical(preparation_identity(submission, field="execution"))):
             raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to a different native preparation"})
+        if follow_of is not None:
+            await invoke_async(lambda: _link_follow(request, prior, follow_of))
         return prior
     runtime = getattr(request.app.state, "backtest_runtime", None)
     if runtime is None or not runtime.settings.bar_effective or not runtime.settings.chart_context_effective:
@@ -279,6 +296,7 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
             "libraries": payload.libraries, "host_inputs": payload.host_inputs.model_dump(exclude_none=True), "bindings": bindings, "dependency_requirements": dependencies,
             **({"chart_metadata": payload.chart_metadata.model_dump(exclude_none=True)} if payload.chart_metadata is not None else {}),
             **({"currency_rates": payload.currency_rates} if payload.currency_rates is not None else {}),
+            **({"follow_of": follow_of} if follow_of is not None else {}),
             **({"execution": payload.execution.model_dump(mode="json")} if payload.execution is not None else {})}})
     return await invoke_async(lambda: service(request).submit(prepared))
 

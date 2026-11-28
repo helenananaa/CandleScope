@@ -164,9 +164,11 @@ def freeze_bindings(runtime, bindings):
 
 def launch(runtime, intent, inputs, job_id):
     from app.backtest.native_contracts import NativeRunRequest, ExternalRunRequest
+    # A FOLLOW rebuild names the user's run it rebuilds (ADR-BACKTEST-015 O2).
+    follow_of = intent.get("follow_of")
     if "frozen_payload" in intent:
         payload = ExternalRunRequest.model_validate(intent["frozen_payload"]).model_dump()
-        return runtime.native.create(payload, f"preparation:{job_id}")
+        return runtime.native.create(payload, f"preparation:{job_id}", follow_of=follow_of)
     main, *contexts = inputs
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
@@ -181,7 +183,7 @@ def launch(runtime, intent, inputs, job_id):
     if intent.get("execution") is not None:
         contract = ExternalRunRequest
         payload.update(intent["execution"], execution_mode="CANDLESCOPE")
-    return runtime.native.create(contract.model_validate(payload).model_dump(), f"preparation:{job_id}")
+    return runtime.native.create(contract.model_validate(payload).model_dump(), f"preparation:{job_id}", follow_of=follow_of)
 
 
 def validate_frozen_external(runtime, payload):

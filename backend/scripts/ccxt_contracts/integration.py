@@ -70,6 +70,8 @@ def main() -> int:
         "test_strategy_drafts.py", "test_strategy_versions.py", "test_strategy_references.py",
         # ADR-BACKTEST-015 P4: FOLLOW equals FIXED; chart FOLLOW runs fed by the DataManager.
         "test_follow_session.py", "test_strategy_follows.py", "test_strategy_experiments.py", "test_strategy_run_derive.py", "test_strategy_experiment_robustness.py",
+        # ADR O2: Pine FOLLOW keeps the results of the 8 most recently active follows.
+        "test_native_follow_results.py",
         "test_execution_data_market.py",
         # Replay: no future data before reveal (launch non-negotiable) and revealed indicator columns.
         "test_replay_no_lookahead.py", "test_replay_indexed_indicator_closes.py",

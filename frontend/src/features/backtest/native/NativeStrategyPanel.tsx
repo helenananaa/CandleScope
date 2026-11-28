@@ -9,7 +9,7 @@ import type { ChartStrategyTesterPanelProps } from "../chart-tester/ChartStrateg
 import type { ChartContextResolution } from "../backtestApi.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
-import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
+import { FOLLOW_OF_HEADER, loadShownNativeRun, nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import { CHART_STRATEGY_FOLLOW_ENABLED } from "../chart-tester/chartStrategyTesterFeature.js";
@@ -271,7 +271,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     setBusy(true);
     const abort = new AbortController();
     if (!strategyManager) { setError(t("chartTester.error.backend")); setBusy(false); return; }
-    void strategyManager.loadNativeRun(mode, saved, abort.signal)
+    // The newest of the user's own runs here, in case the shown FOLLOW result is no longer kept.
+    const own = instanceRef.current.runHistory?.[runContext]?.find((runId) => runId !== saved);
+    void loadShownNativeRun((runId) => strategyManager.loadNativeRun(mode, runId, abort.signal), saved, own)
       .then((value) => { if (!abort.signal.aborted) receiveRun(value); })
       .catch((reason) => { if (!abort.signal.aborted) { setError(String(reason)); setBusy(false); } });
     return () => abort.abort();
@@ -439,7 +441,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             async rebuild(next, signal) {
               const submission = await submissionFor(next);
               const job = await preparationRequest<PreparationJob>("/native-strategy", {
-                method: "POST", headers: { "Content-Type": "application/json" }, signal,
+                method: "POST", headers: { "Content-Type": "application/json", [FOLLOW_OF_HEADER]: prepared.run_id }, signal,
                 body: JSON.stringify({ ...submission, idempotency_key: await followInputKey({ route: "/native-strategy", ...submission }) }),
               });
               if (["FAILED", "BLOCKED_STORAGE", "CANCELLED"].includes(job.state)) return null;
@@ -508,7 +510,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             }, undefined, signal);
             if (resolved.status !== "READY") return null;
             const payload = await chartRunPayload(resolved, next);
-            const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal);
+            const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal,
+              { followOf: result.run_id });
             return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
           } } };
       }

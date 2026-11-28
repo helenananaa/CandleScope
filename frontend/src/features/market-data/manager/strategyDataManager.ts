@@ -16,7 +16,7 @@ import {
   type ChartStrategyRunApi, type ResearchExperimentInput,
 } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
-import { defaultNativeRunClient, type NativeExecutionMode, type NativeRun, type NativeRunClient } from "../../backtest/native/nativeBacktestApi.js";
+import { defaultNativeRunClient, type NativeExecutionMode, type NativeRun, type NativeRunClient, type NativeRunOptions } from "../../backtest/native/nativeBacktestApi.js";
 import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
@@ -662,8 +662,9 @@ export class StrategyDataManager {
 
   // -- Native and CandleScope-matched runs ----------------------------------
 
-  createNativeRun(mode: NativeExecutionMode, body: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<NativeRun> {
-    return this.operation(signal, (owned) => this.nativeRuns.create(mode, body, idempotencyKey, owned));
+  createNativeRun(mode: NativeExecutionMode, body: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal,
+    options?: NativeRunOptions): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.create(mode, body, idempotencyKey, owned, options));
   }
 
   loadNativeRun(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun> {

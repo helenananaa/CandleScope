@@ -179,6 +179,11 @@ class NativeBacktests:
         self.db.commit()
         from .native_replay import NativeReplay
         self.replay = NativeReplay(self)
+        from .native_follow_results import FollowResults
+        # FOLLOW rebuilds of the user's runs (ADR O2): only the results a chart can still show are kept.
+        self.follows = FollowResults(self.db)
+        with self.lock:
+            self._collect_follows()
 
     def capabilities(self):
         result = []
@@ -251,7 +256,8 @@ class NativeBacktests:
         return self.runner(plugin, {"protocol": PROTOCOL, "identity": identity,
             "operation": "analyze", "source": source, "libraries": libraries or {}}, timeout=15)
 
-    def create(self, payload, key):
+    def create(self, payload, key, *, follow_of=None):
+        """Create (or, for a known key, return) a run; ``follow_of`` names the user's run this one rebuilds."""
         if not self.runtime.settings.bar_effective:
             raise BacktestError("FLAG_DISABLED", "BAR backtests are disabled")
         if payload.get("signal_chart") is not None:
@@ -262,6 +268,8 @@ class NativeBacktests:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "Chart strategy signals require Host matching with real market prices")
         fingerprint = digest(payload)
         with self.lock:
+            if follow_of is not None:
+                self._check_follow_base(follow_of)
             existing = self.db.execute("SELECT hash,record FROM runs WHERE key=?", (key,)).fetchone()
             if existing:
                 record = json.loads(existing[1])
@@ -271,6 +279,9 @@ class NativeBacktests:
                     if (not isinstance(stored, dict) or digest(stored) != existing[0]
                             or digest(request_identity(stored)) != digest(request_identity(payload))):
                         raise BacktestError("IDEMPOTENCY_CONFLICT", "key belongs to different native inputs")
+                if follow_of is not None:
+                    # Identical inputs share one rebuild (O2): it is now this base's newest too.
+                    self.link_follow(record["run_id"], follow_of)
                 return record
             if self.closed or len(self.cancel_events) + len(self.replay.jobs) >= 2:
                 raise BacktestError("RUN_CAPACITY_EXCEEDED", "two native runs are already active")
@@ -437,8 +448,13 @@ class NativeBacktests:
             self.db.execute("INSERT INTO runs VALUES (?,?,?,?)", (run_id, key, fingerprint, encoded(record)))
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
             self._save_summary(record)
+            if follow_of is not None:
+                self.follows.link(run_id, follow_of, record["created_at_ms"])
+                self._collect_follows()
             self.db.commit()
-            self._record_version(record)
+            if follow_of is None:
+                # A rebuild is not the user's run: the base already links the code's version.
+                self._record_version(record)
             cancel = threading.Event()
             self.cancel_events[run_id] = cancel
             self.pool.submit(self._execute, run_id, plugin, wire, cancel)
@@ -491,9 +507,35 @@ class NativeBacktests:
         return {**json.loads(row[0]), "language": row[1], "execution_fidelity": row[2], "result_present": row[3] == "object"}
 
     def list(self):
+        """The newest runs the user made; FOLLOW rebuilds are read through the chart that shows them."""
         with self.lock:
             return [json.loads(row[0]) for row in self.db.execute(
-                "SELECT s.record FROM native_run_summaries s JOIN runs r ON r.id=s.id ORDER BY r.rowid DESC LIMIT 100")]
+                "SELECT s.record FROM native_run_summaries s JOIN runs r ON r.id=s.id "
+                "WHERE r.id NOT IN (SELECT run_id FROM native_follow_results) ORDER BY r.rowid DESC LIMIT 100")]
+
+    def _check_follow_base(self, base_run_id):
+        if (not isinstance(base_run_id, str) or self.follows.is_rebuild(base_run_id)
+                or self.db.execute("SELECT 1 FROM runs WHERE id=?", (base_run_id,)).fetchone() is None):
+            raise BacktestError("FOLLOW_BASE_INVALID", "a FOLLOW rebuild follows one of the user's own runs")
+
+    def link_follow(self, run_id, base_run_id):
+        """Record an existing run as a FOLLOW rebuild of ``base_run_id`` and drop what that supersedes."""
+        with self.lock:
+            self._check_follow_base(base_run_id)
+            if run_id == base_run_id or self.db.execute("SELECT 1 FROM runs WHERE id=?", (run_id,)).fetchone() is None:
+                raise BacktestError("FOLLOW_BASE_INVALID", "a FOLLOW rebuild is another stored run")
+            self.follows.link(run_id, base_run_id, int(time.time() * 1000))
+            self._collect_follows()
+            self.db.commit()
+
+    def _collect_follows(self):
+        """Delete FOLLOW rebuilds that no chart can show any more (ADR O2). Caller holds the lock."""
+        removed = self.follows.collect()
+        for run_id in removed:
+            for table in ("runs", "native_inputs", "native_run_summaries"):
+                self.db.execute(f"DELETE FROM {table} WHERE id=?", (run_id,))
+        self.db.commit()
+        return removed
 
     def _replay_origin(self, run_id):
         """Read the original seal and settings without expanding the batch report."""
@@ -580,6 +622,8 @@ class NativeBacktests:
             with self.lock:
                 if not cancel.is_set():
                     self._update(run_id, state="COMPLETED", result=result)
+                    if self.follows.is_rebuild(run_id):
+                        self._collect_follows()
                 # The committed row owns the result now. Release the job's
                 # complete graph before a reader can acquire this lock and
                 # materialize its independent public copy.
@@ -589,6 +633,8 @@ class NativeBacktests:
                 if not cancel.is_set():
                     self._update(run_id, state="FAILED", error={"code": getattr(exc, "code", "NATIVE_EXECUTION_FAILED"),
                                  "message": str(exc), "details": getattr(exc, "details", {})})
+                    if self.follows.is_rebuild(run_id):
+                        self._collect_follows()
         finally:
             with self.lock:
                 self.cancel_events.pop(run_id, None)
@@ -601,6 +647,10 @@ class NativeBacktests:
                 if event:
                     event.set()
                 self._update(run_id, state="CANCELLED")
+                record = self.get(run_id)
+                if self.follows.is_rebuild(run_id):
+                    self._collect_follows()
+                return record
             return self.get(run_id)
 
     def shutdown(self):
