@@ -12,7 +12,9 @@ on:
       - "backend/app/host_credentials/**"
       - "backend/app/data_sources/**"
       - "backend/app/readonly_accounts/credentials.py"
+      - "backend/app/readonly_accounts/service.py"
       - "backend/tests/test_host_credential_vault.py"
+      - "backend/tests/test_readonly_account_windows.py"
       - "backend/tests/test_data_source_credentials.py"
       - "backend/tests/test_python_strategy_runtime.py"
       - "backend/tests/test_continuous*.py"
@@ -83,11 +85,12 @@ jobs:
         working-directory: backend
         env:
           CANDLE_DATA_DIR: ${{ runner.temp }}/candlescope-credential-vault-data
-          # Writes, reads and deletes two records under a test namespace.
+          # Writes, reads and deletes two records under a test namespace, and
+          # one OKX account key the account service saves, reads and forgets.
           CANDLESCOPE_REAL_CREDENTIAL_VAULT: "1"
         run: >-
           python -B -m pytest -q -rs tests/test_host_credential_vault.py
-          tests/test_data_source_credentials.py
+          tests/test_data_source_credentials.py tests/test_readonly_account_windows.py
           --junitxml=../output/windows-python-worker/credential-vault-junit.xml
           --basetemp="${{ runner.temp }}/credential-vault-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Require executed Windows cases and record source identity

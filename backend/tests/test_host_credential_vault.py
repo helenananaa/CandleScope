@@ -1,7 +1,6 @@
 """The host credential vault on macOS (Keychain) and Windows (Credential Manager)."""
 import hashlib
 import os
-import sys
 import uuid
 
 import pytest
@@ -14,7 +13,7 @@ from app.host_credentials.vault import (
     namespace_service,
     open_host_vault,
 )
-from app.readonly_accounts.credentials import MacKeychainVault
+from app.readonly_accounts.credentials import AccountVault
 from app.readonly_accounts.normalization import AccountDataError
 
 RECORD = "a" * 32
@@ -146,7 +145,7 @@ def test_okx_wrapper_keeps_its_error_codes():
             self.records.pop(record, None)
 
     store = Store()
-    vault = MacKeychainVault(None, store=store)
+    vault = AccountVault(None, store=store)
     credentials = {"apiKey": "k" * 10, "secret": "s" * 10, "password": "p" * 10}
     vault.store(RECORD, credentials)
     assert vault.read(RECORD) == credentials
@@ -165,12 +164,6 @@ def test_okx_wrapper_keeps_its_error_codes():
         vault.delete(RECORD)
     with pytest.raises(AccountDataError, match="CREDENTIAL_FIELDS_INVALID"):
         vault.store(RECORD, {"apiKey": "x"})
-
-
-def test_okx_accounts_stay_macos_only_until_pl5(monkeypatch, tmp_path):
-    monkeypatch.setattr(sys, "platform", "win32")
-    with pytest.raises(AccountDataError, match="MACOS_KEYCHAIN_REQUIRED"):
-        MacKeychainVault(tmp_path)
 
 
 @pytest.mark.skipif(os.environ.get("CANDLESCOPE_REAL_CREDENTIAL_VAULT") != "1",
