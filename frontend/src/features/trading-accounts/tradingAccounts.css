@@ -76,6 +76,8 @@
 
 .trading-field-row { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-2); }
 .trading-field-row > .ui-field { min-width: 0; }
+/* Sits on the input's line, not stretched up beside the field's label. */
+.trading-margin-save { align-self: end; }
 /* A date and time needs about 170px; in a narrow rail it takes its own line. */
 .trading-field-row-wrap { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 
