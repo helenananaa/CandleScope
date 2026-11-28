@@ -224,6 +224,11 @@ class DataEngineRuntime:
             if callable(stop):
                 await self._shutdown_step("ManualHistoryService", stop(), step_timeout)
 
+        # Runtimes built around other DataManager stand-ins have no planner.
+        get_history_router = getattr(self.data_manager, "get_history_router", None)
+        history_router = get_history_router() if callable(get_history_router) else None
+        if history_router is not None:
+            await self._shutdown_step("Symbol history planner", history_router.close(), step_timeout)
         await self._shutdown_step(
             "BackfillCoordinator",
             self.backfill_coordinator.shutdown(),
@@ -1043,6 +1048,10 @@ async def start_data_engine() -> DataEngineRuntime:
         if callable(set_suppression_lookup):
             set_suppression_lookup(backfill_coordinator.get_repair_suppression)
         dm.set_backfill_trigger(backfill_coordinator.trigger)
+        from app.data_engine.data_manager.symbol_history import planner_enabled
+        if planner_enabled():
+            dm.enable_history_planner(backfill_coordinator, loop=asyncio.get_running_loop())
+            print("[startup] Symbol history planner enabled [ok]")
         from app.data_engine.data_manager.bar_delivery import source_recovery_handler
         dm.aggregator_bridge.delivery.recover_source = source_recovery_handler(backfill_coordinator)
         print("[startup] BackfillCoordinator injected [ok]")

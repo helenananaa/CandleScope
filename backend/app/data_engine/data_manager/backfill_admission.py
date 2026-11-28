@@ -7,6 +7,7 @@ writes is created in ``BackfillCoordinator.__init__``.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -15,6 +16,8 @@ from app.data_engine.series_identity import identity_from_metadata
 from .backfill_contracts import RepairOutcome, RepairRequest
 
 _REQUEST_ID_ALIAS_HISTORY_LIMIT = 2048
+
+logger = logging.getLogger("data_manager.backfill_coordinator")
 
 
 class BackfillAdmission:
@@ -190,6 +193,7 @@ class BackfillAdmission:
         self._scope_generations[normalized_scope] = normalized_generation
         while len(self._scope_generations) > _REQUEST_ID_ALIAS_HISTORY_LIMIT:
             self._scope_generations.popitem(last=False)
+        self._notify_demand_listeners("scope", normalized_scope, normalized_generation)
         return await self._scheduler.supersede_scope(
             normalized_scope,
             normalized_generation,
@@ -208,10 +212,27 @@ class BackfillAdmission:
         self._revoked_demand_owners[normalized_owner] = str(reason or "demand_owner_revoked")
         while len(self._revoked_demand_owners) > _REQUEST_ID_ALIAS_HISTORY_LIMIT:
             self._revoked_demand_owners.popitem(last=False)
+        self._notify_demand_listeners("owner", normalized_owner)
         return await self._scheduler.revoke_owner(
             normalized_owner,
             reason=str(reason or "demand_owner_revoked"),
         )
+
+    def add_demand_listener(self, listener) -> None:
+        """Also tell ``listener`` when demand ends outside the scheduler (the history planner).
+
+        Called as ``listener("scope", scope, generation)`` when a newer
+        generation supersedes a scope, and ``listener("owner", owner_id)``
+        when an owner is revoked.
+        """
+        self.__dict__.setdefault("_demand_listeners", []).append(listener)
+
+    def _notify_demand_listeners(self, *event) -> None:
+        for listener in list(self.__dict__.get("_demand_listeners", ())):
+            try:
+                listener(*event)
+            except Exception:  # noqa: BLE001 - a listener must not block demand release
+                logger.exception("demand listener failed for %s", event)
 
     def is_demand_generation_current(self, scope: str, generation: int) -> bool:
         normalized_scope = str(scope or "").strip()
