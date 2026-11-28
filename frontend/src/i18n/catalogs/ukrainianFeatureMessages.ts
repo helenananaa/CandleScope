@@ -716,6 +716,7 @@ export const tradingAccountsUk: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Виконано за {price}",
   "trading.ticket.working": "Ордер активний",
   "trading.ticket.waitsForOpen": "Ринок закритий; ордер виконається під час наступного відкриття",
+  "trading.ticket.modelUnsupported": "Навчальні рахунки поки не можуть відкривати позиції на цьому ринку; наявні позиції все ще можна закрити",
   "trading.ticket.model": "Змодельоване виконання. Нічого не надсилається на біржу.",
   "trading.manual.title": "Ввести виконання",
   "trading.manual.help": "Запишіть виконання для {symbol}. Виконання автоматично групуються в угоди від нульової позиції до нульової.",

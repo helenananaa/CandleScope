@@ -28,14 +28,25 @@ const account = (positionMode: "HEDGE" | "ONE_WAY"): TradingAccount => ({ id: `q
   name: "QA practice", quoteCurrency: "USDT", createdAtMs: 1_800_000_000_000, archived: false,
   settings: { positionMode, initialBalance: "10000", takerFeeRate: "0.0005", makerFeeRate: "0.0002", slippageBps: "1", leverage: "10" },
   capabilities: { placeOrders: true, manualFills: false, sync: false } });
-const context = (marketType: "futures" | "spot"): TradingChartContext => ({ exchange: "binance", marketType, symbol: "BTCUSDT", interval: "1m", lastPrice: 100 });
+type Market = "futures" | "spot" | "swap.linear" | "swap.inverse";
+const context = (marketType: Market): TradingChartContext => ({ exchange: marketType.startsWith("swap") ? "gate" : "binance", marketType,
+  symbol: "BTCUSDT", interval: "1m", lastPrice: 100 });
+/** The backend's market rules (ADR-DATA-002 D5b): Gate's linear swaps are contracts, its inverse swaps open nothing. */
+const RULES: Record<Market, string> = { futures: "crypto_linear", spot: "cash", "swap.linear": "crypto_linear", "swap.inverse": "crypto_inverse" };
 
 /** The actual ticket, clicked like a user: every HEDGE action sends its own intent. */
 export async function checkPracticeOrderTicket() {
   const originalFetch = window.fetch;
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   window.fetch = async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), location.href).pathname;
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    const path = url.pathname;
+    if ((init?.method ?? "GET") === "GET" && path.endsWith("/trading/market-rules")) {
+      const model = RULES[url.searchParams.get("marketType") as Market];
+      const contract = model !== "cash";
+      return Response.json({ accountModel: model, declared: true, leverage: model === "crypto_linear", shorting: contract,
+        hedge: contract, opensPositions: model === "cash" || model === "crypto_linear" });
+    }
     assert(init?.method === "POST" && /\/trading\/accounts\/[^/]+\/orders$/.test(path), `unexpected request: ${init?.method ?? "GET"} ${path}`);
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     requests.push({ path, body });
@@ -45,7 +56,7 @@ export async function checkPracticeOrderTicket() {
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
   let placed = 0;
-  const render = (positionMode: "HEDGE" | "ONE_WAY", marketType: "futures" | "spot") => flushSync(() => root.render(
+  const render = (positionMode: "HEDGE" | "ONE_WAY", marketType: Market) => flushSync(() => root.render(
     <PracticeOrderTicket key={positionMode + marketType} account={account(positionMode)} summary={null} context={context(marketType)}
       onPlaced={() => { placed += 1; }} onPlanTrade={() => undefined} />));
   const actionGroup = () => host.querySelectorAll<HTMLElement>(".trading-ticket [role=radiogroup]")[0];
@@ -117,6 +128,18 @@ export async function checkPracticeOrderTicket() {
         `${mode} ${market} sent hedge intent: ${JSON.stringify(body)}`);
       checks[`${mode}-${market}`] = { side: body.side, reduceOnly: body.reduceOnly };
     }
+
+    // A linear swap on another venue declares the same contract rules as futures, so a HEDGE
+    // account trades it by leg once the rules arrive; an inverse swap warns that it opens nothing.
+    render("HEDGE", "swap.linear");
+    const legs = await until(() => {
+      const values = [...actionGroup()!.querySelectorAll<HTMLButtonElement>("[role=radio]")].map(button => button.dataset.value);
+      return values.join() === "openLong,openShort,closeLong,closeShort" && values;
+    }, "HEDGE swap.linear ticket never offered hedge actions");
+    assert(!host.querySelector(".ui-alert[data-tone=warning]"), "a linear swap warned that it cannot open positions");
+    render("ONE_WAY", "swap.inverse");
+    await until(() => host.querySelector(".ui-alert[data-tone=warning]"), "an inverse swap showed no unsupported notice");
+    checks["swap.linear"] = legs;
     return { passed: true, checks, scope: "Actual PracticeOrderTicket with a controlled order endpoint; not backend matching" };
   } finally { window.fetch = originalFetch; flushSync(() => root.unmount()); host.remove(); }
 }

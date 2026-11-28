@@ -39,10 +39,9 @@ MAX_TAGS = 32
 
 _SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9._:/-]{0,39}$")
 _EXCHANGE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
-# Any market a data series offers (ADR-DATA-002 D1c). Only ``futures`` gets
-# leverage, shorting and hedge mode; every other market type, such as Twelve
-# Data's stock, etf, forex, index or commodity, is fully paid and long-only until
-# D5 adds its own simulation rules.
+# Any market a data series offers (ADR-DATA-002 D1c). The symbol's declared
+# account model decides leverage, shorting and hedge mode (D5b,
+# ``account_models.py``).
 _MARKET_TYPE = re.compile(r"^[a-z][a-z0-9_.]{0,31}$")
 _FIELD_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _ID = re.compile(r"^[a-z]{2,4}_[0-9a-f]{20}(~r)?$")

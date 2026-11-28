@@ -257,6 +257,17 @@ export interface Excursion {
 }
 
 /** The chart the rail is attached to: defaults for orders, notes and replay. */
+/** How practice accounts hold positions in one market (ADR-DATA-002 D5b). */
+export interface PracticeMarketRules {
+  accountModel: "cash" | "crypto_linear" | "crypto_inverse" | "futures_margin";
+  /** False when the catalog has no declaration and the market keeps the earlier rules. */
+  declared: boolean;
+  leverage: boolean;
+  shorting: boolean;
+  hedge: boolean;
+  opensPositions: boolean;
+}
+
 export interface TradingChartContext {
   exchange: string;
   marketType: string;

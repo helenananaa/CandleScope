@@ -716,6 +716,7 @@ export const tradingAccountsId: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Terisi di {price}",
   "trading.ticket.working": "Order sedang aktif",
   "trading.ticket.waitsForOpen": "Pasar sedang tutup; order terisi saat pembukaan berikutnya",
+  "trading.ticket.modelUnsupported": "Akun latihan belum dapat membuka posisi di pasar ini; posisi yang ada masih dapat ditutup",
   "trading.ticket.model": "Fill simulasi. Tidak ada yang dikirim ke bursa.",
   "trading.manual.title": "Masukkan fill",
   "trading.manual.help": "Catat fill untuk {symbol}. Fill otomatis dikelompokkan menjadi transaksi dari posisi nol ke posisi nol.",

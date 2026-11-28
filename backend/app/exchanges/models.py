@@ -548,6 +548,12 @@ def serialize_exchange_capabilities(capabilities: Any) -> dict[str, Any]:
 # identity's asset_class, except crypto, which is the default and stays empty.
 UNDERLYING_CLASSES = frozenset({"", "stock", "etf", "forex", "index", "commodity"})
 
+# How a simulated account holds a position in the symbol (ADR-DATA-002 §4.1, D5b):
+# cash (fully paid, long only: spot crypto, stocks, ETFs); crypto_linear (margin
+# on notional, profit in the quote); crypto_inverse (contracts settled in the
+# base coin); futures_margin (a fixed margin per contract). Empty: undeclared.
+ACCOUNT_MODELS = frozenset({"", "cash", "crypto_linear", "crypto_inverse", "futures_margin"})
+
 
 @dataclass(slots=True)
 class SymbolInfo:
@@ -597,6 +603,7 @@ class SymbolInfo:
     # crypto-venue series whose underlying_class is commodity.
     underlying_class: str = ""
     underlying_region: str = ""
+    account_model: str = ""
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -651,6 +658,9 @@ class SymbolInfo:
             or len(self.underlying_region) > 8
         ):
             raise ValueError("underlying_region must be a short region code on a classified underlying")
+        self.account_model = str(self.account_model or "").strip().lower()
+        if self.account_model not in ACCOUNT_MODELS:
+            raise ValueError("unsupported account_model")
         self.option_right = str(self.option_right or "").strip().lower()
         if self.option_right not in {"", "call", "put"}:
             raise ValueError("option_right must be call, put, or empty")
@@ -737,6 +747,8 @@ class SymbolInfo:
             data["underlyingClass"] = self.underlying_class
         if self.underlying_region:
             data["underlyingRegion"] = self.underlying_region
+        if self.account_model:
+            data["accountModel"] = self.account_model
         if self.price_tick_size:
             data["priceTickSize"] = self.price_tick_size
         lot = next((item for item in self.raw.get("filters", []) if item.get("filterType") == "LOT_SIZE"), {})

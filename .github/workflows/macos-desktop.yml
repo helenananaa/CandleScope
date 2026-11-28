@@ -240,6 +240,7 @@ jobs:
             tests/test_account_product_integration.py \
             tests/test_trading_accounts.py \
             tests/test_trading_series_identity.py \
+            tests/test_trading_practice_account_models.py \
             tests/test_trading_practice_sessions.py \
             tests/test_practice_baselines.py \
             tests/test_trading_account_snapshot.py \

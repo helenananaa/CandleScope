@@ -716,6 +716,7 @@ export const tradingAccountsTh: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "ฟิลล์ที่ {price}",
   "trading.ticket.working": "คำสั่งกำลังทำงาน",
   "trading.ticket.waitsForOpen": "ตลาดปิดอยู่ คำสั่งจะจับคู่เมื่อตลาดเปิดครั้งถัดไป",
+  "trading.ticket.modelUnsupported": "บัญชีฝึกซ้อมยังเปิดสถานะในตลาดนี้ไม่ได้ แต่ยังปิดสถานะที่มีอยู่ได้",
   "trading.ticket.model": "ฟิลล์จำลอง ไม่มีการส่งสิ่งใดไปยังตลาด",
   "trading.manual.title": "กรอกฟิลล์",
   "trading.manual.help": "บันทึกฟิลล์สำหรับ {symbol} ฟิลล์จะถูกจัดกลุ่มเป็นเทรดโดยอัตโนมัติ ตั้งแต่ไม่มีโพสิชันจนกลับมาไม่มีโพสิชัน",
