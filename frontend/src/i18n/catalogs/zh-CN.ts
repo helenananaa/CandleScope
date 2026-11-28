@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { replayNoteChinese } from "./replayNoteMessages.js";
@@ -13,6 +14,7 @@ import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
 import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 export const zhCN = {
   ...unifiedMessages["zh-CN"],
+  ...syntheticPagingMessages["zh-CN"],
   ...drawingAnnotationMessages["zh-CN"],
   ...continuousChinese,
   ...tradeHistoryChinese,

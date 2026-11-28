@@ -138,17 +138,46 @@ same-time preview cohort can therefore replace its entire volume-bearing prefix.
   browser algorithms.
 
 The frontend workspace manager owns shared sockets and immutable replicas.
-Each chart binding owns only its source-range demand and display projection.
+Each chart binding owns only its source-range demand, its paging demand and
+its display projection.
 There is no mutable shared K-line `SeriesWindowStore` for synthetic records:
 that store's timestamp index would discard equal-time bricks.
 
-Live charts request `complete_window` snapshots. The service captures one
-immutable output generation and sends chunks of at most 5,000 records. The
-frontend validates order/generation/revision, then atomically publishes the full
-loaded source window (within the 50,000-output calculation limit). Updates queued
-during transfer follow that snapshot. Small fixed boxes therefore do not silently
-lose the first 5,000+ bricks. Independent output-cursor paging remains available
-to backend/HTTP consumers; the UI still navigates through its source-window demand.
+### Output pages in charts (#381)
+
+The chart's loaded source window still chooses the definition (`anchor` to
+`through`). Inside one definition, charts page outputs by ordinal cursor instead
+of transferring the whole output first:
+
+* The stream sends the newest page (2,000 outputs) and the live patches. The
+  workspace replica of a definition is one contiguous range `[from, total)` that
+  always ends at the live tail; every chart and indicator input on that
+  definition reads the same range.
+* When a chart reaches the left edge of that range, it loads the previous page
+  with `POST /synthetic/query` (`before` = first loaded ordinal, `generation`).
+  A page joins only at the same generation, revision and cursor, so equal-time
+  bricks are never lost or repeated at the seam. A page cut at a newer revision
+  waits for the stream's patch and is fetched again; a new generation restarts
+  at its newest page.
+* Only when the range starts at ordinal 0 does the left edge ask for older source
+  bars, which makes a new definition. A new definition (older source bars, a new
+  bar, Go to date, a resync) pages back to the source time the chart was showing
+  before it paints, so the view stays where it was.
+* Go to date and linked time ranges page back to their target time first.
+* Pages count toward the browser's 100,000-row synthetic budget. A refused page
+  stops paging for that snapshot and the chart says older data isn't loaded; it
+  never recomputes locally and never hides a truncated result.
+* Another chart's paging adds rows in front of a shared definition but never
+  moves its live tail, and its viewport keeps its bricks in place.
+
+On 1,500 hourly BTCUSDT bars with a 10-point fixed box (30,813 bricks), the
+first paint transfers 1.06 MB instead of 16.29 MB, arrives in 0.39–0.48 s
+instead of 1.26–1.73 s with the series computed, and admits 2,000 rows in the
+browser (17 ms) instead of 30,813 (259 ms). Each older page is 2,000 rows,
+about 1 MB, served in 0.05–0.5 s.
+
+`complete_window` snapshots (one immutable generation in chunks of at most 5,000
+records) remain available to backend/HTTP consumers.
 
 ## Frozen and replay sources
 
@@ -234,7 +263,8 @@ price-event histories have explicitly distinct contracts.
 
 Independent follow-ups are
 [persistence/rebuild acceleration #380](https://github.com/helenananaa/CandleScope/issues/380),
-[output-cursor UI navigation #381](https://github.com/helenananaa/CandleScope/issues/381),
+[output-cursor UI navigation #381](https://github.com/helenananaa/CandleScope/issues/381)
+(charts now page outputs by ordinal; see "Output pages in charts"),
 [capacity/mixed-load/endurance #382](https://github.com/helenananaa/CandleScope/issues/382),
 and [cross-platform expanded release acceptance #383](https://github.com/helenananaa/CandleScope/issues/383).
 General executor and scheduling work remains with #120; this feature does not

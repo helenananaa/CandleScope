@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
@@ -12,6 +13,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ru = {
   ...unifiedMessages["ru"],
+  ...syntheticPagingMessages["ru"],
   ...drawingAnnotationMessages["ru"],
   ...syntheticEnglish,
   ...continuousRussian,
