@@ -4,10 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from threading import RLock
-from typing import Iterable, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Callable, Iterable, Mapping, Protocol, Sequence, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from app.data_engine.history.models import TimeRange
+from app.data_engine.history.exchange_date_calendar import CN_A_SHARE_DAILY_CALENDAR_ID
 from app.data_engine.interval_policy import (
     compute_bucket_end_ms,
     compute_bucket_start_ms,
@@ -594,9 +595,28 @@ class CalendarRegistry:
 
     def __init__(self, *, include_defaults: bool = True) -> None:
         self._calendars: dict[str, TradingCalendar] = {}
+        self._factories: dict[str, Callable[[], TradingCalendar]] = {}
         self._lock = RLock()
         if include_defaults:
             self.register("crypto.24x7.utc", AlwaysOpenCalendar())
+            # ADR-DATA-002 D2e: calendars that imported datasets may name. They
+            # are built on first lookup, so any process resolves them without
+            # bootstrapping exchange plugins.
+            self.register_factory(CN_A_SHARE_DAILY_CALENDAR_ID, _cn_a_share_calendar)
+
+    def register_factory(
+        self,
+        calendar_id: str,
+        factory: Callable[[], TradingCalendar],
+    ) -> None:
+        """Register a calendar that is built the first time it is looked up."""
+        key = str(calendar_id or "").strip()
+        if not key:
+            raise ValueError("calendar_id must be non-empty")
+        with self._lock:
+            if key in self._calendars or key in self._factories:
+                raise ValueError(f"calendar already registered: {key}")
+            self._factories[key] = factory
 
     def register(
         self,
@@ -611,15 +631,28 @@ class CalendarRegistry:
         if not isinstance(calendar, TradingCalendar):
             raise TypeError("calendar does not implement TradingCalendar")
         with self._lock:
-            if key in self._calendars and not replace:
+            if (key in self._calendars or key in self._factories) and not replace:
                 raise ValueError(f"calendar already registered: {key}")
+            self._factories.pop(key, None)
             self._calendars[key] = calendar
 
     def get(self, calendar_id: str | None) -> TradingCalendar | None:
         if not calendar_id:
             return None
+        key = str(calendar_id).strip()
         with self._lock:
-            return self._calendars.get(str(calendar_id).strip())
+            calendar = self._calendars.get(key)
+            if calendar is not None:
+                return calendar
+            factory = self._factories.get(key)
+            if factory is None:
+                return None
+            calendar = factory()
+            if not isinstance(calendar, TradingCalendar):
+                raise TypeError("calendar does not implement TradingCalendar")
+            self._calendars[key] = calendar
+            del self._factories[key]
+            return calendar
 
     def require(self, calendar_id: str) -> TradingCalendar:
         calendar = self.get(calendar_id)
@@ -629,7 +662,13 @@ class CalendarRegistry:
 
     def ids(self) -> tuple[str, ...]:
         with self._lock:
-            return tuple(sorted(self._calendars))
+            return tuple(sorted({*self._calendars, *self._factories}))
+
+
+def _cn_a_share_calendar() -> TradingCalendar:
+    from app.data_engine.history.exchange_date_calendar import build_cn_a_share_calendar
+
+    return build_cn_a_share_calendar()
 
 
 _PROCESS_CALENDAR_REGISTRY = CalendarRegistry()

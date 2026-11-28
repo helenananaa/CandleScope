@@ -5,6 +5,7 @@ import { CSV_FIELDS, parseResearchCsvPreview, validCsvColumns, type CsvColumns, 
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalImportJob } from "./researchDataApi.js";
 import { formatResearchRows } from "./researchDataFormat.js";
+import { findLocalImportCalendar, LOCAL_IMPORT_CALENDARS, localCalendarLabel } from "../local-data/localTradingCalendars.js";
 import type { ResearchImportSubmitInput } from "./useResearchDataLibrary.js";
 
 export function ResearchDataImportForm({
@@ -31,12 +32,18 @@ export function ResearchDataImportForm({
   const [timezone, setTimezone] = useState("UTC");
   const [timestampUnit, setTimestampUnit] = useState<"auto" | "s" | "ms" | "iso">("auto");
   const [volumeRequired, setVolumeRequired] = useState(false);
+  const [calendarId, setCalendarId] = useState("");
   const [asRevision, setAsRevision] = useState(false);
   useEffect(() => {
     if (!asRevision) return;
     setBaseAsset(selected?.instrument?.base_asset ?? "");
     setQuoteAsset(selected?.instrument?.quote_asset ?? "");
+    setCalendarId(selected?.calendar_id ?? "");
   }, [asRevision, selected]);
+  // A trading calendar labels daily bars at 00:00 UTC on the trading date.
+  const calendar = findLocalImportCalendar(calendarId);
+  const effectiveInterval = calendar?.interval ?? interval;
+  const effectiveTimezone = calendar?.timezone ?? timezone;
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [columns, setColumns] = useState<CsvColumns | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -54,12 +61,13 @@ export function ResearchDataImportForm({
           columns,
           name: name.trim() || file.name.replace(/\.csv$/i, ""),
           symbol,
-          interval,
-          timezone,
+          interval: effectiveInterval,
+          timezone: effectiveTimezone,
           timestampUnit,
           volumeRequired,
           baseAsset,
           quoteAsset,
+          ...(calendar !== null ? { calendarId: calendar.id } : {}),
           ...(asRevision && selected !== null ? { datasetId: selected.dataset_id } : {}),
         }).then(() => {
           setFile(null);
@@ -108,11 +116,18 @@ export function ResearchDataImportForm({
         <Field label={t("local.symbol")} required>
           <Input size="sm" required value={symbol} onChange={(event) => setSymbol(event.target.value)} />
         </Field>
+        <Field label={t("local.calendar")}>
+          <Select size="sm" value={calendarId} disabled={asRevision} data-testid="research-import-calendar"
+            onChange={(event) => setCalendarId(event.target.value)}>
+            <option value="">{t("local.calendar.none")}</option>
+            {LOCAL_IMPORT_CALENDARS.map((item) => <option key={item.id} value={item.id}>{localCalendarLabel(item.id)}</option>)}
+          </Select>
+        </Field>
         <Field label={t("local.interval")} required>
-          <Input size="sm" required value={interval} onChange={(event) => setInterval(event.target.value)} placeholder="1m" />
+          <Input size="sm" required value={effectiveInterval} disabled={calendar !== null} onChange={(event) => setInterval(event.target.value)} placeholder="1m" />
         </Field>
         <Field label={t("local.timezone")} required>
-          <Input size="sm" required value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="UTC" />
+          <Input size="sm" required value={effectiveTimezone} disabled={calendar !== null} onChange={(event) => setTimezone(event.target.value)} placeholder="UTC" />
         </Field>
         <Field label={t("local.timeFormat")}>
           <Select size="sm" value={timestampUnit} onChange={(event) => setTimestampUnit(event.target.value as typeof timestampUnit)}>
@@ -133,6 +148,7 @@ export function ResearchDataImportForm({
           </Select>
         </Field>
       </div>
+      {calendar !== null && <p className="research-import-note" data-testid="research-import-calendar-hint">{t("local.calendar.hint")}</p>}
       <p className="research-import-note">{t("local.requiredCols")}</p>
       <div className="research-import-grid">
         <Field label={t("local.baseAsset")}><Input size="sm" value={baseAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,31}"

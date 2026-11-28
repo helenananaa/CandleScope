@@ -84,6 +84,9 @@ function expectManifest(value: unknown): LocalDatasetManifest {
     || typeof value.instrument.base_asset !== "string" || !/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(value.instrument.base_asset)
     || typeof value.instrument.quote_asset !== "string" || !/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(value.instrument.quote_asset)
     || value.instrument.volume_unit !== "base_asset")) throw new TypeError("Local dataset instrument units are invalid");
+  if (value.calendar_id !== undefined && (typeof value.calendar_id !== "string" || value.calendar_id.length === 0)) {
+    throw new TypeError("Local dataset manifest field calendar_id is invalid");
+  }
   const requiredStrings = [
     "dataset_id",
     "data_epoch",
@@ -180,6 +183,7 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     base_asset: input.baseAsset,
     quote_asset: input.quoteAsset,
     dataset_id: input.datasetId,
+    calendar_id: input.calendarId,
     ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });
   const payload = await responseJson(await fetch(url, {
@@ -230,6 +234,7 @@ export function createLocalImportJob(
     base_asset: input.baseAsset,
     quote_asset: input.quoteAsset,
     dataset_id: input.datasetId,
+    calendar_id: input.calendarId,
     ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });
   return new Promise((resolve, reject) => {

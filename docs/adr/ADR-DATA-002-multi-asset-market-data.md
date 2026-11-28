@@ -301,7 +301,7 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 
 | 档 | 方式 | 说明 |
 | --- | --- | --- |
-| 零代码 | 导入 CSV/Parquet | 现在导入的数据走 `local-*` 和 `local_bar`（`replay/local_bar_repository.py`），策略走 `ImportedDatasetSource`，两条路分开。改成一个"本地 provider"，产出同样的 SeriesRef，和 #169 并库一起做 |
+| 零代码 | 导入 CSV/Parquet（D2e 起可声明交易日历） | 现在导入的数据走 `local-*` 和 `local_bar`（`replay/local_bar_repository.py`），策略走 `ImportedDatasetSource`，两条路分开。改成一个"本地 provider"，产出同样的 SeriesRef，和 #169 并库一起做 |
 | 写脚本 | Python 模板实现 `symbols`、`history`、可选 `stream`，加一份声明清单 | 从文件夹热加载开发；用 `packages/plugin-conformance` 做一致性检查；分页循环、限流、重连、缺口由宿主负责 |
 | 填 key | 内置来源在设置页填 key | §8 |
 
@@ -355,6 +355,7 @@ Binance 品种键规范化和 `i18n/t.ts` 的显示名属于命名，不是功�
 | D0b | 1.1 | 其他 CCXT 交易所的 TradFi 合约按 `venue_underlyings.py` 分类，并逐家核对交易时段；Hyperliquid HIP-3 加载 | 至少一个非 Binance 交易所的黄金、原油合约可用，非 24×7 的品种不报缺口 |
 | D1 | 1.1 | SeriesRef 贯穿策略测试、研究来源、回放、数据准备、练习账户；hash 规则按 §3 | 用 Twelve Data AAPL 1m（环境变量 key）跑通图表 → 策略测试 → 回放 → 练习账户；现有运行和回放的 hash 不变 |
 | D2 | 1.1 | 完整性改用日历；持续策略去掉加密限定，改看日历和能力 | 美股休市、节假日、半日市不报不完整；Binance 和 OKX 现有结果不变 |
+| D2e | 1.1 | 导入数据声明交易日历：内置 A 股日线日历（`cn.a-share.exchange-date.utc`，来自 `exchange_calendars` XSHG，按交易日期的 00:00 UTC 标日线）；CSV 导入按日历判断缺口，清单和 data_epoch 记录日历；日历数据集暂不派生周期 | A 股日线休市不算缺口、停牌仍是缺口，策略回测跨休市完成；没有日历的数据集 data_epoch 不变 |
 | D3 | 1.1 | §5 的名字判断全部改成能力（D3a 逐笔成交归档；D3b 回放训练；D3c 策略；D3d 高级行情） | 对 Binance/OKX 行为不变；无该能力的来源明确提示不支持 |
 | D4 | 1.1 | 宿主凭据库 + 设置页「数据源」；Twelve Data key 迁到界面 | 不设环境变量即可使用 Twelve Data；macOS 和 Windows 都能用 |
 | D5 | 1.1 | 模拟账户：现金股票、期货每手保证金、休市不成交和开盘跳空（D5a 休市和跳空；D5b 账户模型来自品种；D5c 现金股票；D5d 期货每手保证金） | 美股和期货品种在练习账户里能开平仓，财务结果有测试 |
