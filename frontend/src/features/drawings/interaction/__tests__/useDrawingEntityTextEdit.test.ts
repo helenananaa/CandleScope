@@ -317,3 +317,25 @@ test("committed text keeps textarea ownership until the exact scene paint handof
   assert.deepEqual(harness.toolChanges, [null]);
   assert.equal(disposed, 0, "the acknowledged handoff already owns its cleanup");
 });
+
+test("the edited drawing is readable while its textarea is open, including a new callout", () => {
+  const { harness, options } = createHarness();
+  const controller = createDrawingEntityTextEditController(options);
+  const callout = savedText({ id: "callout-1", text: "", target: { time: 40, price: 30 } });
+  // The scene hides the entity as soon as editing starts, so the drawing must be readable by then.
+  const seenAtHide: Array<SavedTextDrawing | null> = [];
+  controller.setOptions({
+    ...options,
+    setActiveSceneEntityId: (id) => {
+      harness.activeSceneIds.push(id);
+      seenAtHide.push(controller.getEditingDrawing());
+    },
+  });
+  assert.equal(controller.getEditingDrawing(), null);
+  assert.equal(controller.startTextEditing(callout, { isNew: true, screenPoint: { x: 5, y: 6 } }), true);
+  assert.deepEqual(controller.getEditingDrawing()?.target, { time: 40, price: 30 });
+  assert.equal(seenAtHide[0]?.id, "callout-1");
+  assert.equal(controller.cancelTextEditing(), true);
+  assert.equal(controller.getEditingDrawing(), null);
+  assert.deepEqual(harness.activeSceneIds, ["callout-1", null]);
+});

@@ -48,6 +48,7 @@ const HIT_TYPE_TOOL_IDS: Readonly<Record<DrawingHitType, DrawingToolId>> = Objec
   "range-measure": "measure-price-time",
   path: "path-line",
   channel: "channel-parallel",
+  calculated: "anchored-vwap",
   fibonacci: "fibonacci",
   shape: "shape-rectangle",
   text: "text",

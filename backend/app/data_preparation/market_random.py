@@ -5,6 +5,11 @@ import asyncio
 import secrets
 import time
 
+from app.exchanges.roles import (
+    BINANCE_KLINES_START_TIME_ASCENDING,
+    HISTORY_EARLIEST_PAGE,
+    venue_role_contract,
+)
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 from .models import PreparationError
@@ -45,9 +50,12 @@ async def resolve_market_random(payload, factory, *, now_ms=None, randbelow=secr
     descriptor.validate()
     metadata = get_cached_symbol_metadata(payload.exchange, payload.market_type, payload.symbol) or {}
     listed = metadata.get("continuousTradingAtMs") or metadata.get("listedAtMs")
-    # Binance's startTime pagination is ascending. Other providers require an
-    # authoritative listing boundary; never infer it from a local cache edge.
-    if not (type(listed) is int and listed >= 0) and payload.exchange != "binance":
+    # A venue whose start-time pages are ascending finds its first bar from
+    # time zero. Others need an authoritative listing boundary; never infer it
+    # from a local cache edge.
+    if not (type(listed) is int and listed >= 0) and venue_role_contract(
+            payload.exchange, payload.market_type, HISTORY_EARLIEST_PAGE,
+    ) != BINANCE_KLINES_START_TIME_ASCENDING:
         raise PreparationError("MARKET_LISTING_UNKNOWN", "无法确认该交易对的上市边界，请使用指定时间或指定范围随机。")
     start = listed if isinstance(listed, int) and listed >= 0 else 0
     ended = [v for v in (metadata.get("delistedAtMs"), metadata.get("expiryAtMs"))

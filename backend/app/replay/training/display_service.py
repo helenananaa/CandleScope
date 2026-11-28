@@ -8,6 +8,11 @@ from collections.abc import Mapping
 from dataclasses import replace
 from threading import Event
 
+from app.exchanges.roles import (
+    BINANCE_PUBLIC_KLINE_ARCHIVE,
+    HISTORY_NATIVE_ARCHIVE,
+    venue_role_contract,
+)
 from app.data_engine.interval_policy import (
     VALID_INTERVALS,
     compute_bucket_start_ms,
@@ -342,8 +347,10 @@ class TrainingDisplayService:
             return dict(binding)
         actual_replay_start_ms = int(policy["actual_replay_start_ms"])
         strict_native_source = (
-            str(binding.get("exchange", "")).lower() == "binance"
-            and str(binding.get("market_type", "")).lower() == "spot"
+            venue_role_contract(
+                str(binding.get("exchange", "")), str(binding.get("market_type", "")),
+                HISTORY_NATIVE_ARCHIVE,
+            ) == BINANCE_PUBLIC_KLINE_ARCHIVE
             and str(binding.get("source_kind", "")).upper() == "BAR"
         )
         if getattr(self.replay_service, "_native_intervals_explicit", False):

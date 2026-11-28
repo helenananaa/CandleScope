@@ -107,6 +107,7 @@ if RUNTIME_MODE == "LIVE":
     from app.plugin_core_v2 import CorePluginPlatform, create_core_plugin_router
     from app.data_engine.storage import initialize_market_storage
     from app.readonly_accounts.api import router as readonly_accounts_router
+    from app.data_sources.api import router as data_sources_router
 else:
     from app.api.v1.local_data import router as local_data_router
 
@@ -174,6 +175,7 @@ else:
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(readonly_accounts_router, prefix="/api/v1")
+    app.include_router(data_sources_router, prefix="/api/v1")
     app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
     if RESEARCH_DATA_LIBRARY_ENABLED:
@@ -543,6 +545,13 @@ async def startup_event() -> None:
             except SubscriptionError as exc:
                 logger.warning("Subscription routes unavailable: %s", exc)
             app.state.proxy_supervisor = asyncio.create_task(managed.supervise(), name="managed-proxy-recovery")
+            from app.api.v1.settings import apply_refreshed_routes
+            from app.proxy_subscriptions.refresh import refresher
+
+            async def apply_refresh(replacements):
+                return await apply_refreshed_routes(app, replacements)
+
+            app.state.proxy_refresher = asyncio.create_task(refresher.run(apply_refresh), name="proxy-subscription-refresh")
         await _startup_event_impl()
     except BaseException as failure:
         if isinstance(failure, Exception):
@@ -648,6 +657,12 @@ async def _startup_event_impl() -> None:
     restored_catalog = initialize_exchange_metadata_cache()
     if restored_catalog:
         logger.info("Restored last-known-good symbol catalog snapshot")
+
+    # Keys saved in Settings → Data sources, read before any provider request.
+    from app.core.config import DATA_DIR
+    from app.data_sources.runtime import start_data_source_credentials
+
+    await start_data_source_credentials(app, DATA_DIR / "data-sources")
 
     # 3. Start script/plugin runtimes as a capability plane. A missing or
     # unsupported first-party sidecar degrades Pine; it does not abort
@@ -889,6 +904,9 @@ async def shutdown_event() -> None:
             await _shutdown_components()
         finally:
             if RUNTIME_MODE != "LOCAL_OFFLINE":
+                from app.data_sources.runtime import stop_data_source_credentials
+
+                stop_data_source_credentials(app)
                 await _stop_managed_proxy()
 
     cleanup = asyncio.create_task(stop_components(), name="application-shutdown-components")
@@ -913,10 +931,10 @@ async def _stop_managed_proxy() -> None:
     if sys.platform == "emscripten":
         return
     from app.proxy_subscriptions.runtime import managed
-    supervisor = getattr(app.state, "proxy_supervisor", None)
-    if supervisor is not None:
-        supervisor.cancel()
-        await asyncio.gather(supervisor, return_exceptions=True)
+    tasks = [getattr(app.state, name, None) for name in ("proxy_refresher", "proxy_supervisor")]
+    for task in filter(None, tasks):
+        task.cancel()
+    await asyncio.gather(*filter(None, tasks), return_exceptions=True)
     await asyncio.to_thread(managed.close)
 
 

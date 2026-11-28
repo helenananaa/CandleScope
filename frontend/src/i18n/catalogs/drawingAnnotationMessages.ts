@@ -1,0 +1,211 @@
+/** Callout and price-label drawing tools (PL-1), for every registered locale. */
+const english = {
+  "drawing.variant.text": "Text",
+  "drawing.variant.callout": "Callout",
+  "drawing.variant.callout.description": "Click the point to annotate, then click where the note goes",
+  "drawing.variant.price-label": "Price label",
+  "drawing.variant.price-label.description": "Click a point to label its price",
+} as const;
+
+type DrawingAnnotationMessages = Readonly<Record<keyof typeof english, string>>;
+
+const traditional: DrawingAnnotationMessages = {
+  "drawing.variant.text": "文字",
+  "drawing.variant.callout": "引線標註",
+  "drawing.variant.callout.description": "先點擊要標註的點，再點擊放置註解的位置",
+  "drawing.variant.price-label": "價格標籤",
+  "drawing.variant.price-label.description": "點擊一個點，標出它的價格",
+};
+
+type CatalogLocale = "en" | "zh-CN" | "zh-TW" | "zh-Hant" | "zh-HK" | "zh-MO" | "ja" | "ko" | "ar" | "cs"
+  | "de" | "es" | "fr" | "he" | "hi" | "hu" | "id" | "it" | "ms" | "nl" | "pl" | "pt-BR" | "pt-PT" | "ro"
+  | "ru" | "sv" | "th" | "tr" | "uk" | "vi";
+
+export const drawingAnnotationMessages: Readonly<Record<CatalogLocale, DrawingAnnotationMessages>> = {
+  en: english,
+  "zh-CN": {
+    "drawing.variant.text": "文字",
+    "drawing.variant.callout": "引线标注",
+    "drawing.variant.callout.description": "先单击要标注的点，再单击放置注释的位置",
+    "drawing.variant.price-label": "价格标签",
+    "drawing.variant.price-label.description": "单击一个点，标出它的价格",
+  },
+  "zh-TW": {
+    "drawing.variant.text": "文字",
+    "drawing.variant.callout": "引線標註",
+    "drawing.variant.callout.description": "先按一下要標註的點，再按一下放置註解的位置",
+    "drawing.variant.price-label": "價格標籤",
+    "drawing.variant.price-label.description": "按一下一個點，標出它的價格",
+  },
+  "zh-Hant": traditional,
+  "zh-HK": traditional,
+  "zh-MO": traditional,
+  ja: {
+    "drawing.variant.text": "テキスト",
+    "drawing.variant.callout": "吹き出し",
+    "drawing.variant.callout.description": "注釈する点をクリックし、次にメモを置く位置をクリック",
+    "drawing.variant.price-label": "価格ラベル",
+    "drawing.variant.price-label.description": "点をクリックしてその価格を表示",
+  },
+  ko: {
+    "drawing.variant.text": "텍스트",
+    "drawing.variant.callout": "콜아웃",
+    "drawing.variant.callout.description": "주석을 달 지점을 클릭한 다음 메모를 놓을 위치를 클릭하세요",
+    "drawing.variant.price-label": "가격 라벨",
+    "drawing.variant.price-label.description": "지점을 클릭해 그 가격을 표시하세요",
+  },
+  ar: {
+    "drawing.variant.text": "نص",
+    "drawing.variant.callout": "تعليق بمؤشر",
+    "drawing.variant.callout.description": "انقر النقطة المراد التعليق عليها، ثم انقر موضع الملاحظة",
+    "drawing.variant.price-label": "ملصق السعر",
+    "drawing.variant.price-label.description": "انقر نقطة لعرض سعرها",
+  },
+  cs: {
+    "drawing.variant.text": "Text",
+    "drawing.variant.callout": "Popisek s odkazem",
+    "drawing.variant.callout.description": "Klikněte na bod, který chcete popsat, a pak na místo poznámky",
+    "drawing.variant.price-label": "Cenový štítek",
+    "drawing.variant.price-label.description": "Kliknutím na bod zobrazíte jeho cenu",
+  },
+  de: {
+    "drawing.variant.text": "Text",
+    "drawing.variant.callout": "Hinweis mit Zeiger",
+    "drawing.variant.callout.description": "Den zu markierenden Punkt anklicken, dann die Stelle für die Notiz",
+    "drawing.variant.price-label": "Preisetikett",
+    "drawing.variant.price-label.description": "Einen Punkt anklicken, um seinen Preis anzuzeigen",
+  },
+  es: {
+    "drawing.variant.text": "Texto",
+    "drawing.variant.callout": "Llamada",
+    "drawing.variant.callout.description": "Haz clic en el punto que quieres anotar y luego donde va la nota",
+    "drawing.variant.price-label": "Etiqueta de precio",
+    "drawing.variant.price-label.description": "Haz clic en un punto para mostrar su precio",
+  },
+  fr: {
+    "drawing.variant.text": "Texte",
+    "drawing.variant.callout": "Légende fléchée",
+    "drawing.variant.callout.description": "Cliquez sur le point à annoter, puis à l’endroit où placer la note",
+    "drawing.variant.price-label": "Étiquette de prix",
+    "drawing.variant.price-label.description": "Cliquez sur un point pour afficher son prix",
+  },
+  he: {
+    "drawing.variant.text": "טקסט",
+    "drawing.variant.callout": "הערה עם מצביע",
+    "drawing.variant.callout.description": "לחצו על הנקודה שרוצים לסמן, ואז על המקום של ההערה",
+    "drawing.variant.price-label": "תווית מחיר",
+    "drawing.variant.price-label.description": "לחצו על נקודה כדי להציג את המחיר שלה",
+  },
+  hi: {
+    "drawing.variant.text": "टेक्स्ट",
+    "drawing.variant.callout": "कॉलआउट",
+    "drawing.variant.callout.description": "जिस बिंदु पर नोट लगाना है उसे क्लिक करें, फिर नोट की जगह क्लिक करें",
+    "drawing.variant.price-label": "मूल्य लेबल",
+    "drawing.variant.price-label.description": "किसी बिंदु का मूल्य दिखाने के लिए उसे क्लिक करें",
+  },
+  hu: {
+    "drawing.variant.text": "Szöveg",
+    "drawing.variant.callout": "Mutatós felirat",
+    "drawing.variant.callout.description": "Kattintson a megjelölendő pontra, majd a jegyzet helyére",
+    "drawing.variant.price-label": "Árcímke",
+    "drawing.variant.price-label.description": "Kattintson egy pontra az árának megjelenítéséhez",
+  },
+  id: {
+    "drawing.variant.text": "Teks",
+    "drawing.variant.callout": "Keterangan bergaris",
+    "drawing.variant.callout.description": "Klik titik yang ingin diberi keterangan, lalu klik tempat catatannya",
+    "drawing.variant.price-label": "Label harga",
+    "drawing.variant.price-label.description": "Klik sebuah titik untuk menampilkan harganya",
+  },
+  it: {
+    "drawing.variant.text": "Testo",
+    "drawing.variant.callout": "Didascalia con freccia",
+    "drawing.variant.callout.description": "Fai clic sul punto da annotare, poi dove mettere la nota",
+    "drawing.variant.price-label": "Etichetta prezzo",
+    "drawing.variant.price-label.description": "Fai clic su un punto per mostrarne il prezzo",
+  },
+  ms: {
+    "drawing.variant.text": "Teks",
+    "drawing.variant.callout": "Keterangan bergaris",
+    "drawing.variant.callout.description": "Klik titik yang hendak diberi keterangan, kemudian klik tempat nota",
+    "drawing.variant.price-label": "Label harga",
+    "drawing.variant.price-label.description": "Klik satu titik untuk menunjukkan harganya",
+  },
+  nl: {
+    "drawing.variant.text": "Tekst",
+    "drawing.variant.callout": "Toelichting met lijn",
+    "drawing.variant.callout.description": "Klik op het punt dat je wilt markeren en daarna waar de notitie komt",
+    "drawing.variant.price-label": "Prijslabel",
+    "drawing.variant.price-label.description": "Klik op een punt om de prijs ervan te tonen",
+  },
+  pl: {
+    "drawing.variant.text": "Tekst",
+    "drawing.variant.callout": "Objaśnienie",
+    "drawing.variant.callout.description": "Kliknij punkt do opisania, a potem miejsce na notatkę",
+    "drawing.variant.price-label": "Etykieta ceny",
+    "drawing.variant.price-label.description": "Kliknij punkt, aby pokazać jego cenę",
+  },
+  "pt-BR": {
+    "drawing.variant.text": "Texto",
+    "drawing.variant.callout": "Balão com indicador",
+    "drawing.variant.callout.description": "Clique no ponto a anotar e depois onde a nota deve ficar",
+    "drawing.variant.price-label": "Etiqueta de preço",
+    "drawing.variant.price-label.description": "Clique em um ponto para mostrar o preço dele",
+  },
+  "pt-PT": {
+    "drawing.variant.text": "Texto",
+    "drawing.variant.callout": "Balão com indicador",
+    "drawing.variant.callout.description": "Clique no ponto a anotar e depois onde a nota deve ficar",
+    "drawing.variant.price-label": "Etiqueta de preço",
+    "drawing.variant.price-label.description": "Clique num ponto para mostrar o respetivo preço",
+  },
+  ro: {
+    "drawing.variant.text": "Text",
+    "drawing.variant.callout": "Etichetă cu indicator",
+    "drawing.variant.callout.description": "Faceți clic pe punctul de adnotat, apoi pe locul notei",
+    "drawing.variant.price-label": "Etichetă de preț",
+    "drawing.variant.price-label.description": "Faceți clic pe un punct pentru a-i afișa prețul",
+  },
+  ru: {
+    "drawing.variant.text": "Текст",
+    "drawing.variant.callout": "Выноска",
+    "drawing.variant.callout.description": "Щёлкните точку, к которой относится заметка, затем место для заметки",
+    "drawing.variant.price-label": "Ценовая метка",
+    "drawing.variant.price-label.description": "Щёлкните точку, чтобы показать её цену",
+  },
+  sv: {
+    "drawing.variant.text": "Text",
+    "drawing.variant.callout": "Pratbubbla med pil",
+    "drawing.variant.callout.description": "Klicka på punkten som ska märkas och sedan där anteckningen ska stå",
+    "drawing.variant.price-label": "Prisetikett",
+    "drawing.variant.price-label.description": "Klicka på en punkt för att visa dess pris",
+  },
+  th: {
+    "drawing.variant.text": "ข้อความ",
+    "drawing.variant.callout": "ป้ายคำอธิบายพร้อมเส้นชี้",
+    "drawing.variant.callout.description": "คลิกจุดที่ต้องการระบุ แล้วคลิกตำแหน่งที่จะวางบันทึก",
+    "drawing.variant.price-label": "ป้ายราคา",
+    "drawing.variant.price-label.description": "คลิกจุดเพื่อแสดงราคาของจุดนั้น",
+  },
+  tr: {
+    "drawing.variant.text": "Metin",
+    "drawing.variant.callout": "Açıklama balonu",
+    "drawing.variant.callout.description": "İşaretlenecek noktaya, ardından notun yerine tıklayın",
+    "drawing.variant.price-label": "Fiyat etiketi",
+    "drawing.variant.price-label.description": "Fiyatını göstermek için bir noktaya tıklayın",
+  },
+  uk: {
+    "drawing.variant.text": "Текст",
+    "drawing.variant.callout": "Виноска",
+    "drawing.variant.callout.description": "Клацніть точку, до якої належить нотатка, а потім місце для нотатки",
+    "drawing.variant.price-label": "Цінова мітка",
+    "drawing.variant.price-label.description": "Клацніть точку, щоб показати її ціну",
+  },
+  vi: {
+    "drawing.variant.text": "Văn bản",
+    "drawing.variant.callout": "Chú thích có đường chỉ",
+    "drawing.variant.callout.description": "Nhấp vào điểm cần chú thích, rồi nhấp vào vị trí đặt ghi chú",
+    "drawing.variant.price-label": "Nhãn giá",
+    "drawing.variant.price-label.description": "Nhấp vào một điểm để hiện giá của điểm đó",
+  },
+};

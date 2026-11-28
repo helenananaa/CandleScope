@@ -1,17 +1,31 @@
-"""macOS Keychain credential storage; no plaintext or command-line fallback."""
+"""OKX read-only keys in the host credential vault; no plaintext or command-line fallback.
+
+The records live in the ``okx-readonly`` namespace, so the Keychain service is
+``io.candlescope.okx-readonly.<data folder>`` as before and saved keys stay readable.
+On Windows (#575 PL-5) the same records live in Credential Manager, one generic
+credential per record. The error codes keep their ``KEYCHAIN_`` names on both
+systems, because saved account statuses already carry them.
+"""
 from __future__ import annotations
 
-import ctypes
-import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from app.host_credentials import CredentialVaultError, open_host_vault
+from app.host_credentials.vault import record_name
+
 from .normalization import AccountDataError
 
-_RECORD = re.compile(r"^[0-9a-f]{32}$")
+NAMESPACE = "okx-readonly"
+# Which OS store keeps account keys, by platform; the account panel names it.
+STORES = {"darwin": "macos-keychain", "win32": "windows-credential-manager"}
+
+
+def credential_store(platform: str | None = None) -> str | None:
+    """The store account keys use here, or None where accounts are unavailable."""
+    return STORES.get(platform or sys.platform)
 
 
 def validate_credentials(value: Any) -> dict[str, str]:
@@ -24,79 +38,50 @@ def validate_credentials(value: Any) -> dict[str, str]:
     return dict(value)
 
 
-class MacKeychainVault:
+class AccountVault:
     """Only open this feature's known record ID in its data-directory namespace."""
 
-    def __init__(self, root: Path):
-        if sys.platform != "darwin":
-            raise AccountDataError("MACOS_KEYCHAIN_REQUIRED")
-        # The namespace follows the data folder when it moves (see secret_namespace_origin).
-        from app.core.profile_relocation import secret_namespace_origin
-        context = hashlib.sha256(secret_namespace_origin(root).encode()).hexdigest()[:32]
-        self.service = ("io.candlescope.okx-readonly." + context).encode()
-        self.security = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
-        self.core = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
-        uint, pointer = ctypes.c_uint32, ctypes.c_void_p
-        self.security.SecKeychainAddGenericPassword.argtypes = [pointer, uint, ctypes.c_char_p, uint, ctypes.c_char_p, uint, pointer, ctypes.POINTER(pointer)]
-        self.security.SecKeychainFindGenericPassword.argtypes = [pointer, uint, ctypes.c_char_p, uint, ctypes.c_char_p, ctypes.POINTER(uint), ctypes.POINTER(pointer), ctypes.POINTER(pointer)]
-        self.security.SecKeychainItemFreeContent.argtypes = [pointer, pointer]
-        self.security.SecKeychainItemDelete.argtypes = [pointer]
-        for name in ["SecKeychainAddGenericPassword", "SecKeychainFindGenericPassword", "SecKeychainItemFreeContent", "SecKeychainItemDelete"]:
-            getattr(self.security, name).restype = ctypes.c_int32
-        self.core.CFRelease.argtypes = [pointer]
-        self.core.CFRelease.restype = None
+    def __init__(self, root: Path, *, store=None):
+        if store is None:
+            if credential_store() is None:
+                raise AccountDataError("CREDENTIAL_STORE_UNAVAILABLE")
+            try:
+                store = open_host_vault(root, NAMESPACE)
+            except CredentialVaultError:
+                raise AccountDataError("CREDENTIAL_STORE_UNAVAILABLE") from None
+        self._store = store
 
     @staticmethod
-    def _name(record_id: str) -> bytes:
-        if not isinstance(record_id, str) or _RECORD.fullmatch(record_id) is None:
-            raise AccountDataError("CREDENTIAL_RECORD_INVALID")
-        return record_id.encode("ascii")
+    def _record(record_id: str) -> str:
+        try:
+            return record_name(record_id)
+        except CredentialVaultError:
+            raise AccountDataError("CREDENTIAL_RECORD_INVALID") from None
 
     def store(self, record_id: str, credentials: Mapping[str, str]) -> None:
-        name = self._name(record_id)
-        secret = bytearray(json.dumps(validate_credentials(credentials), separators=(",", ":")).encode())
-        buffer = (ctypes.c_ubyte * len(secret)).from_buffer(secret)
-        item = ctypes.c_void_p()
+        record = self._record(record_id)
+        secret = json.dumps(validate_credentials(credentials), separators=(",", ":"))
         try:
-            status = self.security.SecKeychainAddGenericPassword(None, len(self.service), self.service,
-                len(name), name, len(secret), buffer, ctypes.byref(item))
-            if status:
-                raise AccountDataError("KEYCHAIN_STORE_FAILED")
-        finally:
-            for index in range(len(secret)):
-                secret[index] = 0
-            if item.value:
-                self.core.CFRelease(item)
+            self._store.store(record, secret)
+        except CredentialVaultError:
+            raise AccountDataError("KEYCHAIN_STORE_FAILED") from None
 
     def read(self, record_id: str) -> dict[str, str]:
-        name = self._name(record_id)
-        length, content, item = ctypes.c_uint32(), ctypes.c_void_p(), ctypes.c_void_p()
+        record = self._record(record_id)
         try:
-            status = self.security.SecKeychainFindGenericPassword(None, len(self.service), self.service,
-                len(name), name, ctypes.byref(length), ctypes.byref(content), ctypes.byref(item))
-            if status or not content.value or not 1 <= length.value <= 4096:
-                raise AccountDataError("KEYCHAIN_READ_FAILED")
-            try:
-                return validate_credentials(json.loads(ctypes.string_at(content, length.value)))
-            except (ValueError, TypeError):
-                raise AccountDataError("KEYCHAIN_RECORD_INVALID") from None
-        finally:
-            if content.value:
-                ctypes.memset(content, 0, length.value)
-                self.security.SecKeychainItemFreeContent(None, content)
-            if item.value:
-                self.core.CFRelease(item)
+            raw = self._store.read(record)
+        except CredentialVaultError as exc:
+            # A missing record is a failed read, as before; unreadable content is an invalid record.
+            raise AccountDataError("KEYCHAIN_RECORD_INVALID" if exc.code == "CREDENTIAL_RECORD_INVALID"
+                                   else "KEYCHAIN_READ_FAILED") from None
+        try:
+            return validate_credentials(json.loads(raw))
+        except (ValueError, TypeError):
+            raise AccountDataError("KEYCHAIN_RECORD_INVALID") from None
 
     def delete(self, record_id: str) -> None:
-        name = self._name(record_id)
-        item = ctypes.c_void_p()
+        record = self._record(record_id)
         try:
-            status = self.security.SecKeychainFindGenericPassword(None, len(self.service), self.service,
-                len(name), name, None, None, ctypes.byref(item))
-            if status == -25300:  # This exact record does not exist.
-                return
-            if status or not item.value or self.security.SecKeychainItemDelete(item):
-                raise AccountDataError("KEYCHAIN_DELETE_FAILED")
-        finally:
-            if item.value:
-                self.core.CFRelease(item)
+            self._store.delete(record)
+        except CredentialVaultError:
+            raise AccountDataError("KEYCHAIN_DELETE_FAILED") from None

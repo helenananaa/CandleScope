@@ -1,4 +1,6 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
@@ -8,9 +10,16 @@ import { readonlyAccountJapanese, researchBatchJapanese, workbenchJapanese, pine
 import type { MessageCatalog } from "../messageCatalog.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ja = {
   ...unifiedMessages["ja"],
+  ...syntheticPagingMessages["ja"],
+  ...drawingAnnotationMessages["ja"],
   ...syntheticEnglish,
   ...continuousJapanese,
   ...researchBatchJapanese,
@@ -1566,6 +1575,15 @@ export const ja = {
   "settings.proxy.previewNodes": "ノードをプレビュー",
   "settings.proxy.useNodes": "選択したノードを使用",
   "settings.proxy.skippedNodes": "未対応のノードを {count} 件スキップしました",
+  "settings.proxy.autoRefresh": "自動更新",
+  "settings.proxy.autoRefreshOff": "オフ",
+  "settings.proxy.autoRefreshEvery": "{duration}ごと",
+  "settings.proxy.autoRefreshHelp": "保存済みの購読をこの間隔で確認します。使用中のノードはプロバイダーの現在の設定に更新されます。新しいノードは追加されず、プロバイダーが削除したノードは最後の設定のまま残ります。",
+  "settings.proxy.refreshPending": "まだ自動確認していません",
+  "settings.proxy.refreshChecked": "前回の確認: {time}",
+  "settings.proxy.refreshFailed": "自動更新に失敗しました: {time}",
+  "settings.proxy.refreshUpdated": "更新したノード: {count} · {time}",
+  "settings.proxy.refreshMissing": "購読から削除されたノード: {count}",
   "settings.proxy.archiveConcurrency": "ZIP 同時実行数 ≤ {count}",
   "settings.proxy.exchanges": "取引所 ID（カンマ区切り、空欄はすべて）",
   "settings.proxy.enabled": "有効",
@@ -4020,6 +4038,58 @@ export const ja = {
   "settings.updates.title": "アップデート",
   "settings.updates.check": "アップデートを確認",
   "settings.updates.checkHint": "起動時と1日1回、CandleScope の新しいリリースがあるか GitHub に問い合わせます。ダウンロードやインストールは行いません。",
+  "settings.category.dataSources": "データソース",
+  "dataSources.intro": "自分のキーが必要なデータソースを接続します。キーはこのコンピュータのパスワード保管場所（macOS のキーチェーンまたは Windows の資格情報マネージャー）にだけ保存され、そのキーのデータソースにだけ送信されます。",
+  "dataSources.desktopOnly": "データソースのキーはデスクトップアプリで追加してください。",
+  "dataSources.loading": "読み込み中…",
+  "dataSources.vaultUnavailable": "このコンピュータにはキーを保存できません。ここでは環境変数だけが使えます。",
+  "dataSources.deletionPending": "古いキーは次回の起動時にパスワード保管場所から削除されます。CandleScope はもう使用しません。",
+  "dataSources.twelvedata.description": "米国株、ETF、為替、指数、商品の価格履歴とリアルタイム価格。無料のキーは {site} で取得できます。",
+  "dataSources.state.saved": "保存したキーを使用中",
+  "dataSources.state.environment": "環境変数を使用中",
+  "dataSources.state.none": "キー未設定",
+  "dataSources.state.unreadable": "再保存が必要",
+  "dataSources.savedKey": "保存したキー",
+  "dataSources.savedKeyValue": "{masked}（{time} に保存）",
+  "dataSources.notSaved": "なし",
+  "dataSources.environmentVariable": "環境変数",
+  "dataSources.environmentSet": "設定済み {masked}",
+  "dataSources.environmentNotSet": "未設定",
+  "dataSources.environmentActive": "現在は環境変数のキーを使っています。ここでキーを保存すると、そちらを使うようになります。",
+  "dataSources.environmentShadowed": "環境変数にもキーがありますが、CandleScope はここに保存したキーを使います。保存したキーを削除すると環境変数に戻ります。",
+  "dataSources.savedUnreadable": "保存したキーを読み取れませんでした。パスワード保管場所がアクセスを拒否したか、項目が削除されています。キーをもう一度保存してください。",
+  "dataSources.keyLabel": "API キー",
+  "dataSources.keyPlaceholder": "{source} の API キーを貼り付け",
+  "dataSources.keyPlaceholderReplace": "置き換える新しいキーを貼り付け",
+  "dataSources.save": "保存",
+  "dataSources.replace": "置き換え",
+  "dataSources.saving": "保存中…",
+  "dataSources.check": "接続をテスト",
+  "dataSources.checking": "テスト中…",
+  "dataSources.remove": "キーを削除",
+  "dataSources.removing": "削除中…",
+  "dataSources.removeTitle": "{source} のキーを削除しますか？",
+  "dataSources.removeMessage": "キーはこのコンピュータのパスワード保管場所から削除されます。キーを再度追加するまで、{source} のチャートはデータを読み込めません。",
+  "dataSources.removeMessageEnvironment": "キーはこのコンピュータのパスワード保管場所から削除されます。その後は環境変数のキーを使います。",
+  "dataSources.removeConfirm": "削除",
+  "dataSources.saved": "キーを保存しました。",
+  "dataSources.removed": "キーを削除しました。",
+  "dataSources.reopenCharts": "開いている {source} のチャートを開き直すと、リアルタイム価格にこの変更が反映されます。",
+  "dataSources.checkOk": "接続しました",
+  "dataSources.plan": "プラン",
+  "dataSources.minuteCredits": "1 分あたりのクレジット",
+  "dataSources.dailyCredits": "1 日あたりのクレジット",
+  "dataSources.creditsUsed": "{limit} 中 {used} 使用",
+  "dataSources.creditsLimit": "最大 {limit}",
+  "dataSources.websocketSymbols": "リアルタイム価格の銘柄上限",
+  "dataSources.checkedAt": "テスト日時",
+  "dataSources.error.valueInvalid": "キーの形式ではありません。空白を含まない 4～256 文字にしてください。",
+  "dataSources.error.keyRejected": "{source} はこのキーを受け付けませんでした。全体をコピーしたか確認してください。",
+  "dataSources.error.rateLimited": "{source} のリクエスト上限に達しました。しばらくしてから再試行してください。",
+  "dataSources.error.unreachable": "{source} に接続できません。ネットワークまたはプロキシの設定を確認して再試行してください。",
+  "dataSources.error.storeFailed": "キーをパスワード保管場所に保存できませんでした。もう一度お試しください。macOS ではまずログインキーチェーンのロックを解除してください。",
+  "dataSources.error.missing": "テストするキーがまだありません。",
+  "dataSources.error.generic": "完了できませんでした。しばらくしてから再試行してください。",
   "chartTester.run.queued": "キュー待ち",
   "chartTester.run.running": "実行中",
   "chartTester.stopObserving": "待機を停止",
@@ -4547,4 +4617,9 @@ export const ja = {
   "chartTester.deleteRetiredDraft": "廃止された下書き {name} を削除",
   "chartTester.deleteRetiredDraftFailed": "廃止された下書きを削除できませんでした。もう一度お試しください。",
   ...tradingAccountsJa,
+  ...drawingSelectionMessages["ja"],
+  ...drawingCalculatedMessages["ja"],
+  ...replayDrawingSaveMessages["ja"],
+  ...chartTimeZoneMessages["ja"],
+  ...chartTimeShortcutMessages["ja"],
 } as const satisfies MessageCatalog;

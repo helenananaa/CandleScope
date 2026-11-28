@@ -3,6 +3,7 @@ import type { ChartStrategyAttachmentRecord } from "../chart-workspace/chartWork
 import { getStrategyStorage, type StrategyStorage } from "../../shared/strategyStorage.js";
 import { isPythonBarOutputMode, validExecutionOverrides } from "../../shared/strategyRunSettings.js";
 import { chartStrategyQuickPresetIdForMarket } from "../backtest/chart-tester/chartStrategyRunRequest.js";
+import { continuousMarketSupported, type RoleSource } from "../exchange-support/capabilityRoles.js";
 
 export interface ResearchSelectedVersion {
   schema: "candlescope.research-selected-version/1";
@@ -34,7 +35,7 @@ function decimal(value: unknown): string | null {
 
 /** Only the currently qualified chart/continuation profile is admitted. An
  * advanced research execution must never be silently flattened into this UI. */
-export function projectSelectedVersion(version: ResearchSelectedVersion): {
+export function projectSelectedVersion(version: ResearchSelectedVersion, venue?: RoleSource): {
   session: ChartSession; attachment: Omit<ChartStrategyAttachmentRecord, "strategyDraftId">;
 } {
   requireValue(version.schema === "candlescope.research-selected-version/1" && hash.test(version.version_hash)
@@ -48,7 +49,8 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
   requireValue(c.fidelity_mode === "BAR_APPROX" && c.source_event_kind === "BAR", "fidelity_mode");
   requireValue(typeof c.exchange === "string" && /^[a-z0-9_-]{1,64}$/.test(c.exchange)
     && typeof c.symbol === "string" && c.symbol.length > 0 && c.symbol.length <= 128, "market");
-  requireValue(c.interval === "1m" && (c.market_type === "spot" || (c.exchange === "binance" && c.market_type === "futures")), "market");
+  requireValue(c.interval === "1m" && typeof c.market_type === "string"
+    && continuousMarketSupported(venue, c.market_type), "market");
   const session: ChartSession = { exchange: c.exchange, symbol: c.symbol, marketType: c.market_type, interval: "1m" };
   const exact: Record<string, unknown> = {
     account_model: c.market_type === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",

@@ -11,7 +11,7 @@ import type { SettingsCategory } from "../features/settings/settingsTypes.js";
 import { browserHost } from "./browserHost.js";
 
 // The browser owns the web version's network connection: no proxy to choose.
-const WEB_SETTINGS: readonly SettingsCategory[] = ["appearance", "exchanges", "data", "plugins", "ai", "about"];
+const WEB_SETTINGS: readonly SettingsCategory[] = ["appearance", "exchanges", "dataSources", "data", "plugins", "ai", "about"];
 
 export interface LazyFeatureSurfaceModels {
   indicatorPanel: IndicatorPanelProps;

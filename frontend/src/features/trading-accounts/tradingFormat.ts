@@ -76,6 +76,14 @@ export function formatPercent(value: string | number | null | undefined): string
   return number.toLocaleString(getNumberLocale(), { style: "percent", maximumFractionDigits: 0 });
 }
 
+/** A fee rate kept as a fraction, e.g. 0.0005 as 0.05%. */
+export function formatRate(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return number.toLocaleString(getNumberLocale(), { style: "percent", maximumFractionDigits: 4 });
+}
+
 /** An R multiple with sign, e.g. +1.25R. */
 export function formatR(value: string | number | null | undefined): string {
   const text = formatSigned(value);

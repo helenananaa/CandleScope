@@ -537,6 +537,8 @@ function queryCandidates(
     // The parallel line is derived in screen space and may leave the anchor box.
     || node.entity.kind === "path"
     || node.entity.kind === "channel"
+    // Calculated drawings reach the latest bar and their labels leave the anchor box.
+    || node.entity.kind === "calculated"
     || node.entity.kind === "fibonacci"
     || node.entity.kind === "text"
     || node.entity.kind === "position"));

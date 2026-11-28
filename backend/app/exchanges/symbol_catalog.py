@@ -166,14 +166,18 @@ def get_cached_symbol_metadata(
 
 
 def _remember_provider_rows(exchange: str, market_type: str, rows: list[dict[str, Any]]) -> None:
-    key = _market_cache_key(exchange, market_type)
+    requested = _market_cache_key(exchange, market_type)
     for row in rows:
         symbol = str(row.get("symbol", "")).strip().upper()
         if not symbol:
             continue
-        entry = (*key, symbol)
-        _provider_search_rows[entry] = copy.deepcopy(row)
-        _provider_search_rows.move_to_end(entry)
+        # A search across all markets (market_type "") still files each row
+        # under its own market, where chart, Pine and practice lookups ask.
+        own = _market_cache_key(exchange, str(row.get("marketType") or market_type))
+        for key in [key for key in dict.fromkeys((own, requested)) if key[1]] or [requested]:
+            entry = (*key, symbol)
+            _provider_search_rows[entry] = copy.deepcopy(row)
+            _provider_search_rows.move_to_end(entry)
     while len(_provider_search_rows) > _PROVIDER_SEARCH_ROWS_LIMIT:
         _provider_search_rows.popitem(last=False)
 

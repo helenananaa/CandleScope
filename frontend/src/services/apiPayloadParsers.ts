@@ -153,6 +153,13 @@ export interface CcxtCatalogSummaryPayload extends JsonRecord {
   watch_ticker: number;
 }
 
+/** A named data role the venue supplies for some markets (ADR-DATA-002 D3). */
+export interface CapabilityRolePayload {
+  role: string;
+  market_types: string[];
+  contract: string;
+}
+
 export interface ExchangeCapabilityPayload extends JsonRecord {
   exchange: string;
   name: string;
@@ -164,6 +171,7 @@ export interface ExchangeCapabilityPayload extends JsonRecord {
   protocol_features: string[];
   limits: JsonRecord;
   known_limitations: string[];
+  roles?: CapabilityRolePayload[];
   support?: ExchangeSupportPayload;
 }
 
@@ -709,6 +717,17 @@ export function parseExchangeCapability(
     result.channels = record.channels.map((item, index) => (
       parseExchangeChannelCapability(item, `${path}.channels[${index}]`)
     ));
+  }
+  if ("roles" in record) {
+    if (!Array.isArray(record.roles)) throw new ApiPayloadError(`${path}.roles`, "expected an array");
+    result.roles = record.roles.map((value, index) => {
+      const itemPath = `${path}.roles[${index}]`, item = expectRecord(value, itemPath);
+      return {
+        role: expectNonEmptyString(item.role, `${itemPath}.role`),
+        market_types: expectStringArray(item.market_types, `${itemPath}.market_types`),
+        contract: expectNonEmptyString(item.contract, `${itemPath}.contract`),
+      };
+    });
   }
   if ("support" in record) {
     result.support = parseExchangeSupport(record.support, `${path}.support`);
