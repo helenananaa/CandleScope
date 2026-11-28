@@ -6,9 +6,14 @@
  * FIXED run covers the latest prefix and replaces the shown result when it completes.
  * Each FOLLOW result is therefore exactly the FIXED run of the same input (§3.4).
  *
- * Defaults (O2, proposed): at most 5,000 bars per rebuild, the base run's start kept
- * until the window exceeds that; one rebuild at a time, later closes folded into one
- * more; identical inputs reuse their run (the idempotency key is the input's hash).
+ * Limits (O2, confirmed 2026-11-27): a rebuild starts from at most the latest 5,000 bars;
+ * one rebuild at a time, later closes folded into one more; identical inputs reuse their
+ * run (the idempotency key is the input's hash).
+ *
+ * Incremental rebuilds (B-157a): when the backend reports that a rebuild's engine session
+ * can be extended, the next rebuild keeps its start, so its input continues the previous
+ * one and only the new bars execute. The window then grows to at most twice the budget
+ * and starts again from the latest 5,000 bars, one full rebuild per 5,000 closes.
  */
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { INTERVAL_UNIT_SECONDS, parseIntervalParts } from "../../../utils/intervals.js";
@@ -37,10 +42,18 @@ export function latestClosedBarOpenMs(window: Pick<SeriesWindowView, "last" | "i
   return last.is_closed ? open : open - window.intervalSeconds * 1000;
 }
 
-/** The prefix a rebuild covers: up to the closed bar, starting at the base run's start until the budget slides it. */
+/**
+ * The prefix a rebuild covers: up to the closed bar, starting at the base run's start until the budget
+ * slides it. `keptStartMs`, the previous rebuild's start when that rebuild can be extended, is kept
+ * until the window would exceed twice the budget.
+ */
 export function followRange(baseStartMs: number, closedOpenMs: number, intervalMs: number,
-  budget = SCRIPT_FOLLOW_BAR_BUDGET): FollowRange {
+  budget = SCRIPT_FOLLOW_BAR_BUDGET, keptStartMs: number | null = null): FollowRange {
   const end = closedOpenMs + intervalMs - 1;
+  if (keptStartMs !== null && keptStartMs >= baseStartMs && keptStartMs <= closedOpenMs
+    && (closedOpenMs - keptStartMs) / intervalMs + 1 <= 2 * budget) {
+    return { start_time_ms: keptStartMs, end_time_ms: end };
+  }
   return { start_time_ms: Math.max(baseStartMs, closedOpenMs - (budget - 1) * intervalMs), end_time_ms: end };
 }
 
@@ -69,6 +82,8 @@ export interface ScriptFollowBase<Run> {
   intervalMs: number;
   /** One FIXED run over `range` with the base's inputs, followed to its end; null when the data is not ready. */
   rebuild(range: FollowRange, signal: AbortSignal): Promise<Run | null>;
+  /** Whether the engine can extend this rebuild with the next bars (B-157a); then the next one keeps its start. */
+  extendable?(run: Run): boolean;
 }
 
 /**
@@ -78,6 +93,8 @@ export interface ScriptFollowBase<Run> {
 export class ScriptFollowController<Run> {
   private base: ScriptFollowBase<Run> | null = null;
   private closedOpenMs: number | null = null;
+  /** The last rebuild's start while its engine session can be extended. */
+  private keptStartMs: number | null = null;
   private running: AbortController | null = null;
   private again = false;
   private disposed = false;
@@ -90,6 +107,7 @@ export class ScriptFollowController<Run> {
     this.running?.abort();
     this.running = null;
     this.again = false;
+    this.keptStartMs = null;
     this.base = base;
     this.check();
   }
@@ -124,11 +142,12 @@ export class ScriptFollowController<Run> {
     if (this.running) { this.again = true; return; }
     const controller = new AbortController();
     this.running = controller;
-    const range = followRange(base.startMs, closed, base.intervalMs);
+    const range = followRange(base.startMs, closed, base.intervalMs, SCRIPT_FOLLOW_BAR_BUDGET, this.keptStartMs);
     void base.rebuild(range, controller.signal).then((run) => {
       if (controller.signal.aborted || this.base !== base) return;
       if (run !== null) {
         base.coveredEndMs = range.end_time_ms;
+        this.keptStartMs = base.extendable?.(run) ? range.start_time_ms : null;
         this.onRun(run, range);
       }
     }, (failure: unknown) => {

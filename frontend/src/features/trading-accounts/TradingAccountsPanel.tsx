@@ -23,6 +23,7 @@ import {
 } from "./tradingFormat.js";
 import type { QuickReplayRequest, Trade, TradingChartContext } from "./tradingTypes.js";
 import { useTradingAccountsRuntime } from "./useTradingAccountsRuntime.js";
+import { ContractPriceBadge } from "../symbol-search/ContractPriceBadge.js";
 
 type Tab = "trade" | "positions" | "history" | "journal" | "stats";
 const TABS: readonly Tab[] = ["trade", "positions", "history", "journal", "stats"];
@@ -88,7 +89,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
         type: "market",
         qty: trade.openQty,
         reduceOnly: true,
-        ...(selected.settings.positionMode === "HEDGE" && trade.marketType === "futures"
+        // A position opened on a hedge leg closes on it; older futures positions in
+        // hedge accounts predate legs and still close with the hedge intent.
+        ...(selected.settings.positionMode === "HEDGE" && (trade.positionSide != null || trade.marketType === "futures")
           ? { positionSide: trade.direction === "long" ? "LONG" : "SHORT", positionEffect: "close", tradeId: trade.id } : {}),
         ...(trade.exchange === context.exchange && trade.marketType === context.marketType && trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
       });
@@ -244,6 +247,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={trade.id} className="trading-row">
                     <div className="trading-row-main">
                       <strong>{trade.symbol}</strong>
+                      <ContractPriceBadge market={trade} />
                       <DirectionBadge direction={trade.direction}>
                         {t(trade.direction === "long" ? "trading.long" : "trading.short")} {formatQty(trade.openQty)}
                       </DirectionBadge>
@@ -287,6 +291,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                     <OptionButton variant="row" className="trading-row-open" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>
                       <div className="trading-row-main">
                         <strong>{trade.symbol}</strong>
+                        <ContractPriceBadge market={trade} />
                         <DirectionBadge direction={trade.direction}>
                           {t(trade.direction === "long" ? "trading.long" : "trading.short")}
                         </DirectionBadge>

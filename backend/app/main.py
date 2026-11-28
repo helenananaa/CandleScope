@@ -107,6 +107,7 @@ if RUNTIME_MODE == "LIVE":
     from app.plugin_core_v2 import CorePluginPlatform, create_core_plugin_router
     from app.data_engine.storage import initialize_market_storage
     from app.readonly_accounts.api import router as readonly_accounts_router
+    from app.data_sources.api import router as data_sources_router
 else:
     from app.api.v1.local_data import router as local_data_router
 
@@ -174,6 +175,7 @@ else:
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(readonly_accounts_router, prefix="/api/v1")
+    app.include_router(data_sources_router, prefix="/api/v1")
     app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
     if RESEARCH_DATA_LIBRARY_ENABLED:
@@ -379,13 +381,18 @@ async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
     from app.exchanges.symbol_catalog import (
+        ensure_provider_symbol_metadata,
         get_cached_symbol_metadata,
         refresh_exchange_metadata,
     )
     from app.replay.runtime import start_replay_runtime
 
-    async def refresh_instrument_metadata(exchange: str, market_type: str):
-        return await refresh_exchange_metadata(exchange, market_type=market_type)
+    async def refresh_instrument_metadata(exchange: str, market_type: str, symbol: str | None = None):
+        refreshed = await refresh_exchange_metadata(exchange, market_type=market_type)
+        if symbol is not None:
+            # Query-only providers (Twelve Data stocks) have no full catalog to refresh.
+            await ensure_provider_symbol_metadata(exchange, market_type, symbol)
+        return refreshed
 
     if sys.platform == "emscripten":
         runtime = await _start_library_replay(app.state.local_data_service)
@@ -651,6 +658,12 @@ async def _startup_event_impl() -> None:
     if restored_catalog:
         logger.info("Restored last-known-good symbol catalog snapshot")
 
+    # Keys saved in Settings → Data sources, read before any provider request.
+    from app.core.config import DATA_DIR
+    from app.data_sources.runtime import start_data_source_credentials
+
+    await start_data_source_credentials(app, DATA_DIR / "data-sources")
+
     # 3. Start script/plugin runtimes as a capability plane. A missing or
     # unsupported first-party sidecar degrades Pine; it does not abort
     # DataEngine, alerts, or builtin indicators.
@@ -723,6 +736,7 @@ async def _startup_event_impl() -> None:
                 backtest_runtime=getattr(app.state, "backtest_runtime", None),
                 host_history_path=KLINES_DB_PATH,
                 replay_library=getattr(app.state, "replay_library", None),
+                calendar_for=getattr(getattr(app.state, "data_manager", None), "series_calendar", None),
             ),
             enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
         )
@@ -890,6 +904,9 @@ async def shutdown_event() -> None:
             await _shutdown_components()
         finally:
             if RUNTIME_MODE != "LOCAL_OFFLINE":
+                from app.data_sources.runtime import stop_data_source_credentials
+
+                stop_data_source_credentials(app)
                 await _stop_managed_proxy()
 
     cleanup = asyncio.create_task(stop_components(), name="application-shutdown-components")

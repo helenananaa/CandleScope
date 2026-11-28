@@ -100,7 +100,7 @@ Common knobs:
 | `INGESTION_HTTP_BASE_URLS_FUTURES` | Binance futures HTTP endpoints |
 | `INGESTION_WS_BASE_URLS_FUTURES` | Binance futures WS endpoints |
 | `INGESTION_HTTP_TIMEOUT` | HTTP request timeout |
-| `INGESTION_TWELVE_DATA_API_KEY` | Server-side Twelve Data API key; the provider fails closed when absent |
+| `INGESTION_TWELVE_DATA_API_KEY` | Fallback Twelve Data API key; a key saved in Settings → Data sources (host credential vault) takes precedence. With neither, the provider fails closed |
 | `INGESTION_TWELVE_DATA_HTTP_BASE_URLS` | Twelve Data HTTP endpoints; defaults to `https://api.twelvedata.com` |
 | `INGESTION_TWELVE_DATA_WS_ENABLED` | enable the shared Twelve Data Basic realtime price stream; defaults to `true` |
 | `INGESTION_TWELVE_DATA_WS_MAX_SYMBOLS` | logical subscription ceiling; defaults to and is hard-capped at `8` |

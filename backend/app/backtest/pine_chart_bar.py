@@ -11,7 +11,7 @@ class ChartHistoricalBarCallbacks:
         self.deadline = deadline
 
     def observe(self, bar, point=None, trigger="bar_close"):
-        from .service import _pine_account_view, _planning_context
+        from .host_bar import _pine_account_view, _planning_context
         if time.monotonic() >= self.deadline:
             raise BacktestError("PROVIDER_TIMEOUT", "historical Pine BAR deadline exceeded")
         self.control()
@@ -50,7 +50,7 @@ def fixed_history(events, *, max_bars, max_bytes):
 
 class ChartHistoricalTicks(ChartHistoricalBarCallbacks):
     def on_vertex(self,bar,point,ordinal):
-        from .service import _pine_account_view,_planning_context
+        from .host_bar import _pine_account_view, _planning_context
         if time.monotonic()>=self.deadline:
             raise BacktestError("PROVIDER_TIMEOUT","historical Pine tick deadline exceeded")
         self.control()

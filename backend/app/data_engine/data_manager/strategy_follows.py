@@ -35,6 +35,7 @@ from pydantic import Field, ValidationError
 from app.backtest.continuous_contracts import CurrentProvider, MarketSeries, StrictInput
 from app.backtest.errors import BacktestError
 from app.backtest.follow_session import FollowSession, FollowSessions
+from app.backtest.follow_timeline import follow_timeline
 from app.core.committed_updates import CommittedUpdates
 from app.market_dataset.snapshot import MarketEvent
 
@@ -83,6 +84,8 @@ class _Feed:
         self.owner, self.session, self.key, self.from_ms, self.spec = owner, session, key, from_ms, spec
         self.follow_id = session.follow_id
         self.step = int(spec.nominal_ms)
+        # Which bars to expect: the interval grid, or the series' session calendar (ADR-DATA-002 D2c).
+        self.timeline = session.timeline
         self.wake = asyncio.Event()
         self.recompute = False
         self.verify = False
@@ -233,18 +236,18 @@ class _Feed:
 
     def _closed_through(self) -> int:
         """The close of the newest bar that has closed: the bar holding ``now`` is still forming."""
-        return int(self.spec.floor_ms(int(self.owner.clock_ms()))) - 1
+        return self.timeline.closed_through(int(self.owner.clock_ms()))
 
     async def _catch_up(self, session: FollowSession) -> None:
         through = self._closed_through()
         while True:
             cursor = self.from_ms if session.through_ms is None else session.through_ms + 1
-            if (cursor - self.from_ms) // self.step >= 2 * MAX_FOLLOW_BARS:
-                session = await self._restart(through + 1 - MAX_FOLLOW_BARS * self.step)
+            if self.timeline.at_least(self.from_ms, cursor, 2 * MAX_FOLLOW_BARS):
+                session = await self._restart(self.timeline.start_of_last(through, MAX_FOLLOW_BARS))
                 continue
             if cursor > through:
                 break
-            last = min(through, cursor + PAGE_BARS * self.step - 1)
+            last = self.timeline.page_through(cursor, through, PAGE_BARS)
             self.read_through_ms = max(self.read_through_ms or -1, last)
             try:
                 rows, complete = await asyncio.to_thread(self._read, cursor, last)
@@ -262,43 +265,54 @@ class _Feed:
                     self.digest.update(_row_bytes(row))
                 self.owner.notify(self.follow_id)
             if not complete:
-                if self._overdue(cursor + len(rows) * self.step):
+                missing = self.timeline.next_open(cursor, [row["open_time_ms"] for row in rows])
+                if missing is not None and self._overdue(missing):
                     self._waiting(session)
                     return
                 break  # only the newest bars are late: the run is live up to what has arrived
+            if not rows:
+                # Nothing more has closed: on a session calendar the next bar is
+                # still forming or the market is closed (the grid never gets here).
+                break
         if session.phase != "LIVE" or not session.caught_up:
             session.phase, session.caught_up = "LIVE", True
             self.owner.notify(self.follow_id)
 
     def _overdue(self, missing_open_ms: int) -> bool:
-        return int(self.owner.clock_ms()) - (missing_open_ms + self.step - 1) > TAIL_GRACE_MS
+        return int(self.owner.clock_ms()) - self.timeline.close(missing_open_ms) > TAIL_GRACE_MS
+
+    def _missing(self, start_ms: int, rows: list[dict[str, Any]], through_ms: int) -> int | None:
+        """The first bar from ``start_ms`` that closed by ``through_ms`` and is not in ``rows``."""
+        missing = self.timeline.next_open(start_ms, [row["open_time_ms"] for row in rows])
+        return missing if missing is not None and self.timeline.close(missing) <= through_ms else None
 
     def _read(self, start_ms: int, through_ms: int) -> tuple[list[dict[str, Any]], bool]:
         rows = self._query(start_ms, through_ms, backfill=False)
-        missing = start_ms + len(rows) * self.step
-        if missing <= through_ms and self._overdue(missing):
+        missing = self._missing(start_ms, rows, through_ms)
+        if missing is not None and self._overdue(missing):
             # Bars older than the grace are missing: ask the DataManager to backfill from the first of them.
             rows += self._query(missing, through_ms, backfill=True)
-        return rows, start_ms + len(rows) * self.step > through_ms
+        return rows, self._missing(start_ms, rows, through_ms) is None
 
     def _query(self, start_ms: int, through_ms: int, *, backfill: bool) -> list[dict[str, Any]]:
         """The trusted contiguous closed bars from ``start_ms`` up to ``through_ms``: all of them, or a prefix."""
         from app.local_data.service import LocalDatasetService
 
-        step = self.step
-        count = (through_ms + 1 - start_ms) // step
+        opens = self.timeline.opens(start_ms, through_ms)
+        if not opens:
+            return []
         result = self.owner.market.bars.query(
             self.key.symbol, self.key.interval, exchange=self.key.exchange, market_type=self.key.market_type,
-            series_identity=self.key.identity, start_ms=start_ms, end_ms=through_ms - step + 1, limit=count,
+            series_identity=self.key.identity, start_ms=start_ms, end_ms=opens[-1], limit=len(opens),
             auto_backfill=backfill, backfill_requester="strategy-follow")
         rows: list[dict[str, Any]] = []
-        for index, bar in enumerate(result.bars):
-            opened = start_ms + index * step
+        for index, (opened, bar) in enumerate(zip(opens, result.bars)):
             if not bar.trusted_final or int(bar.time) * 1000 != opened:
                 break
             payload = {name: LocalDatasetService._decimal_text(LocalDatasetService._host_decimal(bar, name, index + 1))
                        for name in ("open", "high", "low", "close", "volume")}
-            rows.append({**payload, "open_time_ms": opened, "close_time_ms": opened + step - 1, "is_closed": True})
+            rows.append({**payload, "open_time_ms": opened, "close_time_ms": self.timeline.close(opened),
+                         "is_closed": True})
         return rows
 
     def _processed_changed(self, session: FollowSession) -> bool | None:
@@ -309,9 +323,9 @@ class _Feed:
         digest = hashlib.sha256()
         cursor = self.from_ms
         while cursor <= through:
-            last = min(through, cursor + PAGE_BARS * self.step - 1)
+            last = self.timeline.page_through(cursor, through, PAGE_BARS)
             rows = self._query(cursor, last, backfill=False)
-            if len(rows) != (last + 1 - cursor) // self.step:
+            if len(rows) != len(self.timeline.opens(cursor, last)):
                 return None
             for row in rows:
                 digest.update(_row_bytes(row))
@@ -373,10 +387,9 @@ class StrategyFollows:
             host["strategy_revision_id"], parameters=dict(definition["input_plan"]["parameters"]),
             mode=host["python_runtime_mode"], trusted_confirmed=host["python_trusted_confirmed"])
 
-    def _definition_from_run(self, request: FollowFromRun, key) -> tuple[dict[str, Any], int]:
+    def _definition_from_run(self, request: FollowFromRun, key, timeline) -> tuple[dict[str, Any], int]:
         """The FOLLOW definition of a completed fixed run and its first bar (§3.4: FOLLOW equals FIXED)."""
         from app.backtest.models import ENGINE_VERSION
-        from app.data_engine.interval_policy import parse_interval_spec
 
         service = self.owner.service
         try:
@@ -395,10 +408,9 @@ class StrategyFollows:
         if (config.get("exchange"), config.get("market_type"), config.get("symbol"), config.get("interval")) != (
                 key.exchange, key.market_type, key.symbol, key.interval):
             raise BacktestError("FOLLOW_INPUT_INVALID", "The chart series is not the fixed run's market")
-        spec = parse_interval_spec(key.interval)
-        start = int(config["start_time_ms"])
-        first = spec.floor_ms(start)
-        first = first if first == start else first + spec.nominal_ms
+        first = timeline.first_open(int(config["start_time_ms"]))
+        if first is None:
+            raise BacktestError("FOLLOW_INPUT_INVALID", "The fixed run starts after its market's known sessions")
         definition = {
             "engine_version": ENGINE_VERSION, "language": "python", "configuration": config,
             "input_plan": {"roles": ["BARS"], "parameters": dict(config.get("parameters") or {})},
@@ -408,6 +420,18 @@ class StrategyFollows:
                          "python_trusted_confirmed": bool(config.get("python_trusted_confirmed"))},
         }
         return definition, first
+
+    def _calendar(self, key):
+        """The chart series' trading calendar; None keeps the interval grid (ADR-DATA-002 D2c)."""
+        series_calendar = getattr(self.market, "series_calendar", None)
+        if series_calendar is None:
+            return None
+        try:
+            return series_calendar(key.symbol, key.interval, exchange=key.exchange, market_type=key.market_type,
+                                   series_identity=key.identity)
+        except Exception:
+            logger.warning("FOLLOW could not resolve the calendar of %s", key, exc_info=True)
+            return None
 
     def sessions_or_none(self, follow_id: str) -> FollowSession | None:
         try:
@@ -459,8 +483,12 @@ class StrategyFollows:
         key = request.series.key()
         if not trusted and (from_run or request.provider.language == "python"):
             raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
+        spec = parse_interval_spec(key.interval)
+        if spec is None or spec.timezone or spec.alignment is IntervalAlignment.CALENDAR_MONTH:
+            raise BacktestError("FIDELITY_UNSUPPORTED", "FOLLOW needs a fixed-length chart interval")
+        timeline = follow_timeline(spec, await asyncio.to_thread(self._calendar, key))
         if isinstance(request, FollowFromRun):
-            definition, from_ms = await asyncio.to_thread(self._definition_from_run, request, key)
+            definition, from_ms = await asyncio.to_thread(self._definition_from_run, request, key, timeline)
         else:
             definition = await asyncio.to_thread(
                 prepare_definition, request.provider.model_dump(exclude_unset=True, by_alias=True), request.execution,
@@ -468,15 +496,13 @@ class StrategyFollows:
             if definition["language"] == "python" and not trusted:
                 raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
             from_ms = request.from_ms
-        spec = parse_interval_spec(key.interval)
-        if spec is None or spec.timezone or spec.alignment is IntervalAlignment.CALENDAR_MONTH:
-            raise BacktestError("FIDELITY_UNSUPPORTED", "FOLLOW needs a fixed-length chart interval")
-        if from_ms != spec.floor_ms(from_ms):
+        if not timeline.is_open(from_ms):
             raise BacktestError("FOLLOW_INPUT_INVALID", "FOLLOW starts at a bar's open")
-        if (spec.floor_ms(int(self.clock_ms())) - from_ms) // spec.nominal_ms > MAX_FOLLOW_BARS:
+        if timeline.at_least(from_ms, int(spec.floor_ms(int(self.clock_ms()))), MAX_FOLLOW_BARS + 1):
             raise BacktestError("BUDGET_EXCEEDED", f"FOLLOW starts at most {MAX_FOLLOW_BARS} bars back")
         session, created = await asyncio.to_thread(
-            self.sessions.open, definition, interval=key.interval, holder=request.holder, from_ms=from_ms)
+            self.sessions.open, definition, interval=key.interval, holder=request.holder, from_ms=from_ms,
+            timeline=timeline)
         if created:
             feed = _Feed(self, session, key, from_ms, spec)
             self.feeds[session.follow_id] = feed

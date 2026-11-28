@@ -61,6 +61,25 @@ test("CSV imports send explicit units and reject invalid declared unit contracts
   await assert.rejects(listLocalDatasets(), /instrument units are invalid/);
 });
 
+test("CSV imports declare a trading calendar and manifests keep it", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const calendarId = "cn.a-share.exchange-date.utc";
+  const seen: (string | null)[] = [];
+  globalThis.fetch = async (input) => {
+    seen.push(new URL(String(input), "http://localhost").searchParams.get("calendar_id"));
+    return jsonResponse({ ...manifest(), interval: "1d", calendar_id: calendarId });
+  };
+  const input = { file: new File(["time,open,high,low,close"], "bars.csv"), name: "a-share", symbol: "SH600519",
+    interval: "1d", timezone: "UTC", timestampUnit: "iso" as const, volumeRequired: false };
+  const result = await importLocalCsv({ ...input, calendarId });
+  assert.equal(result.calendar_id, calendarId);
+  await importLocalCsv(input);
+  assert.deepEqual(seen, [calendarId, null]);
+  globalThis.fetch = async () => jsonResponse({ datasets: [{ ...manifest(), calendar_id: "" }], count: 1 });
+  await assert.rejects(listLocalDatasets(), /calendar_id is invalid/);
+});
+
 test("local dataset library validates manifests", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

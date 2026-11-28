@@ -7,6 +7,7 @@ import {
 } from "../../utils/intervals.js";
 
 import type { LocalDatasetManifest } from "./localDataTypes.js";
+import { findLocalImportCalendar } from "./localTradingCalendars.js";
 
 
 export const MAX_LOCAL_RESAMPLE_FACTOR = 10_000;
@@ -36,7 +37,7 @@ function unsupported(
 
 export function resolveLocalIntervalSupport(
   manifest: Pick<LocalDatasetManifest, "interval" | "alignment_offset_ms"> &
-    Partial<Pick<LocalDatasetManifest, "first_open_ms">>,
+    Partial<Pick<LocalDatasetManifest, "first_open_ms" | "calendar_id">>,
   requestedInterval: string,
 ): LocalIntervalSupport {
   const sourceSpec = getIntervalSemanticSpec(manifest.interval);
@@ -59,6 +60,11 @@ export function resolveLocalIntervalSupport(
       code: null,
       message: t("local.int.source", { source }),
     };
+  }
+  // ADR-DATA-002 D2e: a fixed multi-day grid ignores market closures, so a
+  // dataset on a trading calendar shows only its source interval for now.
+  if (findLocalImportCalendar(manifest.calendar_id) !== null) {
+    return unsupported(source, target, "interval_not_composable", t("local.int.calendarSourceOnly"));
   }
   const sourceWidth = sourceSpec.widthSeconds;
   const targetWidth = targetSpec.widthSeconds;
@@ -122,7 +128,7 @@ export function resolveLocalIntervalSupport(
 
 export function getCommonLocalIntervals(
   manifest: Pick<LocalDatasetManifest, "interval" | "alignment_offset_ms"> &
-    Partial<Pick<LocalDatasetManifest, "first_open_ms">>,
+    Partial<Pick<LocalDatasetManifest, "first_open_ms" | "calendar_id">>,
 ): string[] {
   const candidates = [manifest.interval, ...COMMON_LOCAL_INTERVALS];
   const seen = new Set<string>();

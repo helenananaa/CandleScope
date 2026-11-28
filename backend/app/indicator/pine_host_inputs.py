@@ -8,6 +8,7 @@ import time
 from app.data_engine.interval_policy import parse_interval_spec
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 from app.backtest.pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
+from app.backtest.pine_ticker import venue_pine_ticker, venue_storage_symbol
 
 
 def indicator_host_options(request, options):
@@ -66,8 +67,8 @@ def requested_data(request, requirements, data_manager):
             # instrument (e.g. BINANCE:BTCUSDT.P -> BTCUSDT in usdm), not a guess
             # that an arbitrary requested perpetual is a spot market.
             ticker = request.context.symbol
-        elif venue.lower() == "binance" and market_type.lower() in {"usdm", "futures", "swap"}:
-            ticker = ticker.removesuffix(".P")
+        else:
+            ticker = venue_storage_symbol(venue.lower(), market_type.lower(), ticker)
         key = f"{symbol}:{timeframe}"
         if key in supplied:
             continue
@@ -197,9 +198,7 @@ def host_pine_timeframe(value):
 
 
 def chart_pine_symbol(context):
-    ticker = context.symbol
-    if context.exchange.lower() == "binance" and context.market_type.lower() in {"futures", "swap", "usdm"} and not ticker.endswith(".P"):
-        ticker += ".P"
+    ticker = venue_pine_ticker(context.exchange.lower(), context.market_type.lower(), context.symbol)
     return f"{context.exchange.upper()}:{ticker}"
 
 

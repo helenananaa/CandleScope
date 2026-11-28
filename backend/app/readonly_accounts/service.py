@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import time
 import uuid
 from pathlib import Path
 
-from .credentials import MacKeychainVault, validate_credentials
+from .credentials import AccountVault, credential_store, validate_credentials
 from .normalization import AccountDataError
 from .okx import ReadOnlyOkx, account_identity
 from .repository import AccountRepository
@@ -78,7 +77,7 @@ async def finish_mutation(operation):
 
 class ReadOnlyAccountService:
     def __init__(self, root: Path, *, client_factory=ReadOnlyOkx,
-                 vault_factory=MacKeychainVault, network_options=None):
+                 vault_factory=AccountVault, network_options=None):
         self.repository = AccountRepository(root)
         from .review import ReadOnlyReview
         self.review = ReadOnlyReview(self.repository)
@@ -277,7 +276,7 @@ class ReadOnlyAccountService:
                     self._route_result(route, exc)
                 await asyncio.to_thread(self.repository.status,"error",error=code)
                 if code in TERMINAL_ERRORS or code in {"KEYCHAIN_READ_FAILED","KEYCHAIN_RECORD_INVALID",
-                            "OLD_KEYCHAIN_RECORD_CLEANUP_FAILED","MACOS_KEYCHAIN_REQUIRED"}:
+                            "OLD_KEYCHAIN_RECORD_CLEANUP_FAILED","CREDENTIAL_STORE_UNAVAILABLE"}:
                     return
             finally:
                 self.synchronizer = None
@@ -298,7 +297,7 @@ class ReadOnlyAccountService:
     async def state(self) -> dict:
         view = await asyncio.to_thread(self.repository.overview)
         sync = self.synchronizer
-        return {"schemaVersion":1,"available":sys.platform == "darwin","venue":"okx",
+        return {"schemaVersion":1,"available":credential_store() is not None,"credentialStore":credential_store(),"venue":"okx",
                 "product":"perpetual","positionMode":"long_short_mode",
                 "settlements":["USDT","coin"],"readOnly":True,"historyMonths":3,
                 **view,

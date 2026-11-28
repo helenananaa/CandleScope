@@ -33,6 +33,9 @@ export class ContinuousStrategyDataManager {
 
   capabilities(signal?: AbortSignal): Promise<ContinuousCapabilities> { return this.operation(signal, (owned) => this.api.capabilities(owned)); }
   editorParameters(source: string, signal: AbortSignal) { return this.operation(signal, (owned) => this.api.editorParameters(source, owned)); }
+  pineSupport(source: string, libraries: Record<string, string>, signal: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.pineSupport(source, libraries, owned));
+  }
   catalog(signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.catalog(owned)); }
   create(key: string, body: ContinuousCreate, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.create(key, body, owned)); }
   request(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.request(key, owned)); }

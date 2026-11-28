@@ -17,6 +17,7 @@ from app.data_engine.storage.raw_trade_archive import (
     RawAggTradeCursor,
     RawAggTradeDatasetRef,
 )
+from app.data_engine.history.expected_bars import FIXED_UTC_CALENDAR_ID, calendar_by_id, follows
 from app.data_engine.interval_policy import parse_interval_spec
 from app.local_data.service import LocalDatasetError, LocalDatasetService
 from app.market_dataset.adapters.local_bar import LocalBarSnapshotProvider
@@ -606,7 +607,7 @@ class BacktestRuntime:
                 else ("BARS",)
             ),
             interval=str(values.get("interval") or manifest["interval"]),
-            calendar_id="UTC_FIXED",
+            calendar_id=_manifest_calendar_id(manifest),
             source="local_immutable",
             retention_policy="user_local",
         )
@@ -803,7 +804,7 @@ class BacktestWorker:
                     else ("BARS",)
                 ),
                 interval=str(values.get("interval") or manifest["interval"]),
-                calendar_id="UTC_FIXED",
+                calendar_id=_manifest_calendar_id(manifest),
                 source="local_immutable",
                 retention_policy="user_local",
             )
@@ -903,7 +904,7 @@ class BacktestWorker:
                         else ("BARS",)
                     ),
                     interval=str(config.get("interval") or manifest["interval"]),
-                    calendar_id="UTC_FIXED",
+                    calendar_id=_manifest_calendar_id(manifest),
                     source="local_immutable",
                     retention_policy="user_local",
                 )
@@ -916,6 +917,7 @@ class BacktestWorker:
                         interval_name=str(
                             config.get("interval") or manifest["interval"]
                         ),
+                        calendar_id=ref.calendar_id,
                     )
                 )
                 if not market_events:
@@ -1138,10 +1140,16 @@ def _snapshot_wire(snapshot: MarketDatasetSnapshot) -> dict[str, Any]:
     }
 
 
+def _manifest_calendar_id(manifest: Mapping[str, Any]) -> str:
+    """The calendar a local dataset's bars follow (ADR-DATA-002 D2)."""
+    return str(manifest.get("calendar_id") or FIXED_UTC_CALENDAR_ID)
+
+
 def _bar_execution_events(
     events: tuple[MarketEvent, ...],
     *,
     interval_name: str,
+    calendar_id: str | None = None,
 ) -> tuple[MarketEvent, ...]:
     """Project combined contract snapshots onto the BAR execution clock.
 
@@ -1154,6 +1162,11 @@ def _bar_execution_events(
     interval = parse_interval_spec(interval_name)
     if interval is None:
         raise MarketDatasetError("invalid BAR interval", code="DATA_QUALITY_FAILED")
+    # A session-calendar dataset's closures are not missing intervals.
+    try:
+        calendar = calendar_by_id(calendar_id)
+    except LookupError as exc:
+        raise MarketDatasetError(str(exc), code="DATA_QUALITY_FAILED") from exc
     result: list[MarketEvent] = []
     previous_open_ms: int | None = None
     sequence = 0
@@ -1164,7 +1177,11 @@ def _bar_execution_events(
         sequence += (
             1
             if previous_open_ms is None
-            or interval.is_successor(previous_open_ms, open_time_ms)
+            or (
+                interval.is_successor(previous_open_ms, open_time_ms)
+                if calendar is None
+                else follows(calendar, interval.canonical, previous_open_ms, open_time_ms)
+            )
             else 2
         )
         result.append(

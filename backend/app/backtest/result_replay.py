@@ -210,7 +210,8 @@ def project_result_replay(
 
         snapshot = runtime.open_saved_bar_snapshot(record, config, source_interval)
         try:
-            events = _bar_execution_events(snapshot.events, interval_name=source_interval)
+            events = _bar_execution_events(snapshot.events, interval_name=source_interval,
+                                           calendar_id=manifest.get("calendar_id"))
         finally:
             snapshot.close()
         if any(event.sequence != index for index, event in enumerate(events, start=1)):

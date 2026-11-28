@@ -7,6 +7,7 @@ import {
   resolveChartRunCompareEnabled,
   resolveChartStrategyAutoRunEnabled,
   resolveChartRunResultViewsEnabled,
+  resolveChartStrategyFollowEnabled,
   resolveChartStrategyTesterEnabled,
   resolveChartTradeExplanationEnabled,
 } from "../chartStrategyTesterFeature.js";
@@ -74,6 +75,7 @@ test("phase 4 keeps runtime, draft storage, and Monaco behind lazy boundaries", 
   assert.match(exampleEnvironment, /^VITE_CHART_TRADE_EXPLANATION_ENABLED=0$/m);
   assert.match(exampleEnvironment, /^VITE_CHART_RUN_COMPARE_ENABLED=1$/m);
   assert.match(exampleEnvironment, /^VITE_CHART_STRATEGY_AUTO_RUN_ENABLED=1$/m);
+  assert.match(exampleEnvironment, /^VITE_CHART_STRATEGY_FOLLOW_ENABLED=1$/m);
   assert.match(bridge, /CHART_STRATEGY_AUTO_RUN_DEBOUNCE_MS/);
   assert.match(bridge, /chartStrategyAutoRunCoordinator\.enqueue/);
   assert.match(bridge, /currentRuntime\.snapshot\(\)\.generation !== intent\.generation/);
@@ -89,4 +91,14 @@ test("shared run-result views default on after their visual review and remain st
   assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "0" }), false);
   assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "true" }), false);
   assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "1" }), true);
+});
+
+test("chart strategies follow live bars by default from 1.1 and remain strict", () => {
+  // Release builds set no VITE_* flags (scripts/package-desktop.mjs), so the default is what ships.
+  assert.equal(resolveChartStrategyFollowEnabled(), true);
+  assert.equal(resolveChartStrategyFollowEnabled({ VITE_CHART_STRATEGY_FOLLOW_ENABLED: "0" }), false);
+  assert.equal(resolveChartStrategyFollowEnabled({ VITE_CHART_STRATEGY_FOLLOW_ENABLED: "true" }), false);
+  assert.equal(resolveChartStrategyFollowEnabled({ VITE_CHART_STRATEGY_FOLLOW_ENABLED: "1" }), true);
+  const packaging = readFileSync(resolve(process.cwd(), "scripts/package-desktop.mjs"), "utf8");
+  assert.doesNotMatch(packaging, /VITE_CHART_STRATEGY_FOLLOW_ENABLED/);
 });

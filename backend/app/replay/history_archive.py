@@ -24,6 +24,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
+from app.data_engine.history.expected_bars import calendar_by_id, open_runs, opens_before
 from app.data_engine.interval_policy import (
     IntervalAlignment,
     compute_bucket_start_ms,
@@ -770,7 +771,7 @@ class ReplayHistoryCatalogManifest:
 
     def _validate(self) -> None:
         if (
-            self.calendar_id != REPLAY_HISTORY_CALENDAR_ID
+            not self.calendar_id
             or self.listing_boundary_ms != self.earliest_open_ms
             or self.earliest_open_ms > self.latest_open_ms
             or self.objects[0].first_open_ms != self.earliest_open_ms
@@ -1062,8 +1063,27 @@ def _catalog_directory(
         / "catalogs"
         / _safe_component(identity.exchange, "exchange")
         / _safe_component(identity.market_type, "market_type")
-        / _safe_component(identity.symbol, "symbol")
+        / _symbol_path_component(identity.symbol)
         / _interval_path_component(interval)
+    )
+
+
+def _symbol_path_component(symbol: str) -> str:
+    """A path for every replay symbol; existing safe symbols keep their name.
+
+    Venue-qualified symbols (Twelve Data ``AAPL:NASDAQ``) contain ``:``, which
+    paths cannot hold. They are spelled ``_`` + the symbol with every byte
+    outside ``[A-Za-z0-9.]`` written ``-xx``. A safe symbol never starts with
+    ``_``, and ``-`` always starts an escape, so no two symbols share a path.
+    """
+
+    normalized = validate_identifier(symbol, field_name="symbol")
+    if _SAFE_COMPONENT.fullmatch(normalized) is not None and normalized not in {".", ".."}:
+        return normalized
+    return "_" + "".join(
+        character if character.isascii() and (character.isalnum() or character == ".")
+        else "".join(f"-{byte:02x}" for byte in character.encode())
+        for character in normalized
     )
 
 
@@ -1360,6 +1380,7 @@ class ReplayHistoryArchiveWriter:
         listing_boundary_source: str = "first_checksum_verified_archive_bar",
         source_bucket_anchor_ms: int | None = None,
         alignment_policy: str | None = None,
+        calendar_id: str | None = None,
     ) -> ReplayHistoryCatalogManifest:
         interval_ms = parse_interval_ms(interval)
         if interval_ms is None or interval_ms <= 0:
@@ -1367,6 +1388,33 @@ class ReplayHistoryArchiveWriter:
                 f"unsupported replay-history interval: {interval}"
             )
         existing = self.current_manifest(identity, interval)
+        # ADR-DATA-002 D2: a market's archive follows one trading calendar.
+        # Callers that do not know it keep the one already recorded.
+        if calendar_id is None:
+            calendar_id = (
+                existing.calendar_id
+                if merge_current and existing is not None
+                else REPLAY_HISTORY_CALENDAR_ID
+            )
+        elif (
+            merge_current
+            and existing is not None
+            and existing.calendar_id != calendar_id
+            # A market archived before its calendar was known (continuous UTC)
+            # may take its session calendar: that only turns closures from
+            # gaps into expected silence. Pinned runs keep their old revision.
+            and existing.calendar_id != REPLAY_HISTORY_CALENDAR_ID
+        ):
+            raise ReplayHistoryArchiveError(
+                "replay market already follows another trading calendar"
+            )
+        if existing is not None and existing.identity.series != identity.series:
+            if identity.series is not None:
+                raise ReplayHistoryArchiveError(
+                    "replay market already holds another kline series"
+                )
+            # Callers that only know the route keep the market's recorded series.
+            identity = existing.identity
         objects = _merge_catalog_objects(
             existing.objects if merge_current and existing is not None else (),
             tuple(new_objects),
@@ -1434,7 +1482,7 @@ class ReplayHistoryArchiveWriter:
             interval_ms=interval_ms,
             source_bucket_anchor_ms=resolved_source_bucket_anchor_ms,
             alignment_policy=resolved_alignment_policy,
-            calendar_id=REPLAY_HISTORY_CALENDAR_ID,
+            calendar_id=_nonempty(calendar_id, "calendar_id"),
             listing_boundary_ms=objects[0].first_open_ms,
             listing_boundary_source=_nonempty(
                 listing_boundary_source, "listing_boundary_source"
@@ -1594,6 +1642,7 @@ class ReplayHistoryArchiveWriter:
         listing_boundary_source: str = "first_checksum_verified_archive_bar",
         source_bucket_anchor_ms: int | None = None,
         alignment_policy: str | None = None,
+        calendar_id: str | None = None,
     ) -> ReplayHistoryCatalogManifest:
         with _archive_mutation_lock(self.root / ".mutation.lock"):
             return self._import_batches_locked(
@@ -1604,6 +1653,7 @@ class ReplayHistoryArchiveWriter:
                 listing_boundary_source=listing_boundary_source,
                 source_bucket_anchor_ms=source_bucket_anchor_ms,
                 alignment_policy=alignment_policy,
+                calendar_id=calendar_id,
             )
 
     def _import_batches_locked(
@@ -1616,6 +1666,7 @@ class ReplayHistoryArchiveWriter:
         listing_boundary_source: str,
         source_bucket_anchor_ms: int | None,
         alignment_policy: str | None,
+        calendar_id: str | None = None,
     ) -> ReplayHistoryCatalogManifest:
         batch_alignment_policies = {
             batch.alignment_policy
@@ -1646,6 +1697,7 @@ class ReplayHistoryArchiveWriter:
             listing_boundary_source=listing_boundary_source,
             source_bucket_anchor_ms=source_bucket_anchor_ms,
             alignment_policy=alignment_policy,
+            calendar_id=calendar_id,
         )
 
     def collect_garbage(
@@ -2383,6 +2435,23 @@ class ReplayHistoryRepository:
         )
         last_ordinal = mapper.actual_bucket_ordinal(last_bucket_open_ms)
         target_start_ms = mapper.actual_bucket_open(last_ordinal - limit - 2)
+        calendar = (
+            _manifest_session_calendar(manifest) if mapper.monthly_count is None else None
+        )
+        if calendar is not None:
+            # Closed buckets hold no bars: reach back far enough in traded bars.
+            try:
+                earliest_open = opens_before(
+                    calendar,
+                    actual_end_ms,
+                    (limit + 2) * (display_ms // manifest.interval_ms),
+                    manifest.interval,
+                )[0]
+            except LookupError:
+                earliest_open = manifest.earliest_open_ms
+            target_start_ms = min(
+                target_start_ms, mapper.actual_containing_bucket_open(earliest_open)
+            )
         query_start_ms = max(actual_start_ms, target_start_ms)
         query_end_ms = actual_end_ms - 1
         objects = [
@@ -3056,19 +3125,43 @@ class ReplayHistoryRepository:
             - actual_replay_start_ms
             - 1
         )
+        calendar = (
+            _manifest_session_calendar(manifest) if mapper.monthly_count is None else None
+        )
         bars: list[dict[str, object]] = []
         for actual_bucket, value in sorted(buckets.items()):
             actual_bucket_end = mapper.actual_bucket_end(actual_bucket)
             duration_ms = actual_bucket_end - actual_bucket
             if duration_ms % base_ms:
                 continue
-            expected_components = duration_ms // base_ms
             component_count = int(value["component_count"])
             first_actual = int(value["first_base_open_ms"])
             last_actual = int(value["last_base_open_ms"])
+            if calendar is None:
+                expected_components = duration_ms // base_ms
+                first_expected = actual_bucket
+                last_expected = actual_bucket_end - base_ms
+                contiguous = bool(value["contiguous"])
+            else:
+                # ADR-DATA-002 D2: a bucket expects only the bars its market trades.
+                interval = manifest.interval
+                expected_components = int(
+                    calendar.count_expected(actual_bucket, actual_bucket_end - 1, interval)
+                )
+                if expected_components < 1:
+                    continue
+                first_expected = calendar.first_expected_open(
+                    actual_bucket, actual_bucket_end - 1, interval
+                )
+                last_expected = calendar.last_expected_open(
+                    actual_bucket, actual_bucket_end - 1, interval
+                )
+                contiguous = component_count == calendar.count_expected(
+                    first_actual, last_actual, interval
+                )
             complete = (
                 component_count == expected_components
-                and last_actual == actual_bucket_end - base_ms
+                and last_actual == last_expected
             )
             partial = (
                 include_partial
@@ -3077,19 +3170,20 @@ class ReplayHistoryRepository:
                 and last_actual + base_ms == actual_end_ms
             )
             if (
-                not value["contiguous"]
-                or first_actual != actual_bucket
+                not contiguous
+                or first_actual != first_expected
                 or not (complete or partial)
             ):
                 continue
             public_bucket = mapper.public_from_actual(actual_bucket)
             public_bucket_end = mapper.public_bucket_end(public_bucket)
+            public_first_base = public_bucket + first_actual - actual_bucket
             public_last_base = min(
                 public_bucket_end - base_ms,
-                public_bucket + (component_count - 1) * base_ms,
+                public_bucket + last_actual - actual_bucket,
                 public_revealed_ms,
             )
-            if public_bucket < 0 or public_last_base < public_bucket:
+            if public_bucket < 0 or public_last_base < public_first_base:
                 continue
 
             def optional_text(name: str) -> str | None:
@@ -3121,7 +3215,7 @@ class ReplayHistoryRepository:
                     ),
                     "taker_buy_base": optional_text("taker_buy_base"),
                     "taker_buy_quote": optional_text("taker_buy_quote"),
-                    "first_base_open_ms": public_bucket,
+                    "first_base_open_ms": public_first_base,
                     "last_base_open_ms": public_last_base,
                     "component_count": component_count,
                     "expected_components": expected_components,
@@ -3373,6 +3467,16 @@ class ReplayHistoryRepository:
             cursor = max(cursor, next_cursor)
         if cursor <= end:
             gaps.append(gap_payload(cursor, end))
+        calendar = _manifest_session_calendar(manifest)
+        if calendar is not None:
+            # ADR-DATA-002 D2: only bars the calendar expects can be missing.
+            gaps = [
+                gap_payload(first, last)
+                for gap in gaps
+                for first, last in open_runs(
+                    calendar, int(gap["start_ms"]), int(gap["end_ms"]), manifest.interval
+                )
+            ]
         return {
             **manifest.identity.to_dict(),
             "interval": manifest.interval,
@@ -3570,6 +3674,18 @@ def _manifest_bounds(
         "listing_boundary_ms": manifest.listing_boundary_ms,
         "listing_boundary_source": manifest.listing_boundary_source,
     }
+
+
+def _manifest_session_calendar(manifest: "ReplayHistoryCatalogManifest") -> object | None:
+    """The archive's session calendar, or None for its continuous UTC grid."""
+    if manifest.calendar_id == REPLAY_HISTORY_CALENDAR_ID:
+        return None
+    try:
+        return calendar_by_id(manifest.calendar_id)
+    except LookupError as exc:
+        raise ReplayHistoryArchiveError(
+            f"replay-history calendar is not registered: {manifest.calendar_id}"
+        ) from exc
 
 
 def _gap_payload(start_ms: int, end_ms: int, interval_ms: int) -> dict[str, object]:

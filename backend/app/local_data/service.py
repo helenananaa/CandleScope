@@ -20,6 +20,16 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.data_engine.bar_basis import BarBasis
+from app.data_engine.history.exchange_date_calendar import (
+    CN_A_SHARE_DAILY_CALENDAR_ID,
+    ExchangeDateCalendar,
+)
+from app.data_engine.history.expected_bars import (
+    bucket_end_ms,
+    calendar_by_id,
+    follows,
+    session_calendar,
+)
 
 from app.data_engine.interval_policy import (
     IntervalAlignment,
@@ -39,6 +49,8 @@ from app.market_dataset.snapshot import MarketDatasetError, canonical_json
 
 
 if TYPE_CHECKING:
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
     from .user_market_trades import UserMarketTradeOptions
 
 
@@ -50,6 +62,12 @@ MAX_PROJECT_PACKAGE_ENTRIES = 2_000
 MAX_PROJECT_PACKAGE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 MAX_PROJECT_CLIENT_STATE_BYTES = 32 * 1024 * 1024
 MAX_PROJECT_MANIFEST_BYTES = 4 * 1024 * 1024
+
+# ADR-DATA-002 D2e: trading calendars an imported CSV may declare. Each one
+# labels daily bars at 00:00 UTC on the trading date.
+IMPORT_CALENDARS: Mapping[str, Mapping[str, Any]] = {
+    CN_A_SHARE_DAILY_CALENDAR_ID: {"intervals": ("1d",), "market": "CN_A_SHARE"},
+}
 
 ProgressCallback = Callable[[str, int, int | None], None]
 CancellationCheck = Callable[[], bool]
@@ -93,6 +111,7 @@ class LocalImportOptions:
     dataset_id: str | None = None
     base_asset: str | None = None
     quote_asset: str | None = None
+    calendar_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +230,7 @@ class LocalDatasetService:
         if not symbol:
             raise LocalDatasetError("Symbol is required")
         instrument = self._import_instrument(options)
+        calendar_id = (options.calendar_id or "").strip() or None
         if options.dataset_id is not None and (self.root / dataset_id).exists():
             current = self.get_manifest(dataset_id)
             if current.get("market_trade_input") is not None:
@@ -219,6 +239,13 @@ class LocalDatasetService:
                 # Omitted optional fields retain this dataset's established
                 # units, including imports through older CSV clients.
                 instrument = current.get("instrument")
+            if calendar_id is None:
+                calendar_id = current.get("calendar_id")
+            if current.get("calendar_id") != calendar_id:
+                raise LocalDatasetError(
+                    "A revision must keep its trading calendar; import a new dataset to change it",
+                    code="dataset_identity_mismatch",
+                )
             if current["symbol"] != symbol or current["interval"] != interval.canonical:
                 raise LocalDatasetError(
                     "A new revision must keep the dataset symbol and interval",
@@ -230,6 +257,8 @@ class LocalDatasetService:
                     code="dataset_identity_mismatch",
                 )
 
+        calendar = self._import_calendar(calendar_id, interval)
+
         staging = self.root / ".staging" / f"{dataset_id}-{uuid.uuid4().hex}"
         staging.mkdir(parents=True)
         try:
@@ -237,12 +266,18 @@ class LocalDatasetService:
                 csv_path,
                 options,
                 interval,
+                calendar=calendar,
                 progress=progress,
                 cancelled=cancelled,
             )
             self._raise_if_cancelled(cancelled)
             self._report_progress(progress, "building_revision", len(bars), len(bars))
-            epoch_hex = self._content_epoch(symbol, interval, bars, excluded_ranges, instrument=instrument)
+            epoch_hex = self._content_epoch(
+                symbol, interval, bars, excluded_ranges, instrument=instrument, calendar_id=calendar_id,
+            )
+            metadata: dict[str, Any] = {} if instrument is None else {"instrument": instrument}
+            if calendar_id is not None:
+                metadata["calendar_id"] = calendar_id
             manifest = self._write_staging_dataset(
                 staging,
                 dataset_id=dataset_id,
@@ -254,7 +289,7 @@ class LocalDatasetService:
                 bars=bars,
                 excluded_ranges=excluded_ranges,
                 resolved_columns=resolved_columns,
-                manifest_metadata={} if instrument is None else {"instrument": instrument},
+                manifest_metadata=metadata,
             )
             self._raise_if_cancelled(cancelled)
             published = self._publish(staging, dataset_id, epoch_hex, manifest)
@@ -386,13 +421,20 @@ class LocalDatasetService:
         symbol: str,
         interval: str,
         chart_context_hash: str,
+        series_identity: KlineSeriesIdentity | None = None,
+        calendar: Any | None = None,
     ) -> dict[str, Any]:
         """Publish closed Host K-lines through the canonical immutable store.
 
         This is deliberately a LocalDatasetService operation rather than a
         chart-context cache. The caller must obtain rows from the Host data
         facade; this method only validates, hashes, and publishes them.
+
+        ``calendar`` is the series' trading calendar (ADR-DATA-002 D2). A
+        session calendar decides which bars must follow each other, so a closed
+        market is not a gap, and the manifest records its ``calendar_id``.
         """
+        calendar = session_calendar(calendar)
 
         self.start()
         interval_spec = parse_interval_spec(interval)
@@ -418,12 +460,14 @@ class LocalDatasetService:
                 str(current.get("market_type") or "").lower(),
                 str(current.get("symbol") or "").upper(),
                 str(current.get("interval") or ""),
+                current.get("identity"),
             )
             expected = (
                 normalized_exchange,
                 normalized_market_type,
                 normalized_symbol,
                 interval_spec.canonical,
+                series_identity.to_dict() if series_identity is not None else None,
             )
             if identity != expected:
                 raise LocalDatasetError(
@@ -445,7 +489,12 @@ class LocalDatasetService:
                 open_ms = int(time_seconds) * 1000
             else:
                 open_ms = int(open_time_value)
-            if interval_spec.floor_ms(open_ms) != open_ms:
+            aligned = (
+                interval_spec.floor_ms(open_ms) == open_ms
+                if calendar is None
+                else calendar.first_expected_open(open_ms, open_ms, interval_spec.canonical) == open_ms
+            )
+            if not aligned:
                 raise LocalDatasetError(
                     "Host K-line is not aligned to the requested interval",
                     code="interval_alignment_incompatible",
@@ -456,7 +505,12 @@ class LocalDatasetService:
                         "Host K-lines are duplicated or out of order",
                         code="host_data_invalid",
                     )
-                if interval_spec.next_ms(previous_open) != open_ms:
+                successor = (
+                    interval_spec.next_ms(previous_open) == open_ms
+                    if calendar is None
+                    else follows(calendar, interval_spec.canonical, previous_open, open_ms)
+                )
+                if not successor:
                     raise LocalDatasetError(
                         "Host K-line coverage is incomplete",
                         code="host_coverage_incomplete",
@@ -494,7 +548,11 @@ class LocalDatasetService:
             bars.append(
                 _NormalizedBar(
                     open_time_ms=open_ms,
-                    close_time_ms=interval_spec.next_ms(open_ms) - 1,
+                    close_time_ms=(
+                        interval_spec.next_ms(open_ms)
+                        if calendar is None
+                        else bucket_end_ms(calendar, open_ms, interval_spec.canonical)
+                    ) - 1,
                     open=self._decimal_text(values["open"]),
                     high=self._decimal_text(values["high"]),
                     low=self._decimal_text(values["low"]),
@@ -521,6 +579,15 @@ class LocalDatasetService:
                 code="host_coverage_incomplete",
             )
 
+        # ADR-DATA-002 D1: a snapshot of a non-default series records which one.
+        # The exchange's own series adds nothing, so its epochs stay as they were.
+        identity_metadata = (
+            {"identity": series_identity.to_dict()} if series_identity is not None else {}
+        )
+        # ADR-DATA-002 D2: a session-calendar snapshot names its calendar, which
+        # readers resolve to tell closures from gaps. Always-open series add nothing.
+        if calendar is not None:
+            identity_metadata["calendar_id"] = calendar.calendar_id
         base_epoch = self._content_epoch(normalized_symbol, interval_spec, bars, [])
         epoch_hex = hashlib.sha256(
             canonical_json(
@@ -529,6 +596,7 @@ class LocalDatasetService:
                     "exchange": normalized_exchange,
                     "market_type": normalized_market_type,
                     "chart_context_hash": chart_context_hash,
+                    **identity_metadata,
                 }
             ).encode("utf-8")
         ).hexdigest()
@@ -571,6 +639,7 @@ class LocalDatasetService:
                     "exchange": normalized_exchange,
                     "market_type": normalized_market_type,
                     "chart_context_hash": chart_context_hash,
+                    **identity_metadata,
                 },
             )
             published = self._publish(staging, dataset_id, epoch_hex, manifest)
@@ -781,6 +850,7 @@ class LocalDatasetService:
         options: LocalImportOptions,
         interval: IntervalSpec,
         *,
+        calendar: ExchangeDateCalendar | None = None,
         progress: ProgressCallback | None = None,
         cancelled: CancellationCheck | None = None,
     ) -> tuple[
@@ -840,7 +910,9 @@ class LocalDatasetService:
                     timezone_info,
                     source_row,
                 )
-                if interval.alignment is IntervalAlignment.FIXED_EPOCH:
+                if calendar is not None:
+                    self._require_calendar_session(calendar, open_ms, source_row)
+                elif interval.alignment is IntervalAlignment.FIXED_EPOCH:
                     row_offset_ms = open_ms % interval.nominal_ms
                     if fixed_alignment_offset_ms is None:
                         fixed_alignment_offset_ms = row_offset_ms
@@ -911,15 +983,23 @@ class LocalDatasetService:
                             )
 
                 if previous_open is not None:
-                    expected = interval.next_ms(previous_open)
+                    expected = (
+                        interval.next_ms(previous_open)
+                        if calendar is None
+                        # A closure between two sessions is not a gap; a
+                        # missing session (a suspension) is.
+                        else calendar.next_expected_open(previous_open, interval.canonical)
+                    )
                     if open_ms != expected:
                         gaps.append(
                             {
                                 "start_ms": expected,
                                 "end_ms": open_ms,
                                 "reason": "source_gap",
-                                "missing_bars": self._count_missing(
-                                    interval, expected, open_ms
+                                "missing_bars": (
+                                    self._count_missing(interval, expected, open_ms)
+                                    if calendar is None
+                                    else calendar.count_expected(expected, open_ms - 1, interval.canonical)
                                 ),
                             }
                         )
@@ -1085,6 +1165,48 @@ class LocalDatasetService:
         return count
 
     @staticmethod
+    def _import_calendar(
+        calendar_id: str | None, interval: IntervalSpec
+    ) -> ExchangeDateCalendar | None:
+        if calendar_id is None:
+            return None
+        declared = IMPORT_CALENDARS.get(calendar_id)
+        if declared is None:
+            raise LocalDatasetError(
+                f"Unknown trading calendar: {calendar_id}", code="calendar_unknown"
+            )
+        if interval.canonical not in declared["intervals"]:
+            allowed = ", ".join(declared["intervals"])
+            raise LocalDatasetError(
+                f"The {calendar_id} calendar supports {allowed} bars only, not {interval.canonical}",
+                code="calendar_interval_unsupported",
+            )
+        calendar = calendar_by_id(calendar_id)
+        if not isinstance(calendar, ExchangeDateCalendar):  # pragma: no cover - registry wiring
+            raise LocalDatasetError(
+                f"Trading calendar is unavailable: {calendar_id}", code="calendar_unknown"
+            )
+        return calendar
+
+    @staticmethod
+    def _require_calendar_session(
+        calendar: ExchangeDateCalendar, open_ms: int, source_row: int
+    ) -> None:
+        label = datetime.fromtimestamp(open_ms / 1000, timezone.utc).isoformat().replace("+00:00", "Z")
+        if open_ms >= calendar.known_end_ms:
+            raise LocalDatasetError(
+                f"Row {source_row}: {label} is after {calendar.known_through.isoformat()}, "
+                f"the last date the {calendar.calendar_id} calendar knows",
+                code="calendar_range_unavailable",
+            )
+        if not calendar.is_session_open(open_ms):
+            raise LocalDatasetError(
+                f"Row {source_row}: {label} is not a trading day on the {calendar.calendar_id} calendar. "
+                "Daily bars on a trading calendar open at 00:00 UTC on their trading date",
+                code="calendar_session_mismatch",
+            )
+
+    @staticmethod
     def _import_instrument(options: LocalImportOptions) -> dict[str, str] | None:
         base = (options.base_asset or "").strip().upper()
         quote = (options.quote_asset or "").strip().upper()
@@ -1102,6 +1224,7 @@ class LocalDatasetService:
         gaps: list[dict[str, Any]],
         *,
         instrument: Mapping[str, str] | None = None,
+        calendar_id: str | None = None,
     ) -> str:
         digest = hashlib.sha256()
         identity = {
@@ -1112,6 +1235,9 @@ class LocalDatasetService:
         }
         if instrument is not None:
             identity["instrument"] = dict(instrument)
+        # Datasets without a calendar keep the epochs they always had.
+        if calendar_id is not None:
+            identity["calendar_id"] = calendar_id
         digest.update(
             json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
         )
@@ -1269,6 +1395,18 @@ class LocalDatasetService:
             "timezone": options.timezone_name,
             "volume_required": options.volume_required,
         }
+        calendar_id = (manifest_metadata or {}).get("calendar_id")
+        if calendar_id is not None:
+            calendar = calendar_by_id(str(calendar_id))
+            receipt["calendar"] = {
+                "calendar_id": calendar_id,
+                "source": getattr(calendar, "source", None),
+                "known_through": (
+                    calendar.known_through.isoformat()
+                    if isinstance(calendar, ExchangeDateCalendar)
+                    else None
+                ),
+            }
         self._write_json(staging / "manifest.json", manifest)
         self._write_json(staging / "quality-report.json", quality)
         self._write_json(staging / "import-receipt.json", receipt)
@@ -1972,13 +2110,23 @@ class LocalDatasetService:
                 else -1
             )
         try:
-            return resolve_local_resample_plan(
+            plan = resolve_local_resample_plan(
                 str(manifest["interval"]),
                 interval,
                 alignment_offset_ms=int(alignment_offset),
             )
         except LocalResamplingError as exc:
             raise LocalDatasetError(str(exc), code=exc.code) from exc
+        # A fixed multi-day grid ignores closures, so derived bars over a
+        # trading calendar would be wrong. Weekly and monthly bars by trading
+        # calendar come in a later stage.
+        if plan.derived and manifest.get("calendar_id") in IMPORT_CALENDARS:
+            raise LocalDatasetError(
+                f"Cannot derive {plan.target.canonical} from {plan.source.canonical}: "
+                "datasets on a trading calendar show only their source interval for now",
+                code="interval_not_composable",
+            )
+        return plan
 
     @staticmethod
     def _read_derived_rows(

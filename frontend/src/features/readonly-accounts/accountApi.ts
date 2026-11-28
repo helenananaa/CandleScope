@@ -2,8 +2,12 @@ import type {} from "../../desktop/desktopWindowManager.js";
 
 export type FactKind = "fills" | "orders" | "bills";
 export type Fact = Record<string, unknown>;
+/** The OS store that keeps the account key (#575 PL-5). */
+export type CredentialStore = "macos-keychain" | "windows-credential-manager";
+const CREDENTIAL_STORES: readonly unknown[] = ["macos-keychain", "windows-credential-manager"];
 export interface AccountStatus {
   available: boolean;
+  credentialStore?: CredentialStore | null;
   serviceError?: string | null;
   account: { status: string; error_code: string | null; venue_uid: string; last_success_ms: number | null; enabled: number } | null;
   counts: Record<string, number>;
@@ -105,6 +109,7 @@ export async function getAccountStatus(signal?: AbortSignal): Promise<AccountSta
 export function validateAccountStatus(value: unknown): AccountStatus {
   if (!record(value) || value.schemaVersion !== 1 || value.readOnly !== true || value.venue !== "okx"
     || typeof value.available !== "boolean" || !record(value.snapshots) || !record(value.counts)
+    || (value.credentialStore !== undefined && value.credentialStore !== null && !CREDENTIAL_STORES.includes(value.credentialStore))
     || (value.serviceError !== undefined && !nullableString(value.serviceError))
     || (value.proxyRoute !== undefined && value.proxyRoute !== null
       && (!record(value.proxyRoute) || typeof value.proxyRoute.id !== "string" || typeof value.proxyRoute.name !== "string"))

@@ -48,6 +48,7 @@ import { useMarketDataWorkspaceResources } from "../features/market-data/marketD
 import { useReplayEntryCapability } from "../features/replay/useReplayEntryCapability.js";
 import { useDrawingToolSelectionState } from "../features/drawings/drawingToolState.js";
 import { buildLiveReplayLaunchContext } from "../features/replay-launcher/replayLaunchContext.js";
+import { klineSeriesIdentityField, type KlineSeriesIdentityWire } from "../features/market-data/klineSeriesIdentity.js";
 import AlertNotificationCenter from "../components/alerts/AlertNotificationCenter.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
@@ -435,6 +436,7 @@ function LiveWorkspaceApp() {
   const [replayLaunchContext, setReplayLaunchContext] = useState<
     ReturnType<typeof buildLiveReplayLaunchContext> | null
   >(null);
+  const [replayLaunchSeries, setReplayLaunchSeries] = useState<KlineSeriesIdentityWire | undefined>(undefined);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [workspacePanelLoaded, setWorkspacePanelLoaded] = useState(false);
   const currentActiveEnvironment = activeEnvironment?.workspaceId === workspace.view.activeWorkspaceId
@@ -501,6 +503,8 @@ function LiveWorkspaceApp() {
   });
 
   const openReplayLauncher = useCallback(() => {
+    // Replay prepares the chart's own series, not the exchange default (ADR-DATA-002 D1).
+    setReplayLaunchSeries(klineSeriesIdentityField(activeSession.exchange, activeSession).identity);
     setReplayLaunchContext(buildLiveReplayLaunchContext({
       exchange: activeSession.exchange,
       marketType: activeSession.marketType,
@@ -509,10 +513,7 @@ function LiveWorkspaceApp() {
       watchlists: watchlist.view.watchlists,
     }));
   }, [
-    activeSession.exchange,
-    activeSession.interval,
-    activeSession.marketType,
-    activeSession.symbol,
+    activeSession,
     watchlist.view.watchlists,
   ]);
   const closeReplayLauncher = useCallback(() => setReplayLaunchContext(null), []);
@@ -752,6 +753,7 @@ function LiveWorkspaceApp() {
         <Suspense fallback={null}>
           <ReplayLauncherDialog
             launchContext={replayLaunchContext}
+            launchSeries={replayLaunchSeries}
             onRequestClose={closeReplayLauncher}
           />
         </Suspense>

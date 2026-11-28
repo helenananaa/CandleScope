@@ -28,14 +28,50 @@ const account = (positionMode: "HEDGE" | "ONE_WAY"): TradingAccount => ({ id: `q
   name: "QA practice", quoteCurrency: "USDT", createdAtMs: 1_800_000_000_000, archived: false,
   settings: { positionMode, initialBalance: "10000", takerFeeRate: "0.0005", makerFeeRate: "0.0002", slippageBps: "1", leverage: "10" },
   capabilities: { placeOrders: true, manualFills: false, sync: false } });
-const context = (marketType: "futures" | "spot"): TradingChartContext => ({ exchange: "binance", marketType, symbol: "BTCUSDT", interval: "1m", lastPrice: 100 });
+type Market = "futures" | "spot" | "swap.linear" | "swap.inverse" | "stock" | "index.future" | "index.future.published";
+const context = (marketType: Market): TradingChartContext => marketType === "stock"
+  ? { exchange: "twelvedata", marketType, symbol: "AAPL:NASDAQ", interval: "1m", lastPrice: 100 }
+  : marketType.startsWith("index.future") ? { exchange: "acme", marketType, symbol: "ESZ6", interval: "1m", lastPrice: 5000 }
+  : { exchange: marketType.startsWith("swap") ? "gate" : "binance", marketType, symbol: "BTCUSDT", interval: "1m", lastPrice: 100 };
+/**
+ * The backend's market rules (ADR-DATA-002 D5b, D5d): Gate's linear swaps are contracts, its inverse
+ * swaps open nothing, and index futures hold a margin per contract of 50 index units.
+ */
+const RULES: Record<Market, string> = { futures: "crypto_linear", spot: "cash", "swap.linear": "crypto_linear", "swap.inverse": "crypto_inverse",
+  stock: "cash", "index.future": "futures_margin", "index.future.published": "futures_margin" };
 
 /** The actual ticket, clicked like a user: every HEDGE action sends its own intent. */
 export async function checkPracticeOrderTicket() {
   const originalFetch = window.fetch;
   const requests: { path: string; body: Record<string, unknown> }[] = [];
+  const margins: { path: string; body: Record<string, unknown> }[] = [];
+  let accountMargin: string | null = null;
+  const rulesFor = (market: Market) => {
+    const model = RULES[market];
+    const contract = model !== "cash";
+    // D5c: a stock is priced in USD and trades whole shares; crypto here is priced in the account's USDT.
+    const stock = market === "stock" ? { currency: "USD", quantityStep: "1", minQuantity: "1" } : { currency: "USDT" };
+    // D5d: one contract is 50 index units; the margin is published or the account's own figure.
+    const margin = market === "index.future.published" ? "20000" : market === "index.future" ? accountMargin : null;
+    const future = model === "futures_margin" ? {
+      currency: "USD", quantityStep: "50", minQuantity: "50", contractSize: "50",
+      ...(margin ? { marginPerContract: margin, marginSource: market === "index.future" ? "account" : "catalog" } : {}),
+    } : {};
+    return { accountModel: model, declared: true, leverage: model === "crypto_linear", shorting: contract, hedge: contract,
+      opensPositions: model === "cash" || model === "crypto_linear" || Boolean(margin), ...stock, ...future };
+  };
   window.fetch = async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), location.href).pathname;
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    const path = url.pathname;
+    if ((init?.method ?? "GET") === "GET" && path.endsWith("/trading/market-rules")) {
+      return Response.json(rulesFor(url.searchParams.get("marketType") as Market));
+    }
+    if (init?.method === "PUT" && /\/trading\/accounts\/[^/]+\/contract-margins$/.test(path)) {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      margins.push({ path, body });
+      accountMargin = typeof body.marginPerContract === "string" ? body.marginPerContract : null;
+      return Response.json(rulesFor(body.marketType as Market));
+    }
     assert(init?.method === "POST" && /\/trading\/accounts\/[^/]+\/orders$/.test(path), `unexpected request: ${init?.method ?? "GET"} ${path}`);
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     requests.push({ path, body });
@@ -45,7 +81,7 @@ export async function checkPracticeOrderTicket() {
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
   let placed = 0;
-  const render = (positionMode: "HEDGE" | "ONE_WAY", marketType: "futures" | "spot") => flushSync(() => root.render(
+  const render = (positionMode: "HEDGE" | "ONE_WAY", marketType: Market) => flushSync(() => root.render(
     <PracticeOrderTicket key={positionMode + marketType} account={account(positionMode)} summary={null} context={context(marketType)}
       onPlaced={() => { placed += 1; }} onPlanTrade={() => undefined} />));
   const actionGroup = () => host.querySelectorAll<HTMLElement>(".trading-ticket [role=radiogroup]")[0];
@@ -117,6 +153,61 @@ export async function checkPracticeOrderTicket() {
         `${mode} ${market} sent hedge intent: ${JSON.stringify(body)}`);
       checks[`${mode}-${market}`] = { side: body.side, reduceOnly: body.reduceOnly };
     }
+
+    // A linear swap on another venue declares the same contract rules as futures, so a HEDGE
+    // account trades it by leg once the rules arrive; an inverse swap warns that it opens nothing.
+    render("HEDGE", "swap.linear");
+    const legs = await until(() => {
+      const values = [...actionGroup()!.querySelectorAll<HTMLButtonElement>("[role=radio]")].map(button => button.dataset.value);
+      return values.join() === "openLong,openShort,closeLong,closeShort" && values;
+    }, "HEDGE swap.linear ticket never offered hedge actions");
+    assert(!host.querySelector(".ui-alert[data-tone=warning]"), "a linear swap warned that it cannot open positions");
+    render("ONE_WAY", "swap.inverse");
+    await until(() => host.querySelector(".ui-alert[data-tone=warning]"), "an inverse swap showed no unsupported notice");
+    checks["swap.linear"] = legs;
+
+    // A cash stock (D5c) shows its whole-share grid, says it is priced in USD while the account
+    // books USDT, and shows the account's fee rates; crypto priced in USDT shows no currency notice.
+    render("HEDGE", "stock");
+    const notice = await until(() => host.querySelector(".ui-alert[data-tone=info]")?.textContent, "a USD stock showed no currency notice");
+    assert(notice.includes("USD") && notice.includes("USDT"), `currency notice reads ${notice}`);
+    const hint = host.querySelector(".trading-ticket .ui-field-hint")?.textContent ?? "";
+    assert(/\b1\b/.test(hint), `quantity hint reads ${JSON.stringify(hint)}`);
+    const sides = [...actionGroup()!.querySelectorAll<HTMLButtonElement>("[role=radio]")].map(button => button.dataset.value);
+    assert(sides.join() === "buy,sell", `a cash stock offered ${sides.join()}`);
+    const fees = [...host.querySelectorAll(".trading-kv dd")].at(-1)?.textContent ?? "";
+    assert(fees.includes("0.05") && fees.includes("0.02"), `fees row reads ${JSON.stringify(fees)}`);
+    render("ONE_WAY", "spot");
+    await until(() => host.querySelector(".trading-ticket .ui-field-hint") === null && host.querySelector(".trading-ticket"), "spot ticket did not render");
+    await settle(); await settle();
+    assert(!host.querySelector(".ui-alert[data-tone=info]"), "a USDT market showed a currency notice on a USDT account");
+    checks.stock = { notice, hint, fees };
+
+    // A per-contract future (D5d) whose source publishes no margin asks for the account's figure,
+    // counts the quantity in contracts of 50 and holds the margin per contract once it is saved.
+    render("HEDGE", "index.future");
+    const save = await until(() => host.querySelector<HTMLButtonElement>(".trading-margin-save"), "no margin input for an unpublished margin");
+    await until(() => host.querySelector(".ui-alert[data-tone=warning]"), "an unpublished margin showed no warning");
+    const values = () => [...host.querySelectorAll(".trading-kv dd")].map(node => node.textContent ?? "");
+    type(field(0), "400");
+    assert(values()[4]?.includes("50") && values()[5] === "8" && values()[6] === "—", `contract rows read ${JSON.stringify(values())}`);
+    const marginInput = save.closest(".trading-field-row")?.querySelector<HTMLInputElement>("input");
+    assert(marginInput, "margin input missing");
+    type(marginInput, "12000");
+    flushSync(() => save.click());
+    await until(() => margins.length === 1 && !host.querySelector(".ui-alert[data-tone=warning]"), "saving the margin did not clear the warning");
+    assert(margins[0]!.path.endsWith("/accounts/qa-hedge/contract-margins")
+      && JSON.stringify(margins[0]!.body) === JSON.stringify({ exchange: "acme", marketType: "index.future", symbol: "ESZ6", marginPerContract: "12000" }),
+      `margin request ${JSON.stringify(margins[0])}`);
+    await until(() => /96/.test(values()[6] ?? ""), `margin row reads ${JSON.stringify(values())}`);
+    const future = await submit();
+    assert(future.qty === "400" && future.positionSide === "LONG", `future order ${JSON.stringify(future)}`);
+    // A published margin is shown, not asked for.
+    render("HEDGE", "index.future.published");
+    await until(() => values().length === 8, `published margin rows read ${JSON.stringify(values())}`);
+    assert(!host.querySelector(".trading-margin-save") && values()[6]?.includes("20") && values()[6]?.includes("USD"),
+      `published margin reads ${JSON.stringify(values())}`);
+    checks.futureMargin = { saved: margins[0]!.body, rows: values() };
     return { passed: true, checks, scope: "Actual PracticeOrderTicket with a controlled order endpoint; not backend matching" };
   } finally { window.fetch = originalFetch; flushSync(() => root.unmount()); host.remove(); }
 }

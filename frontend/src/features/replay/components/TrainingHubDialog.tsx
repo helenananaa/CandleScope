@@ -270,8 +270,14 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                 <Field label={t("backtest.exchange")}><Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} /></Field>
                 <Field label={t("backtest.marketType")}><Select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
                   <option value="spot">{t("market.spot")}</option><option value="futures">{t("market.futures")}</option>
+                  {/* A market brought from the chart (a Twelve Data stock) is shown as it is, not as spot. */}
+                  {draft.marketType && draft.marketType !== "spot" && draft.marketType !== "futures"
+                    && <option value={draft.marketType}>{draft.marketType}</option>}
                 </Select></Field>
                 <Field label={t("replay.hub.symbol")}><Input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></Field>
+                {/* A market quoted in another asset (a USD stock) settles in that asset. */}
+                <Field label={t("replay.picker.settlement")}><Input disabled={busy} value={draft.settlementAsset}
+                  onChange={event => patchDraft(runtime, { settlementAsset: event.target.value.trim().toUpperCase() })} /></Field>
               </>}
               {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{preparationHint}</p>}
             </div>}

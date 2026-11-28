@@ -133,6 +133,9 @@ jobs:
             tests/test_native_second_exchanges.py \
             tests/test_klines_api.py \
             tests/test_history_calendar.py \
+            tests/test_calendar_completeness.py \
+            tests/test_imported_trading_calendar.py \
+            tests/test_replay_calendar_sessions.py \
             tests/test_session_calendar_tail.py \
             tests/test_session_calendar_neighbours.py \
             tests/test_stream_klines_event_filter.py \
@@ -155,6 +158,9 @@ jobs:
             tests/test_continuous_bar_host.py \
             tests/test_continuous_provider.py \
             tests/test_continuous_definition.py \
+            tests/test_continuous_grid.py \
+            tests/test_continuous_pine.py \
+            tests/test_continuous_external.py \
             tests/test_continuous_creation_journal.py \
             tests/test_continuous_controller.py \
             tests/test_continuous_results.py \
@@ -169,7 +175,10 @@ jobs:
             tests/test_continuous_manager_lifecycle.py \
             tests/test_continuous_strategy_access.py \
             tests/test_continuous_api.py \
+            tests/test_follow_calendar.py \
             tests/test_strategy_data_manager.py \
+            tests/test_native_follow_results.py \
+            tests/test_native_follow_sessions.py \
             tests/test_application_shutdown_failures.py \
             tests/test_strategy_bar_continuation.py \
             tests/test_local_data_pinned_window.py \
@@ -207,6 +216,7 @@ jobs:
             tests/test_replay_context_origin.py \
             tests/test_replay_bounded_context.py \
             tests/test_replay_history_archive.py \
+            tests/test_replay_series_identity.py \
             tests/test_replay_v2_training_history.py \
             tests/test_replay_history_source_grid.py \
             tests/test_replay_projection_native_seam.py \
@@ -237,6 +247,9 @@ jobs:
             tests/test_account_state_stream.py \
             tests/test_account_product_integration.py \
             tests/test_trading_accounts.py \
+            tests/test_trading_series_identity.py \
+            tests/test_trading_practice_account_models.py \
+            tests/test_trading_practice_sessions.py \
             tests/test_practice_baselines.py \
             tests/test_trading_account_snapshot.py \
             tests/test_trading_state_stream.py \

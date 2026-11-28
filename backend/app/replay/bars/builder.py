@@ -369,6 +369,7 @@ class ReplayBarBuilder:
         max_closed_bars: int = 2_048,
         synthetic_policy: str = BAR_SYNTHETIC_POLICY,
         verified_halts: Iterable[ReplayBarHalt] = (),
+        calendar: object | None = None,
     ) -> None:
         self._capability = assess_bar_builder_capability(
             base_interval,
@@ -386,7 +387,8 @@ class ReplayBarBuilder:
         }:
             raise ValueError("synthetic_policy is unsupported")
         self._verified_halts = tuple(verified_halts)
-        self._schedule = ReplayBarSchedule(base_interval, self._verified_halts)
+        self._calendar = calendar
+        self._schedule = ReplayBarSchedule(base_interval, self._verified_halts, calendar)
         self._gap_policy = self._schedule.gap_policy
         self._synthetic_policy = synthetic_policy
         self._capability = replace(
@@ -442,7 +444,7 @@ class ReplayBarBuilder:
             "replay_start_ms": self._replay_start_ms,
             "bars": [bar.to_dict() for bar in self._warmup_bars],
         }
-        if self._verified_halts:
+        if self._schedule.skips_closures:
             warmup_fingerprint_payload["bar_schedule_hash"] = self._schedule.fingerprint
         self._warmup_fingerprint = canonical_sha256(warmup_fingerprint_payload)
         self.reset()
@@ -567,6 +569,7 @@ class ReplayBarBuilder:
             max_closed_bars=self._max_closed_bars,
             synthetic_policy=self._synthetic_policy,
             verified_halts=self._verified_halts,
+            calendar=self._calendar,
         )
         for bar in revealed:
             rebuilt.apply_bar(bar)
@@ -1138,7 +1141,7 @@ class ReplayBarBuilder:
             "replay_start_ms": self._replay_start_ms,
             "warmup_fingerprint": self._warmup_fingerprint,
         }
-        if self._verified_halts:
+        if self._schedule.skips_closures:
             payload["bar_schedule_hash"] = self._schedule.fingerprint
         return canonical_sha256(payload)
 

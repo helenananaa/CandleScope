@@ -21,6 +21,23 @@ test("HTTP creation preserves current code and a stable request key; bounded rea
   await assert.rejects(api.initial("one", signal), { code: "BUDGET_EXCEEDED" });
 });
 
+test("the Pine forward check posts the current code and libraries without a request key (B-333b)", async (t) => {
+  const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
+  const api = createContinuousApi("http://local.test/continuous"), signal = new AbortController().signal;
+  let seen: { url: string; init: RequestInit } | null = null;
+  globalThis.fetch = async (url, init) => {
+    seen = { url: String(url), init: init! };
+    return new Response(JSON.stringify({ supported: false, uses: ["calc_on_every_tick"], reason: "refused" }));
+  };
+  assert.deepEqual(await api.pineSupport("//@version=6", { "local/Twice/1": "x" }, signal), { supported: false, uses: ["calc_on_every_tick"], reason: "refused" });
+  assert.equal(seen!.url, "http://local.test/continuous/pine/support");
+  assert.equal(seen!.init.method, "POST"); assert.equal(seen!.init.signal, signal);
+  assert.equal("Idempotency-Key" in (seen!.init.headers as Record<string, string>), false);
+  assert.deepEqual(JSON.parse(String(seen!.init.body)), { source_text: "//@version=6", libraries: { "local/Twice/1": "x" } });
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: "PINE_COMPILE_FAILED", message: "line 3" } }), { status: 400 });
+  await assert.rejects(api.pineSupport("x", {}, signal), { code: "PINE_COMPILE_FAILED", message: "line 3" });
+});
+
 test("repair transport binds exact consent and stable request identity without editor source", async (t) => {
   const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
   const api = createContinuousApi("http://local.test/continuous"), signal = new AbortController().signal;

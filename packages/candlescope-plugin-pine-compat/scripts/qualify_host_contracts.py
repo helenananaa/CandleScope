@@ -49,11 +49,13 @@ def main():
     cases = [output / "engine-source/python/tests" / name for name in (
         "test_host_bar_boundaries.py", "test_renko_event_requests.py", "test_realtime_session.py",
         "test_bar_calendars.py", "test_external_ordered_chart_contract.py",
-        "test_external_ordered_chart_events.py")]
+        "test_external_ordered_chart_events.py",
+        # ADR-BACKTEST-015 O1 (B-157a): an extended fixed history equals the complete dataset.
+        "test_historical_extension.py")]
     cases += [repo / "packages/candlescope-plugin-pine-compat/tests" / name for name in (
         "test_runtime.py", "test_native_sessions.py", "test_event_strategy.py", "test_chart_indicator_input.py",
         "test_host_completion.py", "test_host_boundary_inputs.py", "test_prefix_reply.py",
-        "test_ordered_chart_strategy.py", "test_chart_event_stream.py")]
+        "test_ordered_chart_strategy.py", "test_chart_event_stream.py", "test_native_follow.py")]
     cases += [repo / "backend/tests" / name for name in (
         "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
         "test_pine_prefix_reply.py", "test_pyne_removal.py", "test_native_chart_indicator_input.py",
@@ -83,7 +85,11 @@ def main():
         "test_practice_runs.py",
         # Pine strategies in replay: native and external replay reveal and restore, and the
         # research page's selected Pine version keeps its frozen libraries and parameters.
-        "test_native_replay.py", "test_external_replay.py", "test_research_selected_version.py")]
+        "test_native_replay.py", "test_external_replay.py", "test_research_selected_version.py",
+        # ADR-BACKTEST-015 O1 (B-157a): extended Pine FOLLOW rebuilds equal full runs.
+        "test_native_follow_sessions.py",
+        # B-333b: a Pine forward run restarted mid-way equals the fixed Host run.
+        "test_continuous_pine_engine.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

@@ -115,6 +115,7 @@ from .raw_trade_retention import preview as preview_raw_trade_retention
 from .raw_trade_retention import recheck as recheck_raw_trade_retention
 from .segments import (
     ReplaySegmentManager,
+    history_policy_window,
     resolve_history_policy,
 )
 from .trade_flow import ReplayTradeFlowAdapter
@@ -2067,14 +2068,8 @@ class TrainingRunService:
             request,
             warmup_bars=history_policy.effective_warmup_bars,
         )
-        required_start_ms = (
-            history_policy.actual_replay_start_ms
-            - history_policy.effective_warmup_bars * history_policy.interval_ms
-        )
-        required_end_ms = (
-            history_policy.actual_replay_start_ms
-            + history_policy.forward_cache_ms
-            - history_policy.interval_ms
+        _, required_start_ms, required_end_ms = history_policy_window(
+            history_policy, selection.get("calendar_id")
         )
         if _retry_preparation is None:
             try:

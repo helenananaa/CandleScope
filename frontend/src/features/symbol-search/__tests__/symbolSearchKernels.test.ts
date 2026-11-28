@@ -9,6 +9,7 @@ import {
   filterSymbols,
   formatSymbolLabel,
   resolveExchangeMarketType,
+  venueContractUnderlying,
 } from "../symbolSearchFilter.js";
 import { loadSourcePreferences, saveSourcePreferences } from "../sourcePreferences.js";
 import {
@@ -222,4 +223,20 @@ test("capability catalog exposes unloaded exchanges and exact CCXT market types"
   });
   assert.equal(resolveExchangeMarketType("futures", bybitTabs), "swap.linear");
   assert.equal(resolveExchangeMarketType("spot", bybitTabs), "spot");
+});
+
+test("venue contracts on traditional markets carry their underlying, crypto and real markets do not", () => {
+  const perp = { symbol: "XAUUSDT", baseAsset: "XAU", quoteAsset: "USDT", exchange: "binance", marketType: "futures",
+    assetClass: "crypto", underlyingClass: "commodity", _key: "futures:XAUUSDT" };
+  assert.deepEqual(venueContractUnderlying(perp), { assetKey: "commodity", regionKey: null });
+  assert.deepEqual(venueContractUnderlying({ ...perp, symbol: "AAPLUSDT", underlyingClass: "stock", underlyingRegion: "us" }),
+    { assetKey: "stock", regionKey: "us" });
+  // A region only labels a stock, and unknown values never reach a translation key.
+  assert.deepEqual(venueContractUnderlying({ ...perp, underlyingRegion: "us" }), { assetKey: "commodity", regionKey: null });
+  assert.deepEqual(venueContractUnderlying({ ...perp, underlyingClass: "stock", underlyingRegion: "mars" }), { assetKey: "stock", regionKey: null });
+  assert.equal(venueContractUnderlying({ ...perp, underlyingClass: "bond" }), null);
+  const { underlyingClass: _omitted, ...unclassified } = perp;
+  assert.equal(venueContractUnderlying(unclassified), null);
+  // The real market's own series (Twelve Data gold) is not a contract price.
+  assert.equal(venueContractUnderlying({ ...perp, exchange: "twelvedata", assetClass: "commodity" }), null);
 });

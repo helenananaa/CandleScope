@@ -9,8 +9,12 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 
 MAX_COUNTER=9_007_199_254_740_991
 # What a forward run can be created with; the capability endpoints report these.
-LANGUAGES=("builtin","python")
-INTERVALS=("1m",)
+# Intervals: any fixed-length interval of whole minutes (continuous_grid, B-333).
+# Pine forward runs place close-bar ORDER_INTENT orders on the Host bar account (B-333b).
+# External models answer over a forward connection when the Host enables them (B-333c).
+LANGUAGES=("builtin","python","pine","external")
+# The chart follows its Pine strategies on the Pine engine (ADR-BACKTEST-015 O1), not here.
+FOLLOW_LANGUAGES=("builtin","python")
 ACCOUNT_MODELS=("SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V1")
 
 
@@ -20,6 +24,12 @@ class StrictInput(BaseModel):
 
 class EditorParameters(StrictInput):
     source_text: str = Field(max_length=262144)
+
+
+class PineForwardSupport(StrictInput):
+    source_text: str = Field(min_length=1, max_length=262144)
+    # Versioned libraries the script imports (owner/name/version: source).
+    libraries: dict[str, str] | None = None
 
 
 class SeriesIdentity(StrictInput):
@@ -53,6 +63,11 @@ class CurrentProvider(StrictInput):
     output_mode:Literal["SIGNAL","TARGET_POSITION","ORDER_INTENT"]="TARGET_POSITION"
     runtime_mode:Literal["SANDBOXED_LOCAL","TRUSTED_LOCAL"]|None=None
     trusted_confirmed:bool=False
+    # Pine only: versioned libraries the script imports (owner/name/version: source).
+    libraries:dict[str,str]|None=None
+    # External models only (B-333c): the registered revision and its forward connection.
+    strategy_revision_id:str|None=Field(default=None,min_length=1,max_length=128,pattern=r"^\S+$")
+    external_connection_id:str|None=Field(default=None,min_length=1,max_length=128,pattern=r"^\S+$")
 
 
 class ContinuousCreate(StrictInput):

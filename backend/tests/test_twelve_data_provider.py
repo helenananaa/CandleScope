@@ -234,9 +234,13 @@ def test_symbol_search_preserves_provider_symbol_venue_and_entitlement() -> None
     assert stock.entitlement == "basic"
     assert stock.price_adjustment == "raw"
     assert stock.volume_semantics == "shares"
+    # Whole shares, bought outright (ADR-DATA-002 D5b/D5c).
+    assert stock.to_dict().items() >= {"accountModel": "cash", "quantityStep": "1", "minQuantity": "1",
+                                       "quantityOrigin": "0", "quantityRuleModel": "fixed_step"}.items()
 
     forex = by_symbol["EUR/USD"]
     assert forex.market_type == "forex"
+    assert "quantityStep" not in forex.to_dict() and "accountModel" not in forex.to_dict()
     assert forex.session_variant == "continuous_24x5"
     assert forex.volume_semantics == "unavailable"
 
@@ -462,6 +466,22 @@ def test_us_equity_intraday_calendar_handles_holiday_dst_and_early_close() -> No
             "1h",
         )
     assert calendar.bucket_end_ms(_ms("1999-12-31T14:30:00"), "8h") > _ms("1999-12-31T14:30:00")
+
+
+def test_us_equity_intraday_calendar_answers_an_empty_range_like_other_calendars() -> None:
+    # A gap scan whose storage already holds the last closed minute asks for
+    # the range after it, which is empty. That is not outside 2000-2045.
+    TwelveDataPlugin()
+    calendar = get_history_calendar_registry().require(EXCHANGE_DATE_CALENDAR_ID)
+    last_close = _ms("2026-11-25T20:59:00")
+
+    for interval in ("1m", "1h"):
+        assert calendar.first_expected_open(last_close + 1, last_close, interval) is None
+        assert calendar.last_expected_open(last_close + 1, last_close, interval) is None
+        assert list(calendar.expected_opens(last_close + 1, last_close, interval)) == []
+        assert calendar.count_expected(last_close + 1, last_close, interval) == 0
+    with pytest.raises(ValueError, match="intraday calendar is available only"):
+        calendar.first_expected_open(_ms("1999-12-31T14:30:00"), _ms("1999-12-31T15:30:00"), "1m")
 
 
 @pytest.mark.parametrize(

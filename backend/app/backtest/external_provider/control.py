@@ -61,6 +61,18 @@ class ExternalProviderControl:
         parsed = self.manifest(revision_id)
         scope = {"strategy_revision_id": revision_id, "dataset_id": dataset_id, "data_epoch": data_epoch,
                  "snapshot_hash": snapshot_hash, "manifest_hash": parsed.identity()["manifest_hash"]}
+        return self._issue(scope, now_ms=now_ms)
+
+    def create_forward(self, *, revision_id: str, market: Mapping[str, Any], now_ms: int | None = None) -> dict[str, Any]:
+        """A connection for forward runs of one market series (B-333c); no dataset snapshot."""
+        from .forward import forward_scope
+        parsed = self.manifest(revision_id)
+        capabilities = parsed.capabilities()
+        if "BAR_CLOSE" not in capabilities.input_modes or not capabilities.snapshot_restore:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "forward runs need a model that decides on closed bars and resumes from checkpoints")
+        return self._issue(forward_scope(revision_id, parsed.identity()["manifest_hash"], market), now_ms=now_ms)
+
+    def _issue(self, scope: dict[str, Any], *, now_ms: int | None) -> dict[str, Any]:
         self.open()
         token = secrets.token_urlsafe(32)
         stamp = int(time.time() * 1000) if now_ms is None else now_ms
@@ -158,6 +170,33 @@ class ExternalProviderControl:
             raise StrategyProviderError("PROVIDER_CONNECTION_REQUIRED", "connect the external client before smoke or Run")
         return {"external_connection_id": connection_id, "external_scope_hash": digest(scope),
                 "external_provider_identity": parsed.identity()}
+
+    def forward_binding(self, revision_id: str, connection_id: object, market: Mapping[str, Any], *,
+                        require_ready: bool = True) -> dict[str, Any]:
+        """Bind a forward run (B-333c) to a connection scoped to its revision and market series."""
+        from .forward import forward_scope
+        parsed = self.manifest(revision_id)
+        if type(connection_id) is not str or not connection_id:
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "select a forward connection for the external revision and market")
+        self.open()
+        scope = self.store.scope(connection_id)
+        if scope != forward_scope(revision_id, parsed.identity()["manifest_hash"], market):
+            raise StrategyProviderError("IDENTITY_MUTATION", "external connection belongs to a different revision, dataset or market")
+        if require_ready and not self.store.ready(connection_id, now_ms=int(time.time() * 1000)):
+            raise StrategyProviderError("PROVIDER_CONNECTION_REQUIRED", "connect the external client before starting the forward run")
+        return {"external_connection_id": connection_id, "external_scope_hash": digest(scope),
+                "external_provider_identity": parsed.identity()}
+
+    def build_forward_provider(self, binding: Mapping[str, Any], market: Mapping[str, Any]):
+        """The provider a forward Host resumes; the stored binding must still hold."""
+        from .forward import ForwardExternalProvider
+        current = self.forward_binding(str(binding["strategy_revision_id"]), binding["external_connection_id"], market,
+                                       require_ready=False)
+        if any(binding.get(key) != value for key, value in current.items()):
+            raise StrategyProviderError("IDENTITY_MUTATION", "external forward connection identity changed")
+        return ForwardExternalProvider(self.journal(current["external_connection_id"]),
+                                       connection_id=current["external_connection_id"],
+                                       step_timeout_s=self.settings.provider_step_timeout_ms / 1000)
 
     def journal(self, connection_id: str) -> ExternalCallJournal:
         self.open()

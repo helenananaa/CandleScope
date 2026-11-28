@@ -24,6 +24,39 @@ def utc_ms():return time.time_ns()//1_000_000
 def json_token(value):return json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False)
 
 
+class ForwardExternalRuns:
+    """The profile's forward runs, as external connections see them (B-333c).
+
+    Called from request threads: the store is lock-guarded, and cancellation runs on the
+    controller's event loop.
+    """
+    CANCEL_TIMEOUT_S=60
+
+    def __init__(self,owner):
+        self.owner=owner
+
+    def _controller(self):
+        controller=self.owner.continuous
+        if controller is None or controller.closed:return None
+        return controller
+
+    def require(self,run_id):
+        controller=self._controller()
+        if controller is None:raise BacktestError("CONTINUOUS_NOT_READY","Continuous strategy owner is unavailable")
+        controller.store.summary(run_id)
+
+    def cancel_connection(self,connection_id):
+        # Without a started owner nothing runs, and no Host can resume a revoked connection.
+        controller=self._controller()
+        if controller is None:return []
+        try:running=asyncio.get_running_loop()
+        except RuntimeError:running=None
+        if running is controller.loop:
+            raise RuntimeError("Revoke external connections from a request thread, not the controller's event loop")
+        future=asyncio.run_coroutine_threadsafe(controller.cancel_external(connection_id),controller.loop)
+        return future.result(self.CANCEL_TIMEOUT_S)
+
+
 class ContinuousStrategyAccess:
     def __init__(self,owner):
         self.owner=owner
@@ -68,8 +101,11 @@ class ContinuousStrategyAccess:
         try:
             market=self.owner.market_manager if config.RUNTIME_MODE=="LIVE" else None
             path=self.owner.service.settings.db_path.parent.resolve()/DATABASE_NAME
+            from app.backtest.continuous_provider import ContinuousProviderFactory
+            # External models bind to this Host's connections (B-333c).
             controller=await ContinuousStrategyController.open(path,market,clock_ms=utc_ms,
-                max_active_runs=min(2,self.owner.service.settings.max_active_runs))
+                max_active_runs=min(2,self.owner.service.settings.max_active_runs),
+                provider_factory=ContinuousProviderFactory(external=self.owner.service.external))
             self.owner.bind_continuous(controller)
             self.ready()
             restoration=await controller.restore() if controller.execution_enabled else {

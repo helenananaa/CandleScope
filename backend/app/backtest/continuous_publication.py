@@ -5,6 +5,7 @@ import json
 import time
 
 from app.data_engine.storage.prefix_watches import PrefixReceipt
+from .continuous_grid import bar_grid
 from .continuous_source_identity import source_owner
 from .continuous_store import MAX_CHECKPOINT_BYTES,_counter,_wire,fail
 from .continuous_results import KINDS,MAX_ITEM_BYTES,MAX_PAGE_BYTES,HEAD_OVERHEAD_BYTES,ENTRY_OVERHEAD_BYTES
@@ -60,7 +61,7 @@ class ContinuousRepairPublication:
             raise fail("CONTINUOUS_COMMIT_CONFLICT","Repair staging is no longer active")
         with self.store.lock:self._base(saved)
         cutoff=saved["plan"].get("through_ms");_counter(cutoff)
-        if (cutoff+1)%60000 or cutoff<saved["base_identity"]["event_time_ms"]:
+        if cutoff<saved["base_identity"]["event_time_ms"]:
             raise fail("CONTINUOUS_INPUT_INVALID","Repair must finish its confirmed closed input window")
         check_stopping()
         with staged.lock:
@@ -70,6 +71,10 @@ class ContinuousRepairPublication:
                 row=staged.summary(saved["run_id"])
                 definition=staged.describe(saved["run_id"])["definition"]
                 original=self.store.describe(saved["run_id"])["definition"]
+                # The run's series interval is its bar grid (B-333); the window ends at one of its closes.
+                series=original.get("source_series")
+                if not bar_grid(series[3] if isinstance(series,list) and len(series)>3 else "1m").closes_bar(cutoff):
+                    raise fail("CONTINUOUS_INPUT_INVALID","Repair must finish its confirmed closed input window")
                 stable=lambda value:{key:item for key,item in value.items() if key not in {"source_owner","initial_snapshot"}}
                 if (_wire(stable(definition),1024*1024)!=_wire(stable(original),1024*1024)
                         or definition.get("source_owner")!=saved["source_owner"]

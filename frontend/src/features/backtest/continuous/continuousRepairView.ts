@@ -1,5 +1,6 @@
 import { StrategyRunStreamError } from "../backtestRunStream.js";
 import type { ContinuousRepair } from "./continuousTypes.js";
+import { forwardIntervalMs, MINUTE_MS } from "./forwardInterval.js";
 
 const phases = ["REQUESTED", "PREPARING", "READY", "COMMITTED", "FAILED", "CANCELLED"] as const;
 const terminal = (phase: ContinuousRepair["phase"]) => ["COMMITTED", "FAILED", "CANCELLED"].includes(phase);
@@ -25,6 +26,7 @@ export function mergeRepair(current: ContinuousRepair | null, incoming: Continuo
     || incoming.original_from_ms > incoming.from_ms || incoming.from_ms > incoming.through_ms + 1
     || (incoming.through_ms + 1) % 60000 || incoming.from_ms % 60000 || incoming.original_from_ms % 60000
     || typeof incoming.resume_after !== "boolean" || typeof incoming.full_reinitialization !== "boolean"
+    || (incoming.interval != null && typeof incoming.interval !== "string")
     || (incoming.progress?.sequence !== undefined && !count(incoming.progress.sequence))) invalid();
   if (current) {
     if (incoming.target_revision < current.target_revision) return current;
@@ -47,7 +49,8 @@ export function mergeRepair(current: ContinuousRepair | null, incoming: Continuo
 }
 
 export function repairProgress(repair: ContinuousRepair): { done: number; total: number } {
-  const total = Math.max(0, (repair.through_ms + 1 - repair.original_from_ms) / 60000 - repair.anchor_sequence);
+  const barMs = (repair.interval ? forwardIntervalMs(repair.interval) : null) ?? MINUTE_MS;
+  const total = Math.max(0, Math.floor((repair.through_ms + 1 - repair.original_from_ms) / barMs) - repair.anchor_sequence);
   const done = repair.phase === "COMMITTED" ? total
     : Math.max(0, Math.min(total, (repair.progress?.sequence ?? repair.anchor_sequence) - repair.anchor_sequence));
   return { done, total };

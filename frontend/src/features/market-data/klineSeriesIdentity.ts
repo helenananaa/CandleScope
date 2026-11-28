@@ -77,6 +77,22 @@ export function klineSeriesIdentityKey(
   ].join(":");
 }
 
+/** Snake-case series identity, as chart-context, preparation and FOLLOW requests send it. */
+export type KlineSeriesIdentityWire = Record<string, string>;
+
+/**
+ * The optional `identity` field of a chart-context or preparation request
+ * (ADR-DATA-002 D1): absent for the exchange's own series, so those requests
+ * and their hashes stay as they were.
+ */
+export function klineSeriesIdentityField(
+  exchange: unknown,
+  identity: KlineSeriesIdentityInput | null | undefined,
+): { identity?: KlineSeriesIdentityWire } {
+  const wire = klineSeriesIdentityQuery(exchange, identity);
+  return Object.keys(wire).length ? { identity: wire } : {};
+}
+
 export function klineSeriesIdentityQuery(
   exchange: unknown,
   identity: KlineSeriesIdentityInput | null | undefined,

@@ -11,7 +11,7 @@ class ChartFillCallbacks:
         self.deadline = deadline
 
     def observe(self, bar, *, confirmed):
-        from .service import _pine_account_view, _planning_context
+        from .host_bar import _pine_account_view, _planning_context
         if time.monotonic() >= self.deadline:
             raise BacktestError("PROVIDER_TIMEOUT", "Pine callback run deadline exceeded")
         if self.session.last_sequence % 256 == 0:

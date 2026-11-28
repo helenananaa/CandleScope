@@ -24,9 +24,12 @@ import {
   buildTrainingRunCreateRequest,
   createTrainingRunDraft,
   evaluateTrainingRunSetupDraft,
+  preferHedgeCapableEntries,
 } from "./trainingHubModel.js";
 import type { TrainingRunDraft, TrainingRunDraftEvaluation } from "./trainingHubModel.js";
+import { fetchExchanges } from "../../services/api.js";
 import { defaultHubDraftStorage, hubDraftKey, readHubDraft, writeHubDraft, type HubDraftStorage } from "./trainingHubDraftStorage.js";
+import type { KlineSeriesIdentityWire } from "../market-data/klineSeriesIdentity.js";
 import type {
   ReplayLaunchContext,
   ReplayV2RunState,
@@ -138,6 +141,8 @@ export interface TrainingHubLifecycleOptions {
   readonly api?: TrainingHubApiBoundary;
   readonly navigateToRun?: (runId: string) => void;
   readonly launchContext?: ReplayLaunchContext;
+  /** The launching chart's kline series when it is not the exchange's own (ADR-DATA-002 D1). */
+  readonly launchSeries?: KlineSeriesIdentityWire;
   readonly clearDeletedRunState?: (
     runId: string,
     sessionIds: readonly string[],
@@ -183,6 +188,7 @@ export class TrainingHubLifecycle {
   private readonly api: TrainingHubApiBoundary;
   private readonly navigateToRun: (runId: string) => void;
   private readonly launchContext: ReplayLaunchContext | undefined;
+  private readonly launchSeries: KlineSeriesIdentityWire | undefined;
   private readonly clearDeletedRunState: (
     runId: string,
     sessionIds: readonly string[],
@@ -222,6 +228,7 @@ export class TrainingHubLifecycle {
     dataManager = new ReplayDataManager(),
     navigateToRun = defaultNavigateToRun,
     launchContext,
+    launchSeries,
     clearDeletedRunState = clearDeletedTrainingRunClientState,
     draftStorage = defaultHubDraftStorage(),
   }: TrainingHubLifecycleOptions = {}) {
@@ -234,6 +241,7 @@ export class TrainingHubLifecycle {
     } }, api);
     this.navigateToRun = navigateToRun;
     this.launchContext = launchContext;
+    this.launchSeries = launchSeries;
     this.clearDeletedRunState = clearDeletedRunState;
     this.draftStorage = draftStorage;
     this.draftStorageKey = hubDraftKey(launchContext);
@@ -290,10 +298,12 @@ export class TrainingHubLifecycle {
       // Local history may have been archived while the workbench was open.
       // Refresh source readiness together with coverage; an empty-history
       // capability cached before import must not keep creation disabled.
-      const [capabilities, preparationCapabilities] = await Promise.all([
+      const [capabilities, preparationCapabilities, exchanges] = await Promise.all([
         this.api.capabilities(this.abortController.signal),
         this.api.preparationCapabilities?.(this.abortController.signal)
           .catch(() => ({ enabled: false, replay_sources: { BAR: false, AGG_TRADE: false } })) ?? null,
+        // Only a default preference: without venue roles the first usable entry is used.
+        fetchExchanges().then((payload) => payload.exchanges).catch(() => null),
       ]);
       if (!this.accept(token)) return;
       this.capabilities = capabilities;
@@ -309,7 +319,10 @@ export class TrainingHubLifecycle {
       }, this.abortController.signal);
       if (!this.accept(token)) return;
       this.catalog = catalog;
-      this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
+      this.draft = preservedDraft ?? createTrainingRunDraft(
+        catalog, this.launchContext,
+        exchanges === null ? undefined : preferHedgeCapableEntries(exchanges),
+      );
       if (!preservedDraft && browserHost() && this.canPrepare(this.draft)) {
         const source = this.launchContext;
         this.draft = { ...this.draft, exchange: source?.exchange ?? "binance", marketType: source?.market_type ?? "spot",
@@ -578,6 +591,7 @@ export class TrainingHubLifecycle {
           && draft.accountDataMode === "APPROX_PROXY" && draft.positionMode === "ONE_WAY"
           && draft.bookMode === "OFF";
         const market = { exchange: draft.exchange, market_type: draft.marketType, symbol: draft.symbol,
+          ...this.seriesFor(draft),
           display_interval: draft.displayInterval,
           ...(draft.startMode === "RANDOM" && draft.randomScope === "MARKET" ? { random_by_market: true } : {}), ...(progressive ? { progressive: true } : {}) };
         const identity = JSON.stringify({ setup, market });
@@ -727,6 +741,14 @@ export class TrainingHubLifecycle {
     } catch (error) {
       this.fail(token, error);
     }
+  }
+
+  /** The launching chart's series follows the draft only while it is still that chart's market. */
+  private seriesFor(draft: TrainingRunDraft): { identity?: KlineSeriesIdentityWire } {
+    const context = this.launchContext;
+    return this.launchSeries && context && draft.exchange === context.exchange
+      && draft.marketType === context.market_type && draft.symbol === context.symbol
+      ? { identity: this.launchSeries } : {};
   }
 
   private accept(token: number): boolean {
@@ -973,14 +995,15 @@ export function useTrainingHub(
   options: TrainingHubLifecycleOptions = {},
 ): TrainingHubRuntime {
   const root = useReplayDataManager();
-  const { api, navigateToRun, launchContext } = options;
+  const { api, navigateToRun, launchContext, launchSeries } = options;
   const dataManager = options.dataManager ?? root?.replay;
   const lifecycle = useMemo(() => new TrainingHubLifecycle({
     ...(dataManager === undefined ? {} : { dataManager }),
     ...(api === undefined ? {} : { api }),
     ...(navigateToRun === undefined ? {} : { navigateToRun }),
     ...(launchContext === undefined ? {} : { launchContext }),
-  }), [api, dataManager, launchContext, navigateToRun]);
+    ...(launchSeries === undefined ? {} : { launchSeries }),
+  }), [api, dataManager, launchContext, launchSeries, navigateToRun]);
   const guard = useMemo(() => new TrainingHubEffectGuard(), []);
   useEffect(() => guard.mount(lifecycle), [guard, lifecycle]);
   const snapshot = useSyncExternalStore(

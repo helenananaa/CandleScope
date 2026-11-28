@@ -130,6 +130,8 @@ export interface ChartContextResolveRequest {
   start_time_ms: number | null;
   end_time_ms: number | null;
   fidelity_preference: "FAST" | "PRECISE";
+  /** The chart's series beyond its route; absent for the exchange's own (ADR-DATA-002 D1). */
+  identity?: Record<string, string>;
 }
 
 export interface ChartContextMaterializeRequest {

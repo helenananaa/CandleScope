@@ -1,3 +1,4 @@
+import type { KlineSeriesIdentityWire } from "../market-data/klineSeriesIdentity.js";
 import type { JournalApi } from "./journalApi.js";
 /** Wire contracts for `/api/v1/trading`. Decimals stay strings end to end. */
 
@@ -21,6 +22,8 @@ export interface TradingAccount {
   name: string;
   quoteCurrency: string;
   settings: Partial<PracticeSettings>;
+  /** Margins per contract the user entered for markets whose source publishes none (D5d). */
+  contractMargins?: ContractMargin[];
   createdAtMs: number;
   archived: boolean;
   capabilities: { placeOrders: boolean; manualFills: boolean; sync: boolean };
@@ -83,6 +86,8 @@ export interface Trade {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   direction: "long" | "short";
   status: TradeStatus;
   openedAtMs: number;
@@ -196,6 +201,8 @@ export interface PracticeOrder {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   side: "buy" | "sell";
   type: "market" | "limit" | "stop";
   qty: string;
@@ -216,6 +223,8 @@ export interface PracticeFeed {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The kline series this market follows, when it is not the exchange's own (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   status: string;
   detail: string;
   observedMs: number | null;
@@ -250,10 +259,46 @@ export interface Excursion {
 }
 
 /** The chart the rail is attached to: defaults for orders, notes and replay. */
+/** How practice accounts hold positions in one market (ADR-DATA-002 D5b). */
+export interface PracticeMarketRules {
+  accountModel: "cash" | "crypto_linear" | "crypto_inverse" | "futures_margin";
+  /** False when the catalog has no declaration and the market keeps the earlier rules. */
+  declared: boolean;
+  leverage: boolean;
+  shorting: boolean;
+  hedge: boolean;
+  opensPositions: boolean;
+  /** What the market's prices are quoted in; practice books them in the account's currency one for one. */
+  currency?: string;
+  /** What a quantity counts, from the catalog row (BTC for OKX's BTC-USDT-SWAP). */
+  baseAsset?: string;
+  /**
+   * The market's quantity grid (ADR-DATA-002 D5c, D5d), in base units such as
+   * shares or coins; a contract market's grid is its contract grid times the size.
+   */
+  quantityStep?: string;
+  minQuantity?: string;
+  /** Base units in one contract, for contract markets that declare it (D5d). */
+  contractSize?: string;
+  /** A per-contract market's margin per contract, in its quote currency (D5d). */
+  marginPerContract?: string;
+  /** "catalog" when the data source publishes the margin, "account" when the user entered it. */
+  marginSource?: "catalog" | "account";
+}
+
+export interface ContractMargin {
+  exchange: string;
+  marketType: string;
+  symbol: string;
+  marginPerContract: string;
+}
+
 export interface TradingChartContext {
   exchange: string;
   marketType: string;
   symbol: string;
+  /** The chart's kline series when it is not the exchange's own; orders and fills carry it (ADR-DATA-002 D1c). */
+  identity?: KlineSeriesIdentityWire;
   interval: string;
   lastPrice: number | null;
   /** PNG data URL of the current chart, or null when capture is unavailable. */

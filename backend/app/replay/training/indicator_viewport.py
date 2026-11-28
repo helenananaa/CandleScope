@@ -26,7 +26,7 @@ from .indicator_checkpoint import (
     normalized_parameters,
     restore_state,
 )
-from .indicator_history import IndicatorHistoryPreparing, validate_chunk
+from .indicator_history import IndicatorHistoryPreparing, continues, traded_boundary, validate_chunk
 from .indicator_prefix import CloseIndicatorBar, indicator_bar, validated_render_bars
 
 SCHEMA = "replay.viewport-indicator.v1"
@@ -46,6 +46,10 @@ def preceding_boundary(history, before, count):
     width = parse_interval_ms(interval)
     if not width:
         raise ValueError("invalid indicator display interval")
+    traded = traded_boundary(history, before, count)
+    if traded is not None:
+        # ADR-DATA-002 D2: warm up on traded bars across closures.
+        return max(history.origin_ms, traded)
     cursor = before
     for _ in range(count):
         if cursor <= history.origin_ms:
@@ -163,7 +167,7 @@ class ViewportReplayIndicators:
 
         def reset_for_gap(at, *, keep_outputs=False):
             nonlocal instance
-            if last_close is not None and at != last_close + 1:
+            if last_close is not None and not continues(history, last_close, at):
                 outputs = instance._outputs
                 colors = {
                     field: getattr(instance, field)

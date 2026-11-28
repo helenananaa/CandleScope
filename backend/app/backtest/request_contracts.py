@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from app.data_engine.series_identity import requested_series_identity
 from .native_contracts import RequestedNativeData, PineChartMetadata, ExecutionData, ExecutionEvent
 
 
@@ -194,9 +195,21 @@ class ChartContextResolveRequest(BaseModel):
     start_time_ms: int | None = None
     end_time_ms: int | None = None
     fidelity_preference: Literal["FAST", "PRECISE"]
+    # ADR-DATA-002 D1: the chart's series identity, as FOLLOW requests send it.
+    # An explicit default is stored as absent, so both hash the same.
+    identity: dict[str, str] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_default_identity(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("identity") is None:
+            data.pop("identity", None)
+        return data
 
     @model_validator(mode="after")
     def validate_range(self) -> ChartContextResolveRequest:
+        identity = requested_series_identity(self.exchange.strip().lower(), self.identity)
+        self.identity = identity.to_dict() if identity is not None else None
         if self.range_mode != "ALL_AVAILABLE":
             if self.start_time_ms is None or self.end_time_ms is None:
                 raise ValueError("VISIBLE and CUSTOM ranges require start/end times")

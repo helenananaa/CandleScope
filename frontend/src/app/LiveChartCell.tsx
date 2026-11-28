@@ -72,7 +72,7 @@ import {
   type WorkspaceCellDensity,
 } from "../features/chart-workspace/chartWorkspaceGeometry.js";
 import { useMarketDataRuntime } from "../features/market-data/useMarketDataRuntime.js";
-import { resolveKlineSeriesIdentity } from "../features/market-data/klineSeriesIdentity.js";
+import { klineSeriesIdentityField, resolveKlineSeriesIdentity } from "../features/market-data/klineSeriesIdentity.js";
 import { useLiveReferenceMarketChartSource } from "../features/market-chart-platform/useLiveReferenceMarketChartSource.js";
 import {
   initialViewportCountBackCapForCellCount,
@@ -137,6 +137,7 @@ import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { Icon } from "../components/icons/Icon.js";
 import { chartStrategyChartDataReady } from "../features/backtest/chart-tester/chartStrategyChartData.js";
+import { ContractPriceBadge } from "../features/symbol-search/ContractPriceBadge.js";
 
 const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
@@ -957,6 +958,7 @@ function LiveChartCell({
       exchange: chartSession.view.exchange,
       marketType: chartSession.view.marketType,
       symbol: chartSession.view.symbol,
+      ...klineSeriesIdentityField(liveSourceSession.exchange, liveSourceSession),
       interval: chartSession.view.interval,
       lastPrice: typeof lastClose === "number" && Number.isFinite(lastClose) ? lastClose : null,
       captureImage: () => captureChartPng(chartSurface.actions.getExportSnapshot()),
@@ -978,6 +980,7 @@ function LiveChartCell({
     chartSession.view.symbol,
     chartSurface.actions,
     lastClose,
+    liveSourceSession,
     openTradeReplay,
   ]);
   const tradingOverlay = useTradingChartOverlay({
@@ -1135,6 +1138,7 @@ function LiveChartCell({
             </span>
           )}
           <strong>{chartSession.view.symbol}</strong>
+          <ContractPriceBadge market={chartSession.view} />
           <span>{formatIntervalLabel(chartSession.view.interval)}</span>
           {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
             <span role="status" className="multi-chart-cell-history-only">{t("interval.historyOnly")}</span>
@@ -1294,6 +1298,7 @@ function LiveChartCell({
                 meta: sourceMarketData.view.meta,
               }, liveSourceSession)}
               continuousChartActive={active && !obscured && !study.masked && quickReplay === null}
+              liveBarsAvailable={chartSession.status.realtimeIntervalAvailable}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}

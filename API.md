@@ -270,7 +270,7 @@ The response contains `data` and an explicit `missing` key list. Records include
 
 ### `GET /market/history`
 
-Returns one bounded history page. P1 exposes history only for `funding_rate` and `open_interest`; OI requires `period` (`5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, or `1d`). Optional parameters are `start_ms`, `end_ms`, and `limit` from 1 to 1000. Funding keeps the legacy sparse settlement contract when `view` is omitted. For Binance futures, `view=hybrid` additionally requires the chart `period` and returns at most one point per closed chart candle: an authoritative exchange settlement when one exists, otherwise a no-lookahead estimate derived from cached Binance Premium Index 1m data.
+Returns one bounded history page. P1 exposes history only for `funding_rate` and `open_interest`; OI requires `period` (`5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, or `1d`). Optional parameters are `start_ms`, `end_ms`, and `limit` from 1 to 1000. Funding keeps the legacy sparse settlement contract when `view` is omitted. Markets that declare the `funding.hybrid_history` capability role (today Binance futures) accept `view=hybrid`, which additionally requires the chart `period` and returns at most one point per closed chart candle: an authoritative exchange settlement when one exists, otherwise a no-lookahead estimate derived from cached Binance Premium Index 1m data.
 
 ```http
 GET /api/v1/market/history?exchange=binance&market_type=futures&symbol=BTCUSDT&channel=open_interest&period=5m&limit=500
@@ -752,6 +752,7 @@ responses are in the backend's `/docs` schema.
 | Backtests | `/backtests` | Backtest runs and reports, with `/backtests/native`, `/backtests/continuous` and `/backtests/external` |
 | Practice accounts | `/trading` | Paper trading accounts, orders and the trade journal |
 | Read-only accounts | `/readonly-accounts` | Sync and reconcile a real exchange account, read-only |
+| Data sources | `/data-sources` | Save, test and remove your own keys for built-in sources (Twelve Data); desktop session only, keys are never returned |
 | Plugins | `/api/v2/plugins` (outside `/api/v1`) | Plugin catalog, installs and plugin runtimes |
 | Support | `/api/v1/support` | Diagnostics for a support report |
 

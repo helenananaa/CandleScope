@@ -10,6 +10,7 @@ from app.simulation.execution_realism import PINE_BAR_PATH_SCENARIO
 from .errors import BacktestError
 from .native_contracts import WorkbenchBarSettings
 from .pine_workbench import bar_event
+from .pine_ticker import pine_ticker_symbol
 from .pine_contract_metadata import bind_account_metadata
 
 
@@ -88,7 +89,7 @@ def freeze_account(wire, payload, *, settings=None):
     if data is None:
         wire["account_events"] = []
         return
-    if data.symbol != wire["context"]["symbol"].split(":")[-1]:
+    if data.symbol != pine_ticker_symbol(wire["context"]["symbol"]):
         raise BacktestError("DATA_SNAPSHOT_MISMATCH", "account-data symbol differs from chart")
     first_open = wire["bars"][0]["time"] * 1000
     last_close = bar_event(wire, len(wire["bars"]) - 1, 0).event_time_ms

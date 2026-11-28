@@ -211,6 +211,11 @@ def _clip_intraday_range(start_ms: int, end_ms: int) -> tuple[int, int] | None:
 
 
 def _require_intraday_schedule(start_ms: int, end_ms: int) -> None:
+    if int(start_ms) > int(end_ms):
+        # Empty, as on every other calendar: the range after a stored edge
+        # that already reaches the live edge. Clipping would report it as
+        # outside the schedule.
+        return
     clipped = _clip_intraday_range(start_ms, end_ms)
     if clipped is None or clipped != (int(start_ms), int(end_ms)):
         raise ValueError(

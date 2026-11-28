@@ -139,6 +139,10 @@ def serve_session(describe, factory):
                     output = {"supported": session is not None}
                 elif request["operation"] == "advance" and session is not None:
                     output = session.advance(request["target"])
+                elif (request["operation"] == "extend" and session is not None
+                      and callable(getattr(session, "extend", None))):
+                    # FOLLOW: the same input over bars that continue the session's history.
+                    output = session.extend(request)
                 else:
                     raise ValueError("invalid historical session operation")
             response = binding.encode(output, referenced)

@@ -40,6 +40,20 @@ def test_dependency_grid_shares_minute_download_and_keeps_previous_calendar_bar(
     assert requirements[1].start_ms == start - 3_600_000
 
 
+def test_a_non_default_series_keeps_its_identity_through_requirements_and_bindings():
+    """ADR-DATA-002 D1: a stock chart and the exchange's own series of that symbol stay apart."""
+    from tests.test_data_preparation import STOCK_IDENTITY
+
+    start = int(datetime(2026, 11, 2, tzinfo=timezone.utc).timestamp() * 1000)
+    context = dict(exchange="twelvedata", market_type="stock", symbol="AAPL", interval="5m",
+                   start_time_ms=start, end_time_ms=start + 3_600_000 - 1, identity=STOCK_IDENTITY)
+    requirements, bindings = plan_inputs(context, [
+        {**context, "interval": "15m"},
+        {key: value for key, value in context.items() if key != "identity"}])
+    assert [requirement.identity for requirement in requirements] == [STOCK_IDENTITY, None]
+    assert [binding.get("identity") for binding in bindings] == [STOCK_IDENTITY, STOCK_IDENTITY, None]
+
+
 @pytest.mark.parametrize("value,expected", [("60", "1h"), ("D", "1d"), ("W", "1w"), ("M", "1M")])
 def test_native_timeframe_keeps_calendar_semantics(value, expected):
     assert chart_interval(value) == expected
@@ -184,3 +198,12 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
     finally:
         await service.shutdown()
         runtime.shutdown()
+
+
+def test_pine_ticker_ids_keep_symbols_that_contain_a_colon():
+    from app.backtest.pine_ticker import pine_ticker_symbol
+
+    assert pine_ticker_symbol("BINANCE:BTCUSDT") == "BTCUSDT"
+    assert pine_ticker_symbol("BTCUSDT") == "BTCUSDT"
+    # Twelve Data symbols name their venue (ADR-DATA-002 D1): only the first ':' is the exchange.
+    assert pine_ticker_symbol("TWELVEDATA:AAPL:NASDAQ") == "AAPL:NASDAQ"

@@ -11,12 +11,21 @@ import json
 import uuid
 
 from app.data_engine.storage.prefix_watches import PrefixReceipt
+from .continuous_grid import bar_grid
 from .continuous_store import _text, _counter, _wire, fail, MAX_DEFINITION_BYTES
 
 STEP = 60_000
 MAX_INPUT_METADATA = 32_768
 MAX_CREATION_DEFINITION_BYTES = 64 * 1024 * 1024
 SUMMARY = "request_key,run_id,mode,from_ms,cutoff_ms,dataset_id,revision,phase,error_json"
+
+
+def _grid(definition):
+    """The bar grid of a market definition's series (B-333)."""
+    series = definition.get("source_series")
+    if not isinstance(series, list) or len(series) != 11 or type(series[3]) is not str:
+        raise fail("CONTINUOUS_INPUT_INVALID","Reserve a preflighted market definition before fixing input")
+    return bar_grid(series[3])
 
 
 def create_schema(db):
@@ -85,15 +94,16 @@ class ContinuousCreationJournal:
 
     def reserve(self,key,*,definition,mode,cutoff_ms,from_ms=None):
         _text(key,128);_counter(cutoff_ms)
-        if type(mode) is not str or mode not in {"HISTORY_LIVE","LIVE_ONLY"} or (cutoff_ms+1)%STEP:
-            raise fail("CONTINUOUS_INPUT_INVALID","Creation requires an exact closed UTC minute cutoff")
         if not isinstance(definition,Mapping) or "initial_snapshot" in definition or definition.get("source_kind")!="MARKET_BAR":
             raise fail("CONTINUOUS_INPUT_INVALID","Reserve a preflighted market definition before fixing input")
+        grid=_grid(definition)
+        if type(mode) is not str or mode not in {"HISTORY_LIVE","LIVE_ONLY"} or not grid.closes_bar(cutoff_ms):
+            raise fail("CONTINUOUS_INPUT_INVALID","Creation requires the exact close of a bar of the run's interval")
         wire=_wire(definition,MAX_DEFINITION_BYTES)
         if mode=="HISTORY_LIVE":
             _counter(from_ms)
-            if from_ms < STEP or from_ms%STEP:
-                raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty closed minute window")
+            if from_ms < STEP or not grid.aligned(from_ms):
+                raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty window of closed bars")
         elif from_ms is not None:
             raise fail("CONTINUOUS_INPUT_INVALID","Pure live creation cannot initialize chart history")
         with self.store._transaction():
@@ -103,8 +113,8 @@ class ContinuousCreationJournal:
                         or _wire(self._definition(row),MAX_DEFINITION_BYTES)!=wire):
                     raise fail("CONTINUOUS_COMMIT_CONFLICT","Creation key already owns different code or conditions")
                 return self._describe(row)  # Never move the first cutoff on retry.
-            if mode=="HISTORY_LIVE" and not 1<=(cutoff_ms+1-from_ms)//STEP<=200_000:
-                raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty closed minute window")
+            if mode=="HISTORY_LIVE" and not 1<=grid.count(from_ms,cutoff_ms)<=200_000:
+                raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty window of closed bars")
             if self.store.db.execute("SELECT count(*) FROM runs").fetchone()[0]+self._pending_count()>=self.store.max_runs:
                 raise fail("BUDGET_EXCEEDED","Continuing creation capacity reached")
             if self.store.db.execute("SELECT count(*) FROM creation_requests").fetchone()[0]>=self.store.max_runs*4:
@@ -161,7 +171,7 @@ class ContinuousCreationJournal:
             if (point.incarnation!=original.incarnation or point.through_ms!=row["cutoff_ms"]
                     or point.acquisition<=original.acquisition or point.version<original.version
                     or descriptor.get("dataset_id")!=row["dataset_id"]
-                    or descriptor.get("interval")!="1m" or descriptor.get("from_ms")!=row["from_ms"]
+                    or descriptor.get("interval")!=definition["source_series"][3] or descriptor.get("from_ms")!=row["from_ms"]
                     or descriptor.get("through_ms")!=row["cutoff_ms"] or descriptor.get("source_version")!=point.version
                     or not isinstance(descriptor.get("data_epoch"),str) or not 1<=len(descriptor["data_epoch"])<=256):
                 raise fail("CONTINUOUS_INPUT_INVALID","Frozen input must preserve the reserved source window and identity")

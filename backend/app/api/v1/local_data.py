@@ -23,6 +23,7 @@ from app.local_data import (
     LocalImportOptions,
 )
 from app.local_data.analysis_cache import bind_results, result_key
+from app.local_data.service import IMPORT_CALENDARS
 from app.local_data.indicator_compute import (
     LOCAL_INDICATOR_NAMES,
     MAX_LOCAL_INDICATOR_BARS,
@@ -176,6 +177,10 @@ async def capabilities(request: Request) -> dict[str, Any]:
             "calendar_source_rule": "continuous_fixed_source_dividing_one_hour",
             "calendar_max_aggregation_factor": 600_000,
         },
+        "import_calendars": [
+            {"calendar_id": calendar_id, "intervals": list(spec["intervals"]), "market": spec["market"]}
+            for calendar_id, spec in sorted(IMPORT_CALENDARS.items())
+        ],
         "static_indicators": sorted(LOCAL_INDICATOR_NAMES),
         "static_indicator_max_bars": MAX_LOCAL_INDICATOR_BARS,
         "max_upload_bytes": LOCAL_DATA_MAX_UPLOAD_BYTES,
@@ -448,6 +453,7 @@ async def import_csv(
     dataset_id: str | None = None,
     base_asset: str | None = None,
     quote_asset: str | None = None,
+    calendar_id: Annotated[str | None, Query(max_length=80)] = None,
 ) -> dict[str, Any]:
     service = _service(request)
     upload_path = service.new_upload_path()
@@ -474,6 +480,7 @@ async def import_csv(
             dataset_id=dataset_id,
             base_asset=base_asset,
             quote_asset=quote_asset,
+            calendar_id=calendar_id,
         )
         return await asyncio.to_thread(service.import_csv, upload_path, options)
     except LocalDatasetError as exc:
@@ -534,6 +541,7 @@ async def create_import_job(
     dataset_id: str | None = None,
     base_asset: str | None = None,
     quote_asset: str | None = None,
+    calendar_id: Annotated[str | None, Query(max_length=80)] = None,
 ) -> dict[str, Any]:
     service = _service(request)
     upload_path = service.new_upload_path()
@@ -556,6 +564,7 @@ async def create_import_job(
             dataset_id=dataset_id,
             base_asset=base_asset,
             quote_asset=quote_asset,
+            calendar_id=calendar_id,
         )
         job = _jobs(request).submit(upload_path, options)
         submitted = True

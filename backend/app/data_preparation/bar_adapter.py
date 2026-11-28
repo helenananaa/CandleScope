@@ -12,7 +12,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from app.data_engine.data_manager.backfill_contracts import RepairRequest
+from app.data_engine.history.expected_bars import bucket_end_ms, session_calendar
 from app.data_engine.kline_quality import source_is_trusted_final
+from app.data_engine.series_identity import SERIES_IDENTITY_METADATA_KEY
 from app.data_engine.storage.klines_repo import query_klines
 
 from .models import (
@@ -29,8 +31,11 @@ from .storage import storage_call
 class BarPreparationAdapter:
     def __init__(self, root: Path, *, coordinator, replay_service=None, local_data=None,
                  query=query_klines, now_ms=lambda: int(time.time() * 1000), backtest_runtime=None,
-                 host_history_path=None, replay_library=None):
+                 host_history_path=None, replay_library=None, calendar_for=None):
         self.root = Path(root)
+        # (symbol, interval, *, exchange, market_type, series_identity) -> the
+        # series' trading calendar (ADR-DATA-002 D2); None keeps the minute grid.
+        self.calendar_for = calendar_for
         self.root.mkdir(parents=True, exist_ok=True)
         self.coordinator = coordinator
         self.replay_library = replay_library
@@ -133,18 +138,43 @@ class BarPreparationAdapter:
             raise PreparationError("STORAGE_BUDGET", "Requested range exceeds the estimated input budget")
 
     def _rows(self, requirement):
+        identity = requirement.series_identity()
         return self.query(requirement.symbol, requirement.interval,
                           start_ms=requirement.start_ms, end_ms=requirement.end_ms - 1,
                           limit=(requirement.end_ms - requirement.start_ms) // 60_000 + 1,
-                          order="ASC", exchange=requirement.exchange, market_type=requirement.market_type)
+                          order="ASC", exchange=requirement.exchange, market_type=requirement.market_type,
+                          **({"series_identity": identity} if identity is not None else {}))
+
+    def requirement_calendar(self, requirement):
+        """The requirement's session calendar (ADR-DATA-002 D2), or None for the minute grid."""
+        return self._calendar(requirement)
+
+    def _calendar(self, requirement):
+        """The requirement's session calendar, or None for the plain minute grid."""
+        if self.calendar_for is None:
+            return None
+        try:
+            return session_calendar(self.calendar_for(
+                requirement.symbol, requirement.interval, exchange=requirement.exchange,
+                market_type=requirement.market_type, series_identity=requirement.series_identity()))
+        except Exception:
+            return None
 
     @staticmethod
-    def _complete(rows, requirement, *, require_trusted_source=True):
-        return len(rows) == (requirement.end_ms - requirement.start_ms) // 60_000 and all(
-            int(row["open_time"]) == requirement.start_ms + i * 60_000
-            and int(row["close_time"]) == requirement.start_ms + (i + 1) * 60_000 - 1
+    def _complete(rows, requirement, *, calendar=None, require_trusted_source=True):
+        """Every expected 1m bar of ``[start_ms, end_ms)``; a closed market expects none."""
+        if calendar is None:
+            return len(rows) == (requirement.end_ms - requirement.start_ms) // 60_000 and all(
+                int(row["open_time"]) == requirement.start_ms + i * 60_000
+                and int(row["close_time"]) == requirement.start_ms + (i + 1) * 60_000 - 1
+                and (not require_trusted_source or source_is_trusted_final(row.get("source")))
+                for i, row in enumerate(rows))
+        expected = list(calendar.expected_opens(requirement.start_ms, requirement.end_ms - 1, requirement.interval))
+        return len(rows) == len(expected) and all(
+            int(row["open_time"]) == open_ms
+            and int(row["close_time"]) == bucket_end_ms(calendar, open_ms, requirement.interval) - 1
             and (not require_trusted_source or source_is_trusted_final(row.get("source")))
-            for i, row in enumerate(rows))
+            for open_ms, row in zip(expected, rows))
 
     async def acquire(self, requirement: Requirement, key: str):
         if requirement.role == "TRADES":
@@ -161,7 +191,8 @@ class BarPreparationAdapter:
     async def complete_host_bars(self, requirement, key):
         """Read the requested closed 1m bars through the shared repair coordinator."""
         rows = await storage_call(self._rows, requirement)
-        if not self._complete(rows, requirement):
+        calendar = self._calendar(requirement)
+        if not self._complete(rows, requirement, calendar=calendar):
             if self.coordinator is None:
                 raise PreparationError("DOWNLOAD_UNAVAILABLE", "Historical download service is unavailable")
             repair = RepairRequest(
@@ -169,7 +200,8 @@ class BarPreparationAdapter:
                 start_ms=requirement.start_ms, end_ms=requirement.end_ms - 60_000,
                 exchange=requirement.exchange, market_type=requirement.market_type,
                 reason="data_preparation", priority=40, requester=f"preparation:{key}",
-                wait_policy="wait", metadata={"requires_trusted_finality": True},
+                wait_policy="wait", metadata={"requires_trusted_finality": True,
+                    **({SERIES_IDENTITY_METADATA_KEY: requirement.identity} if requirement.identity is not None else {})},
             )
             if hasattr(self.coordinator, "acquire_demand"):
                 request_id = self.coordinator.request(repair)
@@ -185,7 +217,7 @@ class BarPreparationAdapter:
             else:
                 await self.coordinator.request_and_wait(repair)
             rows = await storage_call(self._rows, requirement)
-        if not self._complete(rows, requirement):
+        if not self._complete(rows, requirement, calendar=calendar):
             raise PreparationError("COVERAGE_INCOMPLETE", "Historical source did not supply the complete requested range", retryable=True)
         await storage_call(self._record_host_history)
         return rows
@@ -206,6 +238,21 @@ class BarPreparationAdapter:
         if repository is None:
             return None
         from app.replay.history_archive import ReplayHistoryArchiveError
+        # A replay market records the one kline series it holds (ADR-DATA-002 D1):
+        # its rows serve only a requirement for that same series.
+        describe = getattr(repository, "describe_catalog", None)
+        if callable(describe):
+            try:
+                recorded = describe(requirement.symbol, requirement.interval,
+                    exchange=requirement.exchange, market_type=requirement.market_type)["identity"]
+            except ReplayHistoryArchiveError as exc:
+                if "series is unavailable" in str(exc):
+                    return None
+                raise
+            if recorded.get("series_identity") != requirement.identity:
+                return None
+        elif requirement.identity is not None:
+            return None
         try:
             rows = repository.query_bars(requirement.symbol, requirement.interval,
                 start_ms=requirement.start_ms, end_ms=requirement.end_ms - 1,
@@ -215,7 +262,8 @@ class BarPreparationAdapter:
             if "series is unavailable" in str(exc):
                 return None
             raise
-        return rows if self._complete(rows, requirement, require_trusted_source=False) else None
+        return rows if self._complete(rows, requirement, calendar=self._calendar(requirement),
+                                      require_trusted_source=False) else None
 
     def _write(self, rows, requirement, origin="host_history"):
         # Verify OHLC values with the existing importer at publication as well.
@@ -269,7 +317,8 @@ class BarPreparationAdapter:
                     raise ValueError("cached input checksum mismatch")
                 data = json.loads(raw)
                 requirement = Requirement.model_validate(data["requirement"])
-                if not self._complete(data["rows"], requirement, require_trusted_source=data["origin"] != "replay_archive"):
+                if not self._complete(data["rows"], requirement, calendar=self._calendar(requirement),
+                                      require_trusted_source=data["origin"] != "replay_archive"):
                     raise ValueError("cached input coverage mismatch")
                 after = path.stat()
                 if signature != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
@@ -448,7 +497,8 @@ class BarPreparationAdapter:
         requirement = request.requirements[0]
         feed = await storage_call(self.replay_service.progressive_history.create,
             f"preparation-{job_id}", ReplaySeriesIdentity(requirement.exchange,
-                requirement.market_type, requirement.symbol), planned["start_ms"], planned["end_ms"])
+                requirement.market_type, requirement.symbol, series=requirement.series_identity()),
+            planned["start_ms"], planned["end_ms"])
         return {**planned, "feed_id": feed["id"]}, fragments
 
     async def publish_progressive(self, request, chunks, job_id, plan, fragment):
@@ -593,9 +643,12 @@ class BarPreparationAdapter:
         groups = {}
         for chunk in chunks:
             req = chunk["requirement"]
-            group = (req["exchange"], req["market_type"], req["symbol"], req["interval"])
+            series = req.get("identity")
+            group = (req["exchange"], req["market_type"], req["symbol"], req["interval"],
+                     tuple(sorted(series.items())) if series else None)
             groups.setdefault(group, []).append(chunk)
-        for (exchange, market, symbol, interval), fragments in groups.items():
+        for (exchange, market, symbol, interval, _series), fragments in groups.items():
+            series_identity = Requirement.model_validate(fragments[0]["requirement"]).series_identity()
             if request.consumer == "REPLAY":
                 from app.replay.catalog import ReplaySeriesIdentity
                 from app.replay.history_archive import (
@@ -603,7 +656,9 @@ class BarPreparationAdapter:
                     ReplayHistoryImportBatch,
                 )
                 writer = ReplayHistoryArchiveWriter(self.replay_service.settings.replay_history_archive_dir)
-                identity = ReplaySeriesIdentity(exchange, market, symbol)
+                identity = ReplaySeriesIdentity(exchange, market, symbol, series=series_identity)
+                # ADR-DATA-002 D2: the archive records the series' session calendar.
+                calendar = self._calendar(Requirement.model_validate(fragments[0]["requirement"]))
                 # Publish bounded fragments; already completed immutable objects
                 # survive interruption and are deduplicated by the writer.
                 for fragment in fragments:
@@ -625,7 +680,8 @@ class BarPreparationAdapter:
                             rows=rows, source_provider=f"automatic_{fragment['receipt']['origin']}_snapshot",
                             source_object_key=fragment["key"],
                             source_period=f"{fragment['requirement']['start_ms']}:{fragment['requirement']['end_ms']}",
-                        )], listing_boundary_source="automatic_host_history_snapshot")
+                        )], listing_boundary_source="automatic_host_history_snapshot",
+                            calendar_id=None if calendar is None else calendar.calendar_id)
                         if self.publication_repository is not None:
                             from app.replay.shared_market_index import index_path
                             paths = []
@@ -654,7 +710,8 @@ class BarPreparationAdapter:
                     manifest = self.local_data.freeze_host_bars(
                         rows, dataset_id=f"local-{context[:32]}", name=f"{exchange} {symbol} {interval}",
                         exchange=exchange, market_type=market, symbol=symbol, interval=interval,
-                        chart_context_hash=f"sha256:{context}")
+                        chart_context_hash=f"sha256:{context}", series_identity=series_identity,
+                        calendar=self._calendar(Requirement.model_validate(fragments[0]["requirement"])))
                     self._record_dataset(manifest["dataset_id"], reservation=reservation)
                 result["inputs"].append({"exchange": exchange, "market_type": market, "symbol": symbol,
                                          "interval": interval, "dataset_id": manifest["dataset_id"],

@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any, Iterable
 
 from .models import dec_str
+from .series import series_view
 
 ZERO = Decimal("0")
 
@@ -65,6 +66,9 @@ class Trade:
     position_side: str | None = None
     remaining_cost: Decimal = ZERO
     legs: list[FillLeg] = field(default_factory=list)
+    # Canonical JSON of the kline series the opening fill was on (ADR-DATA-002
+    # D1c); None is the exchange's own series.
+    series_identity: str | None = None
 
     @property
     def status(self) -> str:
@@ -102,6 +106,7 @@ class Trade:
             "exchange": self.exchange,
             "marketType": self.market_type,
             "symbol": self.symbol,
+            **series_view(self.series_identity),
             "direction": self.direction,
             **({"positionSide": self.position_side} if self.position_side else {}),
             "status": self.status,
@@ -186,6 +191,7 @@ def build_trades(account_id: str, fills: Iterable[dict[str, Any]]) -> list[Trade
                     position_side=position_side,
                     direction="long" if fill_sign > 0 else "short",
                     opened_at_ms=int(fill["ts_ms"]),
+                    series_identity=fill.get("series_identity"),
                 )
                 role = "open"
             else:
