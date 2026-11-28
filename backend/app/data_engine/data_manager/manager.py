@@ -360,6 +360,8 @@ class DataManager(DataManagerCore):
         }
         self._backfill_trigger: BackfillTrigger | None = None
         self._backfill_suppression_lookup: Any | None = None
+        # HistoryDemandRouter when HISTORY_SYMBOL_PLANNER_ENABLED (ADR-DATA-001 S5).
+        self._history_router: Any | None = None
 
         # ── BarAggregator (L1–L5) ───────────────────────────
         self.bar_aggregator = BarAggregator(
@@ -382,6 +384,7 @@ class DataManager(DataManagerCore):
             storage_provider=lambda: self.query_engine.storage,
             backfill_trigger_provider=lambda: self._backfill_trigger,
             interval_resolver=self.interval_resolver,
+            history_router_provider=lambda: self._history_router,
         )
         self.retention = RetentionService(
             cache=self.cache,
@@ -763,6 +766,31 @@ class DataManager(DataManagerCore):
         # direct callbacks for standalone use, but facade queries submit the
         # structured MissingRange results below.
         self.query_engine.set_backfill_trigger(None)
+
+    def set_history_router(self, router: Any | None) -> None:
+        """Route single-base chart reads' missing base ranges to the per-symbol planner.
+
+        ``router`` is a ``symbol_history.router.HistoryDemandRouter``; None
+        keeps every missing range on the per-request path.
+        """
+        self._history_router = router
+
+    def enable_history_planner(self, coordinator: Any, *, loop: Any) -> Any:
+        """Attach a per-symbol history planner running pieces on ``coordinator`` (ADR-DATA-001 S5)."""
+        from .symbol_history.router import HistoryDemandRouter
+
+        router = HistoryDemandRouter(
+            coordinator,
+            loop=loop,
+            project_target=self.query_engine.custom_intervals.project_base_repair_to_target,
+            trigger_target=coordinator.trigger,
+        )
+        self.set_history_router(router)
+        return router
+
+    def get_history_router(self) -> Any | None:
+        """Return the attached history planner router, if the planner is enabled."""
+        return self._history_router
 
     async def _handle_ingestion_gap(self, key: SeriesKey, marker: Any) -> None:
         if (getattr(getattr(marker, "stream_type", None), "value", None) != "kline"
@@ -1507,6 +1535,56 @@ class DataManager(DataManagerCore):
             if not submit or self._backfill_trigger is None:
                 continue
             demand_reason = reason or self._semantic_reason_for_missing(missing.reason)
+            router = self._history_router
+            # The base slots this gap needs, for the planner: a derived read's
+            # base gap as it is; a cold mixed read reports closed target
+            # buckets instead (mixed_query), whose repair fetches the single
+            # base anyway, so plan their base slots.
+            planned_base = None
+            if router is not None and result_identity.is_legacy_default_for(result.exchange):
+                if derived_target is not None:
+                    planned_base = (missing.interval, missing.start_ms, missing.end_ms)
+                elif (
+                    missing.interval == result.interval
+                    and result.metadata.get("mixed_target_repair") is True
+                ):
+                    planned_base = router.base_range_of(
+                        exchange=missing.exchange,
+                        market_type=missing.market_type,
+                        target_interval=result.interval,
+                        start_ms=missing.start_ms,
+                        end_ms=missing.end_ms,
+                    )
+            if (
+                planned_base is not None
+                and router.takes(
+                    exchange=missing.exchange,
+                    market_type=missing.market_type,
+                    target_interval=result.interval,
+                    base_interval=planned_base[0],
+                    requester=requester,
+                    metadata=backfill_metadata,
+                )
+            ):
+                piece_ids = router.register(
+                    symbol=missing.symbol,
+                    exchange=missing.exchange,
+                    market_type=missing.market_type,
+                    target_interval=result.interval,
+                    base_interval=planned_base[0],
+                    start_ms=planned_base[1],
+                    end_ms=planned_base[2],
+                    reason=demand_reason,
+                    requester=requester,
+                    metadata={
+                        **dict(backfill_metadata or {}),
+                        "query_reason": missing.reason,
+                    },
+                )
+                if piece_ids:
+                    request_ids.extend(piece_ids)
+                    submitted += 1
+                    continue
             metadata = {
                 "query_reason": missing.reason,
                 "requires_trusted_finality": (
