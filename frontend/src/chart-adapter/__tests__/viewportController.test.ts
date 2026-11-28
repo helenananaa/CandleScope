@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isFewBarFit,
+  isFewBarFitSpacing,
   logicalRangeForLatestBarPosition,
   ViewportController,
 } from "../viewportController.js";
@@ -425,4 +427,96 @@ test("structural compensation bypasses the interaction lock", () => {
 
   mustBeDefined(unlock)();
   assert.deepEqual(calls, [["setVisibleLogicalRange", { from: 13, to: 23 }]]);
+});
+
+test("a captured live tail follows rows added after the latest bar, keeping zoom and right space", () => {
+  const { chart, calls, timeScale } = createChart();
+  let content = { from: 0, to: 488 };
+  const controller = new ViewportController({ chartProvider: () => chart, contentLogicalRangeProvider: () => content });
+  // RC reopen: the restore placed the view on the stored tail with 5 bars of right space.
+  timeScale.range = { from: -11, to: 493 };
+  const tail = controller.captureLiveTail();
+  assert.deepEqual(tail, { rightOffset: 5, span: 504 });
+
+  content = { from: 0, to: 499 };
+  assert.equal(controller.followLiveTail(tail), true);
+  assert.deepEqual(calls.at(-1), ["setVisibleLogicalRange", { from: 0, to: 504 }]);
+});
+
+test("no live tail is captured while the latest bar is off screen or new bars are frozen", () => {
+  const { chart, timeScale } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart, contentLogicalRangeProvider: () => ({ from: 0, to: 499 }) });
+  timeScale.range = { from: 100, to: 300 };
+  assert.equal(controller.captureLiveTail(), null);
+  timeScale.range = { from: 0, to: 498.4 };
+  assert.equal(controller.captureLiveTail(), null);
+  timeScale.range = { from: 0, to: 498.6 };
+  assert.notEqual(controller.captureLiveTail(), null);
+
+  assert.equal(controller.restoreProjectionRange({ from: 0, to: 499 }, { immediate: true, freezeOnNewBars: true }), true);
+  assert.equal(controller.captureLiveTail(), null);
+  assert.equal(controller.followLiveTail(null), false);
+});
+
+test("a fit is few-bar when it zooms in past the chart's default spacing", () => {
+  // #572 smoke test: a 762 px plot fitted 4 bars + 5 bars of right offset at 84.7 px.
+  assert.equal(isFewBarFit({ bars: 4, rightOffset: 5, plotWidth: 762, defaultBarSpacing: 8 }), true);
+  assert.equal(isFewBarFit({ bars: 500, rightOffset: 5, plotWidth: 762, defaultBarSpacing: 8 }), false);
+  // 762 / (90 + 5) = 8.02: still wider than the default.
+  assert.equal(isFewBarFit({ bars: 90, rightOffset: 5, plotWidth: 762, defaultBarSpacing: 8 }), true);
+  assert.equal(isFewBarFit({ bars: 91, rightOffset: 5, plotWidth: 762, defaultBarSpacing: 8 }), false);
+  assert.equal(isFewBarFit({ bars: 0, rightOffset: 5, plotWidth: 762, defaultBarSpacing: 8 }), false);
+  assert.equal(isFewBarFit({ bars: 4, rightOffset: 5, plotWidth: 0, defaultBarSpacing: 8 }), false);
+});
+
+test("a saved spacing is a few-bar fit only when it is exactly a fit of the pane width", () => {
+  const pane = { plotWidth: 762, defaultBarSpacing: 8 };
+  // The 1.0.0 profile from the smoke test: 762 / 9.
+  assert.equal(isFewBarFitSpacing(84.66666666666667, pane), true);
+  // A full-window fit is not wider than the default.
+  assert.equal(isFewBarFitSpacing(762 / 505, pane), false);
+  // A wheel zoom from that fit (LWC scales the spacing by the wheel delta).
+  assert.equal(isFewBarFitSpacing(84.66666666666667 * 0.94, pane), false);
+  assert.equal(isFewBarFitSpacing(72.90222222222222, { plotWidth: 698, defaultBarSpacing: 8 }), false);
+  // The window was resized since the save.
+  assert.equal(isFewBarFitSpacing(84.66666666666667, { plotWidth: 800, defaultBarSpacing: 8 }), false);
+  // The default spacing itself (a reset view) is not a few-bar fit.
+  assert.equal(isFewBarFitSpacing(8, { plotWidth: 800, defaultBarSpacing: 8 }), false);
+  assert.equal(isFewBarFitSpacing(Number.NaN, pane), false);
+  assert.equal(isFewBarFitSpacing("84.67", pane), false);
+});
+
+test("the controller judges fits against the plot width and the chart's own default spacing", () => {
+  const { chart } = createChart();
+  let content = { from: 0, to: 3 };
+  const controller = new ViewportController({ chartProvider: () => chart, contentLogicalRangeProvider: () => content });
+  // The mock plot is 600 px with a default spacing of 6: 600 / (4 + 5) = 66.7.
+  assert.equal(controller.contentFitIsFewBar(), true);
+  content = { from: 0, to: 499 };
+  assert.equal(controller.contentFitIsFewBar(), false);
+  assert.equal(controller.spacingIsFewBarFit(600 / 9), true);
+  assert.equal(controller.spacingIsFewBarFit(600 / 9.3), false);
+});
+
+test("refitContent fits the market rows and never waits behind a user gesture", () => {
+  const { chart, calls } = createChart();
+  let unlock: (() => void) | undefined;
+  let content = { from: 0, to: 3 };
+  const controller = new ViewportController({
+    chartProvider: () => chart,
+    contentLogicalRangeProvider: () => content,
+    setTimer: (fn) => {
+      unlock = fn;
+      return timerFixture(11);
+    },
+    clearTimer: () => {},
+  });
+  content = { from: 0, to: 499 };
+  assert.equal(controller.refitContent(), true);
+  assert.deepEqual(calls, [["setVisibleLogicalRange", { from: 0, to: 504 }]]);
+
+  controller.markUserInteracting();
+  assert.equal(controller.refitContent(), false);
+  mustBeDefined(unlock)();
+  assert.equal(calls.length, 1);
 });

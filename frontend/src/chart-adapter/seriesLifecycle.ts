@@ -27,6 +27,13 @@ export const INDICATOR_SERIES_INCREMENTAL_GRACE_MS = 1_500;
 type AdapterChart = IChartApiBase<ChartTime>;
 type FutureAxisSeries = ISeriesApi<"Line", ChartTime>;
 
+function sameLogicalRange(
+  left: { from: number; to: number },
+  right: { from: number; to: number } | null,
+): boolean {
+  return right !== null && Math.abs(left.from - right.from) < 1e-7 && Math.abs(left.to - right.to) < 1e-7;
+}
+
 function addDynamicMainSeries(
   chart: AdapterChart,
   method: "addSeries" | "addCustomSeries",
@@ -179,7 +186,12 @@ export function replaceFutureTimeAxisData(
   scale.applyOptions({ shiftVisibleRangeOnNewBar: false });
   try {
     series.setData(futureTimeAxisRenderData(data));
-    if (range) scale.setVisibleLogicalRange(range);
+    // Put the range back only if the carrier moved it. The chart applies a
+    // requested range at its next draw, and a write here replaces one made
+    // earlier in the same frame (a live-tail follow after a window commit).
+    if (range && !sameLogicalRange(range, scale.getVisibleLogicalRange())) {
+      scale.setVisibleLogicalRange(range);
+    }
   } finally {
     scale.applyOptions({ shiftVisibleRangeOnNewBar: shift });
   }

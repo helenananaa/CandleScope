@@ -17,6 +17,26 @@ export function normalizeLocale(value: unknown): LocaleId {
   return resolveLocale(value, registrations) ?? DEFAULT_LOCALE;
 }
 
+/** The system's preferred languages, most preferred first; empty where no browser is available. */
+export function systemLanguages(): readonly string[] {
+  if (typeof navigator === "undefined") return [];
+  const languages: readonly string[] | undefined = navigator.languages;
+  if (languages && languages.length > 0) return languages;
+  return typeof navigator.language === "string" && navigator.language ? [navigator.language] : [];
+}
+
+/**
+ * The first supported language among the system's preferences, matched like saved values
+ * (parents and aliases); undefined when none is supported.
+ */
+export function detectSystemLocale(languages: readonly string[] = systemLanguages()): LocaleId | undefined {
+  for (const language of languages) {
+    const locale = resolveLocale(language, registrations);
+    if (locale) return locale;
+  }
+  return undefined;
+}
+
 function applyDocumentLang(locale: LocaleId): void {
   if (typeof document === "undefined") return;
   document.documentElement.lang = locale;

@@ -12,6 +12,7 @@ import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
+import { seriesPricePrecision } from "../../chart-adapter/mainSeriesPriceFormat.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
@@ -72,11 +73,11 @@ import {
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
 import { replayChartEventBarTime, replayChartNotePoints, useReplayChartNoteVersions } from "./replayChartAnnotations.js";
-import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
+import { replayChartTradeInputs, replayFillMarkerText } from "./replayChartTradeInputs.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
   formatReplayTimeAxisLabel,
-  replayDateNavigationEnabled,
+  replayViewNavigationMode,
   replayPublicTimePolicy,
   replayTimeAxisMaxCharacterLength,
 } from "./replayPublicTimeModel.js";
@@ -342,11 +343,16 @@ export default function ReplayTrainingPageShell({
     config?.blind_mode,
   );
   const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
+  const viewNavigation = replayViewNavigationMode({
+    active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
+  });
   const dateNavigation = useChartTimeNavigation({
     active: cell?.active ?? true,
-    enabled: replayDateNavigationEnabled({
-      active, reviewing: review !== null, publicTimePolicy, loading: viewer.loading,
-    }),
+    enabled: viewNavigation !== null,
+    // Shortcuts stop at the revealed boundary, and Last viewed outlives clock moves.
+    ceilingMs: runtime.store.virtualTimeMs,
+    lastViewedKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
+      viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval]),
     cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
     sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
       viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),
@@ -957,7 +963,15 @@ export default function ReplayTrainingPageShell({
   const tradeInputs = useMemo(() => replayChartTradeInputs(runtime.store,
     cell?.projectionBoundaryMs ?? null, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay),
   [runtime.store, cell?.projectionBoundaryMs, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay]);
+  // The precision the chart's price scale shows, recomputed when bars are added
+  // or the window moves rather than on every tick of the forming bar.
+  const viewerAxisRevision = Number(displayedSeriesStore.axisRevision);
+  const pricePrecision = useMemo(() => {
+    void viewerAxisRevision;
+    return viewerBarCount > 0 ? seriesPricePrecision(displayedSeriesStore.snapshot()) : undefined;
+  }, [displayedSeriesStore, viewerAxisRevision, viewerBarCount]);
   const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => {
+    const labels = { buy: t("replay.shell.buy", {}, locale), sell: t("replay.shell.sell", {}, locale) };
     const data = tradeInputs.fills.flatMap(fill => {
       const time = replayChartEventBarTime(fill.event_time_ms, displayedInterval, closedBarClock);
       if (time === null || !displayedSeriesStore.hasTime(time)) return [];
@@ -966,13 +980,13 @@ export default function ReplayTrainingPageShell({
         position: fill.side === "BUY" ? "below" : "above",
         shape: fill.side === "BUY" ? "arrow_up" : "arrow_down",
         color: fill.side === "BUY" ? "#16a34a" : "#e11d48",
-        text: `${fill.side === "BUY" ? t("replay.shell.buy", {}, locale) : t("replay.shell.sell", {}, locale)} ${fill.quantity} @ ${fill.price}`,
+        text: replayFillMarkerText(fill, labels, pricePrecision),
       }];
     });
     return data.length ? [{ id: "replay-trade-fills", pane: "main", data }] : [];
   // The store retains its identity across history and projection updates.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tradeInputs.fills, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale]);
+  }, [tradeInputs.fills, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale, pricePrecision]);
   const replayTradeHlines = useMemo<IndicatorHLine[]>(() => {
     const selectedTrackId = viewer.viewerState?.selected_track_id;
     const portfolio = tradeInputs.portfolio;
@@ -983,6 +997,7 @@ export default function ReplayTrainingPageShell({
       instrumentRules: portfolio?.schema_version === "replay.training.portfolio.v2"
         ? portfolio.instrument_rules
         : [],
+      pricePrecision,
     });
     for (const order of tradeInputs.orders) {
       if (order.status !== "OPEN" && order.status !== "PARTIALLY_FILLED") continue;
@@ -1009,7 +1024,7 @@ export default function ReplayTrainingPageShell({
       });
     }
     return lines;
-  }, [locale, tradeInputs.orders, tradeInputs.portfolio, viewer.viewerState?.selected_track_id]);
+  }, [locale, pricePrecision, tradeInputs.orders, tradeInputs.portfolio, viewer.viewerState?.selected_track_id]);
   const chartMarkers = useMemo(() => [
     ...indicators.view.markers,
     ...replayTradeMarkers,
@@ -1328,7 +1343,7 @@ export default function ReplayTrainingPageShell({
             </div>
           </>}
           actions={[
-            ...(dateNavigation.available ? [{ id: "view-date", label: t("study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
+            ...(dateNavigation.available ? [{ id: "view-date", label: t(viewNavigation === "relative" ? "chartTime.move" : "study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
             ...(active ? [{
               id: "integrity", label: review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing"),
               expanded: integrityOpen, controls: "replay-integrity-drawer", anchorRef: integrityToggleRef,
@@ -1367,6 +1382,7 @@ export default function ReplayTrainingPageShell({
       featureSurfaces={active ? <>
         {dateNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={cell?.cellId ?? controlCellId}
           onClose={() => dateNavigation.setOpen(false)} onSubmit={dateNavigation.submit}
+          shortcuts={dateNavigation.shortcuts} hideDates={viewNavigation === "relative"}
           {...(runtime.store.virtualTimeMs === null ? {} : { initialTimeMs: runtime.store.virtualTimeMs })}
           hint={t("study.viewDateHint")} /></Suspense>}
         {chartSettingsOpen && <PageSettingsDialog runtime={chartSettingsRuntime} onClose={() => setChartSettingsOpen(false)} />}

@@ -234,3 +234,19 @@ test("saving an interval alias writes only its canonical composite key", () => {
     assert.equal(Object.prototype.hasOwnProperty.call(parsed, "binance::spot::BTCUSDT::60m"), false);
   });
 });
+
+test("a provisional few-bar fit is not saved and keeps the earlier entry", () => {
+  withLocalStorage({}, (storage) => {
+    saveVisibleRangeForInterval(
+      "BTCUSDT", "1m", { barSpacing: 84.67, rightOffset: 5, rightmostTime: 300, provisionalFit: true }, "spot", "binance");
+    assert.equal(storage.getItem(VISIBLE_RANGE_KEY), null);
+
+    saveVisibleRangeForInterval("BTCUSDT", "1m", { barSpacing: 1.5, rightOffset: 5, rightmostTime: 300 }, "spot", "binance");
+    saveVisibleRangeForInterval(
+      "BTCUSDT", "1m", { barSpacing: 84.67, rightOffset: 5, rightmostTime: 360, provisionalFit: true }, "spot", "binance");
+    assert.deepEqual(
+      getVisibleRangeForInterval("BTCUSDT", "1m", "spot", "binance"),
+      { barSpacing: 1.5, rightOffset: 5, rightmostTime: 300, savedAt: mustBeDefined(getVisibleRangeForInterval("BTCUSDT", "1m", "spot", "binance")?.savedAt) },
+    );
+  });
+});

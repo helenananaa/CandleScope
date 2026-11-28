@@ -69,6 +69,11 @@ from .models import (
     FetchReceipt,
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
+from .route_health import (
+    URGENT_ARCHIVE_DEADLINE_SECONDS,
+    ArchiveDeadlineExceeded,
+    is_urgent_history_demand,
+)
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
 
 logger = logging.getLogger("backfill.Fetcher")
@@ -786,6 +791,24 @@ class HistoricalFetcher:
         )
         return result
 
+    def _await_archive(self, future, ref, deadline: float | None):
+        if deadline is None or future.done():
+            return future
+        return self._await_archive_until(future, ref, deadline)
+
+    async def _await_archive_until(self, future, ref, deadline: float):
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), deadline)
+        except TimeoutError:
+            pass
+        self._metrics.inc("archive_deadline_rest_fallbacks")
+        router = self._source_router
+        if router is not None:
+            router.route_health.record_failure(ref.exchange, "archive object deadline")
+        raise ArchiveDeadlineExceeded(
+            f"archive object not ready within {deadline:g}s; using REST for this range"
+        )
+
     async def _fetch_routed_task(
         self,
         task: BackfillTask,
@@ -807,9 +830,13 @@ class HistoricalFetcher:
             for start_ms, end_ms in uncovered
         ]
 
+        # A chart waiting on screen gets REST for any object that is not ready
+        # in time; the shielded download keeps filling the cache.
+        deadline = (URGENT_ARCHIVE_DEADLINE_SECONDS
+                    if is_urgent_history_demand(task.metadata) else None)
         try:
             archive_values = await asyncio.gather(
-                *(route_plan.future_for(ref) for ref in refs),
+                *(self._await_archive(route_plan.future_for(ref), ref, deadline) for ref in refs),
                 return_exceptions=True,
             )
         except BaseException:

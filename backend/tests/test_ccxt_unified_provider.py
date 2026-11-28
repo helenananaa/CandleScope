@@ -555,8 +555,8 @@ def test_unified_order_book_is_bounded_snapshot_with_local_revision() -> None:
     }
     first = projector.project(book, received_at_ms=1_700_000_000_001)[0]
     second = projector.project(book, received_at_ms=1_700_000_000_002)[0]
-    assert first.payload["local_revision"] == 1
-    assert second.payload["local_revision"] == 2
+    assert first.payload["local_revision"] >= 1
+    assert second.payload["local_revision"] == first.payload["local_revision"] + 1
 
     event = CcxtUnifiedNormalizer(descriptor).parse(
         RawMessage(
@@ -568,7 +568,7 @@ def test_unified_order_book_is_bounded_snapshot_with_local_revision() -> None:
     )
     assert event is not None
     assert event.data["source_quality"] == "ccxt_managed_snapshot"
-    assert event.data["last_update_id"] == 1
+    assert event.data["last_update_id"] == first.payload["local_revision"]
     assert len(event.data["bids"]) == 5
     assert event.data["bids"][0] == [10.0, 2.0]
     assert event.data["asks"][0] == [11.0, 2.0]
@@ -897,6 +897,14 @@ class _CountingRestExchange(_UnifiedFakeExchange):
         self.ticker_calls += 1
         return {"symbol": symbol, "last": 11.0, "timestamp": 1_700_000_000_000}
 
+    async def fetch_order_book(self, symbol: str) -> dict[str, Any]:
+        assert symbol == "BTC/USDT"
+        return {
+            "timestamp": 1_700_000_000_000,
+            "bids": [[10, 2]],
+            "asks": [[11, 3]],
+        }
+
 
 def _counting_exchange_factory(
     monkeypatch: Any,
@@ -947,6 +955,48 @@ def test_generic_rest_fetch_reuses_pooled_exchange_and_returns_unified_rows(
     assert created[0].load_calls == 1
     assert created[0].close_calls == 1
     assert plugin.history_transport_snapshot(config) is None
+
+
+def test_order_book_revisions_keep_rising_across_projector_rebuild_and_rest(
+    monkeypatch: Any,
+) -> None:
+    # A live feed keeps its partial-book engine state while its CCXT session
+    # rebuilds the projector (runtime reattach) or falls back to REST
+    # snapshots.  A revision that restarts there is rejected as stale until it
+    # passes the old count, so the panel stays stale for as long as the feed
+    # had already run.
+    _counting_exchange_factory(monkeypatch)
+    descriptor = _descriptor(StreamType.DEPTH)
+    book = {"timestamp": 1_700_000_000_000, "bids": [[10, 2]], "asks": [[11, 3]]}
+
+    def project(projector: CcxtUnifiedProjector) -> int:
+        return projector.project(book, received_at_ms=1_700_000_000_001)[0].payload[
+            "local_revision"
+        ]
+
+    before = CcxtUnifiedProjector(exchange_id="bybit", market_type="spot", descriptor=descriptor)
+    last_before_rebuild = max(project(before) for _ in range(5))
+    rebuilt = CcxtUnifiedProjector(exchange_id="bybit", market_type="spot", descriptor=descriptor)
+    after_rebuild = project(rebuilt)
+    assert after_rebuild > last_before_rebuild
+
+    plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("bybit"))
+    config = IngestionConfig(proxy_mode="none")
+
+    async def fetch() -> list[RawMessage]:
+        try:
+            return await plugin.fetch_history_with_config(
+                TransportRequest(descriptor=descriptor, limit=5),
+                config,
+            )
+        finally:
+            await plugin.close_history_transport(config)
+
+    rows = asyncio.run(fetch())
+    assert len(rows) == 1
+    assert rows[0].payload["kind"] == "order_book"
+    assert rows[0].payload["local_revision"] > after_rebuild
+    assert project(rebuilt) > rows[0].payload["local_revision"]
 
 
 def test_generic_one_shot_rest_fetch_closes_its_exchange(

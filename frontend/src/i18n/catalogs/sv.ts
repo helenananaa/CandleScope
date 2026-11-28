@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySwedish, replayNoteSwedish, tradeHistorySwedish, readonlyAccountSwedish, continuousSwedish, tradingAccountsSv, nativeSwedish } from "./swedishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const sv = {
   ...unifiedMessages["sv"],
+  ...drawingAnnotationMessages["sv"],
   ...syntheticEnglish,
   ...continuousSwedish,
   ...tradeHistorySwedish,
@@ -1246,6 +1253,15 @@ export const sv = {
   "settings.proxy.previewNodes": "Förhandsvisa noder",
   "settings.proxy.useNodes": "Använd valda noder",
   "settings.proxy.skippedNodes": "Antal överhoppade noder utan stöd: {count}",
+  "settings.proxy.autoRefresh": "Automatisk uppdatering",
+  "settings.proxy.autoRefreshOff": "Av",
+  "settings.proxy.autoRefreshEvery": "Intervall: {duration}",
+  "settings.proxy.autoRefreshHelp": "Kontrollerar sparade prenumerationer med detta intervall. Noder du använder får leverantörens aktuella inställningar. Nya noder läggs inte till, och en nod som leverantören tagit bort behåller sina senaste inställningar.",
+  "settings.proxy.refreshPending": "Inte kontrollerad automatiskt ännu",
+  "settings.proxy.refreshChecked": "Senast kontrollerad: {time}",
+  "settings.proxy.refreshFailed": "Automatisk uppdatering misslyckades: {time}",
+  "settings.proxy.refreshUpdated": "Uppdaterade noder: {count} · {time}",
+  "settings.proxy.refreshMissing": "Finns inte längre i prenumerationen: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Börs-ID:n (kommaseparerade; tomt betyder alla)",
   "settings.proxy.enabled": "Aktiverad",
@@ -3672,6 +3688,13 @@ export const sv = {
   "chartTester.prepareDataRun": "Förbered data och kör",
   "chartTester.run.resolving": "Kontrollerar…",
   "chartTester.run.waitingForChart": "Diagramdata laddas fortfarande…",
+  "appUpdate.available": "CandleScope {version} är tillgänglig",
+  "appUpdate.current": "Du använder {version}. Ladda ned den nya versionen från dess releasesida.",
+  "appUpdate.view": "Visa release",
+  "appUpdate.skip": "Hoppa över den här versionen",
+  "settings.updates.title": "Uppdateringar",
+  "settings.updates.check": "Sök efter uppdateringar",
+  "settings.updates.checkHint": "Frågar GitHub vid start och en gång om dagen om det finns en nyare version av CandleScope. Inget laddas ned eller installeras.",
   "chartTester.run.queued": "Köad",
   "chartTester.run.running": "Kör",
   "chartTester.stopObserving": "Sluta vänta",
@@ -4155,4 +4178,9 @@ export const sv = {
   "chartTester.deleteDraft": "Ta bort",
   "chartTester.deleteRetiredDraft": "Ta bort det avvecklade utkastet {name}",
   "chartTester.deleteRetiredDraftFailed": "Det avvecklade utkastet kunde inte tas bort. Försök igen.",
+  ...drawingSelectionMessages["sv"],
+  ...drawingCalculatedMessages["sv"],
+  ...replayDrawingSaveMessages["sv"],
+  ...chartTimeZoneMessages["sv"],
+  ...chartTimeShortcutMessages["sv"],
 } as const satisfies MessageCatalog;

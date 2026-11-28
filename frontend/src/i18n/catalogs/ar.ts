@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyArabic, replayNoteArabic, tradeHistoryArabic, readonlyAccountArabic, continuousArabic, tradingAccountsAr, nativeArabic } from "./arabicFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const ar = {
   ...unifiedMessages["ar"],
+  ...drawingAnnotationMessages["ar"],
   ...syntheticEnglish,
   ...continuousArabic,
   ...tradeHistoryArabic,
@@ -1246,6 +1253,15 @@ export const ar = {
   "settings.proxy.previewNodes": "معاينة العقد",
   "settings.proxy.useNodes": "استخدام العقد المحددة",
   "settings.proxy.skippedNodes": "عدد العقد غير المدعومة التي تم تخطيها: {count}",
+  "settings.proxy.autoRefresh": "التحديث التلقائي",
+  "settings.proxy.autoRefreshOff": "إيقاف",
+  "settings.proxy.autoRefreshEvery": "كل {duration}",
+  "settings.proxy.autoRefreshHelp": "يفحص الاشتراكات المحفوظة وفق هذا الفاصل الزمني. تأخذ العقد التي تستخدمها إعدادات المزوّد الحالية. لا تُضاف عقد جديدة، وتحتفظ العقدة التي أزالها المزوّد بآخر إعداداتها.",
+  "settings.proxy.refreshPending": "لم يُفحص تلقائيًا بعد",
+  "settings.proxy.refreshChecked": "آخر فحص: {time}",
+  "settings.proxy.refreshFailed": "فشل التحديث التلقائي: {time}",
+  "settings.proxy.refreshUpdated": "العقد المحدّثة: {count} · {time}",
+  "settings.proxy.refreshMissing": "لم تعد في الاشتراك: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "معرّفات البورصات (مفصولة بفواصل؛ الفارغ يعني الكل)",
   "settings.proxy.enabled": "مفعّل",
@@ -3672,6 +3688,13 @@ export const ar = {
   "chartTester.prepareDataRun": "تجهيز البيانات والتشغيل",
   "chartTester.run.resolving": "جارٍ الفحص…",
   "chartTester.run.waitingForChart": "ما زالت بيانات الرسم قيد التحميل…",
+  "appUpdate.available": "يتوفر CandleScope {version}",
+  "appUpdate.current": "تستخدم الإصدار {version}. نزّل الإصدار الجديد من صفحة الإصدار.",
+  "appUpdate.view": "عرض الإصدار",
+  "appUpdate.skip": "تخطي هذا الإصدار",
+  "settings.updates.title": "التحديثات",
+  "settings.updates.check": "التحقق من التحديثات",
+  "settings.updates.checkHint": "عند بدء التشغيل ومرة يوميًا، يسأل GitHub عن وجود إصدار أحدث من CandleScope. لا يُنزَّل أي شيء ولا يُثبَّت.",
   "chartTester.run.queued": "في القائمة",
   "chartTester.run.running": "يعمل",
   "chartTester.stopObserving": "إيقاف الانتظار",
@@ -4175,4 +4198,9 @@ export const ar = {
   "chartTester.deleteDraft": "حذف",
   "chartTester.deleteRetiredDraft": "حذف المسودة المتوقفة {name}",
   "chartTester.deleteRetiredDraftFailed": "تعذّر حذف المسودة المتوقفة. حاول مرة أخرى.",
+  ...drawingSelectionMessages["ar"],
+  ...drawingCalculatedMessages["ar"],
+  ...replayDrawingSaveMessages["ar"],
+  ...chartTimeZoneMessages["ar"],
+  ...chartTimeShortcutMessages["ar"],
 } as const satisfies MessageCatalog;

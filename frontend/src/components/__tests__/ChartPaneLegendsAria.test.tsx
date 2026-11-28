@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MainChartLegend } from "../ChartPaneLegends.js";
+import { IndicatorPaneLabels, MainChartLegend } from "../ChartPaneLegends.js";
 import { createPaneCrosshairStore } from "../paneCrosshairStore.js";
 import { getLocale, setLocale } from "../../i18n/index.js";
 
@@ -21,4 +21,18 @@ test("main legend exposes the same signed movement visually and to assistive tec
       crosshairStore.dispose();
     }
   } finally { setLocale(previous); }
+});
+
+test("an empty indicator pane exposes its preparation or error status", () => {
+  const crosshairStore = createPaneCrosshairStore(null);
+  try {
+    const html = renderToStaticMarkup(<IndicatorPaneLabels collapsedPaneIds={[]} crosshairStore={crosshairStore}
+      linesByPaneId={new Map()} panes={[{ id: "separate-rsi", label: "RSI", lines: [], statusText: "计算中 25%" }]} />);
+    assert.ok(html.includes('aria-label="RSI · 计算中 25%"'), html);
+    assert.ok(html.includes('role="status">计算中 25%</span>'), html);
+    assert.ok(html.includes('data-pane-id="separate-rsi"'), html);
+    const ready = renderToStaticMarkup(<IndicatorPaneLabels collapsedPaneIds={[]} crosshairStore={crosshairStore}
+      linesByPaneId={new Map()} panes={[{ id: "separate-rsi", label: "RSI", lines: [], statusText: null }]} />);
+    assert.ok(!ready.includes('role="status"') && ready.includes('aria-label="RSI"'), ready);
+  } finally { crosshairStore.dispose(); }
 });

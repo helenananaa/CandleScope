@@ -28,7 +28,6 @@ from app.core.executors import run_storage
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.market import MarketType
 from app.core.config import (
-    get_effective_proxy,
     load_proxy_settings,
     normalize_proxy_settings,
     save_proxy_settings,
@@ -554,12 +553,16 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
         return await finish_cleanup(_apply_proxy_settings(request, body))
 
 
-def _available_account_proxy():
+def _account_network_changed(readonly_accounts) -> bool:
+    """Whether the running account session would connect differently under the saved settings."""
+    in_use = getattr(readonly_accounts, "network_in_use", None)
+    if in_use is None:
+        return True  # Not connected: (re)starting it is harmless.
     try:
-        return get_effective_proxy()
+        return readonly_accounts.network_options_now() != in_use
     except ValueError:
         # A pool with no usable route must still be able to save a recovery.
-        return None
+        return True
 
 
 async def _blocking(func, *args):
@@ -568,6 +571,33 @@ async def _blocking(func, *args):
     if sys.platform == "emscripten":
         return func(*args)
     return await asyncio.to_thread(func, *args)
+
+
+class _BackendChange:
+    """A change the backend makes on its own (scheduled subscription refresh): no client request."""
+
+    def __init__(self, app):
+        self.app = app
+
+
+async def apply_refreshed_routes(app, replacements: dict[str, str]) -> bool:
+    """Point subscription routes at refreshed snapshots, as a save from the settings panel would.
+
+    Routes the user changed since the refresh read them are left alone. Returns whether
+    anything changed.
+    """
+    async with _proxy_update_lock:
+        persisted = load_proxy_settings()
+        routes = persisted.get("routes", [])
+        updated = [dict(route, url=replacements.get(route["url"], route["url"])) for route in routes]
+        if persisted.get("mode") != "pool" or updated == routes:
+            return False
+        body = ProxyConfig(mode="pool", routes=updated, strategy=persisted.get("strategy", "failover"))
+        try:
+            await finish_cleanup(_apply_proxy_settings(_BackendChange(app), body))
+        except HTTPException as exc:
+            raise SubscriptionError(str(exc.detail)) from None
+        return True
 
 
 async def _apply_proxy_settings(request, body):
@@ -582,23 +612,19 @@ async def _apply_proxy_settings(request, body):
         previous_core and previous_core.alive and cfg and getattr(cfg, "proxy_mode", None) == mode == "pool"
         and external_routes(cfg.proxy_routes) == external_routes(selected)
     )
-    if any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core:
+    if not isinstance(request, _BackendChange) and (
+            any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core):
         require_local_research_access(request)
     readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
-    # The account service binds to the first usable route, independently of
-    # the public-market pool. Restart it when that concrete endpoint changes.
-    previous_account_proxy = None
-    if readonly_accounts is not None and previous_core and mode == "pool":
-        previous_account_proxy = _available_account_proxy()
     try:
         await _blocking(managed.activate, selected, lambda: save_proxy_settings(
             mode, custom_proxy, routes=body.routes, strategy=body.strategy))
     except SubscriptionError as exc:
         raise HTTPException(400, str(exc)) from None
 
-    restart_account = readonly_accounts is not None and (
-        previous_account_proxy is None or previous_account_proxy != _available_account_proxy()
-    )
+    # The account session keeps one pool route while it works (see saved_network_options).
+    # Restart it only when the saved settings would connect it differently.
+    restart_account = readonly_accounts is not None and _account_network_changed(readonly_accounts)
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
         if restart_account:

@@ -1,11 +1,18 @@
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyFrench, replayNoteFrench, tradeHistoryFrench, readonlyAccountFrench, continuousFrench, tradingAccountsFr, nativeFrench } from "./frenchFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const fr = {
   ...unifiedMessages["fr"],
+  ...drawingAnnotationMessages["fr"],
   ...syntheticEnglish,
   ...continuousFrench,
   ...tradeHistoryFrench,
@@ -1245,6 +1252,15 @@ export const fr = {
   "settings.proxy.previewNodes": "Afficher les nœuds",
   "settings.proxy.useNodes": "Utiliser les nœuds sélectionnés",
   "settings.proxy.skippedNodes": "Nœuds non pris en charge ignorés : {count}",
+  "settings.proxy.autoRefresh": "Actualisation automatique",
+  "settings.proxy.autoRefreshOff": "Désactivée",
+  "settings.proxy.autoRefreshEvery": "Toutes les {duration}",
+  "settings.proxy.autoRefreshHelp": "Vérifie les abonnements enregistrés à cet intervalle. Les nœuds utilisés reprennent les paramètres actuels du fournisseur. Aucun nouveau nœud n’est ajouté, et un nœud retiré par le fournisseur garde ses derniers paramètres.",
+  "settings.proxy.refreshPending": "Pas encore vérifié automatiquement",
+  "settings.proxy.refreshChecked": "Dernière vérification : {time}",
+  "settings.proxy.refreshFailed": "Échec de l’actualisation automatique : {time}",
+  "settings.proxy.refreshUpdated": "Nœuds mis à jour : {count} · {time}",
+  "settings.proxy.refreshMissing": "Absents de l’abonnement : {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID des plateformes (séparés par des virgules ; vide = toutes)",
   "settings.proxy.enabled": "Activé",
@@ -3673,6 +3689,13 @@ export const fr = {
   "chartTester.prepareDataRun": "Préparer les données et lancer le Run",
   "chartTester.run.resolving": "Vérification…",
   "chartTester.run.waitingForChart": "Les données du graphique sont encore en chargement…",
+  "appUpdate.available": "CandleScope {version} est disponible",
+  "appUpdate.current": "Vous utilisez la version {version}. Téléchargez la nouvelle version depuis sa page de publication.",
+  "appUpdate.view": "Voir la version",
+  "appUpdate.skip": "Ignorer cette version",
+  "settings.updates.title": "Mises à jour",
+  "settings.updates.check": "Rechercher des mises à jour",
+  "settings.updates.checkHint": "Au démarrage puis une fois par jour, demande à GitHub si une version plus récente de CandleScope est parue. Rien n’est téléchargé ni installé.",
   "chartTester.run.queued": "En file",
   "chartTester.run.running": "En cours",
   "chartTester.stopObserving": "Arrêter d’attendre",
@@ -4161,4 +4184,9 @@ export const fr = {
   "chartTester.deleteDraft": "Supprimer",
   "chartTester.deleteRetiredDraft": "Supprimer le brouillon retiré {name}",
   "chartTester.deleteRetiredDraftFailed": "Impossible de supprimer le brouillon retiré. Réessayez.",
+  ...drawingSelectionMessages["fr"],
+  ...drawingCalculatedMessages["fr"],
+  ...replayDrawingSaveMessages["fr"],
+  ...chartTimeZoneMessages["fr"],
+  ...chartTimeShortcutMessages["fr"],
 } as const satisfies MessageCatalog;

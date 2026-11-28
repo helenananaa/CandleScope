@@ -4,6 +4,7 @@ import type { DrawingStyle } from "../core/drawingDocument.js";
 import type {
   AxisLineType,
   BasicLineToolId,
+  CalculatedDrawingType,
   DrawingHit,
   DrawingKind,
   ScreenBox,
@@ -19,6 +20,7 @@ export const DRAWING_DISPLAY_KIND_CODES: Readonly<Record<DrawingKind, number>> =
   "range-measure": 10,
   channel: 11,
   path: 12,
+  calculated: 13,
   text: 4,
   fibonacci: 5,
   position: 6,
@@ -26,6 +28,57 @@ export const DRAWING_DISPLAY_KIND_CODES: Readonly<Record<DrawingKind, number>> =
   freehand: 8,
   highlighter: 9,
 });
+
+/**
+ * Calculated drawings (fib extension, anchored VWAP, volume profile, regression
+ * channel). The projector resolves every value from the chart's bars; the
+ * painter only strokes and fills the listed point ranges. Offsets are
+ * entity-local point indexes.
+ */
+export type CalculatedDisplayRenderSpec = Readonly<{
+  op: "calculated";
+  calcType: CalculatedDrawingType;
+  strokeColor: string;
+  lineWidthCssPx: number;
+  selected: boolean;
+  /** Handle points painted when selected. */
+  handlePointOffset: number;
+  handleCount: number;
+  polygons: readonly Readonly<{ pointOffset: number; pointCount: number; fillColor: string }>[];
+  /** Two points each: opposite corners. */
+  boxes: readonly Readonly<{ pointOffset: number; fillColor: string }>[];
+  lines: readonly Readonly<{ pointOffset: number; pointCount: number; color: string; widthCssPx: number; dashed: boolean }>[];
+  labels: readonly Readonly<{ pointOffset: number; text: string; color: string; align: "left" | "right" }>[];
+}>;
+
+function validRange(offset: unknown, count: unknown, pointCount: number, minimum = 1): boolean {
+  return Number.isSafeInteger(offset) && Number.isSafeInteger(count)
+    && (offset as number) >= 0 && (count as number) >= minimum
+    && (offset as number) + (count as number) <= pointCount;
+}
+
+// A plain Array.isArray guard would widen the items to any.
+function everyItem<T>(items: readonly T[], valid: (item: T) => boolean): boolean {
+  return Array.isArray(items as unknown) && items.every(valid);
+}
+
+/** Every offset stays inside the entity's points and every colour is a string. */
+export function validCalculatedRenderSpec(spec: CalculatedDisplayRenderSpec, pointCount: number): boolean {
+  return typeof spec.strokeColor === "string"
+    && Number.isFinite(spec.lineWidthCssPx) && spec.lineWidthCssPx > 0
+    && typeof spec.selected === "boolean"
+    && validRange(spec.handlePointOffset, spec.handleCount, pointCount, 0)
+    && everyItem(spec.polygons, (polygon) => typeof polygon.fillColor === "string"
+      && validRange(polygon.pointOffset, polygon.pointCount, pointCount, 3))
+    && everyItem(spec.boxes, (box) => typeof box.fillColor === "string"
+      && validRange(box.pointOffset, 2, pointCount, 2))
+    && everyItem(spec.lines, (line) => typeof line.color === "string"
+      && typeof line.dashed === "boolean" && Number.isFinite(line.widthCssPx) && line.widthCssPx > 0
+      && validRange(line.pointOffset, line.pointCount, pointCount, 2))
+    && everyItem(spec.labels, (label) => typeof label.text === "string"
+      && typeof label.color === "string" && (label.align === "left" || label.align === "right")
+      && validRange(label.pointOffset, 1, pointCount));
+}
 
 export type DrawingDisplayUnboundedAxis = "horizontal" | "vertical" | "both" | null;
 
@@ -48,6 +101,7 @@ export type DrawingDisplayRenderSpec =
       midlinePointOffset: 4;
       offsetHandlePointOffset: 6;
     }>
+  | CalculatedDisplayRenderSpec
   | Readonly<{
       op: "range-measure";
       measureType: import("../drawingTypes.js").RangeMeasureType;
@@ -132,6 +186,9 @@ export type DrawingDisplayRenderSpec =
       paddingCssPx: number;
       lineHeightCssPx: number;
       selectionColor: string;
+      /** Callout/price-label leader: points at this offset run from the box to the target. */
+      leaderPointOffset?: number;
+      leaderColor?: string;
     }>
   | Readonly<{
       op: "position";
@@ -605,6 +662,9 @@ function validRenderSpec(
       && entity.points.length >= 8;
   }
   if (spec.op === "path") return entity.kind === "path" && entity.points.length >= 4 && typeof spec.arrowEnd === "boolean";
+  if (spec.op === "calculated") {
+    return entity.kind === "calculated" && validCalculatedRenderSpec(spec, entity.points.length / 2);
+  }
   if (spec.op === "channel") {
     return entity.kind === "channel"
       && (spec.fillPaintColor === null || typeof spec.fillPaintColor === "string")
@@ -687,7 +747,13 @@ function validRenderSpec(
       && spec.paddingCssPx >= 0
       && Number.isFinite(spec.lineHeightCssPx)
       && spec.lineHeightCssPx > 0
-      && typeof spec.selectionColor === "string";
+      && typeof spec.selectionColor === "string"
+      && (spec.leaderPointOffset === undefined
+        ? spec.leaderColor === undefined
+        : Number.isSafeInteger(spec.leaderPointOffset)
+          && spec.leaderPointOffset >= spec.boxPointOffset + 2
+          && spec.leaderPointOffset + 2 <= pointCount
+          && typeof spec.leaderColor === "string");
   }
   if (spec.op === "position") {
     const pointCount = entity.points.length / 2;

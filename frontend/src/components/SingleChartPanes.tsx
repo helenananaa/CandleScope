@@ -222,6 +222,7 @@ import {
   ProjectionStore,
   projectPaneDescriptorsToDisplay,
   rememberSurfaceViewport,
+  shouldFollowLiveTail,
   shouldPreserveProjectionViewport,
   selectSurfaceViewportSnapshot,
   selectPeriodViewportRestore,
@@ -249,7 +250,7 @@ import type {
   ChartSurfaceLinkedTimeRange,
   ChartSurfaceVisibleRange,
 } from "../chart-adapter/useChartSurfaceRuntime.js";
-import type { ViewportController } from "../chart-adapter/viewportController.js";
+import type { ViewportController, ViewportLiveTail } from "../chart-adapter/viewportController.js";
 import type {
   AxisTime,
   DisplayRow,
@@ -501,6 +502,8 @@ interface AuxiliaryDisplayState {
 const LEFT_EDGE_TRIGGER_BARS = 15;
 const HISTORY_WHEEL_GESTURE_IDLE_MS = 160;
 const VISIBLE_RANGE_SAVE_DEBOUNCE_MS = 500;
+/** Frames to wait for the chart to draw a restored zoom at its final width. */
+const SAVED_FIT_CHECK_FRAMES = 6;
 // v1 layouts may contain 30px panes produced by sequential setHeight replay.
 // Keep the corrected ratio-based layout isolated from those polluted values.
 const SINGLE_PANE_HEIGHT_KEY_PREFIX = "single-v2:";
@@ -524,6 +527,33 @@ interface DrawingPresenceState {
 
 function rowsFromStore(store: SeriesWindowView | null | undefined): KlineBar[] {
   return store?.snapshot?.() || [];
+}
+
+function lastDisplayTime(rows: readonly DisplayRow[]): number | null {
+  const time = rows[rows.length - 1]?.time;
+  return typeof time === "number" && Number.isFinite(time) ? time : null;
+}
+
+interface CommitLiveTail {
+  readonly tail: ViewportLiveTail;
+  readonly lastTime: number | null;
+}
+
+/**
+ * The session view is a fit to a window too short to fill the pane at the
+ * chart's default spacing (#572: a fresh profile's first window can be the
+ * five-bar latest request). Until the user moves the view, more rows refit
+ * it, and its spacing is not saved.
+ */
+interface ProvisionalFit {
+  readonly datasetKey: string | null;
+  readonly bars: number;
+}
+
+/** A restored saved spacing that may be a 1.0.0 few-bar fit, checked once drawn. */
+interface SavedFitCheck {
+  readonly datasetKey: string | null;
+  readonly barSpacing: number;
 }
 
 function latestFiniteSourceTime(rows: readonly SourceBar[] | null | undefined): number | null {
@@ -1035,6 +1065,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const transferredHistoryFrameRef = useRef<number | null>(null);
   const hasRestoredRangeRef = useRef(false);
   const lastViewportRestoreSourceRef = useRef<string | null>(null);
+  const provisionalFitRef = useRef<ProvisionalFit | null>(null);
+  const savedFitCheckRef = useRef<SavedFitCheck | null>(null);
   const visibleRangeSaveTimerRef = useRef<TimerHandle | null>(null);
   const activeSubPaneCountRef = useRef(0);
   const activeSubPanesRef = useRef<IndicatorSubPane[]>(subPanes);
@@ -1861,18 +1893,31 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     let settleFrame: number | null = null;
     let followLatestResizeFrame: number | null = null;
     let observedWidth = wrapper.getBoundingClientRect().width;
+    // The bar at a view's center, by source time. Ticks append bars without
+    // emitting a range change, so a store version is no proof that a remembered
+    // logical view moved; a prepend or recalibration moves this bar's index.
+    const resizeViewAnchor = (logical: VisibleLogicalRange | null) => {
+      const rows = displayRowsRef.current;
+      if (!logical || rows.length === 0) return null;
+      const index = Math.min(rows.length - 1, Math.max(0, Math.round((logical.from + logical.to) / 2)));
+      return { index, time: sourceTimeFromAxisTime(rows[index]?.time) };
+    };
+    const resizeViewAnchored = (anchor: ReturnType<typeof resizeViewAnchor>) => anchor !== null
+      && anchor.time !== null && sourceTimeFromAxisTime(displayRowsRef.current[anchor.index]?.time) === anchor.time;
+    const initialResizeLogical = chart.timeScale().getVisibleLogicalRange();
     let stableResizeView = {
-      logical: chart.timeScale().getVisibleLogicalRange(),
+      logical: initialResizeLogical,
+      anchor: resizeViewAnchor(initialResizeLogical),
+      scaleWidth: chart.timeScale().width(),
       store: seriesStoreRef.current,
-      version: seriesStoreRef.current?.version,
       datasetKey: datasetKeyRef.current,
     };
-    const rememberResizeView = (logical: VisibleLogicalRange) => {
+    const rememberResizeView = (logical: VisibleLogicalRange | null) => {
       // LWC emits the resized range before our observer runs. Keep the last
       // view at the old width so a split cannot retain only future padding.
       if (Math.abs(wrapper.getBoundingClientRect().width - observedWidth) >= 0.5) return;
-      stableResizeView = { logical, store: seriesStoreRef.current,
-        version: seriesStoreRef.current?.version, datasetKey: datasetKeyRef.current };
+      stableResizeView = { logical, anchor: resizeViewAnchor(logical), scaleWidth: chart.timeScale().width(),
+        store: seriesStoreRef.current, datasetKey: datasetKeyRef.current };
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(rememberResizeView);
     const syncSize = () => {
@@ -1892,7 +1937,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         transferredHistoryRef.current = null;
       }
       frameLifecycle.cancel(followLatestResizeFrame);
-      followLatestResizeFrame = frameLifecycle.schedule(() => {
+      let widthFrames = 0;
+      const resizeFrame = () => {
         followLatestResizeFrame = null;
         const displayRows = displayRowsRef.current;
         if (!followLatestRef.current
@@ -1901,12 +1947,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (followLatestDisabledRef.current) {
           // A restored or panned replay remains fixed in time. Resize around
           // its previous center at the same zoom, without resuming following.
-          if (!previousView.logical || previousView.store !== seriesStoreRef.current
-            || previousView.version !== seriesStoreRef.current?.version
+          const logical = previousView.logical;
+          if (!logical || previousView.store !== seriesStoreRef.current
+            || !resizeViewAnchored(previousView.anchor)
             || previousView.datasetKey !== datasetKeyRef.current) return;
+          // LWC applies its own observed size in its next paint, which can come
+          // after this frame. A range sized for the old width would change zoom.
+          if (chart.timeScale().width() === previousView.scaleWidth && widthFrames < 3) {
+            widthFrames += 1;
+            followLatestResizeFrame = frameLifecycle.schedule(resizeFrame);
+            return;
+          }
           const range = logicalRangeForLatestBarPosition({
             barSpacing: chart.timeScale().options().barSpacing,
-            contentLastLogical: (previousView.logical.from + previousView.logical.to) / 2,
+            contentLastLogical: (logical.from + logical.to) / 2,
             width: chart.timeScale().width(), position: 0.5,
           });
           if (range) viewportControllerRef.current?.restoreProjectionRange(range);
@@ -1922,7 +1976,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         )) {
           boundSurfaceViewportAnchorRef.current = null;
         }
-      });
+      };
+      followLatestResizeFrame = frameLifecycle.schedule(resizeFrame);
     };
     const trackPaneResize = () => {
       syncOverlays();
@@ -2050,6 +2105,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
   const markViewportRangeChanged = useCallback((userDriven: boolean) => {
     liveSessionViewportRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2220,6 +2277,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
     liveSessionViewportRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     settleDatasetViewportTransfer("interrupted");
     followLatestDisabledRef.current = false;
     const rawPosition = Number(latestBarPositionRef.current);
@@ -2307,14 +2366,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return true;
   }, [scheduleLatestWindowScroll]);
 
-  const handleRestoreLatestWindow = useCallback(() => {
+  // The promise settles true once the view has scrolled to the restored edge;
+  // null means the restore could not start (nothing to call, or loading).
+  const handleRestoreLatestWindow = useCallback((): Promise<boolean> | null => {
     const restore = onRestoreLatestWindowRef.current ?? onNeedMoreRightRef.current;
     if (
       !restore
       || !canRestoreLatestWindowRef.current
       || explicitLatestWindowRestoreRef.current != null
       || rightWindowRestoreRef.current != null
-    ) return;
+    ) return null;
 
     const requestedDatasetKey = datasetKeyRef.current;
     const store = seriesStoreRef.current;
@@ -2339,11 +2400,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         setLatestWindowRestorePending(false);
       });
     explicitLatestWindowRestoreRef.current = promise;
+    return promise;
   }, [scheduleLatestWindowScroll]);
 
   const returnToLatest = useCallback(() => {
     if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
-      handleRestoreLatestWindow();
+      void handleRestoreLatestWindow();
     } else {
       jumpToLatest();
     }
@@ -2387,12 +2449,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       intervalRef.current, futureTimeAxisDataRef.current) ?? (sourceFrom != null && sourceTo != null
       ? { from: Math.min(sourceFrom, sourceTo), to: Math.max(sourceFrom, sourceTo) }
       : null);
-    return buildVisibleRangeSnapshot({
+    const snapshot = buildVisibleRangeSnapshot({
       barSpacing: visibleRange.barSpacing,
       logicalRange: visibleRange.logical,
       rightOffset: viewportControllerRef.current?.captureRightOffset() ?? visibleRange.scrollPosition,
       timeRange: sourceTimeRange,
     });
+    const provisional = provisionalFitRef.current;
+    // Persistence skips a few-bar fit; every other consumer reads it as usual.
+    return snapshot && provisional !== null && provisional.datasetKey === (datasetKeyRef.current ?? null)
+      && !userInteractedRef.current ? { ...snapshot, provisionalFit: true } : snapshot;
   }, [chartAdapter]);
 
   const captureViewportTransfer = useCallback(() => {
@@ -2451,6 +2517,44 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       { position },
     ) ?? false;
     if (followed) boundSurfaceViewportAnchorRef.current = null;
+    return followed;
+  }, []);
+
+  // Before a commit renders: where the view sits relative to the latest bar,
+  // if that bar is on screen. Time axes only; ordinal projections and views
+  // bound to a source range or follow-latest keep their own rules.
+  const captureCommitLiveTail = useCallback((
+    previousDisplayRows: readonly DisplayRow[],
+    axisMode: string,
+  ): CommitLiveTail | null => {
+    if (axisMode === "derived-ordinal" || previousDisplayRows.length === 0
+      || (followLatestRef.current && !followLatestDisabledRef.current)
+      || boundSurfaceViewportAnchorRef.current !== null) return null;
+    const tail = viewportControllerRef.current?.captureLiveTail() ?? null;
+    return tail ? { tail, lastTime: lastDisplayTime(previousDisplayRows) } : null;
+  }, []);
+
+  // After it rendered: rows added after that bar keep the newest bar on screen.
+  const followCommitLiveTail = useCallback((
+    captured: CommitLiveTail | null,
+    displayRows: readonly DisplayRow[],
+    store: SeriesWindowView,
+  ): boolean => {
+    if (!captured || pendingSurfaceViewportRef.current !== null
+      || boundSurfaceViewportAnchorRef.current !== null
+      || !shouldFollowLiveTail({
+        latestBarVisible: true,
+        nextLastTime: lastDisplayTime(displayRows),
+        previousLastTime: captured.lastTime,
+        rightEdgeCurrent: !store.rightTruncated,
+        sessionViewportPlaced: hasRestoredRangeRef.current,
+        userInteracted: userInteractedRef.current,
+      })) return false;
+    const followed = viewportControllerRef.current?.followLiveTail(captured.tail) ?? false;
+    recordPerfEvent("chart.viewport.followLiveTail", {
+      applied: followed, bars: displayRows.length, datasetKey: datasetKeyRef.current,
+      rightOffset: captured.tail.rightOffset,
+    });
     return followed;
   }, []);
 
@@ -3844,6 +3948,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       // early restore here consumed the snapshot against the wrong interval.
       hasRestoredRangeRef.current = false;
       lastViewportRestoreSourceRef.current = null;
+      provisionalFitRef.current = null;
+      savedFitCheckRef.current = null;
       // The main LWC series stays mounted, but drawing/auxiliary consumers must
       // not observe the outgoing projection under the incoming dataset key.
       setDrawingSurfaceDataKey(null);
@@ -3864,6 +3970,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     followLatestDisabledRef.current = false;
     hasRestoredRangeRef.current = false;
     lastViewportRestoreSourceRef.current = null;
+    provisionalFitRef.current = null;
+    savedFitCheckRef.current = null;
     // The mounted series still contains the outgoing dataset. An empty cache
     // would turn an empty incoming synthetic projection into a no-op, leaving
     // old bricks visible beneath the new interval label until history arrives.
@@ -3889,6 +3997,85 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     scheduleTransferredHistoryFill,
     settleDatasetViewportTransfer,
   ]);
+
+  // #572: a fit to a window too short to fill the pane stays provisional
+  // until the user or a placement moves the view.
+  const markSessionFit = useCallback((sessionKey: string | null) => {
+    provisionalFitRef.current = surfaceAxisModeRef.current !== "derived-ordinal"
+      && viewportControllerRef.current?.contentFitIsFewBar()
+      ? { datasetKey: sessionKey, bars: displayRowsRef.current.length } : null;
+  }, []);
+
+  // After a commit rendered: rows added to a provisional fit refit the view,
+  // so history that arrives after a few-bar first window is shown whole.
+  const refitProvisionalFit = useCallback((displayRows: readonly DisplayRow[]): boolean => {
+    const fit = provisionalFitRef.current;
+    if (!fit) return false;
+    if (fit.datasetKey !== (datasetKeyRef.current ?? null) || userInteractedRef.current
+      || pendingSurfaceViewportRef.current !== null || boundSurfaceViewportAnchorRef.current !== null
+      || (followLatestRef.current && !followLatestDisabledRef.current)
+      || surfaceAxisModeRef.current === "derived-ordinal") {
+      provisionalFitRef.current = null;
+      return false;
+    }
+    if (displayRows.length <= fit.bars || !viewportControllerRef.current?.refitContent()) return false;
+    markSessionFit(fit.datasetKey);
+    recordPerfEvent("chart.viewport.provisionalRefit", {
+      bars: displayRows.length, datasetKey: fit.datasetKey, previousBars: fit.bars,
+      provisional: provisionalFitRef.current !== null,
+    });
+    return true;
+  }, [markSessionFit]);
+
+  // 1.0.0 saved the spacing of a fit to a few-bar first window, and every
+  // reopen restored it (#572). A saved spacing that is exactly a fit of the
+  // drawn pane width and wider than the default is that fit, not a zoom the
+  // user made, so fit the window instead. The chart settles its plot width
+  // (the price axis depends on what is visible) only when it draws the
+  // restored zoom, so the check runs over the next frames.
+  const savedFitCheckFrameRef = useRef<number | null>(null);
+  const scheduleSavedFitCheck = useCallback((check: SavedFitCheck) => {
+    savedFitCheckRef.current = check;
+    if (savedFitCheckFrameRef.current !== null) cancelAnimationFrame(savedFitCheckFrameRef.current);
+    let frames = 0;
+    const step = () => {
+      savedFitCheckFrameRef.current = null;
+      const controller = viewportControllerRef.current;
+      if (savedFitCheckRef.current !== check) return;
+      if (!controller || check.datasetKey !== (datasetKeyRef.current ?? null) || userInteractedRef.current
+        || pendingSurfaceViewportRef.current !== null || boundSurfaceViewportAnchorRef.current !== null) {
+        savedFitCheckRef.current = null;
+        return;
+      }
+      if (!controller.spacingIsFewBarFit(check.barSpacing)) {
+        frames += 1;
+        if (frames < SAVED_FIT_CHECK_FRAMES) savedFitCheckFrameRef.current = requestAnimationFrame(step);
+        else savedFitCheckRef.current = null;
+        return;
+      }
+      savedFitCheckRef.current = null;
+      let refit = false;
+      isRestoringViewportRef.current = true;
+      try {
+        refit = controller.refitContent();
+      } finally {
+        isRestoringViewportRef.current = false;
+      }
+      if (refit) markSessionFit(check.datasetKey);
+      recordPerfEvent("chart.viewport.savedFewBarFit", {
+        applied: refit, barSpacing: check.barSpacing, bars: displayRowsRef.current.length,
+        datasetKey: check.datasetKey, provisional: provisionalFitRef.current !== null,
+      });
+      if (!refit) return;
+      publishViewportRangeChange();
+      scheduleVisibleRangeSave();
+    };
+    savedFitCheckFrameRef.current = requestAnimationFrame(step);
+  }, [markSessionFit, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  useEffect(() => () => {
+    if (savedFitCheckFrameRef.current !== null) cancelAnimationFrame(savedFitCheckFrameRef.current);
+    savedFitCheckFrameRef.current = null;
+  }, []);
 
   const sessionViewportInputsRef = useRef({ dataMeta, datasetKey, savedVisibleRange, seriesStore });
   useLayoutEffect(() => {
@@ -3919,6 +4106,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     if (followLatestViewport(displayRowsRef.current)) {
       hasRestoredRangeRef.current = true;
       lastViewportRestoreSourceRef.current = "follow-latest";
+      provisionalFitRef.current = null;
+      savedFitCheckRef.current = null;
       publishViewportRangeChange();
       notifyLinkedViewportReady();
       return;
@@ -3942,20 +4131,30 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } finally {
       isRestoringViewportRef.current = false;
     }
+    if (restored) {
+      savedFitCheckRef.current = null;
+      if (restorePlan.mode === "fit") markSessionFit(datasetKey ?? null);
+      else provisionalFitRef.current = null;
+    }
     recordPerfEvent("chart.viewport.restore", {
       applied: Boolean(restored),
       bars: rows.length,
       datasetKey,
       mode: restorePlan?.mode || "fit",
+      provisional: provisionalFitRef.current !== null,
       visibleLogicalRange: captureVisibleRange()?.logical || null,
     });
     if (restored) {
       hasRestoredRangeRef.current = true;
       lastViewportRestoreSourceRef.current = dataMeta?.source || null;
+      if (restorePlan.mode === "anchor" && restorePlan.barSpacing != null
+        && surfaceAxisModeRef.current !== "derived-ordinal") {
+        scheduleSavedFitCheck({ datasetKey: datasetKey ?? null, barSpacing: restorePlan.barSpacing });
+      }
       publishViewportRangeChange();
     }
     notifyLinkedViewportReady();
-  }, [captureVisibleRange, followLatestViewport, notifyLinkedViewportReady, publishViewportRangeChange]);
+  }, [captureVisibleRange, followLatestViewport, markSessionFit, notifyLinkedViewportReady, publishViewportRangeChange, scheduleSavedFitCheck]);
 
   const sessionViewportRestoreFrameRef = useRef<number | null>(null);
   const schedulePaintedSessionViewportRestore = useCallback(() => {
@@ -4029,6 +4228,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         rowIndexMapRef: sourceRowIndexMapRef,
       });
       const previousDisplayRows = displayRowsRef.current;
+      const liveTail = captureCommitLiveTail(
+        previousDisplayRows,
+        getChartTypeDescriptor(activeChartType).axisMode,
+      );
       const projectionPatch = canReuseProjection
         ? projectionStore.applySourceDelta({ type: "replace" }, rows)
         : projectionStore.reset(rows);
@@ -4160,6 +4363,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           if (restored) {
             hasRestoredRangeRef.current = true;
             lastViewportRestoreSourceRef.current = "surface-viewport-transfer";
+            provisionalFitRef.current = null;
+            savedFitCheckRef.current = null;
             materializeRuntimePaneLayout(
               chartRef.current,
               containerRef.current,
@@ -4190,6 +4395,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           isRestoringViewportRef.current = false;
         }
       }
+      if (projectionRendered && !refitProvisionalFit(displayRows)) followCommitLiveTail(liveTail, displayRows, store);
       if (projectionRendered && followLatestViewport(displayRows)) {
         hasRestoredRangeRef.current = true;
         lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4225,6 +4431,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         drawingSourceTimeHorizonRef.current = nextSourceTimeHorizon;
         const sourceTimeHorizonChanged = nextSourceTimeHorizon !== previousSourceTimeHorizon;
         const previousDisplayRows = projectionStore.displaySnapshot();
+        const liveTail = captureCommitLiveTail(
+          previousDisplayRows,
+          getChartTypeDescriptor(currentChartType).axisMode,
+        );
         // A user-owned historical view must keep elapsed source coordinates
         // through ATR recalibration, even when a normal tick rebuilds the
         // complete ordinal grid. Capture before mutating that projection.
@@ -4393,6 +4603,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             if (restored) {
               hasRestoredRangeRef.current = true;
               lastViewportRestoreSourceRef.current = "dataset-viewport-transfer";
+              provisionalFitRef.current = null;
+              savedFitCheckRef.current = null;
               materializeRuntimePaneLayout(
                 chartRef.current,
                 containerRef.current,
@@ -4426,6 +4638,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         // Synthetic recalibration can remap the axis while retaining the same
         // output count. Following depends on the committed projection, not on
         // whether this tick happened to create an additional brick/column.
+        if (projectionRendered && !refitProvisionalFit(displayRows)) followCommitLiveTail(liveTail, displayRows, currentStore);
         if (projectionRendered && followLatestViewport(displayRows)) {
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
@@ -4443,7 +4656,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [captureCommitLiveTail, chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followCommitLiveTail, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refitProvisionalFit, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     schedulePaintedSessionViewportRestore();
@@ -5409,6 +5622,25 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useImperativeHandle(ref, () => ({
     getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
+    // Same as the chart's button, but says whether the view got there.
+    returnToLatest: () => {
+      if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
+        return handleRestoreLatestWindow() ?? Promise.resolve(false);
+      }
+      if (displayRowsRef.current.length === 0) return Promise.resolve(false);
+      jumpToLatest();
+      return Promise.resolve(true);
+    },
+    // Centres the bar half a view in, so the oldest loaded bar sits at the left edge.
+    showFirstLoadedBar: () => {
+      const rows = seriesStoreRef.current?.snapshot() ?? [];
+      const first = Number(rows[0]?.time);
+      const logical = captureVisibleRange()?.logical;
+      if (!Number.isFinite(first) || !logical) return null;
+      const half = Math.max(0, Math.floor((logical.to - logical.from) / 2));
+      const anchor = Number(rows[Math.min(rows.length - 1, half)]?.time);
+      return Number.isFinite(anchor) && centerVisibleTime(anchor) ? first : null;
+    },
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
     centerVisibleTime,
@@ -5498,6 +5730,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     setLinkedDrawingRevision,
     setDrawingsHidden,
     updateSelectedDrawingStyle,
+    handleRestoreLatestWindow,
+    jumpToLatest,
   ]);
 
   const latestWindowMissing = rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated);
