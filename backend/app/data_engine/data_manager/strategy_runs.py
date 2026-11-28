@@ -467,9 +467,17 @@ class StrategyRuns:
         controller = self.owner.continuous_access().controller()
         enabled = controller.execution_enabled is not False
         reason = None if enabled else "READ_ONLY"
+        settings = self.owner.service.settings
+        # External models run only where the Host enables their connections (B-333c).
+        external = None if settings.enabled and settings.external_provider_enabled else "EXTERNAL_PROVIDER_DISABLED"
         starts = list(get_args(ContinuousCreate.model_fields["mode"].annotation))
+
+        def language_reason(language: str) -> str | None:
+            return reason or (external if language == "external" else None)
+
         rows = [{**_profile("continuous", language, authority="HOST", clock_policy="FORWARD",
-                            fidelities=["BAR_APPROX"], available=enabled, reason=reason,
+                            fidelities=["BAR_APPROX"], available=language_reason(language) is None,
+                            reason=language_reason(language),
                             account_models=list(ACCOUNT_MODELS), intervals=None, cancel=False),
                  # Any fixed-length interval of whole minutes (B-333).
                  "starts": starts, "fixed_intervals_only": True} for language in LANGUAGES]

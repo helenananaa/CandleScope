@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
@@ -16,6 +16,18 @@ if TYPE_CHECKING:
     from app.backtest.runtime import BacktestRuntime
     from app.backtest.service import BacktestService
 
+FORWARD_RUN_PREFIX = "cs_"
+
+
+class ForwardRuns(Protocol):
+    """The forward runs external connections serve (B-333c)."""
+
+    def require(self, run_id: str) -> None:
+        """Raise unless this profile holds the forward run."""
+
+    def cancel_connection(self, connection_id: str) -> list[str]:
+        """Cancel the forward runs a revoked connection served, keeping their results."""
+
 
 class ExternalProviderAccess:
     def __init__(
@@ -24,10 +36,13 @@ class ExternalProviderAccess:
         runtime: BacktestRuntime | None,
         *,
         check_owner: Callable[[], None] | None = None,
+        forward_runs: ForwardRuns | None = None,
     ) -> None:
         self._resolve_service = resolve_service
         self._runtime = runtime
         self._check_owner = check_owner
+        # The profile's forward runs (B-333c); a standalone Host has none.
+        self._forward_runs = forward_runs
 
     def _admit(self) -> BacktestService:
         service = self._resolve_service()
@@ -52,6 +67,15 @@ class ExternalProviderAccess:
             data_epoch=values["data_epoch"], snapshot_hash=values["snapshot_hash"],
         )
 
+    def create_forward(self, values: dict[str, Any]) -> dict[str, Any]:
+        """A connection scoped to one market series for forward runs (B-333c)."""
+        service = self._admit()
+        if self._forward_runs is None:
+            raise BacktestError("CONTINUOUS_NOT_READY", "forward runs need this profile's strategy data manager")
+        if self._check_owner is not None:
+            self._check_owner()
+        return service.external.create_forward(revision_id=values["strategy_revision_id"], market=values)
+
     def list(self) -> list[dict[str, Any]]:
         return self._admit().external.list()
 
@@ -64,12 +88,19 @@ class ExternalProviderAccess:
 
     def trace(self, run_id: str, *, after: int, limit: int) -> dict[str, Any]:
         service = self._admit()
-        service.get_run(run_id)
+        if run_id.startswith(FORWARD_RUN_PREFIX):
+            if self._forward_runs is None:
+                raise BacktestError("CONTINUOUS_NOT_READY", "forward runs need this profile's strategy data manager")
+            self._forward_runs.require(run_id)
+        else:
+            service.get_run(run_id)
         return service.external.trace(run_id, after=after, limit=limit)
 
     def revoke(self, connection_id: str) -> dict[str, Any]:
         self._admit().revoke_external_connection(connection_id)
-        return {"connection_id": connection_id, "revoked": True}
+        # Revoked first: no model call is admitted while its forward runs stop.
+        cancelled = [] if self._forward_runs is None else self._forward_runs.cancel_connection(connection_id)
+        return {"connection_id": connection_id, "revoked": True, "cancelled_forward_runs": cancelled}
 
     def smoke(self, connection_id: str, values: dict[str, Any]) -> dict[str, Any]:
         service = self._admit()

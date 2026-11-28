@@ -34,6 +34,10 @@ def preview(store, manager, run_id, *, expected, resume_after, now_ms):
             if store.results.identity(current) != expected or current["phase"] != "REPAIR_REQUIRED":
                 raise fail("CONTINUOUS_COMMIT_CONFLICT", "Observed repair-required account changed")
             definition = store.describe(run_id)["definition"]
+            if (definition.get("provider") or {}).get("language") == "external":
+                # B-333c: its journal holds one decision per bar, which corrected bars cannot replay.
+                raise fail("FIDELITY_UNSUPPORTED",
+                    "An external model decided each bar once; a corrected history needs a new forward run")
             if definition.get("source_kind") != "MARKET_BAR":
                 raise fail("FIDELITY_UNSUPPORTED", "Repair requires the owned market BAR source")
             # Extract just one source receipt. Do not decode historical engine,

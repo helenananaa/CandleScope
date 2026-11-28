@@ -20,9 +20,13 @@ SCHEMA = "candlescope.continuous-provider/1"
 MAX_SOURCE_BYTES = 262_144
 MAX_PARAMETERS_BYTES = 65_536
 FIELDS = {"schema", "language", "builtin_id", "source_text", "parameters", "output_mode",
-          "runtime_mode", "trusted_confirmed", "libraries", "pine"}
-# Only a stored definition carries the Host's Pine compilation; editor input never does.
-STORED_FIELDS = {"pine"}
+          "runtime_mode", "trusted_confirmed", "libraries", "pine",
+          "strategy_revision_id", "external_connection_id", "external"}
+# Only a stored definition carries the Host's Pine compilation or external binding;
+# editor input never does.
+STORED_FIELDS = {"pine", "external"}
+EXTERNAL_FIELDS = {"strategy_revision_id", "external_connection_id", "external"}
+EXTERNAL_BINDING = {"external_scope_hash", "external_provider_identity"}
 
 
 def _invalid(message):
@@ -71,10 +75,12 @@ def _prepare_provider(payload, *, stored=False):
     language = payload.get("language")
     if language == "pyne":
         raise BacktestError("FIDELITY_UNSUPPORTED", "Pyne is retired")
-    if type(language) is not str or language not in {"builtin", "python", "pine"}:
+    if type(language) is not str or language not in {"builtin", "python", "pine", "external"}:
         raise BacktestError("FIDELITY_UNSUPPORTED", "This language requires its own qualified continuous provider")
     if language != "pine" and ("libraries" in payload or "pine" in payload):
         _invalid("Libraries and a Pine compilation require Pine code")
+    if language != "external" and set(payload) & EXTERNAL_FIELDS:
+        _invalid("An external revision and connection require an external model")
     parameters = payload.get("parameters", {})
     if not isinstance(parameters, dict):
         _invalid("Provider parameters must be an object")
@@ -114,6 +120,8 @@ def _prepare_provider(payload, *, stored=False):
         finally:
             probe.close()
         prepared["builtin_id"] = identity
+    elif language == "external":
+        prepared.update(_prepare_external(payload, source, stored=stored))
     elif language == "pine":
         if any(name in payload for name in ("builtin_id", "runtime_mode", "trusted_confirmed")):
             _invalid("Pine code names no builtin or Python runtime")
@@ -134,6 +142,28 @@ def _prepare_provider(payload, *, stored=False):
         inspected = inspect_files(editor_bundle_files("Continuous strategy", source))
         prepared.update(runtime_mode=runtime, trusted_confirmed=confirmed)
     return prepared, inspected
+
+
+def _prepare_external(payload, source, *, stored):
+    """An external model (B-333c): a registered revision's manifest, answered over its connection.
+
+    Creation binds the connection (``ContinuousProviderFactory.bind_external``); a stored
+    definition holds that binding, and every Host start checks it again.
+    """
+    if any(name in payload for name in ("builtin_id", "runtime_mode", "trusted_confirmed")) or source:
+        _invalid("An external model runs outside the Host: it names no source, builtin or Python runtime")
+    prepared = {}
+    for name in ("strategy_revision_id", "external_connection_id"):
+        value = payload.get(name)
+        if type(value) is not str or not 1 <= len(value) <= 128 or value != value.strip():
+            _invalid("An external model names its revision and forward connection")
+        prepared[name] = value
+    if stored:
+        binding = payload.get("external")
+        if not isinstance(binding, Mapping) or set(binding) != EXTERNAL_BINDING:
+            _invalid("Stored external model requires its connection binding")
+        prepared["external"] = json.loads(_json(dict(binding)))
+    return prepared
 
 
 class _OwnedEditorProvider(PythonHostProvider):
@@ -165,8 +195,33 @@ class ContinuousProviderFactory:
     The Runtime bounds live provider count. The controller owns scratch_root
     and must drain its Runtime before removing that disposable process input.
     """
-    def __init__(self, *, scratch_root=None):
+    def __init__(self, *, scratch_root=None, external=None):
         self.scratch_root = scratch_root
+        # The Host's ExternalProviderControl; without it no external model runs (B-333c).
+        self.external = external
+
+    def _external(self):
+        if self.external is None:
+            raise BacktestError("FIDELITY_UNSUPPORTED", "External models need this Host's external connections")
+        self.external.require_enabled()
+        return self.external
+
+    def bind_external(self, provider, configuration, *, warmup_bars):
+        """Bind a new forward run to its connected forward connection; the client must be connected."""
+        from .strategy.protocol import StrategyProviderError
+        try:
+            control = self._external()
+            manifest = control.manifest(provider["strategy_revision_id"])
+            if provider["output_mode"] not in manifest.output_modes:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "The external model does not decide in this output mode")
+            if warmup_bars < manifest.warmup_bars:
+                raise BacktestError("CONTINUOUS_INPUT_INVALID",
+                    f"The external model needs at least {manifest.warmup_bars} warmup bars")
+            binding = control.forward_binding(provider["strategy_revision_id"], provider["external_connection_id"],
+                                              configuration)
+        except StrategyProviderError as failure:
+            raise BacktestError(failure.code, str(failure)) from failure
+        return {key: binding[key] for key in EXTERNAL_BINDING}
 
     def __call__(self, definition):
         if not isinstance(definition, Mapping):
@@ -181,6 +236,14 @@ class ContinuousProviderFactory:
         if prepared["language"] == "pine":
             from .strategy.pine_engine import PineEngineProvider
             return PineEngineProvider()
+        if prepared["language"] == "external":
+            from .strategy.protocol import StrategyProviderError
+            binding = {"strategy_revision_id": prepared["strategy_revision_id"],
+                       "external_connection_id": prepared["external_connection_id"], **prepared["external"]}
+            try:
+                return self._external().build_forward_provider(binding, definition["configuration"])
+            except StrategyProviderError as failure:
+                raise BacktestError(failure.code, str(failure)) from failure
         return _OwnedEditorProvider(prepared, inspected, scratch_root=self.scratch_root)
 
 

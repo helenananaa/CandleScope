@@ -30,8 +30,20 @@ class ExternalCallJournal:
         self.max_record_bytes = max_record_bytes
 
     def start(self, connection_id: str, run_id: str, *, host_generation: int, context: dict[str, Any]) -> None:
-        if (type(run_id) is not str or not 1 <= len(run_id) <= 128
-                or type(host_generation) is not int or host_generation < 1):
+        if type(host_generation) is not int or host_generation < 1:
+            _fail("invalid external Host session identity")
+        self._start(connection_id, run_id, host_generation, context)
+
+    def start_next(self, connection_id: str, run_id: str, *, context: dict[str, Any]) -> int:
+        """Take the session over with the next Host generation, fencing every earlier owner.
+
+        A forward run (B-333c) has no lease generation of its own for a provider: each Host
+        start is the session's next owner, and resumes an interrupted session.
+        """
+        return self._start(connection_id, run_id, None, context)
+
+    def _start(self, connection_id: str, run_id: str, host_generation: int | None, context: dict[str, Any]) -> int:
+        if type(run_id) is not str or not 1 <= len(run_id) <= 128:
             _fail("invalid external Host session identity")
         frozen = {"provider": self.manifest.identity(), "context": context}
         text = encode(frozen, max_bytes=65_536)
@@ -44,6 +56,8 @@ class ExternalCallJournal:
             if session is not None:
                 if session["connection_id"] != connection_id or session["context_hash"] != context_hash:
                     _fail("external session identity cannot change", "IDENTITY_MUTATION")
+                if host_generation is None:
+                    host_generation = int(session["host_generation"]) + 1
                 if host_generation < session["host_generation"]:
                     _fail("external Host generation is stale")
                 status = session["status"]
@@ -51,13 +65,15 @@ class ExternalCallJournal:
                     status = "ACTIVE"
                 connection.execute("UPDATE external_provider_sessions SET host_generation = ?, status = ? WHERE run_id = ?",
                                    (host_generation, status, run_id))
-                return
+                return host_generation
+            host_generation = 1 if host_generation is None else host_generation
             self._reserve(connection, len(text.encode("utf-8")) + 512)
             connection.execute(
                 """INSERT INTO external_provider_sessions
                    (run_id, connection_id, host_generation, context_json, context_hash) VALUES (?, ?, ?, ?, ?)""",
                 (run_id, connection_id, host_generation, text, context_hash),
             )
+            return host_generation
 
     def enqueue(self, run_id: str, *, host_generation: int, cursor: int, operation: str,
                 payload: dict[str, Any], now_ms: int) -> dict[str, Any]:
@@ -194,7 +210,13 @@ class ExternalCallJournal:
             )
             return self._record(self._call(connection, run_id, cursor))
 
-    def snapshot(self, run_id: str, cursor: int, *, host_generation: int) -> dict[str, Any]:
+    def snapshot(self, run_id: str, cursor: int, *, host_generation: int, pin: bool = True) -> dict[str, Any]:
+        """The checkpoint identity at ``cursor``.
+
+        ``pin`` keeps that cursor's model state past collection. A forward run checkpoints
+        every bar and is never repaired from an older checkpoint, so it does not pin: its
+        latest state is always retained, and recovery replays committed calls up to it.
+        """
         with self.store._transaction() as connection:
             session = self._session(connection, run_id)
             self._generation(session, host_generation)
@@ -211,8 +233,9 @@ class ExternalCallJournal:
                 ).fetchone()
                 if retained is not None:
                     self._state(connection, run_id, state_hash)
-                    connection.execute("UPDATE external_provider_states SET pinned = 1 WHERE run_id = ? AND state_hash = ?",
-                                       (run_id, state_hash))
+                    if pin:
+                        connection.execute("UPDATE external_provider_states SET pinned = 1 WHERE run_id = ? AND state_hash = ?",
+                                           (run_id, state_hash))
                 elif cursor < session["last_completed"]:
                     # Recovery may checkpoint while replaying previously
                     # committed decisions whose intermediate state was GC'd.

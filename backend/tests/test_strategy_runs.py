@@ -231,6 +231,8 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
         without_forward = client.get("/strategy-runs/capabilities").json()
         monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(enabled=False))
         matrix = client.get("/strategy-runs/capabilities").json()
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(enabled=True))
+        enabled = {(row["family"], row["language"]): row for row in client.get("/strategy-runs/capabilities").json()["profiles"]}
     assert without_forward["families"]["continuous"] == {"available": False, "reason": "CONTINUOUS_NOT_READY"}
     assert not [row for row in without_forward["profiles"] if row["family"] == "continuous"]
     assert matrix["schema"] == "candlescope.strategy-run-capabilities/1"
@@ -245,7 +247,7 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
     assert set(rows) == {("host", "builtin"), ("host", "pine"), ("host", "python"), ("native", "pine"),
                          ("external", "pine"), ("continuous", "builtin"), ("continuous", "python"),
-                         ("continuous", "pine"), ("follow", "builtin"), ("follow", "python")}
+                         ("continuous", "pine"), ("continuous", "external"), ("follow", "builtin"), ("follow", "python")}
     host = rows["host", "builtin"]
     assert host["available"] and host["authority"] == "HOST" and host["clock_policy"] == "FIXED"
     assert host["fidelities"] == runtime.service.capabilities()["fidelity_modes"] and "BAR_APPROX" in host["fidelities"]
@@ -259,6 +261,11 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     assert (forward["clock_policy"], forward["intervals"], forward["fixed_intervals_only"], forward["starts"],
             forward["controls"]) == ("FORWARD", None, True, ["HISTORY_LIVE", "LIVE_ONLY"], {"cancel": False})
     assert forward["available"] is False and forward["reason"] == "READ_ONLY"
+    # B-333c: an external model needs the Host's external connections as well.
+    assert enabled["continuous", "builtin"]["available"] is True
+    assert (enabled["continuous", "external"]["available"], enabled["continuous", "external"]["reason"]) == (
+        runtime.service.settings.external_provider_enabled, None if runtime.service.settings.external_provider_enabled
+        else "EXTERNAL_PROVIDER_DISABLED")
     follow = rows["follow", "builtin"]
     assert (follow["authority"], follow["clock_policy"], follow["intervals"], follow["fixed_intervals_only"]) == (
         "HOST", "FOLLOW", None, True)

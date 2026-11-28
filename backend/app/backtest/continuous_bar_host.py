@@ -79,6 +79,10 @@ class ContinuousBarHost:
         self.bar_step_ms = (bar_grid(series[3]).step_ms if isinstance(series, list) and len(series) > 3
                             else MARKET_BAR_STEP_MS)
         provider = provider_factory(definition)
+        # A provider that waits on outside work (an external model, B-333c) stops when the host stops.
+        bind_control = getattr(provider, "bind_control", None)
+        if callable(bind_control):
+            bind_control(self._check_stopping)
         self.session = StrategyProviderSession(provider, run_id=run_id)
         self.adapter = StrategyHostAdapter(self.session, step_timeout_s=step_timeout_s)
         try:

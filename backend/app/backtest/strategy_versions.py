@@ -86,6 +86,13 @@ def continuous_material(definition: Mapping[str, Any]) -> dict[str, Any]:
     source = provider.get("source_text") or ""
     if builtin and not source:
         return material("builtin", str(builtin), {}, runtime)
+    if provider["language"] == "external":
+        # B-333c: the model runs outside the Host; its code is its revision's frozen manifest.
+        binding = provider.get("external") or {}
+        identity = binding.get("external_provider_identity") or {}
+        return material("external", str(provider.get("strategy_revision_id")), {},
+                        {**runtime, "provider_schema": str(provider.get("schema")),
+                         "manifest_hash": str(identity.get("manifest_hash"))})
     pine = provider.get("pine") if isinstance(provider.get("pine"), Mapping) else None
     return material(str(provider["language"]), str(source), provider.get("libraries") or {},
                     {**runtime, "provider_schema": str(provider.get("schema")),

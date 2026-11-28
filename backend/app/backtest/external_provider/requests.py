@@ -14,6 +14,16 @@ class ConnectionCreateRequest(SnapshotPreviewRequest):
     snapshot_hash: str = Field(min_length=8, max_length=80)
 
 
+class ForwardConnectionCreateRequest(BaseModel):
+    """A connection for forward runs of one market series (B-333c), not a dataset snapshot."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    strategy_revision_id: str = Field(min_length=1, max_length=128)
+    exchange: str = Field(min_length=1, max_length=40, pattern=r"^\S+$")
+    market_type: str = Field(min_length=1, max_length=40, pattern=r"^\S+$")
+    symbol: str = Field(min_length=1, max_length=128, pattern=r"^\S+$")
+    interval: str = Field(min_length=1, max_length=64, pattern=r"^\S+$")
+
+
 class ConnectionSmokeRequest(ConnectionCreateRequest):
     parameters: dict[str, Any] = Field(default_factory=dict)
     output_mode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"] = "TARGET_POSITION"
