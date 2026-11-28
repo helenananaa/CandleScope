@@ -3,6 +3,7 @@ import { IconButton } from "../ui/index.js";
 import { openToolMenuFromKeyboard } from "./toolMenuKeys.js";
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
 import type { ToolbarVariant } from "./drawingToolbarDefinitions.js";
+import type { FlyoutFavorites } from "./ToolFlyout.js";
 
 type VariantButtonEvents = Pick<
   ComponentPropsWithoutRef<"button">,
@@ -18,6 +19,7 @@ export interface DrawingVariantToolButtonProps<TId extends string = string> exte
   dataChartType?: string;
   dataDrawingTool?: string;
   disabled?: boolean;
+  favorites?: FlyoutFavorites<TId> | null;
   flyoutClassName?: string;
   flyoutKey: string;
   flyoutOpen: string | null;
@@ -46,6 +48,7 @@ export default function DrawingVariantToolButton<TId extends string>({
   dataChartType,
   dataDrawingTool,
   disabled = false,
+  favorites = null,
   flyoutClassName = "",
   flyoutKey,
   flyoutOpen,
@@ -92,6 +95,7 @@ export default function DrawingVariantToolButton<TId extends string>({
           anchorRef={anchorRef}
           label={title}
           className={flyoutClassName}
+          favorites={favorites}
           {...(isVariantDisabled === undefined ? {} : { isVariantDisabled })}
         />
       )}

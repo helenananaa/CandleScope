@@ -68,6 +68,12 @@ on legacy flat fields.
   transaction and can never supply missing command data.
 - `core/drawingCodec.ts` owns fail-closed conversion between the canonical
   document and the unchanged legacy `SavedDrawing[]` wire contract.
+- `core/drawingWireContract.ts` lists every geometry and style key per kind.
+  Replay training saves canonical documents to the backend, whose allowlist in
+  `backend/app/replay/training/review.py` must accept them all. After adding a
+  kind or key, regenerate `frontend/contracts/drawing-wire.json` (the command is
+  in the module) and extend the backend allowlist; the backend test
+  `test_replay_drawing_wire_contract.py` fails until both agree.
 - `persistence/drawingDocumentRepository.ts` owns the canonical scope-keyed
   IndexedDB record, manifest validation, bounded encode/decode, and v2-first
   load policy. `drawingPersistenceCoordinator.ts` owns debounced single-flight
@@ -192,3 +198,28 @@ The arrow tool creates an ordinary `line` segment whose style carries `arrowEnd`
 The parallel channel creates a `channel` entity with three source anchors: baseline start, baseline end, and a point the parallel line passes through. Creation is three clicks; the second click fixes the baseline without committing. The parallel offset is derived in screen space at projection time (baseline translated vertically through the third anchor), so the rails stay visually parallel on linear and logarithmic price scales and across zoom. The width handle sits at the middle of the parallel rail; dragging it moves only the third anchor, and dragging a rail or the band interior moves all three. Hits use point zones, rail polylines and a `polygon` zone for the interior. Like range measurements, channels are scene-path only with no legacy primitive, and are offered on ordinary time-axis charts.
 
 Rectangles gain optional zone options: `extendRight` (geometry, because it changes the drawn extent and culling bounds; toggling it commits as a resize), and `midline`, `priceLabels` and a short `label` (style). The extension is painted only: anchors, resize handles and the persisted right edge never move to the pane edge. Boundary prices are read from the source anchors and formatted by magnitude. Ellipses ignore all zone options.
+
+## Multi-select, groups, copy/paste and favorite tools
+
+A selection is a primary drawing (the one whose style bar or handles show) plus the other selected ids in z-order (`interaction/drawingMultiSelection.ts`). Shift-click toggles a drawing; ⌘/Ctrl+A selects every drawing visible on the interval once something is selected. With two or more selected, `DrawingMultiSelectionBar` replaces the one-drawing style bar.
+
+Groups are a common style flag, `groupId` (`grp_…`, validated by the codec and both persistence normalizers). Clicking any member selects the whole group. Group (⌘/Ctrl+G), ungroup (⌘/Ctrl+⇧G) and delete are each one `update-style` or `delete` batch, so one undo restores them.
+
+Pressing the body of a selected drawing moves every selected drawing (`interaction/drawingGroupMove.ts`). Each member keeps its own body-drag descriptor and gets the same screen delta, and the whole move commits as one batch of `move` commands. With the magnet on, only the primary's first anchor snaps and the others follow by the corrected delta, so the group keeps its shape. A locked member keeps the selection in place. During the drag the members leave the static scene (`companionOverlayEntityIdsRef`) and the dynamic overlay paints them; their drafts stay there for two frames after the commit so nothing flickers. A handle press still resizes just that drawing.
+
+Copy (⌘/Ctrl+C) keeps detached copies in memory for this window. Paste (⌘/Ctrl+V) and duplicate (⌘/Ctrl+D) create new drawings with new ids and new group ids, unlocked. Pasting onto the chart the copy came from offsets it by 16 px; another symbol or chart gets the same anchors. These shortcuts belong to the chart last pressed and skip text fields, dialogs and text editing.
+
+Favorite tools are starred in any tool menu (or F on a focused row), up to nine, stored per browser profile under `candlescope.drawing.favoriteTools.v1`. They appear as their own toolbar strip, and Alt+1…Alt+9 (by physical key) picks them.
+
+## Calculated drawings
+
+Fib extension, anchored VWAP, fixed-range volume profile and regression channel are one `calculated` entity kind with a `calcType` and 3, 1, 2 or 2 time anchors (`geometry/calculatedDrawingMath.ts` holds the maths; `engine/drawingCalculatedProjection.ts` the projection). Only the anchors are stored. Values are recomputed on every projection from `DrawingFrameSnapshot.seriesData`, the bars the chart is showing, so a replay chart (which shows only revealed bars) can never feed them a later bar, and the world revision already changes with `dataRevision`. Bars are taken by position: a market closure has no bars and nothing fills it, a range anchored inside a closure starts at the next bar, and the regression slope is per bar, not per second. The volume profile spreads each bar's volume evenly over its high–low range and says "Estimated from N bars" on the chart. Like channels these are scene-path only, offered on ordinary time-axis charts with the overlay surface; the fib extension uses the three-click flow, the anchored VWAP a single click. Replay training offers them too and saves them in the run record like other drawings (the backend allowlist accepts the `calculated` kind). Selection handles come from the scene projection (fitted line ends, profile corners, first VWAP value) and map back to the stored anchors.
+
+## Callouts and price labels
+
+Both tools create ordinary `text` entities, so they reuse the inline editor, the text format bar, the object list, locking, interval visibility, history, persistence and export without a second store. `interaction/drawingTextAnnotations.ts` owns their creation payloads, drag parts and drag previews.
+
+- A callout adds an optional `target` anchor to the text geometry. The first click fixes the target, the second places the box and opens the editor; an empty note removes the draft like any text. The scene paints a leader from the box's nearest border point to a dot on the target. Dragging the box moves only the box, the target dot (also a selection handle) moves only the target, and the leader line moves both. All three commit one normal geometry command.
+- A price label sets `priceLabel` on the text style and keeps one anchor. Its content is the anchor's source price, formatted like zone boundary prices, so it is never opened for typing and follows the anchor when dragged. The tag is painted up and to the right of the anchor with a leader back to it.
+
+Anchors keep source time and price, so interval switches, zoom and history backfill never move them. A stored price label never carries a target; strict persistence rejects that and malformed targets. The tools are offered on ordinary time-axis charts with the default overlay interaction owner; legacy renderer controls and source-lineage charts do not offer them, and the legacy text primitive keeps showing a callout as plain text.

@@ -37,12 +37,19 @@ class TwelveDataConfigurationError(RuntimeError):
     """The provider is installed but has no usable server-side credential."""
 
 
+def configured_twelve_data_api_key(config: Any | None) -> str:
+    """The key saved in Settings → Data sources, else INGESTION_TWELVE_DATA_API_KEY."""
+    from app.data_sources.credentials import resolve_secret
+
+    return resolve_secret("twelvedata", "apiKey", getattr(config, "twelve_data_api_key", ""))
+
+
 def twelve_data_api_key(config: Any | None) -> str:
-    value = str(getattr(config, "twelve_data_api_key", "") or "").strip()
+    value = configured_twelve_data_api_key(config)
     if not value:
         raise TwelveDataConfigurationError(
-            "Twelve Data API key is not configured; set "
-            "INGESTION_TWELVE_DATA_API_KEY on the backend"
+            "Twelve Data API key is not configured; add one in Settings → Data "
+            "sources or set INGESTION_TWELVE_DATA_API_KEY on the backend"
         )
     return value
 
@@ -333,6 +340,7 @@ __all__ = [
     "TwelveDataConfigurationError",
     "TwelveDataExchangeAdapter",
     "WEEKDAY_CALENDAR_ID",
+    "configured_twelve_data_api_key",
     "twelve_data_api_key",
     "twelve_data_auth_headers",
 ]

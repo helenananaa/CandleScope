@@ -4,6 +4,7 @@ import { EmptyState } from "../../components/ui/EmptyState.js";
 import { Button } from "../../components/ui/Button.js";
 import { TabPanel, Tabs } from "../../components/ui/Choice.js";
 import AiControlSettingsPanel from "../ai-control/AiControlSettingsPanel.js";
+import DataSourcesSettingsPanel from "../data-sources/DataSourcesSettingsPanel.js";
 import { useId, useState } from "react";
 import AboutSettingsPanel from "./panels/AboutSettingsPanel.js";
 import CacheDiagnosticsPanel from "./panels/CacheDiagnosticsPanel.js";
@@ -47,6 +48,8 @@ export default function SettingsPanelHost({
       return <ProxySettingsPanel {...panelModel.network} />;
     case "exchanges":
       return <ExchangeSettingsPanel {...panelModel.exchanges} />;
+    case "dataSources":
+      return <DataSourcesSettingsPanel />;
     case "data":
       return (
         <div className="st-data">

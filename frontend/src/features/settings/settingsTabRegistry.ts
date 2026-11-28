@@ -7,6 +7,7 @@ export const SETTINGS_CATEGORIES = [
   { key: "appearance", labelKey: "settings.category.appearance", icon: "palette" },
   { key: "network", labelKey: "settings.category.network", icon: "globe" },
   { key: "exchanges", labelKey: "settings.category.exchanges", icon: "exchange" },
+  { key: "dataSources", labelKey: "settings.category.dataSources", icon: "lock" },
   { key: "data", labelKey: "settings.category.data", icon: "database" },
   { key: "plugins", labelKey: "settings.category.plugins", icon: "puzzle" },
   { key: "ai", labelKey: "settings.category.ai", icon: "bot" },

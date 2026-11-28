@@ -486,6 +486,27 @@ class ProxyPool:
         return route
 
     @_http_locked
+    def select_session(self, config: Any, exchange: str, *, kind: str,
+                       current: ProxyRoute | None = None) -> ProxyRoute:
+        """The route for one long-lived private session (read-only account).
+
+        The session stays on `current` while that route is still eligible for the
+        exchange and not cooling down after failures; otherwise it takes the first
+        healthy route in the configured order, or the one that recovers soonest.
+        Raises ValueError when no route allows the exchange.
+        """
+        routes = self.routes(config, exchange)
+        now = time.monotonic()
+
+        def wait(route):
+            return max(0.0, self.health(route, exchange, kind).retry_at - now)
+
+        for route in routes:
+            if current is not None and (route.id, route.url) == (current.id, current.url) and not wait(route):
+                return route
+        return min(routes, key=lambda route: (wait(route), routes.index(route)))
+
+    @_http_locked
     def begin(self, route: ProxyRoute | None, exchange: str, *, kind: str = "rest") -> None:
         if route is None:
             return

@@ -5,6 +5,14 @@ import type { ChartWorkspaceDocument } from "../chart-workspace/chartWorkspaceTy
 import type { ReplayIntegrityRuntime } from "./useReplayIntegrityRuntime.js";
 import type { ReplayV2Json } from "./replayV2Types.js";
 import { replayReviewDocumentHash, replayReviewDrawingDocument, replayReviewDrawingRecord } from "./replayReviewDrawing.js";
+import {
+  excludeRejectedDrawings,
+  replayDrawingSaveDocument,
+  replayRejectedDrawings,
+  sameRejectedDrawings,
+  type ReplayDrawingExclusions,
+  type ReplayRejectedDrawing,
+} from "./replayDrawingRejections.js";
 
 export function replayWorkspaceDrawingCharts(
   value: Readonly<Record<string, unknown>> | null, runId?: string,
@@ -31,7 +39,9 @@ export function replayWorkspaceDrawingScopes(bases: readonly string[], available
 export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
   document: ChartWorkspaceDocument, integrity: ReplayIntegrityRuntime) {
   const [error, setError] = useState<string | null>(null);
+  const [rejected, setRejected] = useState<readonly ReplayRejectedDrawing[]>([]);
   const charts = useRef<Record<string, Readonly<Record<string, unknown>>>>({});
+  const exclusions = useRef<ReplayDrawingExclusions>(new Map());
   const loaded = useRef(new Set<string>());
   const tail = useRef(Promise.resolve());
   const latest = useRef(integrity);
@@ -52,13 +62,24 @@ export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
         charts.current[scope] = replayReviewDrawingRecord(snapshot, runId);
       }
     }
-    const document = { documentSchemaVersion: 2, scopeKey: `replay-run:${runId}`, charts: { ...charts.current } };
-    const count = Object.values(document.charts).reduce((total, chart) => total + (Array.isArray(chart.entities) ? chart.entities.length : 0), 0);
+    const snapshot = { ...charts.current };
     tail.current = tail.current.catch(() => {}).then(async () => {
-      try {
-        await latest.current.actions.recordDrawing(document, await replayReviewDocumentHash(document), count);
-        setError(null);
-      } catch (cause) { setError(String(cause)); }
+      // Drawings the server rejects are left out and the rest saved again. Each
+      // retry leaves out at least one more drawing, so this ends.
+      for (;;) {
+        const save = replayDrawingSaveDocument(runId, snapshot, exclusions.current);
+        setRejected((current) => sameRejectedDrawings(current, save.excluded) ? current : save.excluded);
+        try {
+          await latest.current.actions.recordDrawing(save.document, await replayReviewDocumentHash(save.document), save.count);
+          setError(null);
+          return;
+        } catch (cause) {
+          const named = replayRejectedDrawings(cause);
+          if (named && excludeRejectedDrawings(exclusions.current, snapshot, named) > 0) continue;
+          setError(String(cause));
+          return;
+        }
+      }
     });
   }, [runId, scopes]);
   useEffect(() => {
@@ -97,5 +118,5 @@ export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
       if (timer !== null) { clearTimeout(timer); flush(); }
     };
   }, [flush, integrity.currentDrawing, integrity.drawingLoaded, runId, scopes]);
-  return { error, retry: flush };
+  return { error, rejected, retry: flush };
 }

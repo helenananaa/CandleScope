@@ -24,8 +24,10 @@ import {
   buildTrainingRunCreateRequest,
   createTrainingRunDraft,
   evaluateTrainingRunSetupDraft,
+  preferHedgeCapableEntries,
 } from "./trainingHubModel.js";
 import type { TrainingRunDraft, TrainingRunDraftEvaluation } from "./trainingHubModel.js";
+import { fetchExchanges } from "../../services/api.js";
 import { defaultHubDraftStorage, hubDraftKey, readHubDraft, writeHubDraft, type HubDraftStorage } from "./trainingHubDraftStorage.js";
 import type { KlineSeriesIdentityWire } from "../market-data/klineSeriesIdentity.js";
 import type {
@@ -296,10 +298,12 @@ export class TrainingHubLifecycle {
       // Local history may have been archived while the workbench was open.
       // Refresh source readiness together with coverage; an empty-history
       // capability cached before import must not keep creation disabled.
-      const [capabilities, preparationCapabilities] = await Promise.all([
+      const [capabilities, preparationCapabilities, exchanges] = await Promise.all([
         this.api.capabilities(this.abortController.signal),
         this.api.preparationCapabilities?.(this.abortController.signal)
           .catch(() => ({ enabled: false, replay_sources: { BAR: false, AGG_TRADE: false } })) ?? null,
+        // Only a default preference: without venue roles the first usable entry is used.
+        fetchExchanges().then((payload) => payload.exchanges).catch(() => null),
       ]);
       if (!this.accept(token)) return;
       this.capabilities = capabilities;
@@ -315,7 +319,10 @@ export class TrainingHubLifecycle {
       }, this.abortController.signal);
       if (!this.accept(token)) return;
       this.catalog = catalog;
-      this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
+      this.draft = preservedDraft ?? createTrainingRunDraft(
+        catalog, this.launchContext,
+        exchanges === null ? undefined : preferHedgeCapableEntries(exchanges),
+      );
       if (!preservedDraft && browserHost() && this.canPrepare(this.draft)) {
         const source = this.launchContext;
         this.draft = { ...this.draft, exchange: source?.exchange ?? "binance", marketType: source?.market_type ?? "spot",
