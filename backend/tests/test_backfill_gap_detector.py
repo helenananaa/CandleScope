@@ -168,6 +168,40 @@ def test_gap_detector_reports_requested_range_edge_holes() -> None:
     asyncio.run(_run())
 
 
+def test_up_to_date_session_series_has_no_gaps_and_no_calendar_error() -> None:
+    # Live AAPL 1m failed every scan with "calendar is available only from
+    # 2000-01-01": the head and tail ranges after a stored edge are empty.
+    from app.data_engine.history import get_history_calendar_registry
+    from app.exchanges.plugins.twelvedata.adapter import EXCHANGE_DATE_CALENDAR_ID
+    from app.exchanges.plugins.twelvedata.plugin import TwelveDataPlugin
+
+    async def _run() -> None:
+        TwelveDataPlugin()
+        minute = 60_000
+        close_minute = datetime(2026, 11, 25, 20, 59, tzinfo=timezone.utc)
+        last = int(close_minute.timestamp() * 1000)
+        detector = GapDetector(
+            BackfillConfig(gap_tolerance_bars=0),
+            _Storage({last - offset * minute for offset in range(5)}),
+            calendar_resolver=lambda *_: EXCHANGE_DATE_CALENDAR_ID,
+            calendar_registry=get_history_calendar_registry(),
+        )
+
+        gaps = await detector.detect(
+            symbol="AAPL:NASDAQ",
+            intervals=["1m"],
+            range_start_ms=last - 4 * minute,
+            range_end_ms=last,
+            exchange="twelvedata",
+            market_type="stock",
+        )
+
+        assert gaps == []
+        assert detector.snapshot()["metrics"]["counters"].get("detect_errors", 0) == 0
+
+    asyncio.run(_run())
+
+
 def test_gap_detector_clamps_stale_tail_to_exact_requested_bar() -> None:
     async def _run() -> None:
         day_ms = 24 * 60 * 60 * 1_000

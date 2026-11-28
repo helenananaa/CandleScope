@@ -767,7 +767,7 @@ class BackfillCoordinator(BackfillAdmission, BackfillExecution):
                     metadata=identity_metadata,
                 )
                 audit_calendar, calendar_resolved = (
-                    self._calendar_for_reconciliation(calendar_request)
+                    self._series_calendar(calendar_request)
                 )
                 if not calendar_resolved:
                     raise ValueError("history calendar is unavailable")
@@ -2365,6 +2365,16 @@ class BackfillCoordinator(BackfillAdmission, BackfillExecution):
         calendar = self._history_planner.calendar(context, availability)
         if calendar is None and self._history_service is not None and plan is not None:
             calendar = self._history_service.calendars.get(plan.calendar_id)
+        return calendar, calendar is not None
+
+    def _series_calendar(
+        self,
+        request: RepairRequest,
+    ) -> tuple[TradingCalendar | None, bool]:
+        """Like ``_calendar_for_reconciliation``, for a request without a real range."""
+        if not self._history_planner.configured:
+            return None, True
+        calendar = self._history_planner.series_calendar(request)
         return calendar, calendar is not None
 
     @staticmethod

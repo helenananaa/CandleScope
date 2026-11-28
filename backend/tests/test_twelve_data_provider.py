@@ -468,6 +468,22 @@ def test_us_equity_intraday_calendar_handles_holiday_dst_and_early_close() -> No
     assert calendar.bucket_end_ms(_ms("1999-12-31T14:30:00"), "8h") > _ms("1999-12-31T14:30:00")
 
 
+def test_us_equity_intraday_calendar_answers_an_empty_range_like_other_calendars() -> None:
+    # A gap scan whose storage already holds the last closed minute asks for
+    # the range after it, which is empty. That is not outside 2000-2045.
+    TwelveDataPlugin()
+    calendar = get_history_calendar_registry().require(EXCHANGE_DATE_CALENDAR_ID)
+    last_close = _ms("2026-11-25T20:59:00")
+
+    for interval in ("1m", "1h"):
+        assert calendar.first_expected_open(last_close + 1, last_close, interval) is None
+        assert calendar.last_expected_open(last_close + 1, last_close, interval) is None
+        assert list(calendar.expected_opens(last_close + 1, last_close, interval)) == []
+        assert calendar.count_expected(last_close + 1, last_close, interval) == 0
+    with pytest.raises(ValueError, match="intraday calendar is available only"):
+        calendar.first_expected_open(_ms("1999-12-31T14:30:00"), _ms("1999-12-31T15:30:00"), "1m")
+
+
 @pytest.mark.parametrize(
     ("interval", "open_time"),
     [("1h", "2024-11-29T17:30:00Z"), ("8h", "2024-11-29T14:30:00Z")],
