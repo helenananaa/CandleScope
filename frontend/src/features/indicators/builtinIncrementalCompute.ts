@@ -68,14 +68,16 @@ export function roundBuiltinValue(value: number): number {
  */
 export class BuiltinIncrementalState {
   private rows: IndicatorOhlcvBar[] = [];
-  private states: State[] = [initial()];
-  private values: (number | null)[][] = [];
+  // Only the last input row is ever replaced, so the recursion restarts from
+  // the state before that row. Older per-bar states are never read again.
+  private beforeLast: State = initial();
+  private latest: State = initial();
   private outputs: IndicatorValuePoint[][] = [[], [], []];
   private outputColors: IndicatorColorPoint[][] = [[], [], []];
   private seedWindow: number[] = [];
   constructor(private readonly request: IndicatorComputeRequest, seed?: BuiltinIncrementalSeed,
     private readonly allowSparseSeed = false) {
-    if (seed !== undefined) this.states = [this.restoreSeed(seed)];
+    if (seed !== undefined) this.beforeLast = this.latest = this.restoreSeed(seed);
   }
 
   get inputCount(): number { return this.rows.length; }
@@ -181,31 +183,36 @@ export class BuiltinIncrementalState {
     for (let i = 0; i < stable; i++) {
       if (!sameBar(rows[i]!, this.rows[i]!)) return false;
     }
-    this.values.length = stable;
-    this.states.length = stable + 1;
+    let state = this.rows.length === 0 ? this.latest : this.beforeLast;
     this.rows.length = stable;
     const replaceFrom = rows[stable]?.time ?? Infinity;
     for (const points of [...this.outputs, ...this.outputColors]) points.length = prefixLength(points, replaceFrom);
     const p = this.request.params ?? {};
     const fast = Number(p.fast ?? 12), slow = Number(p.slow ?? 26), signal = Number(p.signal ?? 9);
+    // Finite windows read one price array: the replaced rows' windows, plus the
+    // canonical seed's prices before the first complete in-input window.
+    let prices: number[] = [], priceOffset = 0;
+    if (this.request.name === "MA" || this.request.name === "BOLL") {
+      const from = Math.max(0, stable - Number(p.period ?? 20) + 1);
+      const recent = rows.slice(from).map(row => field(row, String(p.source ?? "close")));
+      prices = from === 0 ? [...this.seedWindow, ...recent] : recent;
+      priceOffset = from === 0 ? this.seedWindow.length : -from;
+    }
     for (let i = stable; i < rows.length; i++) {
       const bar = rows[i]!;
-      const s = { ...this.states.at(-1)! };
+      const s = { ...state };
       s.count++;
-      if (this.request.name === "VOL") this.values.push([bar.volume]);
+      let values: (number | null)[];
+      if (this.request.name === "VOL") values = [bar.volume];
       else if (this.request.name === "MA" || this.request.name === "BOLL") {
         const period = Number(p.period ?? 20);
-        const missing = Math.max(0, period - i - 1);
-        const window = [
-          ...(missing ? this.seedWindow.slice(-missing) : []),
-          ...rows.slice(Math.max(0, i - period + 1), i + 1).map(row => field(row, String(p.source ?? "close"))),
-        ];
-        if (window.length < period) this.values.push(this.request.name === "MA" ? [null] : [null, null, null]);
-        else if (this.request.name === "MA") this.values.push([windowMean(window)]);
+        const end = i + priceOffset + 1, start = end - period;
+        if (start < 0) values = this.request.name === "MA" ? [null] : [null, null, null];
+        else if (this.request.name === "MA") values = [windowMean(prices, start, end)];
         else {
-          const [mean, m2] = windowMoments(window);
+          const [mean, m2] = windowMoments(prices, start, end);
           const spread = Number(p.mult ?? 2) * Math.sqrt(Math.max(m2 / period, 0));
-          this.values.push([mean, mean + spread, mean - spread]);
+          values = [mean, mean + spread, mean - spread];
         }
       }
       else if (this.request.name === "MACD") {
@@ -223,7 +230,7 @@ export class BuiltinIncrementalState {
           dea = s.signal;
           if (dea !== null) hist = 2 * (dif - dea);
         }
-        this.values.push([dif, dea, hist]);
+        values = [dif, dea, hist];
       } else {
         const period = Number(p.period ?? (this.request.name === "EMA" ? 20 : 14));
         const value = field(bar, String(p.source ?? "close"));
@@ -260,11 +267,12 @@ export class BuiltinIncrementalState {
           output = s.fast;
           s.previous = bar.close;
         }
-        this.values.push([output]);
+        values = [output];
       }
-      this.states.push(s);
+      this.beforeLast = state;
+      state = s;
       this.rows.push({ ...bar });
-      this.values.at(-1)!.forEach((value, output) => {
+      values.forEach((value, output) => {
         if (value === null) return;
         this.outputs[output]!.push(Object.freeze({ time: bar.time, value: roundBuiltinValue(value) }));
         if (this.request.name === "VOL" || (this.request.name === "MACD" && output === 2)) {
@@ -276,6 +284,7 @@ export class BuiltinIncrementalState {
         }
       });
     }
+    this.latest = state;
     return true;
   }
 
@@ -390,15 +399,23 @@ export function createIncrementalBuiltinCompute(remote: IndicatorComputeBatchExe
   };
 }
 
+/** Builtins that live charts advance in the browser: EMA, and MA and RSI,
+ * which every new live chart shows by default. */
+export const LIVE_INCREMENTAL_BUILTINS: ReadonlySet<string> = new Set(["EMA", "MA", "RSI"]);
+
 /** Live local builtins resend their whole bounded window on every sampled
- * forming tick. EMA is validated once per window against the Python builtin and
- * then advanced in the browser. A moved window, a changed closed bar, a new gap
- * or an explicit recompute goes back to the server. Replay and synthetic chart
- * inputs keep their own executors. */
+ * forming tick. EMA, MA and RSI are validated once per window against the
+ * Python builtin and then advanced in the browser. A moved window, a changed
+ * closed bar, a new gap or an explicit recompute goes back to the server.
+ * Replay and synthetic chart inputs keep their own executors. */
 export function createLiveBuiltinCompute(remote: IndicatorComputeBatchExecutor = computeIndicatorBatch): IndicatorComputeBatchExecutor {
   return createIncrementalBuiltinCompute(remote, {
-    supports: request => request.name === "EMA" && request.replayContext === undefined && request.chartInput === undefined,
+    supports: request => LIVE_INCREMENTAL_BUILTINS.has(request.name ?? "")
+      && request.replayContext === undefined && request.chartInput === undefined,
     allowSparseSeed: true,
-    maxEntries: 16, maxCachedBars: 32_000, eventName: "indicator.builtin.incremental",
+    // One manager serves an app window of up to 16 charts, each showing MA and
+    // RSI by default. Each entry keeps one INDICATOR_HISTORY_LIMIT (2,000-bar)
+    // input window, about 0.45 MB of state.
+    maxEntries: 48, maxCachedBars: 96_000, eventName: "indicator.builtin.incremental",
   });
 }
