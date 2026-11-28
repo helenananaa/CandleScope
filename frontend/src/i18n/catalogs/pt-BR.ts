@@ -4296,7 +4296,7 @@ export const ptBR = {
   "dataSources.loading": "Carregando…",
   "dataSources.vaultUnavailable": "Não é possível salvar chaves neste computador; aqui só funciona uma variável de ambiente.",
   "dataSources.deletionPending": "Uma chave antiga será excluída do cofre de senhas na próxima abertura. O CandleScope não a usa mais.",
-  "dataSources.twelvedata.description": "Histórico e preços em tempo real de ações dos EUA, ETFs, câmbio, índices e commodities. Obtenha uma chave gratuita em {site}.",
+  "dataSources.twelvedata.description": "Histórico e preços em tempo real de ações dos EUA, ETFs, câmbio, índices e mercadorias. Obtenha uma chave gratuita em {site}.",
   "dataSources.state.saved": "Usando chave salva",
   "dataSources.state.environment": "Usando variável de ambiente",
   "dataSources.state.none": "Sem chave",
