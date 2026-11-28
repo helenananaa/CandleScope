@@ -218,7 +218,8 @@ The component dependency direction is explicit:
   injected executor. It is off by default (`HISTORY_SYMBOL_PLANNER_ENABLED=0`).
   When on, `DataManager.enable_history_planner` routes base history for
   single-base derived intervals on 1m-or-wider Binance/OKX bases (89m on 1m) to
-  it: chart reads' missing base ranges, and the warm-start seed's forming-bucket
+  it: chart reads' missing base ranges (for a cold mixed read, which reports
+  the closed target buckets themselves, their base slots), and the warm-start seed's forming-bucket
   components (`forming`) and tail rebuild (`tail`). Pieces run as source-interval
   coordinator repairs (`coordinator_executor`) and a read's ids go back to the
   API; a served read or tail then sends its target window to the existing target
