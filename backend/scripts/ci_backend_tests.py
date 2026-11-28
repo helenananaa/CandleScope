@@ -158,6 +158,7 @@ STAGES = {
         "test_symbol_catalog_refresh.py", "test_symbol_discovery.py",
         "test_symbol_history_coordinator_executor.py",
         "test_symbol_history_planner.py", "test_symbol_history_router.py",
+        "test_symbol_history_warm_start.py",
         "test_symbol_normalization.py",
         "test_trade_candle_sources.py",
         "test_trade_candles.py", "test_trade_history_round3.py",

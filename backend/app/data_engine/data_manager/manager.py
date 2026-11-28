@@ -384,6 +384,7 @@ class DataManager(DataManagerCore):
             storage_provider=lambda: self.query_engine.storage,
             backfill_trigger_provider=lambda: self._backfill_trigger,
             interval_resolver=self.interval_resolver,
+            history_router_provider=lambda: self._history_router,
         )
         self.retention = RetentionService(
             cache=self.cache,
