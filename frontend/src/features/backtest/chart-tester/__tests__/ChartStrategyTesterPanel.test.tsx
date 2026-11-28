@@ -54,10 +54,12 @@ test("first open lists templates and recents on one screen, with no blank editor
       onResumeObserving={() => undefined}
       onSourceDirty={() => undefined}
       onClose={() => undefined}
+      liveFollow={false}
     />,
   );
 
   assert.match(html, /data-chart-strategy-panel="true"/);
+  // The 1.0 run modes, kept for the VITE_CHART_STRATEGY_FOLLOW_ENABLED=0 rollback.
   for (const key of ["continuous.history", "continuous.historyLive", "continuous.liveOnly"] as const) assert.ok(html.includes(t(key)));
   for (const template of CHART_STRATEGY_TEMPLATES) assert.ok(html.includes(t(template.nameKey)));
   assert.match(html, /chart-strategy-start-footer"><button/);
@@ -214,8 +216,10 @@ test("an empty continuous chart can attach a strategy or restore its own saved s
         onResumeObserving={() => undefined}
         onSourceDirty={() => undefined}
         onClose={() => undefined}
+        liveFollow={false}
       />,
     );
+    // The 1.0 run-mode selector (VITE_CHART_STRATEGY_FOLLOW_ENABLED=0) restores the saved mode.
     assert.match(html, /value="LIVE_ONLY" selected/);
     assert.ok(html.includes(t("continuous.restoreAttachment", { name: saved.displayName })));
     assert.ok(html.includes(t("chartTester.start.template")));
@@ -316,7 +320,7 @@ test("the strategy list names the Python strategy by its language, never by the 
     assert.ok(!listed.includes(t("native.hostMode")), "no engine name in the list");
     const empty = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-5", null)} strategyTesterMode="CANDLESCOPE" liveFollow />);
     assert.ok(empty.includes(t("strategyList.python")), "an empty Python entry is still named for what it holds");
-    const before = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-6", python)} strategyTesterMode="CANDLESCOPE" />);
+    const before = renderToStaticMarkup(<ChartStrategyDock {...panelProps("workspace\u0000cell-6", python)} strategyTesterMode="CANDLESCOPE" liveFollow={false} />);
     assert.ok(before.includes(t("native.hostMode")), "flag off keeps the previous list");
   });
 });

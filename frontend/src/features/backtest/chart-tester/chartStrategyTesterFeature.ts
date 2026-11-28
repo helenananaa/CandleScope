@@ -50,13 +50,15 @@ export function resolveChartStrategyAutoRunEnabled(
 }
 
 /**
- * ADR-BACKTEST-015 P4a: a native Pine run on the chart follows live bars by rebuilding its
- * latest prefix after each bar closes (O1). Off until its visual review; "1" turns it on.
+ * ADR-BACKTEST-015 P4: chart strategies follow live bars. Fixed Python results extend with
+ * new bars, native Pine follows live bars (O1), the panel shows one strategy list with the
+ * forward-tracking bar, and the `forward` control command is available. On by default from
+ * 1.1, after the O2 limits were confirmed on 2026-11-27; "0" restores the 1.0 run modes.
  */
 export function resolveChartStrategyFollowEnabled(
-  environment: ChartStrategyTesterFlagEnvironment,
+  environment: ChartStrategyTesterFlagEnvironment = {},
 ): boolean {
-  return strictEnabled(environment.VITE_CHART_STRATEGY_FOLLOW_ENABLED);
+  return enabledByDefault(environment.VITE_CHART_STRATEGY_FOLLOW_ENABLED);
 }
 
 function viteEnvironment(): ChartStrategyTesterFlagEnvironment {
