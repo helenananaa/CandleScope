@@ -5,6 +5,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import asdict, dataclass
 
+from app.exchanges.roles import (
+    BINANCE_KLINES_START_TIME_ASCENDING,
+    HISTORY_EARLIEST_PAGE,
+    venue_role_contract,
+)
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 
@@ -153,7 +158,9 @@ class ReplayOriginResolver:
         lower = ((max(bounds) + MINUTE - 1) // MINUTE) * MINUTE if bounds else 0
         if bounds and lower >= frozen_start_ms:
             return frozen_start_ms
-        if identity.exchange == "binance" and self.factory is not None:
+        if venue_role_contract(identity.exchange, identity.market_type,
+                               HISTORY_EARLIEST_PAGE) == BINANCE_KLINES_START_TIME_ASCENDING \
+                and self.factory is not None:
             # This provider's start-time page is ascending. Do not generalize
             # this probe to providers whose limit selects the newest rows.
             descriptor = StreamDescriptor(

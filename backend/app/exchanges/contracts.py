@@ -269,6 +269,36 @@ def _validate_capability_values(
         _validate_channel_capabilities(capabilities, report)
     if schema_version >= 3:
         _validate_market_availability(capabilities, report)
+    _validate_capability_roles(capabilities, report)
+
+
+def _validate_capability_roles(capabilities: Any, report: ExchangeContractReport) -> None:
+    """Roles name advertised markets, once per role and market (ADR-DATA-002 D3)."""
+    roles = getattr(capabilities, "roles", ()) or ()
+    if isinstance(roles, (str, bytes, dict)):
+        report.add("capabilities.roles_invalid", "capability roles must be a list or tuple")
+        return
+    markets = {
+        str(getattr(market, "market_type", "")).strip().lower()
+        for market in (getattr(capabilities, "markets", ()) or ())
+    }
+    seen: set[tuple[str, str]] = set()
+    for item in roles:
+        name, contract = getattr(item, "role", None), getattr(item, "contract", None)
+        market_types = getattr(item, "market_types", None)
+        if not isinstance(name, str) or not name or not isinstance(contract, str) or not contract \
+                or not isinstance(market_types, tuple) or not market_types:
+            report.add("capabilities.role_invalid",
+                       "a capability role needs a name, a contract and its market types")
+            continue
+        for market_type in market_types:
+            if market_type not in markets:
+                report.add("capabilities.role_market_unknown",
+                           f"role {name!r} names market {market_type!r}, which is not advertised")
+            if (name, market_type) in seen:
+                report.add("capabilities.role_duplicate",
+                           f"role {name!r} is declared twice for market {market_type!r}")
+            seen.add((name, market_type))
 
 
 def _validate_channel_capabilities(

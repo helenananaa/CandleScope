@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Field, Input, Select } from "../../components/ui/index.js";
 import { getNumberLocale, t } from "../../i18n/index.js";
 import type { MessageKey } from "../../i18n/index.js";
+import { useExchangeCatalog } from "../chart-session/exchangeCatalogRuntime.js";
 import { PreparationApiError } from "../data-preparation/api.js";
 import type { PreparationJob } from "../data-preparation/api.js";
 import { fillTradeHistory, readTradeHistory, supportsTradeHistoryArchive, TRADE_HISTORY_MINUTES } from "./tradeFlowHistoryApi.js";
@@ -152,7 +153,11 @@ export function TradeFlowHistory({ identity }: { identity: TradeFlowIdentity }) 
   const now = Date.now();
   const today = new Date(now).toISOString().slice(0, 10);
   const startMs = Date.parse(`${day}T${hour}:00:00Z`);
-  const archiveSupported = supportsTradeHistoryArchive(identity);
+  const { exchangeCatalog, exchangeCatalogStatus } = useExchangeCatalog();
+  const archiveKnown = exchangeCatalogStatus !== "loading";
+  const archiveSupported = supportsTradeHistoryArchive(
+    identity, exchangeCatalog[identity.exchange.toLowerCase()]?.raw,
+  );
   const valid = day.length === 10 && Number.isFinite(startMs) && startMs >= 0 && startMs <= now;
   return (
     <div className="tf-history">
@@ -165,7 +170,7 @@ export function TradeFlowHistory({ identity }: { identity: TradeFlowIdentity }) 
           ))}
         </Select></Field>
       </div>
-      {!archiveSupported && <div className="tf-history-status">{t("trade.history.localOnly")}</div>}
+      {archiveKnown && !archiveSupported && <div className="tf-history-status">{t("trade.history.localOnly")}</div>}
       {archiveSupported && day === today && <div className="tf-history-status">{t("trade.history.unpublished")}</div>}
       {valid ? <TradeHistoryHour key={startMs} identity={identity} startMs={startMs}
         canDownload={archiveSupported && day < today} /> : <div className="tf-history-status">{t("trade.history.invalid")}</div>}

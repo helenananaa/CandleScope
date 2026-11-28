@@ -157,10 +157,66 @@ export async function checkAnnotationTools() {
     assert(widened && JSON.stringify(widened.dataPoints.slice(0, 2)) === JSON.stringify(channel.dataPoints.slice(0, 2)), "Width drag moved the baseline");
     assert(widened.dataPoints[2]!.price > through.price, "Width drag did not widen the channel");
 
+    // Callout: the first click fixes the target, the second places the box and opens the editor.
+    await selectTool("callout");
+    await click(730, 300);
+    assert(saved().length === 4, "A callout committed before its box was placed");
+    await click(745, 200);
+    const editor = await (async () => {
+      for (let i = 0; i < 40; i++) {
+        const area = document.querySelector<HTMLTextAreaElement>(".text-edit-overlay textarea");
+        if (area) return area;
+        await settle();
+      }
+      throw new Error("The callout did not open its text editor");
+    })();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(editor, "Breakout");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })); });
+    await until(() => saved().length === 5, "Committing the callout text did not create it");
+    // The editor stays until the committed scene paints, then the tool returns to the cursor.
+    await until(() => !document.querySelector(".text-edit-overlay") && tool === null,
+      "The callout editor did not hand back to the cursor");
+    const calloutDrawing = saved().find((item) => item.type === "text" && item.target);
+    assert(calloutDrawing?.type === "text" && calloutDrawing.text === "Breakout" && calloutDrawing.target
+      && calloutDrawing.dataPoint && calloutDrawing.target.price < calloutDrawing.dataPoint.price,
+      `Callout lost its text or target: ${JSON.stringify(calloutDrawing)}`);
+
+    // Dragging the target dot moves only the target.
+    await selectTool("callout");
+    await pointer("pointerdown", 730, 300, 1);
+    await pointer("pointermove", 715, 285, 1);
+    await pointer("pointerup", 715, 285);
+    const aimed = saved().find((item) => item.id === calloutDrawing.id);
+    assert(aimed?.type === "text" && JSON.stringify(aimed.dataPoint) === JSON.stringify(calloutDrawing.dataPoint)
+      && aimed.target && aimed.target.time !== calloutDrawing.target.time,
+      `Dragging the target moved the box or missed: ${JSON.stringify(aimed)}`);
+    await history("undo");
+    assert(JSON.stringify(saved().find((item) => item.id === calloutDrawing.id)) === JSON.stringify(calloutDrawing),
+      "Undo did not restore the callout target");
+
+    // Price label: one click; the label shows its anchor price and moves as one anchor.
+    await selectTool("price-label");
+    await click(720, 150);
+    await until(() => saved().length === 6, "One click did not create a price label");
+    const priceLabel = saved().find((item) => item.type === "text" && item.priceLabel);
+    assert(priceLabel?.type === "text" && priceLabel.dataPoint && !priceLabel.target, "Price label was not saved as one anchor");
+    await selectTool("price-label");
+    // The selected object's toolbar sits along the top edge; grab the label below it.
+    await pointer("pointerdown", 720, 150, 1);
+    await pointer("pointermove", 720, 170, 1);
+    await pointer("pointerup", 720, 170);
+    const relabelled = saved().find((item) => item.id === priceLabel.id);
+    assert(relabelled?.type === "text" && relabelled.dataPoint && relabelled.dataPoint.price < priceLabel.dataPoint.price,
+      "Dragging the price label pointer did not move its anchor");
+    await history("undo");
+
     // Rectangle zone options go through the same property command path as the panel.
     await selectTool("shape-rectangle");
     await click(90, 60); await click(240, 140);
-    await until(() => saved().length === 5, "Two clicks did not create a rectangle");
+    await until(() => saved().length === 7, "Two clicks did not create a rectangle");
     const rectangle = byType("shape");
     assert(rectangle?.id, "Missing rectangle");
     await act(async () => { assert(api()?.objects?.updateObject(rectangle.id!, { extendRight: true, midline: true, priceLabels: true, label: "Demand" }), "Zone options rejected"); });
@@ -168,6 +224,7 @@ export async function checkAnnotationTools() {
     const zone = byType("shape");
     assert(zone?.extendRight === true && zone.midline === true && zone.priceLabels === true && zone.label === "Demand", "Zone options did not persist");
     assert(JSON.stringify(zone.dataPoints) === JSON.stringify(rectangle.dataPoints), "Extending a zone rewrote its anchors");
+
     const before = saved();
 
     // Undo/redo, interval switch and IndexedDB remount must keep exact source payloads.
@@ -181,11 +238,11 @@ export async function checkAnnotationTools() {
     assert(JSON.stringify(saved()) === JSON.stringify(before), "Interval switch altered source coordinates");
     await act(async () => root.unmount()); await settle();
     root = createRoot(host); await act(async () => render());
-    await until(() => saved().length === 5 && !!api()?.control?.isReady(), "Remount did not restore the drawings");
+    await until(() => saved().length === 7 && !!api()?.control?.isReady(), "Remount did not restore the drawings");
     assert(JSON.stringify(saved()) === JSON.stringify(before), "Restored drawings differ from saved source");
     const exported = await chart.current!.prepareExport();
     assert(exported, "Drawing export could not synchronize the new tools");
     await exported.restore();
-    return { status: "PASS", saved: before, scope: "Real Chromium pointer creation (arrow, three-click channel, rectangle, plain/arrow paths), vertex edits, channel width drag, zone options, history, interval switch, IndexedDB remount and export" };
+    return { status: "PASS", saved: before, scope: "Real Chromium pointer creation (arrow, three-click channel, rectangle, plain/arrow paths, callout, price label), vertex edits, channel width drag, callout target drag, price label drag, zone options, history, interval switch, IndexedDB remount and export" };
   } finally { await act(async () => root.unmount()); host.remove(); }
 }

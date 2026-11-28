@@ -89,7 +89,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
         type: "market",
         qty: trade.openQty,
         reduceOnly: true,
-        ...(selected.settings.positionMode === "HEDGE" && trade.marketType === "futures"
+        // A position opened on a hedge leg closes on it; older futures positions in
+        // hedge accounts predate legs and still close with the hedge intent.
+        ...(selected.settings.positionMode === "HEDGE" && (trade.positionSide != null || trade.marketType === "futures")
           ? { positionSide: trade.direction === "long" ? "LONG" : "SHORT", positionEffect: "close", tradeId: trade.id } : {}),
         ...(trade.exchange === context.exchange && trade.marketType === context.marketType && trade.symbol === context.symbol && context.lastPrice ? { referencePrice: String(context.lastPrice) } : {}),
       });

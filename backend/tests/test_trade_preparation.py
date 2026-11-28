@@ -469,6 +469,12 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
                 "start_ms": today + 60_000, "end_ms": today + 60_000, "reason": "trade_day_unpublished",
                 "retry_at_ms": today + 86_400_000,
             }]
+            for venue in ({"exchange": "OKX"}, {"market_type": "spot"},
+                          {"exchange": "twelvedata", "market_type": "stock"}):
+                refused = await client.post(path, json={**request, **venue, "idempotency_key": "trade-refused"})
+                assert refused.status_code == 422, refused.text
+                assert refused.json()["detail"]["code"] == "TRADE_PROVIDER_UNSUPPORTED"
+                assert "publishes no verified trade archive" in refused.json()["detail"]["message"]
             first = await client.post(path, json=request)
             second = await client.post(path, json={**request, "idempotency_key": "trade-second"})
             assert first.status_code == second.status_code == 202, (first.text, second.text)

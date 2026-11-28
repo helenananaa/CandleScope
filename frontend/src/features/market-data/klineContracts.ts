@@ -109,6 +109,8 @@ export interface KlineFetchResult extends Record<string, unknown> {
   excluded_ranges?: HistoryExcludedRange[];
   missing_ranges?: HistoryMissingRange[];
   verified_contiguous?: boolean;
+  /** The request started or joined a backend repair for its range. */
+  backfill_triggered?: boolean;
 }
 
 export interface TerminalHistoryGap {

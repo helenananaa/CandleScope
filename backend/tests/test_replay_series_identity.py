@@ -144,3 +144,23 @@ def test_a_searched_provider_symbol_has_metadata_for_replay(monkeypatch):
     assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "stock", "aapl:nasdaq")["symbol"] == "AAPL:NASDAQ"
     symbol_catalog.evict_exchange_metadata("twelvedata")
     assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "stock", "AAPL:NASDAQ") is None
+
+
+def test_a_search_across_all_markets_files_rows_under_their_own_market(monkeypatch):
+    """The symbol picker may search every market at once; lookups ask by the row's market (D5c)."""
+    from app.exchanges import symbol_catalog
+
+    monkeypatch.setattr(symbol_catalog, "_provider_search_rows", type(symbol_catalog._provider_search_rows)())
+    symbol_catalog._remember_provider_rows("twelvedata", "", [
+        {"symbol": "AAPL:NASDAQ", "marketType": "stock", "accountModel": "cash", "quantityStep": "1"},
+        {"symbol": "AAPB:NASDAQ", "marketType": "etf"},
+        {"symbol": "LEGACY"},
+    ])
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "stock", "AAPL:NASDAQ")["quantityStep"] == "1"
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "etf", "AAPB:NASDAQ") is not None
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "stock", "AAPB:NASDAQ") is None
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "", "LEGACY") is not None
+    # A filtered search keeps answering under the market it asked for.
+    symbol_catalog._remember_provider_rows("twelvedata", "stock", [{"symbol": "X:NYSE", "marketType": "etf"}])
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "stock", "X:NYSE") is not None
+    assert symbol_catalog.get_cached_symbol_metadata("twelvedata", "etf", "X:NYSE") is not None

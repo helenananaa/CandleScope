@@ -13,6 +13,12 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.exchanges.roles import (
+    BINANCE_USDM_AGG_TRADES_ARCHIVE,
+    TRADES_HISTORY_ARCHIVE,
+    venue_role_contract,
+)
+
 from .canonical import canonical_sha256
 from .catalog import ReplaySeriesIdentity
 from .history_archive import (
@@ -69,10 +75,9 @@ class OfficialTradeHistoryRepository:
     def list_all_series(self, custom_only=False):
         result = []
         for identity in self.trade_archive.list_verified_identities():
-            if (
-                identity["exchange"] != "binance"
-                or identity["market_type"] != "futures"
-            ):
+            if venue_role_contract(
+                identity["exchange"], identity["market_type"], TRADES_HISTORY_ARCHIVE,
+            ) != BINANCE_USDM_AGG_TRADES_ARCHIVE:
                 continue
             epoch, windows = self.trade_archive.selection_snapshot(**identity)
             if not windows:
