@@ -39,8 +39,17 @@ on any venue (Gate's `swap.linear` as well as Binance `futures`);
 `crypto_inverse` and `futures_margin` open no positions yet
 (`TRADING_ACCOUNT_MODEL_UNSUPPORTED`) but close existing ones. A symbol without
 a declaration, or one the catalog has not loaded, keeps the earlier rule:
-`futures` is linear, anything else is cash. `GET /trading/market-rules` gives
-the order ticket the same answer.
+`futures` is linear, anything else is cash. Cash markets also follow the row's
+quantity grid in base units (D5c): its `quantityStep`, `quantityOrigin` and
+`minQuantity`, so Twelve Data stocks and ETFs trade whole shares. An off-grid
+quantity is refused with `TRADING_QUANTITY_RULE`, except an order that closes
+the whole position, which may predate the grid. Contract rows count contracts,
+not base units, so their grid waits for D5d. Practice books every price in the
+account's `quoteCurrency` one for one; it converts no currencies, and the ticket
+says so when a market is priced in another currency. Fees are the account's own
+rates: no source publishes per-symbol fees, so none are guessed.
+`GET /trading/market-rules` gives the order ticket the same answer, with the
+market's `currency`, `quantityStep` and `minQuantity`.
 
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).

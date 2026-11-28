@@ -28,11 +28,13 @@ const account = (positionMode: "HEDGE" | "ONE_WAY"): TradingAccount => ({ id: `q
   name: "QA practice", quoteCurrency: "USDT", createdAtMs: 1_800_000_000_000, archived: false,
   settings: { positionMode, initialBalance: "10000", takerFeeRate: "0.0005", makerFeeRate: "0.0002", slippageBps: "1", leverage: "10" },
   capabilities: { placeOrders: true, manualFills: false, sync: false } });
-type Market = "futures" | "spot" | "swap.linear" | "swap.inverse";
-const context = (marketType: Market): TradingChartContext => ({ exchange: marketType.startsWith("swap") ? "gate" : "binance", marketType,
-  symbol: "BTCUSDT", interval: "1m", lastPrice: 100 });
+type Market = "futures" | "spot" | "swap.linear" | "swap.inverse" | "stock";
+const context = (marketType: Market): TradingChartContext => marketType === "stock"
+  ? { exchange: "twelvedata", marketType, symbol: "AAPL:NASDAQ", interval: "1m", lastPrice: 100 }
+  : { exchange: marketType.startsWith("swap") ? "gate" : "binance", marketType, symbol: "BTCUSDT", interval: "1m", lastPrice: 100 };
 /** The backend's market rules (ADR-DATA-002 D5b): Gate's linear swaps are contracts, its inverse swaps open nothing. */
-const RULES: Record<Market, string> = { futures: "crypto_linear", spot: "cash", "swap.linear": "crypto_linear", "swap.inverse": "crypto_inverse" };
+const RULES: Record<Market, string> = { futures: "crypto_linear", spot: "cash", "swap.linear": "crypto_linear", "swap.inverse": "crypto_inverse",
+  stock: "cash" };
 
 /** The actual ticket, clicked like a user: every HEDGE action sends its own intent. */
 export async function checkPracticeOrderTicket() {
@@ -42,10 +44,13 @@ export async function checkPracticeOrderTicket() {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
     const path = url.pathname;
     if ((init?.method ?? "GET") === "GET" && path.endsWith("/trading/market-rules")) {
-      const model = RULES[url.searchParams.get("marketType") as Market];
+      const market = url.searchParams.get("marketType") as Market;
+      const model = RULES[market];
       const contract = model !== "cash";
+      // D5c: a stock is priced in USD and trades whole shares; crypto here is priced in the account's USDT.
+      const stock = market === "stock" ? { currency: "USD", quantityStep: "1", minQuantity: "1" } : { currency: "USDT" };
       return Response.json({ accountModel: model, declared: true, leverage: model === "crypto_linear", shorting: contract,
-        hedge: contract, opensPositions: model === "cash" || model === "crypto_linear" });
+        hedge: contract, opensPositions: model === "cash" || model === "crypto_linear", ...stock });
     }
     assert(init?.method === "POST" && /\/trading\/accounts\/[^/]+\/orders$/.test(path), `unexpected request: ${init?.method ?? "GET"} ${path}`);
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -140,6 +145,23 @@ export async function checkPracticeOrderTicket() {
     render("ONE_WAY", "swap.inverse");
     await until(() => host.querySelector(".ui-alert[data-tone=warning]"), "an inverse swap showed no unsupported notice");
     checks["swap.linear"] = legs;
+
+    // A cash stock (D5c) shows its whole-share grid, says it is priced in USD while the account
+    // books USDT, and shows the account's fee rates; crypto priced in USDT shows no currency notice.
+    render("HEDGE", "stock");
+    const notice = await until(() => host.querySelector(".ui-alert[data-tone=info]")?.textContent, "a USD stock showed no currency notice");
+    assert(notice.includes("USD") && notice.includes("USDT"), `currency notice reads ${notice}`);
+    const hint = host.querySelector(".trading-ticket .ui-field-hint")?.textContent ?? "";
+    assert(/\b1\b/.test(hint), `quantity hint reads ${JSON.stringify(hint)}`);
+    const sides = [...actionGroup()!.querySelectorAll<HTMLButtonElement>("[role=radio]")].map(button => button.dataset.value);
+    assert(sides.join() === "buy,sell", `a cash stock offered ${sides.join()}`);
+    const fees = [...host.querySelectorAll(".trading-kv dd")].at(-1)?.textContent ?? "";
+    assert(fees.includes("0.05") && fees.includes("0.02"), `fees row reads ${JSON.stringify(fees)}`);
+    render("ONE_WAY", "spot");
+    await until(() => host.querySelector(".trading-ticket .ui-field-hint") === null && host.querySelector(".trading-ticket"), "spot ticket did not render");
+    await settle(); await settle();
+    assert(!host.querySelector(".ui-alert[data-tone=info]"), "a USDT market showed a currency notice on a USDT account");
+    checks.stock = { notice, hint, fees };
     return { passed: true, checks, scope: "Actual PracticeOrderTicket with a controlled order endpoint; not backend matching" };
   } finally { window.fetch = originalFetch; flushSync(() => root.unmount()); host.remove(); }
 }
