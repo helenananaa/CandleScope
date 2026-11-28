@@ -31,7 +31,11 @@ from app.exchanges.catalog_worker import (
 )
 from app.exchanges.contract_rules import ccxt_contract_rules, precision_increment
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
-from app.exchanges.venue_underlyings import venue_contract_underlying, warn_unknown_underlyings
+from app.exchanges.venue_underlyings import (
+    VENUES_WITH_EXTRA_ROWS,
+    venue_contract_underlying,
+    warn_unknown_underlyings,
+)
 from app.exchanges.pagination import ReverseTimePaginationPolicy
 from app.exchanges.public_admission import (
     PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
@@ -54,6 +58,10 @@ from .tls import SharedSslContextMixin
 
 
 logger = logging.getLogger(__name__)
+
+# Hyperliquid lists ten HIP-3 dexes on 2026-11-26; CCXT asks each one once per
+# catalog load.
+HYPERLIQUID_HIP3_DEX_LIMIT = 64
 
 _GENERIC_STREAM_METHODS = {
     StreamType.KLINE: ("watchOHLCV", "fetchOHLCV"),
@@ -947,9 +955,10 @@ async def load_ccxt_symbols(
                            else demand.traffic_class),
         )):
             await exchange.load_markets()
-        selections = (
-            (resolved_selection,) if resolved_selection else entry.market_types
-        )
+            selections = (
+                (resolved_selection,) if resolved_selection else entry.market_types
+            )
+            extra_rows = await _underlying_extra_rows(entry.exchange_id, exchange, selections)
         symbols: list[SymbolInfo] = []
         unknown_underlyings: set[str] = set()
         for market in exchange.markets.values():
@@ -971,9 +980,14 @@ async def load_ccxt_symbols(
             if not symbol or not base or not quote:
                 continue
             raw_info = market.get("info")
-            underlying = venue_contract_underlying(entry.exchange_id, selection or selected, raw_info)
+            underlying = venue_contract_underlying(
+                entry.exchange_id,
+                selection or selected,
+                raw_info,
+                extra_rows.get(str(market.get("id") or "")),
+                unknown=unknown_underlyings,
+            )
             if underlying is None:
-                unknown_underlyings.add(str(raw_info.get("underlyingType") or ""))
                 continue
             symbols.append(
                 SymbolInfo(
@@ -1008,6 +1022,32 @@ async def load_ccxt_symbols(
             if symbol.market_type == "swap.linear" and market_type == "futures":
                 symbol.market_type = "futures"
     return symbols
+
+
+async def _underlying_extra_rows(
+    exchange_id: str,
+    exchange: Any,
+    selections: tuple[str, ...],
+) -> dict[str, dict[str, Any]]:
+    """Rows that say what a contract tracks when the market list does not.
+
+    Bitget's v2 contract list only says ``isRwa``; its v3 instrument list says
+    stock, metal, energy, fx, ... Its TradFi contracts are all USDT-margined.
+    A failed request fails the catalog load, which keeps the previous catalog.
+    """
+    if exchange_id not in VENUES_WITH_EXTRA_ROWS:
+        return {}
+    if not any(market_selection_parts(item) in {("swap", "linear"), ("swap", None)} for item in selections):
+        return {}
+    response = await exchange.publicUtaGetV3MarketInstruments({"category": "USDT-FUTURES"})
+    rows = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(rows, list):
+        raise RuntimeError("Bitget v3 instrument list returned no data")
+    return {
+        str(row.get("symbol")): row
+        for row in rows
+        if isinstance(row, dict) and row.get("symbol")
+    }
 
 
 async def load_ccxt_symbol_rows(
@@ -1068,6 +1108,10 @@ def _create_exchange(
         options["fetchMarkets"] = {"types": ["spot" if base_type == "spot" else "swap"]}
     elif entry.exchange_id == "binance" and base_type == "spot":
         options["fetchMarkets"] = {"types": ["spot"]}
+    elif entry.exchange_id == "hyperliquid":
+        # CCXT loads builder-deployed (HIP-3) dexes, such as xyz:GOLD, only up
+        # to ``limit - 1`` of them; the default 10 already leaves one out.
+        options["fetchMarkets"] = {"hip3": {"limit": HYPERLIQUID_HIP3_DEX_LIMIT}}
     if sys.platform == "emscripten" and websocket and entry.exchange_id == "binance":
         # Pinned CCXT gives each of a client's first 50 subscriptions a socket
         # of its own, and a browser opens the sockets to one host one after
