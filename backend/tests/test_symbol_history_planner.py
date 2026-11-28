@@ -350,3 +350,57 @@ def test_close_cancels_running_pieces():
 def test_demands_need_a_nonempty_range(bad):
     with pytest.raises(ValueError):
         demand("x", "89m", *bad)
+
+
+class Submitter:
+    """A two-phase executor: request ids at submission, results when released."""
+
+    def __init__(self, *, refuse: bool = False) -> None:
+        self.submitted: list = []
+        self.done: dict[str, asyncio.Event] = {}
+        self.refuse = refuse
+
+    def submit(self, piece):
+        if self.refuse:
+            raise RuntimeError("coordinator shut down")
+        request_id = f"req-{len(self.submitted) + 1}"
+        self.submitted.append((request_id, piece))
+        self.done[request_id] = asyncio.Event()
+        return request_id
+
+    async def wait(self, handle, piece, still_wanted):
+        await self.done[handle].wait()
+        return PieceResult("committed")
+
+
+def test_a_submitting_executor_hands_out_request_ids_at_registration():
+    async def run():
+        executor = Submitter()
+        plan = planner(executor, max_running=8)
+        first = plan.register_now(demand("chart-89m", "89m", T0, T0 + 3 * DAY, DemandKind.FIRST_SCREEN))
+        assert first == ["req-1", "req-2"]
+        assert [(p.start_ms - T0, p.end_ms - T0) for _, p in executor.submitted] == [(2 * DAY, 3 * DAY), (0, 2 * DAY)]
+        # A second chart inside the first one's range shares its piece; a poll submits nothing new.
+        assert plan.register_now(demand("chart-97m", "97m", T0 + DAY, T0 + 2 * DAY)) == ["req-2"]
+        assert plan.register_now(demand("chart-89m", "89m", T0, T0 + 3 * DAY, DemandKind.FIRST_SCREEN)) == first
+        assert len(executor.submitted) == 2
+        executor.done["req-2"].set()
+        await tick()
+        assert plan.register_now(demand("chart-97m", "97m", T0 + DAY, T0 + 2 * DAY)) == []
+        executor.done["req-1"].set()
+        await plan.drain()
+        assert plan.metrics["pieces_committed"] == 2
+        await plan.close()
+    asyncio.run(run())
+
+
+def test_a_refused_submission_is_handed_back_without_a_handle():
+    async def run():
+        handed = []
+        plan = planner(Submitter(refuse=True), on_handed_back=lambda piece, ranges, error: handed.append(error))
+        assert plan.register_now(demand("chart", "89m", T0, T0 + DAY)) == []
+        await plan.drain()
+        assert handed == ["RuntimeError('coordinator shut down')"]
+        assert plan.metrics["pieces_failed"] == 1
+        await plan.close()
+    asyncio.run(run())

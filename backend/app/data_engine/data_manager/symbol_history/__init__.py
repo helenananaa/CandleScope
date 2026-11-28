@@ -10,6 +10,8 @@ existing per-request path stays unchanged while the flag is off.
 - ``slots``: interval sets and the per-source slot map
 - ``pieces``: cutting missing slots into pieces, piece results
 - ``planner``: the planner and the per-symbol registry
+- ``coordinator_executor``: pieces as source-interval coordinator repairs
+- ``router``: which chart reads go to the planner, thread handoff, serving reads
 """
 from __future__ import annotations
 
