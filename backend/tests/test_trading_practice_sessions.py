@@ -248,3 +248,92 @@ def test_data_manager_market_asks_the_series_calendar_once(xnys):
     assert market.calendar(*INSTRUMENT, series_identity=STOCK_SERIES) is xnys
     assert market.calendar(*INSTRUMENT, series_identity=STOCK_SERIES) is xnys
     assert manager.calls == [("binance", "1m"), ("twelvedata", "1m"), ("twelvedata", "1m")]
+
+
+# ADR-DATA-002 D5a: nothing trades while the market is closed.
+
+
+def bar(open_ms: int, open_: str, high: str, low: str, close: str) -> dict[str, Any]:
+    return {"time": open_ms // 1000, "open": D(open_), "high": D(high), "low": D(low), "close": D(close)}
+
+
+def fill_of(service, order_id: str) -> tuple[str, Decimal, int, str]:
+    order = service.store.order(order_id)
+    [fill] = [row for row in service.store.fills(order["account_id"]) if row["order_id"] == order_id]
+    return order["status"], order["fill_price"], fill["ts_ms"], fill["liquidity"]
+
+
+def test_orders_the_open_gaps_through_fill_at_the_open(practice):
+    service, runtime, market, clock, account_id = practice
+    market.session(TUE_OPEN, TUE_CLOSE, "350")
+    clock.now = TUE_CLOSE - 90_000
+    service.place_order(account_id, {**APPLE, "side": "buy", "type": "market", "qty": "3"})
+    stop = service.place_order(account_id, {**APPLE, "side": "sell", "type": "stop", "qty": "1", "stopPrice": "340"})
+    limit = service.place_order(account_id, {**APPLE, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "336"})
+    near = service.place_order(account_id, {**APPLE, "side": "sell", "type": "stop", "qty": "1", "stopPrice": "320"})
+    # Wednesday opens at 330: the stop at 340 and the limit at 336 were gapped
+    # through overnight and fill at the open, not at prices that never traded.
+    market.history[WED_OPEN // 1000] = bar(WED_OPEN, "330", "331", "325", "329")
+    market.session(WED_OPEN + MINUTE, WED_OPEN + 10 * MINUTE, "329")
+    step(runtime, clock, WED_OPEN + 5 * MINUTE)
+
+    assert fill_of(service, stop["order"]["id"]) == ("filled", D("330"), WED_OPEN, "taker")
+    assert fill_of(service, limit["order"]["id"]) == ("filled", D("330"), WED_OPEN, "maker")
+    # The open did not reach 320; the candle's low of 325 did not either.
+    assert service.store.order(near["order"]["id"])["status"] == "working"
+
+
+def test_a_market_order_placed_while_closed_fills_at_the_next_open(practice):
+    service, runtime, market, clock, account_id = practice
+    market.session(WED_OPEN, WED_OPEN + 390 * MINUTE, "350")
+    clock.now = THU + 3 * 60 * MINUTE  # Thanksgiving
+    placed = service.place_order(account_id, {
+        **APPLE, "side": "buy", "type": "market", "qty": "2", "bracketStop": "330", "bracketTarget": "370",
+    })
+    assert placed["waitsForOpen"] is True and placed["order"]["status"] == "working"
+    marketable = service.place_order(account_id, {**APPLE, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "360"})
+    assert marketable["waitsForOpen"] is True and marketable["order"]["status"] == "working"
+    assert service.account_summary(account_id)["positions"] == []
+
+    assert step(runtime, clock, FRI_OPEN - 30 * MINUTE) == "live"
+    assert service.store.order(placed["order"]["id"])["status"] == "working"
+    market.history[FRI_OPEN // 1000] = bar(FRI_OPEN, "355", "357", "354", "356")
+    market.session(FRI_OPEN + MINUTE, FRI_OPEN + 10 * MINUTE, "356")
+    step(runtime, clock, FRI_OPEN + 5 * MINUTE)
+
+    assert fill_of(service, placed["order"]["id"]) == ("filled", D("355"), FRI_OPEN, "taker")
+    assert fill_of(service, marketable["order"]["id"]) == ("filled", D("355"), FRI_OPEN, "maker")
+    [position] = service.account_summary(account_id)["positions"]
+    assert position["openQty"] == "3"
+    exits = {row["tag"] for row in service.store.working_orders_for(*INSTRUMENT)}
+    assert exits == {"stop_loss", "take_profit"}
+
+
+def test_an_open_market_still_fills_market_orders_now(practice):
+    service, runtime, market, clock, account_id = practice
+    market.session(TUE_OPEN, TUE_CLOSE, "350")
+    clock.now = TUE_OPEN + 30 * MINUTE + 10_000
+    placed = service.place_order(account_id, {**APPLE, "side": "buy", "type": "market", "qty": "1"})
+    assert placed["waitsForOpen"] is False and placed["order"]["status"] == "filled"
+
+
+def test_without_a_session_calendar_the_path_still_moves_from_the_last_close():
+    from app.simulation.practice_account import (
+        Cursor, PracticeMatcher, PracticeSettings, WorkingOrder, advance_cursor,
+    )
+
+    cursor = Cursor(bar_time=0, seen_high=D("350"), seen_low=D("350"), last_close=D("350"), observed_ms=59_000)
+    settings = PracticeSettings(D("0"), D("0"), D("0"), allow_short=True)
+
+    def stop_fill(after_closure):
+        _, chunk = advance_cursor(cursor, 600, D("330"), D("331"), D("325"), D("329"),
+                                  observed_ms=659_000, after_closure=after_closure)
+        stop = WorkingOrder(id="o1", side="sell", type="stop", qty=D("1"), created_at_ms=0, stop_price=D("340"))
+        matcher = PracticeMatcher([stop], D("1"), settings, new_order_id=lambda: "x")
+        matcher.run(chunk)
+        return chunk.points[0], matcher.result.fills[0].price
+
+    # An always-open market's hole is a move from the last close (unchanged) ...
+    assert stop_fill(False) == (D("350"), D("340"))
+    # ... a closure is a gap to the open.
+    assert stop_fill(True) == (D("330"), D("330"))

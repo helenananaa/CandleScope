@@ -26,6 +26,7 @@ from app.data_engine.market_data.models import (
 from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT, OKX_OI_HISTORY_PERIODS
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
+    CapabilityRole,
     ExchangeCapabilities,
     ExchangeMarket,
     HistoryAvailabilityPolicy,
@@ -33,6 +34,7 @@ from app.exchanges.models import (
     HistoryEmptyPageSemantics,
     MarketChannelCapability,
 )
+from app.exchanges.roles import GATE_OI_GRID, OPEN_INTEREST_NATIVE_GRID
 
 from .binance_usdm import SUPPORTED_CCXT_VERSION
 from app.exchanges.trade_candles import supports_trade_candles, trade_candle_profile
@@ -585,6 +587,16 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
             )
         )
 
+    roles: list[CapabilityRole] = []
+    gate_oi_markets = tuple(
+        market_type for market_type in metric_market_types
+        if market_type in {"swap.linear", "swap.inverse"}
+    )
+    if entry.exchange_id == "gate" and fetch_open_interest_history and gate_oi_markets:
+        # Gate's 5m open-interest history sits on a fixed sample grid, so a
+        # bounded page can prove which samples are missing.
+        roles.append(CapabilityRole(OPEN_INTEREST_NATIVE_GRID, gate_oi_markets, GATE_OI_GRID))
+
     fetch_liquidations = entry.supports("fetchLiquidations")
     watch_liquidations = entry.supports("watchLiquidations") and entry.pro
     if contract_market_types and (fetch_liquidations or watch_liquidations):
@@ -626,6 +638,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
         capability_schema_version=3 if markets else 1,
         markets=markets,
         channels=channels,
+        roles=roles,
         native_intervals=["1s", *kline_intervals] if entry.exchange_id == "gate" else list(kline_intervals),
         supports_multi_symbol_ticker=False,
         supports_symbol_search=True,

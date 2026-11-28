@@ -19,6 +19,7 @@ import {
   createTrainingRunDraft,
   evaluateTrainingRunDraft,
   evaluateTrainingRunSetupDraft,
+  preferHedgeCapableEntries,
 } from "../trainingHubModel.js";
 import {
   formatReplayUtcDateTime,
@@ -39,6 +40,7 @@ import {
   parseTrainingRunReturnResponse,
 } from "../replayV2Types.js";
 import { parseReplaySegmentPreparePlan } from "../replaySegmentTypes.js";
+import { t } from "../../../i18n/index.js";
 import { parseReplayCapabilities, parseReplayCatalog } from "../replayParser.js";
 import { enabledCapabilities } from "./fixtures.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
@@ -2030,4 +2032,38 @@ test("a replay launched from a chart prepares that chart's series while the draf
   await lifecycle.createRun({ ...lifecycle.getSnapshot().draft!, symbol: "MSFT:NASDAQ" });
   assert.deepEqual(markets.map(market => [market.symbol, market.identity]),
     [["AAPL:NASDAQ", series], ["MSFT:NASDAQ", undefined]]);
+});
+
+test("a new draft prefers markets whose venue declares hedge history, not a venue name", () => {
+  const base = hedgeCatalog();
+  const template = base.entries[0]!;
+  const entry = (exchange: string, market_type: string) => ({
+    ...template, identity: { ...template.identity, exchange, market_type },
+  });
+  const catalog = { ...base, entries: [entry("okx", "futures"), entry("binance", "spot"), entry("binance", "futures")] };
+  const hedge = [{ role: "hedge.public_history", market_types: ["futures"], contract: "binance.usdm.hedge-public-history/1" }];
+  const venues = [{ exchange: "okx", roles: [] }, { exchange: "binance", roles: hedge }];
+  const preferred = createTrainingRunDraft(catalog, undefined, preferHedgeCapableEntries(venues));
+  assert.deepEqual([preferred.exchange, preferred.marketType], ["binance", "futures"]);
+  const unknownRoles = createTrainingRunDraft(catalog);
+  assert.deepEqual([unknownRoles.exchange, unknownRoles.marketType], ["okx", "futures"]);
+  const other = createTrainingRunDraft({ ...catalog, entries: [entry("okx", "futures"), entry("acme", "futures")] },
+    undefined, preferHedgeCapableEntries([{ exchange: "acme", roles: hedge }]));
+  assert.equal(other.exchange, "acme");
+});
+
+test("hedge drafts report the backend's venue decision instead of checking the venue name", () => {
+  const catalog = hedgeCatalog();
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  const draft = { ...createTrainingRunDraft(catalog), exchange: "okx", positionMode: "HEDGE" as const,
+    accountDataMode: "DETERMINISTIC_SIMULATION" as const };
+  const venueMessage = t("replay.err.hedgeBinance");
+  assert.ok(!evaluateTrainingRunDraft(draft, capabilities, catalog, null).errors.includes(venueMessage));
+  const refused = parseReplaySegmentPreparePlan(segmentPlanResponse({ hedge_inputs: {
+    ...segmentPlanResponse().hedge_inputs, requested_position_mode: "HEDGE",
+    capability_state: "UNSUPPORTED_SOURCE_MODE", reason: "BINANCE_USDM_REQUIRED",
+  } }));
+  const errors = evaluateTrainingRunDraft(draft, capabilities, catalog, refused).errors;
+  assert.ok(errors.includes(venueMessage));
+  assert.ok(!errors.some((message) => message.includes("BINANCE_USDM_REQUIRED")));
 });

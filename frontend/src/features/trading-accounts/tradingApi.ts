@@ -6,6 +6,7 @@ import type {
   AccountsResponse,
   Excursion,
   JournalEntry,
+  PracticeMarketRules,
   PracticeOrder,
   Trade,
   TradeDetail,
@@ -52,11 +53,20 @@ export const tradingApi = {
     request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}`), signal ? { signal } : {}) as Promise<TradeDetail>,
   excursion: (accountId: string, tradeId: string) =>
     request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}/excursion`)) as Promise<Excursion>,
+  marketRules: (market: { exchange: string; marketType: string; symbol: string }, signal?: AbortSignal, accountId?: string) =>
+    request(path(`/market-rules?${new URLSearchParams({
+      exchange: market.exchange, marketType: market.marketType, symbol: market.symbol,
+      ...(accountId ? { accountId } : {}),
+    }).toString()}`), signal ? { signal } : {}) as Promise<PracticeMarketRules>,
+  setContractMargin: (accountId: string, body: { exchange: string; marketType: string; symbol: string; marginPerContract: string | null }) =>
+    request(path(`/accounts/${id(accountId)}/contract-margins`), { method: "PUT", body }) as Promise<PracticeMarketRules>,
   placeOrder: (accountId: string, body: Record<string, unknown>) =>
     request(path(`/accounts/${id(accountId)}/orders`), { method: "POST", body }) as Promise<{
       order: PracticeOrder;
       priceSource: string;
       referencePrice: string;
+      /** The market is closed; the order fills at the next open (ADR-DATA-002 D5a). */
+      waitsForOpen?: boolean;
     }>,
   cancelOrder: (accountId: string, orderId: string) =>
     request(path(`/accounts/${id(accountId)}/orders/${id(orderId)}/cancel`), { method: "POST" }) as Promise<{

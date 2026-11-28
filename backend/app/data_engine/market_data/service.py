@@ -40,6 +40,7 @@ from app.exchanges import (
     get_shared_rate_limit_manager,
 )
 
+from app.exchanges import roles as venue_roles
 from app.exchanges.models import ExchangeCapabilities, HistoryEmptyPageSemantics
 
 from .events import HubRecord, MarketStateEvent
@@ -69,12 +70,13 @@ _HISTORY_STREAM_TYPES = {
     MarketChannel.LIQUIDATION: StreamType.LIQUIDATION,
 }
 _DEFAULT_OPEN_INTEREST_STORAGE_PERIOD = "5m"
-_BINANCE_OI_COVERAGE_REVISION = "binance-oi-grid-v2"
-_GATE_OI_COVERAGE_REVISION = "gate-oi-grid-v1"
+# Sample-grid contracts this service implements, from the venue's declared
+# ``open_interest.native_grid`` role, with the periods each grid covers.
 _OI_COVERAGE_BASES = {
-    _BINANCE_OI_COVERAGE_REVISION: "native_binance_oi_sample_grid_v2",
-    _GATE_OI_COVERAGE_REVISION: "gate_oi_sample_grid_v1",
+    venue_roles.BINANCE_OI_GRID: "native_binance_oi_sample_grid_v2",
+    venue_roles.GATE_OI_GRID: "gate_oi_sample_grid_v1",
 }
+_OI_GRID_PERIODS = {venue_roles.GATE_OI_GRID: frozenset({"5m"})}
 _DEFAULT_OPEN_INTEREST_STORAGE_BUCKET_MS = 5 * 60 * 1000
 _HISTORY_RETENTION_SAFETY_MS = 60 * 1000
 _PREMIUM_INDEX_INTERVAL = "1m"
@@ -88,7 +90,7 @@ _FUNDING_CONTEXT_LOOKBACK_MS = 24 * 60 * 60 * 1000
 _FUNDING_INTEREST_RATE_8H = 0.0001
 _FUNDING_ADJUSTMENT_BOUND = 0.0005
 _FUNDING_RATE_BOUND = 0.0075
-_FUNDING_FORMULA_VERSION = "binance-premium-index-cumavg-v2"
+_FUNDING_FORMULA_VERSION = venue_roles.BINANCE_PREMIUM_INDEX_CUMAVG
 _MAX_PREMIUM_ESTIMATE_POINTS = 250_000
 _MAX_UPSTREAM_HISTORY_PAGES_PER_REQUEST = 16
 _MAX_PREMIUM_HISTORY_PAGES_PER_REQUEST = 64
@@ -96,7 +98,7 @@ _PREMIUM_HISTORY_PAGE_POINTS = 1000
 _PREMIUM_FETCH_CONCURRENCY = 4
 _REALTIME_FUNDING_STALE_MS = 10_000
 _FUNDING_SETTLEMENT_EDGE_TTL_MS = 60_000
-_FUNDING_SETTLEMENT_POLICY_REVISION = "binance-usdm-regular-settlement-v1"
+_FUNDING_SETTLEMENT_POLICY_REVISION = venue_roles.BINANCE_USDM_REGULAR_SETTLEMENT
 
 
 @dataclass(slots=True)
@@ -481,9 +483,12 @@ class MarketDataService:
         if hybrid_funding and key.channel != MarketChannel.FUNDING_RATE:
             raise ValueError("hybrid history is available only for funding_rate")
         if hybrid_funding:
-            if key.exchange != "binance" or key.market_type != "futures":
+            if _declared_contract(
+                capabilities, venue_roles.FUNDING_HYBRID_HISTORY, key.market_type,
+            ) != _FUNDING_FORMULA_VERSION:
                 raise ValueError(
-                    "hybrid funding history is currently available only for binance futures",
+                    "hybrid funding history requires a market that publishes the premium index "
+                    "funding formula",
                 )
             period_spec = parse_interval_spec(period or "")
             if period_spec is None:
@@ -523,25 +528,24 @@ class MarketDataService:
             start_ms=start_ms,
             end_ms=end_ms,
         )
-        native_bounded = (
-            key.exchange == "binance" and key.market_type == "futures"
-            and start_ms is not None and end_ms is not None
+        bounded = (
+            start_ms is not None and end_ms is not None
             and self._metrics_repository is not None
         )
-        if native_bounded and key.channel == MarketChannel.FUNDING_RATE and not hybrid_funding:
+        if (bounded and key.channel == MarketChannel.FUNDING_RATE and not hybrid_funding
+                and _declared_contract(
+                    capabilities, venue_roles.FUNDING_SETTLEMENT_HISTORY, key.market_type,
+                ) == _FUNDING_SETTLEMENT_POLICY_REVISION):
             assert start_ms is not None and end_ms is not None
             return await self._sparse_funding_history_page(
                 event_key, start_ms=start_ms, end_ms=end_ms, limit=limit,
                 mode=mode or "fill_missing", plan=refresh_plan,
             )
-        if (key.channel == MarketChannel.OPEN_INTEREST and period is not None
-                and start_ms is not None and end_ms is not None and self._metrics_repository is not None):
-            revision = None
-            if native_bounded:
-                revision = _BINANCE_OI_COVERAGE_REVISION
-            elif key.exchange == "gate" and key.market_type in {"swap.linear", "swap.inverse"} and period == "5m":
-                revision = _GATE_OI_COVERAGE_REVISION
-            if revision is not None:
+        if key.channel == MarketChannel.OPEN_INTEREST and period is not None and bounded:
+            revision = _declared_contract(
+                capabilities, venue_roles.OPEN_INTEREST_NATIVE_GRID, key.market_type,
+            )
+            if revision in _OI_COVERAGE_BASES and period in _OI_GRID_PERIODS.get(revision, {period}):
                 step_ms = parse_interval_ms(period)
                 assert step_ms is not None
                 return await self._shared_oi_history(
@@ -2955,6 +2959,13 @@ class MarketDataService:
                 f"{key.exchange}:{key.market_type}:{key.channel.value} does not support {mode}",
             )
         return capabilities
+
+
+def _declared_contract(capabilities: ExchangeCapabilities, role: str, market_type: str) -> str | None:
+    """The contract the venue declares for ``role`` on this market, or None."""
+    lookup = getattr(capabilities, "role", None)
+    found = lookup(role, market_type) if callable(lookup) else None
+    return found.contract if found is not None else None
 
 
 def _inferred_funding_interval_ms(

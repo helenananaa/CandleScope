@@ -20,6 +20,7 @@ import type {
 } from "./drawingTypes.js";
 import { drawingPerfCounters } from "./performance/drawingPerfCounters.js";
 import { drawingCoordinates, type DrawingCoordinate } from "./drawingProperties.js";
+import { DEFAULT_REGRESSION_DEVIATION, DEFAULT_VOLUME_PROFILE_ROWS } from "./geometry/calculatedDrawingMath.js";
 import {
   DEFAULT_DRAWING_RENDER_COLOR,
   DEFAULT_DRAWING_RENDER_LINE_WIDTH,
@@ -69,6 +70,8 @@ export interface SelectedDrawingMeta {
   lineStyle?: ShapeLineStyle;
   levels?: FibonacciLevel[];
   positionSize?: number;
+  deviation?: number;
+  rows?: number;
   arrowEnd?: boolean;
   extendRight?: boolean;
   midline?: boolean;
@@ -268,7 +271,9 @@ export function selectedDrawingMetaFromSavedDrawing(
       ? "angle-measure"
       : saved.type === "shape"
         ? saved.shapeType ?? "shape"
-        : saved.type;
+        : saved.type === "calculated"
+          ? saved.calcType
+          : saved.type;
   return {
     id: saved.id,
     locked: saved.locked === true,
@@ -300,6 +305,12 @@ export function selectedDrawingMetaFromSavedDrawing(
     ...(saved.type === "fibonacci" ? {
       levels: (saved.levels ?? DEFAULT_FIBONACCI_RENDER_LEVELS).map((level) => ({ ...level })),
     } : {}),
+    ...(saved.type === "calculated" && saved.calcType === "regression-channel"
+      ? { deviation: saved.deviation ?? DEFAULT_REGRESSION_DEVIATION }
+      : {}),
+    ...(saved.type === "calculated" && saved.calcType === "volume-profile"
+      ? { rows: saved.rows ?? DEFAULT_VOLUME_PROFILE_ROWS }
+      : {}),
   };
 }
 

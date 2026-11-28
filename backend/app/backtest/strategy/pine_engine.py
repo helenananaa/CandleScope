@@ -142,6 +142,7 @@ class PineEngineProvider:
         self.bars, self.accounts, self.history = [], [], []
         self.entry_id = None
         self.context = {}
+        self._pine_chart_symbols = {}
         self.runtime_identity = None
         self.default_quantity = None
         self.request_feed = None
@@ -279,6 +280,17 @@ class PineEngineProvider:
         encoded.extend(encode_schedule(self.execution_passes[len(encoded):], self.execution_contexts[len(encoded):]))
         return encoded
 
+    def _pine_chart_symbol(self, chart_symbol):
+        """The venue's Pine ticker for ``VENUE:SYMBOL``, resolved once per chart and market."""
+        market = str(self.context.get("pineChartMarketType") or "").lower()
+        key, names = (chart_symbol, market), vars(self).setdefault("_pine_chart_symbols", {})
+        if key not in names:
+            from app.backtest.pine_ticker import venue_pine_ticker
+
+            venue, _, symbol = chart_symbol.partition(":")
+            names[key] = f"{venue}:{venue_pine_ticker(venue.lower(), market, symbol)}"
+        return names[key]
+
     def _evaluate(self, frame, *, warmup=False):
         if (self.worker is None and not self.streaming) or not frame.account_view:
             raise StrategyProviderError(
@@ -338,11 +350,7 @@ class PineEngineProvider:
         market = frame.market
         venue = str(market.get("venue") or "local").upper()
         symbol = str(market.get("symbol") or "LOCAL")
-        chart_symbol = symbol if ":" in symbol else f"{venue}:{symbol}"
-        if (chart_symbol.startswith("BINANCE:")
-                and str(self.context.get("pineChartMarketType") or "").lower() in {"usdm", "futures", "swap"}
-                and not chart_symbol.endswith(".P")):
-            chart_symbol += ".P"
+        chart_symbol = self._pine_chart_symbol(symbol if ":" in symbol else f"{venue}:{symbol}")
         timeframe = str(
             max(
                 1,

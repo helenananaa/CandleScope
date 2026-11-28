@@ -86,7 +86,7 @@ export default function SettingsModal({
     }, [pluginBusy, proxyDirty, onClose]);
     useControlCommands(() => maintenanceCommands(controlId, settingsRuntime, backendFeaturesEnabled), isOpen);
     useControlCommands(() => ({ id: `settings-panel:${controlId}`, title: "Settings categories and tools", context: () => ({ activeCategory, dataWorkbenchOpen }), snapshot: () => ({ activeCategory, allowedCategories, backendFeaturesEnabled, dataWorkbenchEnabled, dataWorkbenchOpen }), commands: [
-        command("category", "Select an available settings category.", object({ category: choice(["appearance", "network", "exchanges", "data", "plugins", "about"]) }), ({ category }) => {
+        command("category", "Select an available settings category.", object({ category: choice(["appearance", "network", "exchanges", "dataSources", "data", "plugins", "about"]) }), ({ category }) => {
             if (!allowedCategories.includes(category) || (!backendFeaturesEnabled && category !== "appearance" && category !== "about")) throw new Error("CATEGORY_UNAVAILABLE");
             setActiveCategory(category);
         }),

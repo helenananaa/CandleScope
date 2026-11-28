@@ -121,8 +121,10 @@ jobs:
           export CANDLESCOPE_MIHOMO="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/mihomo/mihomo"
           test -x "$CANDLESCOPE_MIHOMO"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_proxy_subscription_scheduled_refresh.py \
             tests/test_proxy_subscriptions.py \
             tests/test_proxy_subscription_refresh.py \
+            tests/test_proxy_subscription_formats.py \
             tests/test_market_stream_version.py \
             tests/test_oi_local_history.py \
             tests/test_market_metrics_storage.py \
@@ -134,6 +136,7 @@ jobs:
             tests/test_calendar_completeness.py \
             tests/test_replay_calendar_sessions.py \
             tests/test_session_calendar_tail.py \
+            tests/test_session_calendar_neighbours.py \
             tests/test_stream_klines_event_filter.py \
             tests/test_kline_batch_stream.py \
             tests/test_backfill_coordinator.py \
@@ -242,6 +245,7 @@ jobs:
             tests/test_account_product_integration.py \
             tests/test_trading_accounts.py \
             tests/test_trading_series_identity.py \
+            tests/test_trading_practice_account_models.py \
             tests/test_trading_practice_sessions.py \
             tests/test_practice_baselines.py \
             tests/test_trading_account_snapshot.py \

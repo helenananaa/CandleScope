@@ -1,4 +1,6 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
@@ -7,9 +9,16 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { continuousTraditional, readonlyAccountTraditional, nativeTraditional } from "./traditionalFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhHant = {
   ...unifiedMessages["zh-Hant"],
+  ...syntheticPagingMessages["zh-Hant"],
+  ...drawingAnnotationMessages["zh-Hant"],
   ...syntheticEnglish,
   ...continuousTraditional,
   ...tradeHistoryTraditional,
@@ -1253,6 +1262,15 @@ export const zhHant = {
   "settings.proxy.previewNodes": "預覽節點",
   "settings.proxy.useNodes": "使用所選節點",
   "settings.proxy.skippedNodes": "已略過 {count} 個不支援的節點",
+  "settings.proxy.autoRefresh": "自動重新整理",
+  "settings.proxy.autoRefreshOff": "關閉",
+  "settings.proxy.autoRefreshEvery": "每 {duration}",
+  "settings.proxy.autoRefreshHelp": "依此間隔檢查已儲存的訂閱。正在使用的節點會套用服務商目前的參數；不會自動加入新節點，服務商已移除的節點會保留最後一次的參數。",
+  "settings.proxy.refreshPending": "尚未自動檢查",
+  "settings.proxy.refreshChecked": "上次檢查：{time}",
+  "settings.proxy.refreshFailed": "自動重新整理失敗：{time}",
+  "settings.proxy.refreshUpdated": "已更新節點：{count} · {time}",
+  "settings.proxy.refreshMissing": "訂閱中已不存在：{count}",
   "settings.proxy.address": "代理位址",
   "settings.proxy.egressGroup": "出口群組",
   "settings.proxy.concurrency": "並行請求上限",
@@ -3708,6 +3726,58 @@ export const zhHant = {
   "settings.updates.title": "更新",
   "settings.updates.check": "檢查更新",
   "settings.updates.checkHint": "啟動時和每天一次向 GitHub 查詢是否有新版本。不會下載或安裝任何內容。",
+  "settings.category.dataSources": "資料來源",
+  "dataSources.intro": "用你自己的金鑰接入需要註冊的資料來源。金鑰只儲存在這台電腦的系統密碼庫（macOS 鑰匙圈或 Windows 認證管理員），只會傳送給它所屬的資料來源。",
+  "dataSources.desktopOnly": "請在桌面版中新增資料來源金鑰。",
+  "dataSources.loading": "正在讀取…",
+  "dataSources.vaultUnavailable": "這台電腦無法儲存金鑰，只能透過環境變數提供。",
+  "dataSources.deletionPending": "舊金鑰會在下次啟動時從系統密碼庫刪除，CandleScope 已不再使用它。",
+  "dataSources.twelvedata.description": "美股、ETF、外匯、指數和商品的歷史 K 線和即時價格。可在 {site} 免費註冊取得金鑰。",
+  "dataSources.state.saved": "使用儲存的金鑰",
+  "dataSources.state.environment": "使用環境變數",
+  "dataSources.state.none": "未設定金鑰",
+  "dataSources.state.unreadable": "需要重新儲存",
+  "dataSources.savedKey": "儲存的金鑰",
+  "dataSources.savedKeyValue": "{masked}，儲存於 {time}",
+  "dataSources.notSaved": "未儲存",
+  "dataSources.environmentVariable": "環境變數",
+  "dataSources.environmentSet": "已設定 {masked}",
+  "dataSources.environmentNotSet": "未設定",
+  "dataSources.environmentActive": "目前使用環境變數中的金鑰。在這裡儲存金鑰後，會改用儲存的金鑰。",
+  "dataSources.environmentShadowed": "環境變數中也有金鑰，但 CandleScope 使用這裡儲存的金鑰。刪除儲存的金鑰後會改用環境變數。",
+  "dataSources.savedUnreadable": "讀不到儲存的金鑰：系統密碼庫拒絕存取，或記錄已被刪除。重新儲存一次即可。",
+  "dataSources.keyLabel": "API 金鑰",
+  "dataSources.keyPlaceholder": "貼上 {source} 的 API 金鑰",
+  "dataSources.keyPlaceholderReplace": "貼上新金鑰以取代",
+  "dataSources.save": "儲存",
+  "dataSources.replace": "取代",
+  "dataSources.saving": "正在儲存…",
+  "dataSources.check": "測試連線",
+  "dataSources.checking": "正在測試…",
+  "dataSources.remove": "刪除金鑰",
+  "dataSources.removing": "正在刪除…",
+  "dataSources.removeTitle": "刪除 {source} 的金鑰？",
+  "dataSources.removeMessage": "金鑰會從這台電腦的系統密碼庫中刪除。之後 {source} 的圖表無法載入資料，直到你再次新增金鑰。",
+  "dataSources.removeMessageEnvironment": "金鑰會從這台電腦的系統密碼庫中刪除，之後改用環境變數中的金鑰。",
+  "dataSources.removeConfirm": "刪除",
+  "dataSources.saved": "金鑰已儲存。",
+  "dataSources.removed": "金鑰已刪除。",
+  "dataSources.reopenCharts": "已開啟的 {source} 圖表需要重新開啟，即時價格才會使用新設定。",
+  "dataSources.checkOk": "連線成功",
+  "dataSources.plan": "方案",
+  "dataSources.minuteCredits": "每分鐘額度",
+  "dataSources.dailyCredits": "每日額度",
+  "dataSources.creditsUsed": "已用 {used} / {limit}",
+  "dataSources.creditsLimit": "上限 {limit}",
+  "dataSources.websocketSymbols": "即時價格標的上限",
+  "dataSources.checkedAt": "測試時間",
+  "dataSources.error.valueInvalid": "這看起來不像金鑰：應為 4–256 個字元，不含空格。",
+  "dataSources.error.keyRejected": "{source} 不接受這個金鑰。確認複製完整後再試。",
+  "dataSources.error.rateLimited": "{source} 的請求額度暫時用完了，請稍後再試。",
+  "dataSources.error.unreachable": "無法連線到 {source}。檢查網路或代理設定後再試。",
+  "dataSources.error.storeFailed": "無法將金鑰存入系統密碼庫。請再試一次；在 macOS 上請先解鎖登入鑰匙圈。",
+  "dataSources.error.missing": "還沒有可以測試的金鑰。",
+  "dataSources.error.generic": "操作沒有完成，請稍後再試。",
   "chartTester.run.queued": "排隊中",
   "chartTester.run.running": "執行中",
   "chartTester.stopObserving": "停止等待",
@@ -4219,4 +4289,9 @@ export const zhHant = {
   "chartTester.deleteRetiredDraft": "刪除已停用的草稿 {name}",
   "chartTester.deleteRetiredDraftFailed": "無法刪除已停用的草稿，請再試一次。",
   ...tradingAccountsZhHant,
+  ...drawingSelectionMessages["zh-Hant"],
+  ...drawingCalculatedMessages["zh-Hant"],
+  ...replayDrawingSaveMessages["zh-Hant"],
+  ...chartTimeZoneMessages["zh-Hant"],
+  ...chartTimeShortcutMessages["zh-Hant"],
 } as const satisfies MessageCatalog;

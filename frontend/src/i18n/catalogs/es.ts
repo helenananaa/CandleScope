@@ -1,8 +1,15 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudySpanish, replayNoteSpanish, tradeHistorySpanish, readonlyAccountSpanish, continuousSpanish, tradingAccountsEs, nativeSpanish } from "./spanishFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 /** Neutral Spanish trading glossary for Spain and Latin America:
  * orden, ejecución, posición, pérdidas y ganancias, margen,
@@ -10,6 +17,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
  */
 export const es = {
   ...unifiedMessages["es"],
+  ...syntheticPagingMessages["es"],
+  ...drawingAnnotationMessages["es"],
   ...syntheticEnglish,
   ...continuousSpanish,
   ...tradeHistorySpanish,
@@ -1257,6 +1266,15 @@ export const es = {
   "settings.proxy.previewNodes": "Ver nodos",
   "settings.proxy.useNodes": "Usar nodos seleccionados",
   "settings.proxy.skippedNodes": "Nodos no compatibles omitidos: {count}",
+  "settings.proxy.autoRefresh": "Actualización automática",
+  "settings.proxy.autoRefreshOff": "Desactivada",
+  "settings.proxy.autoRefreshEvery": "Cada {duration}",
+  "settings.proxy.autoRefreshHelp": "Comprueba las suscripciones guardadas con esta frecuencia. Los nodos en uso adoptan la configuración actual del proveedor. No se añaden nodos nuevos, y un nodo que el proveedor eliminó conserva su última configuración.",
+  "settings.proxy.refreshPending": "Aún no se ha comprobado automáticamente",
+  "settings.proxy.refreshChecked": "Última comprobación: {time}",
+  "settings.proxy.refreshFailed": "Error en la actualización automática: {time}",
+  "settings.proxy.refreshUpdated": "Nodos actualizados: {count} · {time}",
+  "settings.proxy.refreshMissing": "Ya no están en la suscripción: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "ID de exchanges (separados por comas; vacío significa todos)",
   "settings.proxy.enabled": "Activado",
@@ -3695,6 +3713,58 @@ export const es = {
   "settings.updates.title": "Actualizaciones",
   "settings.updates.check": "Buscar actualizaciones",
   "settings.updates.checkHint": "Al iniciar y una vez al día, consulta a GitHub si hay una versión más reciente de CandleScope. No se descarga ni se instala nada.",
+  "settings.category.dataSources": "Fuentes de datos",
+  "dataSources.intro": "Conecta fuentes que requieren tu propia clave. Las claves se quedan en el almacén de contraseñas de este equipo (Llavero de macOS o Administrador de credenciales de Windows) y solo se envían a la fuente a la que pertenecen.",
+  "dataSources.desktopOnly": "Añade las claves de fuentes de datos en la aplicación de escritorio.",
+  "dataSources.loading": "Cargando…",
+  "dataSources.vaultUnavailable": "No se pueden guardar claves en este equipo; aquí solo funciona una variable de entorno.",
+  "dataSources.deletionPending": "Una clave antigua se eliminará del almacén de contraseñas en el próximo inicio. CandleScope ya no la usa.",
+  "dataSources.twelvedata.description": "Historial y precios en tiempo real de acciones de EE. UU., ETF, divisas, índices y materias primas. Consigue una clave gratuita en {site}.",
+  "dataSources.state.saved": "Usando clave guardada",
+  "dataSources.state.environment": "Usando variable de entorno",
+  "dataSources.state.none": "Sin clave",
+  "dataSources.state.unreadable": "Vuelve a guardarla",
+  "dataSources.savedKey": "Clave guardada",
+  "dataSources.savedKeyValue": "{masked}, guardada el {time}",
+  "dataSources.notSaved": "Ninguna",
+  "dataSources.environmentVariable": "Variable de entorno",
+  "dataSources.environmentSet": "Definida {masked}",
+  "dataSources.environmentNotSet": "No definida",
+  "dataSources.environmentActive": "CandleScope usa la clave de la variable de entorno. Cuando guardes una clave aquí, usará esa.",
+  "dataSources.environmentShadowed": "La variable de entorno también tiene una clave, pero CandleScope usa la guardada aquí. Quita la clave guardada para volver a la variable de entorno.",
+  "dataSources.savedUnreadable": "No se pudo leer la clave guardada: el almacén de contraseñas denegó el acceso o se eliminó la entrada. Vuelve a guardar la clave.",
+  "dataSources.keyLabel": "Clave de API",
+  "dataSources.keyPlaceholder": "Pega tu clave de API de {source}",
+  "dataSources.keyPlaceholderReplace": "Pega una clave nueva para reemplazarla",
+  "dataSources.save": "Guardar",
+  "dataSources.replace": "Reemplazar",
+  "dataSources.saving": "Guardando…",
+  "dataSources.check": "Probar conexión",
+  "dataSources.checking": "Probando…",
+  "dataSources.remove": "Quitar clave",
+  "dataSources.removing": "Quitando…",
+  "dataSources.removeTitle": "¿Quitar la clave de {source}?",
+  "dataSources.removeMessage": "La clave se elimina del almacén de contraseñas de este equipo. Los gráficos de {source} no podrán cargar datos hasta que vuelvas a añadir una clave.",
+  "dataSources.removeMessageEnvironment": "La clave se elimina del almacén de contraseñas de este equipo. Después, CandleScope usa la clave de la variable de entorno.",
+  "dataSources.removeConfirm": "Quitar",
+  "dataSources.saved": "Clave guardada.",
+  "dataSources.removed": "Clave quitada.",
+  "dataSources.reopenCharts": "Vuelve a abrir los gráficos de {source} que tengas abiertos para que sus precios en tiempo real usen este cambio.",
+  "dataSources.checkOk": "Conectado",
+  "dataSources.plan": "Plan",
+  "dataSources.minuteCredits": "Créditos por minuto",
+  "dataSources.dailyCredits": "Créditos por día",
+  "dataSources.creditsUsed": "{used} de {limit} usados",
+  "dataSources.creditsLimit": "Hasta {limit}",
+  "dataSources.websocketSymbols": "Símbolos en tiempo real (máx.)",
+  "dataSources.checkedAt": "Probado",
+  "dataSources.error.valueInvalid": "Eso no parece una clave: usa de 4 a 256 caracteres sin espacios.",
+  "dataSources.error.keyRejected": "{source} no aceptó esta clave. Comprueba que la copiaste completa.",
+  "dataSources.error.rateLimited": "El límite de solicitudes de {source} está agotado por ahora. Inténtalo de nuevo en breve.",
+  "dataSources.error.unreachable": "No se pudo conectar con {source}. Revisa la red o la configuración del proxy e inténtalo de nuevo.",
+  "dataSources.error.storeFailed": "No se pudo guardar la clave en el almacén de contraseñas. Inténtalo de nuevo; en macOS, desbloquea primero el llavero de inicio de sesión.",
+  "dataSources.error.missing": "Todavía no hay ninguna clave que probar.",
+  "dataSources.error.generic": "No se pudo completar. Inténtalo de nuevo en breve.",
   "chartTester.run.queued": "En cola",
   "chartTester.run.running": "En ejecución",
   "chartTester.stopObserving": "Dejar de esperar",
@@ -4178,4 +4248,9 @@ export const es = {
   "chartTester.deleteDraft": "Eliminar",
   "chartTester.deleteRetiredDraft": "Eliminar el borrador retirado {name}",
   "chartTester.deleteRetiredDraftFailed": "No se pudo eliminar el borrador retirado. Inténtalo de nuevo.",
+  ...drawingSelectionMessages["es"],
+  ...drawingCalculatedMessages["es"],
+  ...replayDrawingSaveMessages["es"],
+  ...chartTimeZoneMessages["es"],
+  ...chartTimeShortcutMessages["es"],
 } as const satisfies MessageCatalog;

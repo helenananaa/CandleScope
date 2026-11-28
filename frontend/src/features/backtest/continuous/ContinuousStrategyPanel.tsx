@@ -24,6 +24,8 @@ import {
   PRACTICE_ACCOUNT_RULES, defaultForwardFeeBps, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
 } from "./continuousAccountRules.js";
 import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { continuousMarketSupported } from "../../exchange-support/capabilityRoles.js";
+import { useVenueRoles } from "../../exchange-support/useVenueRoles.js";
 import "./continuousStrategy.css";
 
 /** The backend's continuous-source rules (`continuous_definition.py`). */
@@ -96,6 +98,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [leverage, setLeverage] = useState(() => defaultForwardLeverage(props.session.marketType, props.initialExecution));
   const accountLeverage = forwardAccountLeverage(executionModel, props.session.marketType, leverage);
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
+  const venueRoles = useVenueRoles();
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
   const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null,
@@ -107,7 +110,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   // B-333: the run advances on closed bars of the chart's interval, any fixed length of whole minutes.
   const barMs = forwardIntervalMs(props.session.interval);
   const qualified = props.language === "python" && hasSource && barMs !== null && !liveBarsUnavailable
-    && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
+    && continuousMarketSupported(venueRoles(props.session.exchange), props.session.marketType)
     && CONTINUOUS_SERIES_VARIANTS.has(identity.seriesVariant) && identity.priceAdjustment === "raw"
     && CONTINUOUS_VOLUME_SEMANTICS.has(identity.volumeSemantics);
   useEffect(() => {

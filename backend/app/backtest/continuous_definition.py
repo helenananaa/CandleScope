@@ -9,6 +9,7 @@ from collections.abc import Mapping
 
 from app.data_engine.data_manager.models import SeriesKey
 from app.data_engine.history.expected_bars import session_calendar
+from app.exchanges.roles import BINANCE_USDM_LINEAR_BASE_QUANTITY, CONTRACT_RULES, venue_role_contract
 from app.market_dataset.snapshot import MarketDatasetError
 from app.simulation.execution_realism import parse_execution_realism
 from .continuous_grid import supports as grid_interval
@@ -89,14 +90,17 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
             raise BacktestError("CONTINUOUS_MARKET_SESSIONS_UNSUPPORTED",
                 "Forward runs need a market that trades around the clock; this market closes between sessions")
     # Capabilities and price semantics, not the asset class: raw prices and
-    # base-unit volumes on a spot market or on Binance futures (contract rules).
+    # base-unit volumes on a spot market, or on futures whose venue declares
+    # base-quantity linear contract rules (ADR-DATA-002 D3c).
     if (key.market_type not in {"spot","futures"}
-            or (key.market_type=="futures" and key.exchange!="binance")
+            or (key.market_type=="futures" and venue_role_contract(
+                key.exchange,"futures",CONTRACT_RULES)!=BINANCE_USDM_LINEAR_BASE_QUANTITY)
             or key.identity.series_variant not in CONTINUOUS_SERIES_VARIANTS
             or key.identity.price_adjustment!="raw"
             or key.identity.volume_semantics not in CONTINUOUS_VOLUME_SEMANTICS):
         raise BacktestError("FIDELITY_UNSUPPORTED",
-            "This continuous source requires raw spot or Binance futures OHLCV with base-unit volume")
+            "This continuous source requires raw spot OHLCV, or futures with base-quantity contract rules, "
+            "with base-unit volume")
     provider = prepare_provider(provider)
     payload = {**execution,"output_mode":provider["output_mode"],"market_type":key.market_type}
     try:

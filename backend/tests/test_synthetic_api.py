@@ -28,6 +28,7 @@ def test_http_pages_share_source_snapshot_ids_and_reject_client_ohlcv():
     with client:
         first = client.post("/synthetic/query", json={**body, "limit": 2})
         assert first.status_code == 200
+        assert first.headers["content-type"] == "application/json"
         value = first.json()
         assert value["status"] == "ready" and value["total"] == 3
         page = client.post("/synthetic/query", json={**body, "before": value["before"], "generation": value["generation"]})

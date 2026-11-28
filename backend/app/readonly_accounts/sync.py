@@ -19,8 +19,13 @@ HISTORY = {
     "bills":("privateGetAccountBillsArchive","billId",normal.bill),
     "orders":("privateGetTradeOrdersHistoryArchive","ordId",normal.order),
 }
+FUNDING_PAGES = 10  # Per list: at most 1,000 deposits, withdrawals or transfers in three months.
 TERMINAL_ERRORS = frozenset({"READONLY_KEY_REQUIRED", "HEDGE_ACCOUNT_REQUIRED",
                             "ACCOUNT_AUTHENTICATION_FAILED", "ACCOUNT_IDENTITY_CHANGED"}) | OKX_AUTH_ERRORS
+
+
+class RouteFailover(Exception):
+    """The proxy route kept failing; the owner reconnects through another route."""
 
 
 def three_months_before(now_ms: int) -> int:
@@ -71,14 +76,21 @@ def uncovered_ranges(start: int, end: int, coverage: list[dict]) -> list[tuple[i
 
 
 class AccountSynchronizer:
-    def __init__(self, repository: AccountRepository, client, *, now_ms=None, state_changed=None):
+    def __init__(self, repository: AccountRepository, client, *, now_ms=None, state_changed=None,
+                 network_result=None):
         self.state_changed = state_changed or (lambda: None)
+        # Called with None after a reconcile succeeds and with the error after a network
+        # failure; returning True ends run() with RouteFailover.
+        self.network_result = network_result or (lambda error: False)
         self.repository = repository
         self.client = client
         self.now_ms = now_ms or (lambda:int(time.time()*1000))
         self.contracts: dict[str,Contract] = {}
         self.last_full_scan = 0
         self.last_position_history_ms = 0
+        self.last_fee_rates_ms = 0
+        self.last_funding_balances_ms = 0
+        self.last_funding_history_ms = 0
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self.changed = asyncio.Event()
         self.stream_status = "waiting"
@@ -285,6 +297,8 @@ class AccountSynchronizer:
         completed = [await self.history(kind,full=full) for kind in (pending or list(HISTORY))]
         if all(completed):
             await self.position_history(force=full)
+            await self.fee_rates(force=full)
+            await self.funding(force=full)
             if full:
                 self.last_full_scan = now
                 self.requested_full = False
@@ -346,6 +360,102 @@ class AccountSynchronizer:
             await asyncio.to_thread(self.repository.save_snapshot, "position_history_state",
                                     {"error": code, "complete": False}, self.now_ms())
 
+    async def fee_rates(self, *, force: bool = False) -> None:
+        """Read the account's fee tier at most hourly; a failure never fails the round."""
+        now = self.now_ms()
+        if not force and self.last_fee_rates_ms and now - self.last_fee_rates_ms < 60*60*1000:
+            return
+        self.last_fee_rates_ms = now
+        try:
+            rows = response_rows(await self.client.privateGetAccountTradeFee({"instType": "SWAP"}), 1)
+            if len(rows) != 1:
+                raise AccountDataError("FEE_RATES_UNAVAILABLE")
+            payload = {"raw": rows[0], "rates": normal.fee_rates(rows[0])}
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates", payload, self.now_ms())
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates_state", {"error": None}, self.now_ms())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            code = error_code(exc)
+            if code in TERMINAL_ERRORS:
+                raise
+            # Estimates are optional: keep the last good rates and say why they are old.
+            await asyncio.to_thread(self.repository.save_snapshot, "fee_rates_state", {"error": code}, self.now_ms())
+
+    async def funding(self, *, force: bool = False) -> None:
+        """Funding account balances each minute and its history every five (#575 PL-6).
+
+        Both are optional: a failure keeps the last values, says why, and never fails the round.
+        """
+        now = self.now_ms()
+        if force or now - self.last_funding_balances_ms >= 60_000:
+            self.last_funding_balances_ms = now
+            await self._optional("funding_balances", self._funding_balances)
+        if force or now - self.last_funding_history_ms >= 5 * 60_000:
+            self.last_funding_history_ms = now
+            await self._optional("funding_history", self._funding_history)
+
+    async def _optional(self, kind: str, read) -> None:
+        try:
+            payload = await read()
+            await asyncio.to_thread(self.repository.save_snapshot, kind, payload, self.now_ms())
+            state = {"error": None, **({"complete": payload["complete"]} if "complete" in payload else {})}
+            await asyncio.to_thread(self.repository.save_snapshot, kind + "_state", state, self.now_ms())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            code = error_code(exc)
+            if code in TERMINAL_ERRORS:
+                raise
+            await asyncio.to_thread(self.repository.save_snapshot, kind + "_state", {"error": code}, self.now_ms())
+
+    async def _funding_balances(self) -> dict:
+        rows = response_rows(await self.client.privateGetAssetBalances({}), 1000)
+        return {"balances": [normal.funding_balance(row) for row in rows]}
+
+    async def _funding_history(self) -> dict:
+        now = self.now_ms()
+        floor = three_months_before(now)
+        deposits, deposits_complete = await self._by_time("privateGetAssetDepositHistory", normal.deposit, floor)
+        withdrawals, withdrawals_complete = await self._by_time("privateGetAssetWithdrawalHistory", normal.withdrawal, floor)
+        transfers, transfers_complete = await self._transfers(floor, now)
+        return {"deposits": deposits, "withdrawals": withdrawals, "transfers": transfers, "fromMs": floor,
+                "throughMs": now, "complete": deposits_complete and withdrawals_complete and transfers_complete}
+
+    async def _by_time(self, method: str, normalize, floor: int) -> tuple[list[dict], bool]:
+        """Newest first back to `floor`, at most FUNDING_PAGES pages.
+
+        `after` is a time here, so each page asks again for the oldest time already seen:
+        rows sharing that time are not lost, and the ids remove the repeats.
+        """
+        records: dict[str, dict] = {}
+        cursor = None
+        for _ in range(FUNDING_PAGES):
+            params = {"limit": "100"} if cursor is None else {"limit": "100", "after": str(cursor + 1)}
+            rows = [normalize(row) for row in response_rows(await getattr(self.client, method)(params))]
+            fresh = [row for row in rows if row["id"] not in records]
+            records.update((row["id"], row) for row in rows if row["eventTimeMs"] >= floor)
+            if len(rows) < 100 or min(row["eventTimeMs"] for row in rows) < floor:
+                return sorted(records.values(), key=lambda row: -row["eventTimeMs"]), True
+            if not fresh:
+                break  # A full page of one time: stop instead of asking for it again.
+            cursor = min(row["eventTimeMs"] for row in rows)
+        return sorted(records.values(), key=lambda row: -row["eventTimeMs"]), False
+
+    async def _transfers(self, floor: int, now: int) -> tuple[list[dict], bool]:
+        """Transfers in and out of the trading account, from its bills (type 1)."""
+        records, cursor = [], None
+        for _ in range(FUNDING_PAGES):
+            params = {"type": "1", "begin": str(floor), "end": str(now), "limit": "100"}
+            if cursor is not None:
+                params["after"] = cursor
+            rows = response_rows(await self.client.privateGetAccountBillsArchive(params))
+            records.extend(normal.transfer(row) for row in rows)
+            if len(rows) < 100:
+                return records, True
+            cursor = normal.identifier(rows[-1].get("billId"))
+        return records, False
+
     async def run(self) -> None:
         tasks = [asyncio.create_task(self.consume())]
         tasks.extend(asyncio.create_task(self.watch(channel)) for channel in ["orders","positions","account"])
@@ -358,6 +468,7 @@ class AccountSynchronizer:
                 try:
                     complete = await self.reconcile()
                     delay = 30 if complete else 1
+                    self.network_result(None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -365,6 +476,8 @@ class AccountSynchronizer:
                     await asyncio.to_thread(self.repository.status,"error",error=code)
                     if code in TERMINAL_ERRORS:
                         raise
+                    if code == "ACCOUNT_NETWORK_UNAVAILABLE" and self.network_result(exc):
+                        raise RouteFailover() from exc
                     delay = min(max(delay*2,2),60)
                 try:
                     await asyncio.wait_for(self.changed.wait(),timeout=delay)

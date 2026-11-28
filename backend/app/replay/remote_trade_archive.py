@@ -29,6 +29,12 @@ from app.data_engine.storage.raw_trade_archive import (
     _canonical_sha256,
 )
 
+from app.exchanges.roles import (
+    BINANCE_USDM_AGG_TRADES_ARCHIVE,
+    TRADES_HISTORY_ARCHIVE,
+    venue_role_contract,
+)
+
 from .canonical import canonical_sha256
 from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock, _atomic_write_json, _file_sha256
 from .remote_history import ReplayHistoryOrigin, ReplayHistoryOriginUnavailable
@@ -206,7 +212,7 @@ class OfficialAggTradeAvailability:
             symbol=symbol,
             day=date(2000, 1, 1),
         )
-        if exchange != "binance":
+        if not _declares_official_archive(exchange, market_type):
             raise ReplayHistoryArchiveError(
                 "official aggTrade availability exchange is unsupported"
             )
@@ -1379,6 +1385,12 @@ class RemoteRawAggTradeArchive:
         raise RuntimeError("remote aggTrade replay cache is read-only")
 
 
+def _declares_official_archive(exchange: str, market_type: str) -> bool:
+    return venue_role_contract(
+        exchange, market_type, TRADES_HISTORY_ARCHIVE,
+    ) == BINANCE_USDM_AGG_TRADES_ARCHIVE
+
+
 def sync_official_agg_trade_availability(
     origin_root: str | Path,
     *,
@@ -1395,9 +1407,9 @@ def sync_official_agg_trade_availability(
     normalized_exchange = str(exchange).strip().lower()
     normalized_market = str(market_type).strip().lower()
     normalized_symbol = str(symbol).strip().upper()
-    if normalized_exchange != "binance":
+    if not _declares_official_archive(normalized_exchange, normalized_market):
         raise ReplayHistoryArchiveError(
-            "official aggTrade availability supports Binance only"
+            f"{normalized_exchange} {normalized_market} publishes no verified trade archive"
         )
     days = list_official_agg_trade_days(
         market_type=normalized_market,
