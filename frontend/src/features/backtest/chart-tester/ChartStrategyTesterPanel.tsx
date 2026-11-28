@@ -278,7 +278,9 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
   const handleNativeRunChange = useCallback((run: Parameters<typeof overlayRunForNative>[0]) => {
     setNativeOverlayRun(overlayRunForNative(run));
   }, []);
-  const shown = shownOverlayRun(mode, nativeOverlayRun, props.candleScopeOverlayRun ?? null);
+  // B-333b: a Pine strategy in the native list that tracks forward shows its forward run instead.
+  const [nativeForwardRun, setNativeForwardRun] = useState<StrategyOverlayRun | null>(null);
+  const shown = shownOverlayRun(mode, nativeForwardRun ?? nativeOverlayRun, props.candleScopeOverlayRun ?? null);
   useEffect(() => { onOverlayRunChange?.(shown); }, [onOverlayRunChange, shown]);
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
@@ -335,7 +337,7 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
             });
           } })}
           strategies={strategies} active={props.active !== false && mode === "NATIVE"} shownOnChart={mode === "NATIVE"} docked
-          {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange } : {})} />
+          {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange, onForwardOverlayRunChange: setNativeForwardRun } : {})} />
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>

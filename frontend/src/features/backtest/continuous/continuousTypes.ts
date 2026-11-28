@@ -87,8 +87,12 @@ export type ContinuousParameterField = {
 } & ({ type: "boolean"; default: boolean } | { type: "string"; default: string }
   | { type: "integer" | "number"; default: number });
 
+/** Whether Pine code can run forward (backend `continuous_pine.forward_support`); `uses` names what it refuses. */
+export type PineForwardSupport = { supported: boolean; uses: string[]; reason: string | null };
+
 export interface ContinuousApi {
   editorParameters(source: string, signal: AbortSignal): Promise<{ fields: ContinuousParameterField[] }>;
+  pineSupport(source: string, libraries: Record<string, string>, signal: AbortSignal): Promise<PineForwardSupport>;
   capabilities(signal: AbortSignal): Promise<ContinuousCapabilities>;
   create(key: string, body: ContinuousCreate, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;
   request(key: string, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;

@@ -633,7 +633,7 @@ export const continuousHindi: Record<keyof typeof continuousEnglish, string> = {
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "निरंतर रन मौजूदा एडिटर कोड और पैरामीटर इस्तेमाल करते हैं। बदलाव केवल नए रन में लागू होते हैं। यह दृश्य बंद करने पर रन स्थानीय सेवा में चलता रहता है।",
   "continuous.scopeHint": "बाज़ार या अंतराल बदलने, या इस रणनीति को हटाने से केवल वह बदलता है जो यह चार्ट दिखाता है। रन स्थानीय सेवा में जारी रहता है।",
   "continuous.detach": "इस चार्ट से हटाएँ",

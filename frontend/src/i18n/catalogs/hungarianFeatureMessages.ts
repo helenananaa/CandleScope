@@ -633,7 +633,7 @@ export const continuousHungarian: Record<keyof typeof continuousEnglish, string>
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "A folyamatos futtatások a szerkesztő aktuális kódját és paramétereit használják. A módosítások csak új futtatásban lépnek életbe. A nézet bezárása után a futtatás a helyi szolgáltatásban folytatódik.",
   "continuous.scopeHint": "A piac vagy az időköz váltása, illetve a stratégia eltávolítása csak azt változtatja meg, amit ez a diagram mutat. A futtatás a helyi szolgáltatásban folytatódik.",
   "continuous.detach": "Eltávolítás erről a diagramról",

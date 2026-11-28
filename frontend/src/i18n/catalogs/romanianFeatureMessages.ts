@@ -633,7 +633,7 @@ export const continuousRomanian: Record<keyof typeof continuousEnglish, string> 
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Rulările continue folosesc codul și parametrii curenți din editor. Modificările se aplică doar într-o rulare nouă. Închiderea acestei vizualizări lasă rularea să continue în serviciul local.",
   "continuous.scopeHint": "Schimbarea pieței sau a intervalului ori eliminarea acestei strategii modifică doar ce arată acest grafic. Rularea continuă în serviciul local.",
   "continuous.detach": "Elimină din acest grafic",

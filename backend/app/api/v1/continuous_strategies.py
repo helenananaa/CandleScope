@@ -10,16 +10,17 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ACCOUNT_MODELS,LANGUAGES,ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
+from app.backtest.continuous_contracts import ACCOUNT_MODELS,LANGUAGES,ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,PineForwardSupport,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
 from app.backtest.strategy.python_bundle import editor_parameter_defaults
 from app.backtest.continuous_provider import SCHEMA as PROVIDER_SCHEMA
+from app.backtest.continuous_pine import forward_support as pine_forward_support
 from app.data_engine.data_manager.continuous_strategy import MAX_REQUESTS
 from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
-from app.core.executors import run_storage
+from app.core.executors import run_script_wait,run_storage
 from app.core.operator_origin import is_trusted_operator_origin,origin_from
 from .stream_utils import send_text_with_timeout
 
@@ -150,6 +151,16 @@ async def editor_parameters(request: Request):
             raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
         payload = await _body(request, EditorParameters)
         return _reply({"fields": await run_storage(editor_parameter_defaults, payload.source_text)})
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+
+@router.post("/pine/support")
+async def pine_support(request: Request):
+    """Whether this Pine code can run forward; the strategy list asks before it offers forward tracking."""
+    try:
+        payload = await _body(request, PineForwardSupport)
+        return _reply(await run_script_wait(pine_forward_support, payload.source_text, payload.libraries))
     except WIRE_ERRORS as failure:
         return _error(failure)
 

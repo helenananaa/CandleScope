@@ -26,6 +26,12 @@ class EditorParameters(StrictInput):
     source_text: str = Field(max_length=262144)
 
 
+class PineForwardSupport(StrictInput):
+    source_text: str = Field(min_length=1, max_length=262144)
+    # Versioned libraries the script imports (owner/name/version: source).
+    libraries: dict[str, str] | None = None
+
+
 class SeriesIdentity(StrictInput):
     provider_id:str=Field(min_length=1,max_length=64,pattern=r"^\S+$")
     venue:str=Field(min_length=1,max_length=64,pattern=r"^\S+$")

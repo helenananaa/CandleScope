@@ -633,7 +633,7 @@ export const continuousDutch: Record<keyof typeof continuousEnglish, string> = {
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "Doorlopende runs gebruiken de huidige code en parameters uit de editor. Wijzigingen gelden pas in een nieuwe run. Deze weergave sluiten laat de run doorgaan in de lokale service.",
   "continuous.scopeHint": "De markt of het interval wisselen, of deze strategie verwijderen, verandert alleen wat deze grafiek toont. De run gaat door in de lokale service.",
   "continuous.detach": "Van deze grafiek verwijderen",

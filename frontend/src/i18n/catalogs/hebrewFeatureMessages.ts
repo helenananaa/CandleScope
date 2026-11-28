@@ -633,7 +633,7 @@ export const continuousHebrew: Record<keyof typeof continuousEnglish, string> = 
   "researchResult.openVersion": "Open as a new draft",
   "researchResult.versionNamed": "Named “{name}”.",
   "strategyForward.fromNow": "From now",
-  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.",
+  "strategyForward.back": "Back to chart", "strategyForward.pineSignalChart": "Pine runs on this chart's own bars, not on a signal chart.", "strategyForward.pineChecking": "Checking whether this script can run forward…", "strategyForward.pineUnsupported": "Forward tracking places close-bar Pine orders; this script uses {uses}.", "strategyForward.pineCheckFailed": "The script must compile before it can be tracked forward.",
   "continuous.hint": "הרצות רציפות משתמשות בקוד ובפרמטרים הנוכחיים של העורך. שינויים חלים רק בהרצה חדשה. סגירת תצוגה זו משאירה את ההרצה פועלת בשירות המקומי.",
   "continuous.scopeHint": "החלפת השוק או המחזור, או הסרת אסטרטגיה זו, משנות רק את מה שגרף זה מציג. ההרצה ממשיכה בשירות המקומי.",
   "continuous.detach": "הסרה מגרף זה",
