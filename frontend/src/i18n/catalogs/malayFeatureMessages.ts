@@ -716,6 +716,7 @@ export const tradingAccountsMs: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Diisi pada {price}",
   "trading.ticket.working": "Pesanan sedang aktif",
   "trading.ticket.waitsForOpen": "Pasaran ditutup; pesanan diisi pada pembukaan seterusnya",
+  "trading.ticket.modelUnsupported": "Akaun latihan belum boleh membuka posisi dalam pasaran ini; posisi sedia ada masih boleh ditutup",
   "trading.ticket.model": "Isian simulasi. Tiada apa-apa dihantar ke bursa.",
   "trading.manual.title": "Masukkan isian",
   "trading.manual.help": "Rekod isian untuk {symbol}. Isian dikumpulkan secara automatik menjadi dagangan dari kedudukan sifar ke kedudukan sifar.",

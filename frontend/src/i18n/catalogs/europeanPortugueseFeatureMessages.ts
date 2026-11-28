@@ -716,6 +716,7 @@ export const tradingAccountsPtPT: Record<keyof typeof tradingAccountsEn, string>
   "trading.ticket.filled": "Executada a {price}",
   "trading.ticket.working": "Ordem activa",
   "trading.ticket.waitsForOpen": "O mercado está fechado; a ordem será executada na próxima abertura",
+  "trading.ticket.modelUnsupported": "As contas de prática ainda não podem abrir posições neste mercado; as posições existentes ainda podem ser fechadas",
   "trading.ticket.model": "Execução simulada. Nada é enviado a uma exchange.",
   "trading.manual.title": "Introduzir uma execução",
   "trading.manual.help": "Registe uma execução de {symbol}. As execuções são agrupadas automaticamente em operações, de posição nula a posição nula.",

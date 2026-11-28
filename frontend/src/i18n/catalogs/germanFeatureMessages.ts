@@ -716,6 +716,7 @@ export const tradingAccountsDe: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Ausgeführt zu {price}",
   "trading.ticket.working": "Order ist aktiv",
   "trading.ticket.waitsForOpen": "Der Markt ist geschlossen; die Order wird zur nächsten Eröffnung ausgeführt",
+  "trading.ticket.modelUnsupported": "Übungskonten können in diesem Markt noch keine Positionen eröffnen; bestehende Positionen lassen sich weiterhin schließen",
   "trading.ticket.model": "Simulierte Ausführung. Es wird nichts an eine Börse gesendet.",
   "trading.manual.title": "Fill eingeben",
   "trading.manual.help": "Einen Fill für {symbol} erfassen. Fills werden automatisch von flach bis flach zu Trades gruppiert.",

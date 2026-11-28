@@ -44,11 +44,11 @@ from app.simulation.practice_account import (
     WorkingOrder,
     advance_cursor,
     initial_margin,
-    market_leverage,
     reachable,
 )
 from app.data_engine.series_identity import KlineSeriesIdentity
 
+from .account_models import MarketRules, market_rules
 from .series import market_series, requested_series, series_text, series_view, stored_series
 from .sessions import closed_between, market_calendar
 from .stats import TradeFacts, compute_stats, journal_tags
@@ -500,7 +500,8 @@ class TradingAccountService(JournalService):
             value = trade.unrealized_pnl(mark)
             unrealized += value or ZERO
             price = mark if mark is not None else (trade.avg_entry_price or ZERO)
-            used_margin += initial_margin(trade.open_qty, price, market_leverage(leverage, trade.market_type))
+            instrument = (trade.exchange, trade.market_type, trade.symbol)
+            used_margin += initial_margin(trade.open_qty, price, self._market_leverage(leverage, instrument))
             view = trade.to_dict(mark=mark)
             view["markAtMs"] = mark_ms
             view["markSource"] = mark_source
@@ -765,14 +766,28 @@ class TradingAccountService(JournalService):
     #  Practice orders
     # ══════════════════════════════════════════════════════════
 
-    def _settings(self, account: dict[str, Any], market_type: str) -> PracticeSettings:
+    def _rules(self, instrument: Instrument) -> MarketRules:
+        """The account model the market's catalog row declares (ADR-DATA-002 D5b)."""
+        return market_rules(self.market, instrument)
+
+    def _market_leverage(self, leverage: Decimal, instrument: Instrument) -> Decimal:
+        """Linear contracts use the account's leverage; cash positions are fully paid."""
+        return leverage if self._rules(instrument).leveraged else Decimal(1)
+
+    def _settings(self, account: dict[str, Any], instrument: Instrument) -> PracticeSettings:
         settings = account["settings"]
         return PracticeSettings(
             taker_fee_rate=Decimal(settings["takerFeeRate"]),
             maker_fee_rate=Decimal(settings["makerFeeRate"]),
             slippage_bps=Decimal(settings["slippageBps"]),
-            allow_short=market_type == "futures",
+            allow_short=self._rules(instrument).contract,
         )
+
+    def market_rules(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """The practice rules of one market, for the order ticket."""
+        instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
+        return {"exchange": instrument[0], "marketType": instrument[1], "symbol": instrument[2],
+                **self._rules(instrument).to_dict()}
 
     def _current_bar(self, instrument: Instrument, series: KlineSeriesIdentity | None, at_ms: int, now: int) -> bool:
         """Whether the candle opened at ``at_ms`` still carries the market's price.
@@ -868,7 +883,8 @@ class TradingAccountService(JournalService):
         leg = payload.get("positionSide")
         effect = payload.get("positionEffect")
         reduce_only = bool(payload.get("reduceOnly"))
-        if account["settings"].get("positionMode") == "HEDGE" and instrument[1] == "futures":
+        rules = self._rules(instrument)
+        if account["settings"].get("positionMode") == "HEDGE" and rules.contract:
             if leg not in ("LONG", "SHORT") or effect not in ("open", "close"):
                 raise invalid("Hedge orders require positionSide and positionEffect")
             expected_side = "buy" if (leg == "LONG") == (effect == "open") else "sell"
@@ -915,7 +931,7 @@ class TradingAccountService(JournalService):
         position = target.open_qty * target.sign if target else ZERO
         if payload.get("tradeId") is not None and (not reduce_only or not target or payload["tradeId"] != target.id):
             raise conflict("The selected position has already closed", code="TRADING_NOTHING_TO_REDUCE")
-        settings = self._settings(account, instrument[1])
+        settings = self._settings(account, instrument)
         direction = Decimal(1) if side == "buy" else Decimal(-1)
 
         if order_type == "stop":
@@ -932,10 +948,18 @@ class TradingAccountService(JournalService):
         if not reduce_only and not settings.allow_short and side == "sell" and position - qty < 0:
             raise conflict("Spot practice cannot sell more than you hold", code="TRADING_INSUFFICIENT_POSITION")
         increases = not reduce_only and (position == 0 or (position > 0) == (direction > 0))
+        if increases and not rules.opens_positions:
+            # Closing what is already open stays possible.
+            raise conflict(
+                "Practice accounts cannot open positions in this market: "
+                + ("coin-settled contracts" if rules.account_model == "crypto_inverse"
+                   else "contracts with a fixed margin per contract") + " are not simulated yet",
+                code="TRADING_ACCOUNT_MODEL_UNSUPPORTED",
+            )
         if increases:
             summary = self.account_summary(account_id)
-            # Spot is fully paid; the account's leverage is read only for futures.
-            leverage = Decimal(account["settings"]["leverage"]) if instrument[1] == "futures" else Decimal(1)
+            # Cash is fully paid; the account's leverage applies to linear contracts.
+            leverage = self._market_leverage(Decimal(account["settings"]["leverage"]), instrument)
             required = initial_margin(qty, entry_price, leverage)
             available = Decimal(summary["available"])
             if required > available:
@@ -1259,9 +1283,9 @@ class TradingAccountService(JournalService):
                     marks_available = False
                     continue
                 capital += trade.unrealized_pnl(mark)
-                capital -= initial_margin(trade.open_qty, mark, market_leverage(leverage, trade.market_type))
+                capital -= initial_margin(trade.open_qty, mark, self._market_leverage(leverage, key))
         return PracticeBuyingPower(capital if marks_available else None,
-                                   market_leverage(leverage, instrument[1]), quantities, trade_ids, committed_ms)
+                                   self._market_leverage(leverage, instrument), quantities, trade_ids, committed_ms)
 
     def _match_sessions(
         self, instrument: Instrument, rows: list[dict[str, Any]],
@@ -1280,7 +1304,7 @@ class TradingAccountService(JournalService):
             sessions.append((account, PracticeMatcher(
                 [_working_order(row) for row in orders],
                 position,
-                self._settings(account, instrument[1]),
+                self._settings(account, instrument),
                 buying_power=book, new_fill_id=lambda: self.new_id("fil"),
                 new_order_id=lambda: self.new_id("ord"),
             )))

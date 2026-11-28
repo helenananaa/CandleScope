@@ -716,6 +716,7 @@ export const tradingAccountsCs: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Vyplněno za {price}",
   "trading.ticket.working": "Objednávka je aktivní",
   "trading.ticket.waitsForOpen": "Trh je zavřený; objednávka se vyplní při příštím otevření",
+  "trading.ticket.modelUnsupported": "Cvičné účty v tomto trhu zatím nemohou otevírat pozice; existující pozice lze stále zavřít",
   "trading.ticket.model": "Simulované plnění. Na burzu se nic neodesílá.",
   "trading.manual.title": "Zadat plnění",
   "trading.manual.help": "Zaznamenejte plnění pro {symbol}. Plnění se automaticky seskupují do obchodů od nulové pozice k nulové.",

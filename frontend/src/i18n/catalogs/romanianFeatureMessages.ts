@@ -716,6 +716,7 @@ export const tradingAccountsRo: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Executat la {price}",
   "trading.ticket.working": "Ordinul este activ",
   "trading.ticket.waitsForOpen": "Piața este închisă; ordinul se execută la următoarea deschidere",
+  "trading.ticket.modelUnsupported": "Conturile de exersare nu pot încă deschide poziții pe această piață; pozițiile existente pot fi în continuare închise",
   "trading.ticket.model": "Execuție simulată. Nimic nu este trimis la o bursă.",
   "trading.manual.title": "Introduceți o execuție",
   "trading.manual.help": "Înregistrați o execuție pentru {symbol}. Execuțiile sunt grupate automat în tranzacții, de la poziție zero la poziție zero.",

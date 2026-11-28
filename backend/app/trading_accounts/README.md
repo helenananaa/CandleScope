@@ -32,8 +32,15 @@ the exchange's own series, so older rows keep their meaning. The cursor, marks
 and excursions read that series. While a market has working orders or open
 positions in any account, an order that names another series is refused with
 `TRADING_SERIES_MISMATCH`; an order without `identity` follows the current one.
-Any market type is accepted; only `futures` gets leverage, shorting and hedge
-mode, and every other market type is fully paid and long-only until D5.
+Any market type is accepted. The symbol's catalog row declares its
+`accountModel` (ADR-DATA-002 D5b, `account_models.py`): `cash` is fully paid and
+long only; `crypto_linear` gets the account's leverage, shorting and hedge mode
+on any venue (Gate's `swap.linear` as well as Binance `futures`);
+`crypto_inverse` and `futures_margin` open no positions yet
+(`TRADING_ACCOUNT_MODEL_UNSUPPORTED`) but close existing ones. A symbol without
+a declaration, or one the catalog has not loaded, keeps the earlier rule:
+`futures` is linear, anything else is cash. `GET /trading/market-rules` gives
+the order ticket the same answer.
 
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).

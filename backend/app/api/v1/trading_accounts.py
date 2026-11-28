@@ -135,6 +135,18 @@ async def trade_excursion(request: Request, account_id: str, trade_id: str) -> d
 
 # ── practice orders ─────────────────────────────────────────────
 
+@router.get("/market-rules")
+async def market_rules(
+    request: Request,
+    exchange: str = Query(...),
+    market_type: str = Query(..., alias="marketType"),
+    symbol: str = Query(...),
+) -> dict:
+    """How practice accounts hold positions in one market (ADR-DATA-002 D5b)."""
+    return await _call(_service(request).market_rules,
+                       {"exchange": exchange, "marketType": market_type, "symbol": symbol})
+
+
 @router.get("/accounts/{account_id}/orders")
 async def list_orders(
     request: Request,

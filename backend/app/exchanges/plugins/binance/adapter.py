@@ -680,7 +680,7 @@ class BinanceExchangeAdapter:
                     raw=item,
                     listed_at_ms=_timestamp_ms(item.get("onboardDate")),
                     price_tick_size=_price_tick_size(item),
-                    **binance_contract_rules(item),
+                    **binance_contract_rules(item, spot=True),
                 ),
             )
         return symbols
@@ -726,7 +726,7 @@ class BinanceExchangeAdapter:
                     ),
                     price_tick_size=_price_tick_size(item),
                     **underlying,
-                    **binance_contract_rules(item),
+                    **binance_contract_rules(item, spot=False),
                 ),
             )
         warn_unknown_underlyings(self.id, unknown_tradfi)

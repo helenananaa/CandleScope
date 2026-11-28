@@ -110,6 +110,9 @@ def parse_symbol_search_payload(
             venue_mic=venue_mic,
             entitlement=str(access.get("plan") or "unknown"),
             redistribution="unknown",
+            # Shares are bought outright. Quotes for forex, indices and
+            # commodities are not something a cash account holds.
+            account_model="cash" if resolved_market in {"stock", "etf"} else "",
             raw={
                 "provider_symbol": raw_symbol,
                 "exchange": exchange_name,

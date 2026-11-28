@@ -70,12 +70,34 @@ def _wall_ms() -> int:
     return int(time.time() * 1000)
 
 
+# Catalog rows are scanned per lookup; matching asks for them every step.
+SYMBOL_INFO_TTL_S = 60.0
+
+
 class DataManagerMarket:
     """``MarketPort`` over the live DataManager (call from worker threads)."""
 
-    def __init__(self, data_manager: Any) -> None:
+    def __init__(self, data_manager: Any, *, symbol_metadata: Any = None) -> None:
         self.data_manager = data_manager
         self._calendars: dict[tuple[str, str, str, Any], Any] = {}
+        self._symbol_metadata = symbol_metadata
+        self._symbol_infos: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+
+    def symbol_info(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None:
+        """The symbol's catalog row (ADR-DATA-002 D5b account model); None when not loaded."""
+        key = (exchange, market_type, symbol)
+        now = time.monotonic()
+        cached = self._symbol_infos.get(key)
+        if cached is not None and now - cached[0] < SYMBOL_INFO_TTL_S:
+            return cached[1]
+        lookup = self._symbol_metadata
+        if lookup is None:
+            from app.exchanges.symbol_catalog import get_cached_symbol_metadata as lookup
+        found = lookup(exchange, market_type, symbol)
+        if found is not None:
+            # Catalog rows change rarely; a row not loaded yet is asked again.
+            self._symbol_infos[key] = (now, found)
+        return found
 
     def calendar(
         self, exchange: str, market_type: str, symbol: str, *, series_identity: Any = None,

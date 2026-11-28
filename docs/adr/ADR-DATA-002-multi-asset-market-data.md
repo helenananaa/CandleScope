@@ -152,9 +152,13 @@ D5 的拆分（模拟账户）：
   隔休市的挂单按开盘价判断（限价单在开盘价更优时按开盘价成交，止损单按开盘价加滑点成交），之后照常按 K 线路径撮合。
   只对有交易日历的市场生效，24×7 市场按构造不变。回测内核已经按开盘价处理跳空（`_adverse_stop_fill_price`、
   `_limit_gapped`），持续策略的前向运行在 D2c3 已拒绝有交易时段的市场，都不用改。
-- **D5b 账户模型来自品种。** `SymbolInfo.account_model`（`crypto_linear` / `crypto_inverse` / `cash_equity` /
-  `futures_margin`），由数据来源声明；练习账户按它决定杠杆、做空和对冲，替换 `market_type == "futures"`。
-  没有声明的品种保持现在的规则（全额、只做多）。（计划）
+- **D5b 账户模型来自品种。** `SymbolInfo.account_model`：`cash`（全额、只做多：现货加密、股票、ETF；§4.1 的
+  `cash_equity` 合进这里，因为现货加密规则相同）、`crypto_linear`、`crypto_inverse`、`futures_margin`。
+  合约规则（`contract_rules.py`）按现货/线性/反向填写，Twelve Data 的股票和 ETF 声明 `cash`，期权不声明。
+  练习账户按它决定杠杆、做空和对冲，替换 `market_type == "futures"`：其他交易所的线性永续（如 Gate `swap.linear`）
+  由此可以做空和加杠杆；反向合约和每手保证金期货暂不能开仓（`TRADING_ACCOUNT_MODEL_UNSUPPORTED`），已有持仓仍可平仓。
+  没有声明或目录还没加载的品种保持原规则（`futures` 按线性，其他全额只做多）；
+  `GET /trading/market-rules` 让下单面板和后端用同一个答案。
 - **D5c 现金股票。** 全额买入、不能卖空、数量步长（整股或碎股）、默认手续费（`fee_defaults`）；
   账户币种和品种报价币种不一致时明确提示。（计划）
 - **D5d 期货每手保证金。** `futures_margin`：保证金按 `margin_per_contract` × 手数，盈亏按价格变动 × 合约乘数；

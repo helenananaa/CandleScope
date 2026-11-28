@@ -716,6 +716,7 @@ export const tradingAccountsAr: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "نُفّذ عند {price}",
   "trading.ticket.working": "الأمر قيد العمل",
   "trading.ticket.waitsForOpen": "السوق مغلق؛ يُنفَّذ الأمر عند الافتتاح التالي",
+  "trading.ticket.modelUnsupported": "لا يمكن لحسابات التمرين فتح مراكز في هذا السوق بعد؛ لا يزال بالإمكان إغلاق المراكز الحالية",
   "trading.ticket.model": "تنفيذ محاكى. لا يُرسل شيء إلى أي بورصة.",
   "trading.manual.title": "إدخال تنفيذ",
   "trading.manual.help": "سجّل تنفيذاً لـ {symbol}. تُجمَّع التنفيذات تلقائياً في صفقات، من مركز صفري إلى مركز صفري.",

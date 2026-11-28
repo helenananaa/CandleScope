@@ -716,6 +716,7 @@ export const tradingAccountsNl: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Uitgevoerd tegen {price}",
   "trading.ticket.working": "Order is actief",
   "trading.ticket.waitsForOpen": "De markt is gesloten; de order wordt bij de volgende opening uitgevoerd",
+  "trading.ticket.modelUnsupported": "Oefenaccounts kunnen in deze markt nog geen posities openen; bestaande posities kunnen nog wel worden gesloten",
   "trading.ticket.model": "Gesimuleerde fill. Er wordt niets naar een beurs verzonden.",
   "trading.manual.title": "Een fill invoeren",
   "trading.manual.help": "Registreer een fill voor {symbol}. Fills worden automatisch gegroepeerd in trades, van vlak tot vlak.",

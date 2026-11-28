@@ -716,6 +716,7 @@ export const tradingAccountsSv: Record<keyof typeof tradingAccountsEn, string> =
   "trading.ticket.filled": "Fylld till {price}",
   "trading.ticket.working": "Ordern är aktiv",
   "trading.ticket.waitsForOpen": "Marknaden är stängd; ordern fylls vid nästa öppning",
+  "trading.ticket.modelUnsupported": "Övningskonton kan ännu inte öppna positioner på den här marknaden; befintliga positioner kan fortfarande stängas",
   "trading.ticket.model": "Simulerad fyllnad. Inget skickas till en börs.",
   "trading.manual.title": "Ange en fyllnad",
   "trading.manual.help": "Registrera en fyllnad för {symbol}. Fyllnader grupperas automatiskt i affärer från platt till platt.",
