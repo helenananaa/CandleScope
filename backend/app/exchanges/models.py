@@ -604,6 +604,9 @@ class SymbolInfo:
     underlying_class: str = ""
     underlying_region: str = ""
     account_model: str = ""
+    # Margin held per contract by a futures_margin row, in its quote currency
+    # (ADR-DATA-002 D5d). Empty when the source publishes none.
+    margin_per_contract: str = ""
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -670,6 +673,7 @@ class SymbolInfo:
             ("min_quantity", False),
             ("quantity_origin", True),
             ("option_strike", True),
+            ("margin_per_contract", False),
         ):
             text = str(getattr(self, field_name) or "").strip()
             if text:
@@ -749,6 +753,8 @@ class SymbolInfo:
             data["underlyingRegion"] = self.underlying_region
         if self.account_model:
             data["accountModel"] = self.account_model
+        if self.margin_per_contract:
+            data["marginPerContract"] = self.margin_per_contract
         if self.price_tick_size:
             data["priceTickSize"] = self.price_tick_size
         lot = next((item for item in self.raw.get("filters", []) if item.get("filterType") == "LOT_SIZE"), {})
