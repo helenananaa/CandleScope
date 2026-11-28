@@ -9,6 +9,20 @@ import {
 
 const source15m = { interval: "15m", alignment_offset_ms: 0 };
 
+test("a dataset on a trading calendar offers only its source interval", () => {
+  const daily = { interval: "1d", alignment_offset_ms: 0, calendar_id: "cn.a-share.exchange-date.utc" };
+  assert.equal(resolveLocalIntervalSupport(daily, "1d").supported, true);
+  for (const target of ["2d", "1w", "1M", "1w~c1~UTC"]) {
+    const support = resolveLocalIntervalSupport(daily, target);
+    assert.equal(support.supported, false, target);
+    assert.equal(support.code, "interval_not_composable");
+  }
+  assert.deepEqual(getCommonLocalIntervals(daily), ["1d"]);
+  assert.equal(resolveLocalIntervalSupport({ interval: "1d", alignment_offset_ms: 0 }, "2d").supported, true);
+  // Host chart snapshots of session markets keep their derived intervals.
+  assert.equal(resolveLocalIntervalSupport({ interval: "1m", alignment_offset_ms: 0, calendar_id: "twelvedata.exchange-date.weekdays.utc" }, "5m").supported, true);
+});
+
 test("15m local data composes 30m, 1h, and custom 90m", () => {
   assert.deepEqual(
     ["30m", "1h", "90m"].map((value) => {

@@ -206,6 +206,7 @@ def test_session_calendar_uses_absolute_time_across_dst_transitions() -> None:
 
 def test_calendar_registry_only_has_explicit_default() -> None:
     registry = CalendarRegistry()
-    assert registry.ids() == ("crypto.24x7.utc",)
+    # ADR-DATA-002 D2e adds the calendar imported A-share datasets name.
+    assert registry.ids() == ("cn.a-share.exchange-date.utc", "crypto.24x7.utc")
     assert isinstance(registry.require("crypto.24x7.utc"), AlwaysOpenCalendar)
     assert registry.get("missing") is None

@@ -2,6 +2,7 @@ import { Badge, Stat } from "../../components/ui/index.js";
 import { getLocale, t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalRevisionDetails } from "./researchDataApi.js";
 import { formatQualityStatus, formatResearchRows } from "./researchDataFormat.js";
+import { localCalendarLabel } from "../local-data/localTradingCalendars.js";
 
 export function ResearchDatasetQuality({
   manifest,
@@ -27,6 +28,11 @@ export function ResearchDatasetQuality({
         <Stat label={t("local.noVolume")} value={formatResearchRows(details?.quality.missing_volume_rows ?? 0)} />
         <Stat label={t("local.revisions")} value={manifest.revision_count ?? revisionCount} />
       </div>
+      {manifest.calendar_id && (
+        <p className="research-import-note" data-testid="research-dataset-calendar">
+          {t("local.calendar.datasetNote", { calendar: localCalendarLabel(manifest.calendar_id) })}
+        </p>
+      )}
       {(details?.quality.excluded_ranges.length ?? 0) > 0 && (
         <ul className="research-dataset-gaps">{details?.quality.excluded_ranges.slice(0, 3).map((gap) => (
           <li key={`${gap.start_ms}-${gap.end_ms}`}>{t("local.gapBars", { time: new Date(gap.start_ms).toLocaleString(getLocale()), count: gap.missing_bars })}</li>

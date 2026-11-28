@@ -16,6 +16,8 @@ export interface LocalDatasetManifest {
   };
   symbol: string;
   instrument?: { base_asset: string; quote_asset: string; volume_unit: "base_asset" };
+  /** ADR-DATA-002 D2e: the trading calendar the bars follow; absent means continuous time. */
+  calendar_id?: string;
   interval: string;
   alignment?: "fixed_epoch" | "weekly_monday" | "calendar_month";
   alignment_offset_ms?: number;
@@ -45,6 +47,7 @@ export interface LocalImportInput {
   timestampUnit: "auto" | "s" | "ms" | "iso";
   volumeRequired: boolean;
   datasetId?: string;
+  calendarId?: string;
 }
 
 export interface LocalMarketTradeImportInput {
