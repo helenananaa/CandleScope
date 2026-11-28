@@ -224,7 +224,9 @@ class DataEngineRuntime:
             if callable(stop):
                 await self._shutdown_step("ManualHistoryService", stop(), step_timeout)
 
-        history_router = self.data_manager.get_history_router()
+        # Runtimes built around other DataManager stand-ins have no planner.
+        get_history_router = getattr(self.data_manager, "get_history_router", None)
+        history_router = get_history_router() if callable(get_history_router) else None
         if history_router is not None:
             await self._shutdown_step("Symbol history planner", history_router.close(), step_timeout)
         await self._shutdown_step(
