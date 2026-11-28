@@ -1,4 +1,5 @@
 import { translateStroke, type CaptureStroke } from "./freehandDrag.js";
+import { applyTextAnnotationDrag } from "./drawingTextAnnotations.js";
 import {
   parseDrawingAnchor,
   parseDrawingDataPoint,
@@ -53,6 +54,7 @@ export function drawingEntityGeometryCommandForDrag(
     case "range-measure":
     case "path":
     case "channel":
+    case "calculated":
     case "angle":
     case "fibonacci":
       return descriptor.pointIndex < 0 ? "move" : "resize";
@@ -254,6 +256,13 @@ function applyTextHandleDrag(
 function applyTextDrag(options: DrawingEntityDragOptions): SavedDrawing | null {
   const { descriptor, drawing, pos, dataToScreen, screenToDrawingData, snap } = options;
   if (descriptor.type !== "text" || drawing.type !== "text") return null;
+  if (descriptor.part && descriptor.part !== "box") {
+    return applyTextAnnotationDrag({
+      drawing, part: descriptor.part, origDataPoint: descriptor.origDataPoint,
+      ...(descriptor.origTarget ? { origTarget: descriptor.origTarget } : {}),
+      startMouse: descriptor.startMouse, pos, dataToScreen, screenToDrawingData, snap,
+    });
+  }
   const originalPoint = immutableDataPoint(descriptor.origDataPoint);
   if (!originalPoint || !finiteScreenPoint(descriptor.startMouse)) return null;
   const originalScreen = dataToScreen(originalPoint);
@@ -599,7 +608,8 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     snap,
   } = options;
   if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci"
-    && descriptor.type !== "range-measure" && descriptor.type !== "channel" && descriptor.type !== "path") {
+    && descriptor.type !== "range-measure" && descriptor.type !== "channel" && descriptor.type !== "path"
+    && descriptor.type !== "calculated") {
     return null;
   }
   if ((descriptor.type === "line" && drawing.type !== "line")
@@ -607,11 +617,14 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     || (descriptor.type === "range-measure" && drawing.type !== "range-measure")
     || (descriptor.type === "path" && drawing.type !== "path")
     || (descriptor.type === "channel" && drawing.type !== "channel")
+    || (descriptor.type === "calculated" && drawing.type !== "calculated")
     || (descriptor.type === "fibonacci" && drawing.type !== "fibonacci")) return null;
   const currentPoints = "dataPoints" in drawing && Array.isArray(drawing.dataPoints)
     ? immutableDataPoints(drawing.dataPoints)
     : null;
-  if (!currentPoints || currentPoints.length < 2 || !Number.isInteger(descriptor.pointIndex)) return null;
+  // An anchored VWAP keeps one anchor; every other line-like drawing keeps two or more.
+  const minimumPoints = drawing.type === "calculated" ? 1 : 2;
+  if (!currentPoints || currentPoints.length < minimumPoints || !Number.isInteger(descriptor.pointIndex)) return null;
 
   let dataPoints: DrawingDataPoint[] | null;
   if (descriptor.pointIndex >= 0) {
@@ -676,6 +689,7 @@ export function applyDrawingEntityDrag(options: DrawingEntityDragOptions): Saved
       case "range-measure":
       case "path":
     case "channel":
+      case "calculated":
       case "angle":
       case "fibonacci":
         return applyLineLikeDrag(options);

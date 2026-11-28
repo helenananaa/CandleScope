@@ -151,6 +151,13 @@ async def facts(request: Request,kind: str,before_time: int | None = None,
         return failure(exc)
 
 
+@router.get("/funding-history")
+async def funding_history(request: Request):
+    """Deposits, withdrawals and transfers from the last read; kept out of the state stream for size."""
+    owner = await service(request)
+    return await asyncio.to_thread(owner.repository.snapshot, "funding_history") or {"receivedMs": None, "data": None}
+
+
 @router.get("/reconciliation")
 async def reconciliation(request: Request):
     owner = await service(request)

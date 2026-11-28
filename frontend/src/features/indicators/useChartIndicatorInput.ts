@@ -42,6 +42,7 @@ export function useChartIndicatorInput(selection: ChartIndicatorSelection | unde
     return routeIndicatorComputeBatch({ ...options, jobs }, computeIndicatorBatch);
   }, [bars, reference]);
   return { enabled, ordinal: enabled && ordinal, bars, executeBatch, snapshot,
-    ready: snapshot.status === "ready", key: `chart:${snapshot.seriesId}:${snapshot.generation}`,
+    // An older page (#381) adds rows in front: recompute from the new first row.
+    ready: snapshot.status === "ready", key: `chart:${snapshot.seriesId}:${snapshot.generation}:${snapshot.from}`,
     revision: snapshot.revision, status: backend.status, error: chartIndicatorSourceError(snapshot, backend.status) };
 }

@@ -1,11 +1,20 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
+import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyHindi, replayNoteHindi, tradeHistoryHindi, readonlyAccountHindi, continuousHindi, tradingAccountsHi, nativeHindi } from "./hindiFeatureMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { drawingSelectionMessages } from "./drawingSelectionMessages.js";
+import { drawingCalculatedMessages } from "./drawingCalculatedMessages.js";
+import { replayDrawingSaveMessages } from "./replayDrawingSaveMessages.js";
+import { chartTimeZoneMessages } from "./chartTimeZoneMessages.js";
+import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const hi = {
   ...unifiedMessages["hi"],
+  ...syntheticPagingMessages["hi"],
+  ...drawingAnnotationMessages["hi"],
   ...syntheticEnglish,
   ...continuousHindi,
   ...tradeHistoryHindi,
@@ -1252,6 +1261,15 @@ export const hi = {
   "settings.proxy.previewNodes": "नोड का पूर्वावलोकन",
   "settings.proxy.useNodes": "चुने गए नोड इस्तेमाल करें",
   "settings.proxy.skippedNodes": "छोड़े गए असमर्थित नोड: {count}",
+  "settings.proxy.autoRefresh": "अपने-आप रीफ़्रेश",
+  "settings.proxy.autoRefreshOff": "बंद",
+  "settings.proxy.autoRefreshEvery": "हर {duration}",
+  "settings.proxy.autoRefreshHelp": "सहेजी गई सदस्यताओं को इस अंतराल पर जाँचता है। आप जिन नोड का इस्तेमाल करते हैं, वे प्रदाता की मौजूदा सेटिंग ले लेते हैं। नए नोड नहीं जोड़े जाते, और प्रदाता द्वारा हटाया गया नोड अपनी आख़िरी सेटिंग रखता है।",
+  "settings.proxy.refreshPending": "अभी तक अपने-आप नहीं जाँचा गया",
+  "settings.proxy.refreshChecked": "पिछली जाँच: {time}",
+  "settings.proxy.refreshFailed": "अपने-आप रीफ़्रेश विफल: {time}",
+  "settings.proxy.refreshUpdated": "अपडेट किए गए नोड: {count} · {time}",
+  "settings.proxy.refreshMissing": "अब सदस्यता में नहीं: {count}",
   "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "एक्सचेंज ID (अल्पविराम से अलग; खाली का अर्थ सभी)",
   "settings.proxy.enabled": "चालू",
@@ -4220,4 +4238,9 @@ export const hi = {
   "chartTester.deleteDraft": "हटाएँ",
   "chartTester.deleteRetiredDraft": "बंद ड्राफ़्ट {name} हटाएँ",
   "chartTester.deleteRetiredDraftFailed": "बंद ड्राफ़्ट हटाया नहीं जा सका। फिर से कोशिश करें।",
+  ...drawingSelectionMessages["hi"],
+  ...drawingCalculatedMessages["hi"],
+  ...replayDrawingSaveMessages["hi"],
+  ...chartTimeZoneMessages["hi"],
+  ...chartTimeShortcutMessages["hi"],
 } as const satisfies MessageCatalog;
