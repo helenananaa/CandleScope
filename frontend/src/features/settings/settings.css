@@ -831,6 +831,28 @@ html[lang="ru"] .st-theme-label {
   display: flex;
 }
 
+/* Settings → 数据源 (desktop app). */
+.st-sources {
+  display: grid;
+  gap: 8px;
+}
+.st-sources .st-group {
+  display: grid;
+  gap: 12px;
+}
+.st-sources .st-group-desc,
+.st-sources .st-group-title,
+.st-sources .st-kv,
+.st-sources .st-form-actions {
+  margin: 0;
+}
+.st-source-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ── Settings → 交易所 ───────────────────────────────────── */
 .st-ex {
   display: grid;

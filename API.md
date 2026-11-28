@@ -752,6 +752,7 @@ responses are in the backend's `/docs` schema.
 | Backtests | `/backtests` | Backtest runs and reports, with `/backtests/native`, `/backtests/continuous` and `/backtests/external` |
 | Practice accounts | `/trading` | Paper trading accounts, orders and the trade journal |
 | Read-only accounts | `/readonly-accounts` | Sync and reconcile a real exchange account, read-only |
+| Data sources | `/data-sources` | Save, test and remove your own keys for built-in sources (Twelve Data); desktop session only, keys are never returned |
 | Plugins | `/api/v2/plugins` (outside `/api/v1`) | Plugin catalog, installs and plugin runtimes |
 | Support | `/api/v1/support` | Diagnostics for a support report |
 
