@@ -1,19 +1,24 @@
 """DataManager's side of the planner: which missing ranges it takes, and their lifecycle (ADR-DATA-001 S5).
 
-With ``HISTORY_SYMBOL_PLANNER_ENABLED``, a chart read's missing base range for
-a single-base derived interval on a 1m-or-wider base (89m on 1m) becomes planner demand
-instead of a target-interval repair. Pieces run as source-interval repairs
-(``CoordinatorPieceExecutor``), so the source table has one writer lane; their
-request ids go back to the API, which waits on and leases them as before.
-Everything else (native charts, composed history, non-default identities,
-non-read requesters, sub-minute bases such as 90s on 1s) keeps the existing path.
+With ``HISTORY_SYMBOL_PLANNER_ENABLED``, base history for a single-base derived
+interval on a 1m-or-wider base (89m on 1m) becomes planner demand instead of its
+own repair: a chart read's missing range (S5a), the forming bucket's closed
+components a warm-start seed lacks (``forming``) and the warm-start tail rebuild
+(``tail``, S5b). Pieces run as source-interval repairs (``CoordinatorPieceExecutor``),
+so the source table has one writer lane and overlapping demand is fetched once;
+a read's request ids go back to the API, which waits on and leases them as before.
+Everything else (native charts, composed history, non-default identities, other
+requesters, sub-minute bases such as 90s on 1s) keeps the existing path.
 
 Once every source slot of a demand is present or handed back, the demand is
-served: its target window goes to the existing target-interval path as one
-ordinary read repair and the planner forgets the demand. With the base present
-that run only derives and writes the target bars (``backfill_aggregated``),
-which warm reopens read; slots of failed pieces are fetched there as without
-the planner (the engine reuses stored base for read repairs).
+served and the planner forgets it:
+- a read or a tail sends its target window to the existing target-interval path
+  as one ordinary repair. With the base present that run only derives and writes
+  the target bars (``backfill_aggregated``), which warm reopens read; slots of
+  failed pieces are fetched there as without the planner (the engine reuses
+  stored base for read repairs and for the warm-start tail);
+- a seed needs no target run: the next ``/klines/latest`` poll seeds the forming
+  bucket from the stored components.
 
 Queries run in storage worker threads; the planner lives on the event loop.
 ``register`` hands the demand to the loop and waits briefly for the request
@@ -44,8 +49,12 @@ logger = logging.getLogger("data_manager.symbol_history")
 REGISTER_TIMEOUT_SECONDS = 2.0
 # The scheduler runs one request per series at a time; this only bounds queued pieces.
 MAX_SUBMITTED_PIECES = 16
-# Chart reads (api/v1/klines.py). The engine reuses stored base slots only for these.
+# Chart reads (api/v1/klines.py). The engine reuses stored base slots for these and the tail.
 READ_REQUESTERS = frozenset({"klines_history", "klines_history_before", "klines_range"})
+# Warm-start demand (data_manager/warm_start.py): the forming bucket's components and the tail rebuild.
+SEED_REQUESTER = "warm_start_custom_seed"
+TAIL_REQUESTER = "warm_start_custom_tail"
+PLANNED_REQUESTERS = READ_REQUESTERS | {SEED_REQUESTER, TAIL_REQUESTER}
 # ...and only on these routes (BackfillEngine._reuse_derived_components): elsewhere, such as 90s on
 # 1s, a served read's target run would fetch the whole base again, so those keep the existing path.
 REUSED_BASE_EXCHANGES = frozenset({"binance", "okx"})
@@ -79,7 +88,8 @@ class HistoryDemandRouter:
         self._registry = PlannerRegistry(self._make_planner)
         # (symbol key, demand key) -> (requester, metadata) of the read that registered it
         self._origins: dict[tuple[SymbolKey, Any], tuple[str, dict[str, Any]]] = {}
-        self.metrics = {"registered": 0, "fallbacks": 0, "served_derive": 0, "served_with_fetch": 0}
+        self.metrics = {"registered": 0, "fallbacks": 0, "served_derive": 0, "served_with_fetch": 0,
+                        "served_forming": 0}
         add_listener = getattr(coordinator, "add_demand_listener", None)
         if callable(add_listener):
             add_listener(self.on_demand_event)
@@ -88,8 +98,8 @@ class HistoryDemandRouter:
 
     def takes(self, *, exchange: str, market_type: str, target_interval: str, base_interval: str,
               requester: str, metadata: dict[str, Any] | None) -> bool:
-        """Whether this missing base range goes to the planner (Q1: single-base chart reads)."""
-        if requester not in READ_REQUESTERS:
+        """Whether this missing base range goes to the planner (Q1: single-base intervals)."""
+        if requester not in PLANNED_REQUESTERS:
             return False
         if metadata and (metadata.get("required_history_composition") is not None
                          or metadata.get("bounded_history_batch_contract") is not None
@@ -229,6 +239,10 @@ class HistoryDemandRouter:
         for demand, (start, end), complete in planner.settled(piece):
             requester, origin = self._origins.pop((key, demand.key), ("klines_history", {}))
             planner.drop(demand)
+            if requester == SEED_REQUESTER:
+                # The next /klines/latest poll seeds the bucket from the stored components.
+                self.metrics["served_forming"] += 1
+                continue
             target = self._project(symbol=key.symbol, target_interval=demand.target_interval,
                                    base_interval=piece.source_interval, start_ms=start,
                                    end_ms=end - piece.width_ms, exchange=key.exchange,
@@ -236,10 +250,16 @@ class HistoryDemandRouter:
             if target is None:
                 continue
             reason, priority = request_fields(demand.urgency)
+            if requester in READ_REQUESTERS:
+                carried = {name: origin[name] for name in ("demand_owner_id", "demand_scope", "demand_generation",
+                                                           "query_reason") if name in origin}
+                carried["requires_trusted_finality"] = True
+            else:
+                # The tail keeps its warm-start fields and, like its existing repair, asks for no
+                # trusted finality, so the engine reuses the stored base (_reuse_derived_components).
+                carried = dict(origin)
             metadata = {
-                **{name: origin[name] for name in ("demand_owner_id", "demand_scope", "demand_generation",
-                                                    "query_reason") if name in origin},
-                "requires_trusted_finality": True,
+                **carried,
                 "requested_range": {"start_ms": int(target["start_ms"]), "end_ms": int(target["end_ms"])},
                 "derived_from": piece.source_interval,
                 "base_missing_range": {"start_ms": start, "end_ms": end - piece.width_ms},

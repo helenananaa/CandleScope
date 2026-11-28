@@ -209,10 +209,11 @@ planner 会选择需要的 source streams。对于自定义周期，可能会启
   [backfill_execution.py](backfill_execution.py) 带重试执行一个请求、校验并把 K 线交给缓存。
 - [symbol_history/](symbol_history/__init__.py) 是按品种的历史规划器（ADR-DATA-001）：同一品种所有图表和
   实时流的需求在源格子上合并，按紧急度和由新到旧切片，由注入的执行器执行。默认关闭
-  （`HISTORY_SYMBOL_PLANNER_ENABLED=0`）。开启后，`DataManager.enable_history_planner` 把图表读取中
-  Binance/OKX 上以 1m 或更宽为基础的单一基础派生周期（1m 上的 89m）缺失的基础区间交给它：切片作为源周期的协调器修复执行
-  （`coordinator_executor`），请求 id 返回给 API；一次读取完成后，其目标窗口交给现有目标路径，基础已在
-  时只做派生（`router`）。其余仍走逐请求路径。
+  （`HISTORY_SYMBOL_PLANNER_ENABLED=0`）。开启后，`DataManager.enable_history_planner` 把
+  Binance/OKX 上以 1m 或更宽为基础的单一基础派生周期（1m 上的 89m）的基础历史交给它：图表读取缺失的基础区间，
+  以及 warm-start 种子当前桶的组件（`forming`）和尾部重建（`tail`）。切片作为源周期的协调器修复执行
+  （`coordinator_executor`），读取的请求 id 返回给 API；读取或尾部完成后，其目标窗口交给现有目标路径，基础已在
+  时只做派生；种子完成后不需要再做什么（`router`）。其余仍走逐请求路径。
 
 `BackfillCoordinator` 和 `BackfillEngine` 分离：
 

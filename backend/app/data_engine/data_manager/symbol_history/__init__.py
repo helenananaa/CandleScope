@@ -11,7 +11,7 @@ existing per-request path stays unchanged while the flag is off.
 - ``pieces``: cutting missing slots into pieces, piece results
 - ``planner``: the planner and the per-symbol registry
 - ``coordinator_executor``: pieces as source-interval coordinator repairs
-- ``router``: which chart reads go to the planner, thread handoff, serving reads
+- ``router``: which chart reads, seeds and tails go to the planner, thread handoff, serving them
 """
 from __future__ import annotations
 

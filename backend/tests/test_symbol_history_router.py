@@ -111,6 +111,8 @@ def test_only_single_base_chart_reads_go_to_the_planner():
         assert takes()
         assert takes(requester="klines_history_before") and takes(requester="klines_range")
         assert not takes(requester="query")  # not a chart read: the engine would not reuse stored base
+        # Warm-start demand (S5b): the forming bucket's components and the tail rebuild.
+        assert takes(requester="warm_start_custom_seed") and takes(requester="warm_start_custom_tail")
         assert not takes(target_interval="1m", base_interval="1m")  # native
         assert not takes(base_interval="5m")  # not this interval's history base
         assert not takes(metadata={"required_history_composition": {"policy": "k130"}})
