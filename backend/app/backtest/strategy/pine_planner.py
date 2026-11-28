@@ -23,6 +23,9 @@ def host_identity():
     digest.update(Path(__file__).parent.parent.joinpath("pine_sensitivity.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_closing.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("service.py").read_bytes())
+    # The Host bar kernel, planning context and Pine account view moved out of service.py.
+    digest.update(Path(__file__).parent.parent.joinpath("host_bar.py").read_bytes())
+    digest.update(Path(__file__).parent.parent.joinpath("pine_host_config.py").read_bytes())
     return {"contract": ORDER_CONTRACT, "execution": execution_identity(), "planner_sha256": digest.hexdigest()}
 
 
@@ -50,7 +53,7 @@ class PineHostPlanner(HostOrderPlanner):
             return True  # The kernel still enforces account, liquidity and latency constraints.
         if self.config is None:
             return True
-        from app.backtest.service import _planning_context
+        from app.backtest.host_bar import _planning_context
         context = _planning_context(self.kernel, event)
         context = replace(context, projected_position=context.actual_position,
             active_order_count=max(0, context.active_order_count - 1))

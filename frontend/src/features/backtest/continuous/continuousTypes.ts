@@ -20,9 +20,11 @@ export interface ContinuousCapabilities {
 export interface ContinuousCreate {
   mode: Exclude<ContinuousMode, "HISTORY">;
   series: { exchange: string; market_type: string; symbol: string; interval: string; identity: Record<string, string> };
-  provider: { language: "python" | "builtin"; source_text?: string; builtin_id?: string;
+  provider: { language: "python" | "builtin" | "pine"; source_text?: string; builtin_id?: string;
     parameters: Record<string, unknown>; output_mode: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
-    runtime_mode?: "TRUSTED_LOCAL"; trusted_confirmed?: boolean };
+    runtime_mode?: "TRUSTED_LOCAL"; trusted_confirmed?: boolean;
+    /** Pine only (B-333b): the versioned libraries the script imports. */
+    libraries?: Record<string, string> };
   execution: Record<string, unknown>; from_ms?: number; warmup_bars?: number;
 }
 export const resultKinds = ["orders", "fills", "decisions", "rejected", "equity_curve", "ledger",

@@ -112,6 +112,7 @@ import { CHART_RUN_RESULT_VIEWS_ENABLED, CHART_STRATEGY_FOLLOW_ENABLED } from ".
 import { chartFollowStatusLabel, chartFollowStatusTone, type ChartFollowStatus } from "./chartStrategyFollowStatus.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
+import { forwardSupport } from "../continuous/forwardPine.js";
 import { browserHost } from "../../../app/browserHost.js";
 
 type PanelTab = ChartStrategyPanelTab;
@@ -420,6 +421,7 @@ export function CandleScopeStrategyTesterPanel({
   }, [active, cellScope, currentAttachment, runMode, session]);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const activeDraft = draft?.id === currentAttachment?.strategyDraftId ? draft : null;
+  const forward = forwardSupport(activeDraft?.language, currentAttachment?.signalChart);
   const [source, setSource] = useState("");
   const [pythonApproval, setPythonApproval] = useState<string | null>(null);
   const approvalKey = JSON.stringify([draft?.id, source]);
@@ -770,7 +772,7 @@ export function CandleScopeStrategyTesterPanel({
       command("openAdvanced", "Open this strategy in the research workspace (run settings and details).", empty, () => openAdvanced?.(), { available: () => !!openAdvanced }),
       command("openBatchStudy", "Open this strategy's robustness check in the research workspace.", empty, () => openBatchStudy?.(), { available: () => !!openBatchStudy }),
       command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
-      command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
+      command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && forward.supported && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = waitingForChartData
@@ -936,7 +938,9 @@ export function CandleScopeStrategyTesterPanel({
                     onSelect: () => { void openWorkspace().catch(() => undefined); } }] : []),
                   ...(openAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: openAdvanced }] : []),
                   // Forward tracking keeps its own record from its start; the chart itself follows live bars.
-                  ...(liveFollow ? [{ id: "forward", label: t("strategyForward.title"), disabled: activeDraft?.language !== "python" || !active,
+                  // B-333b: Python, or Pine on this chart's own bars; a disabled item says why.
+                  ...(liveFollow ? [{ id: "forward", label: t("strategyForward.title"), disabled: !forward.supported || !active,
+                    ...(!forward.supported && forward.reason === "PINE_SIGNAL_CHART" ? { hint: t("strategyForward.pineSignalChart") } : {}),
                     onSelect: () => chooseRunMode(runModePreference.forwardStart ?? "HISTORY_LIVE") }] : []),
                   { id: "focus", label: t("chartTester.focusMode"), ...(focusMode ? { icon: <Icon name="check" size={13} /> } : {}),
                     onSelect: () => setFocusMode((focused) => !focused) },

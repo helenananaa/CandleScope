@@ -197,7 +197,7 @@ class HostChartEventCallbacks(ChartEventCallbacks):
         fills,
         bar_state
     ):
-        from .service import _pine_account_view, _planning_context
+        from .host_bar import _pine_account_view, _planning_context
 
         self.session, self.adapter, self.planner, self.kernel = session, adapter, planner, kernel
 

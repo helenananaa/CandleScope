@@ -18,13 +18,16 @@ from .continuous_store import ContinuousStrategyStore
 from .continuous_source_identity import affects_protected_prefix, source_owner
 from .errors import BacktestError
 from .models import ENGINE_VERSION
-from .service import _build_bar_kernel, _new_host_planner, _planning_context, _strategy_execution_reporter, _strategy_observation_features, _assert_strategy_frame_inputs, _declared_feature_names
+from .host_bar import (_build_bar_kernel, _new_host_planner, _pine_account_view, _planning_context, _strategy_execution_reporter,
+                       _strategy_observation_features, _assert_strategy_frame_inputs, _declared_feature_names)
 from .strategy.host_adapter import StrategyHostAdapter
 from .strategy.protocol import StrategyProvider, StrategyProviderSession
 
 ProviderFactory = Callable[[Mapping[str, object]], StrategyProvider]
 MAX_BATCH_EVENTS = 1000
 MARKET_BAR_STEP_MS = 60_000  # The 1m grid; a market run's own interval decides (B-333).
+# B-333b: a Pine run holds its compilation and Host order identities, and no other Pine contract.
+PINE_IDENTITIES = frozenset({"pine_runtime_identity", "pine_order_runtime_identity"})
 logger = logging.getLogger(__name__)
 
 
@@ -48,13 +51,16 @@ class ContinuousBarHost:
         language = str(definition.get("language") or "builtin").lower()
         if language == "pyne":
             raise error("FIDELITY_UNSUPPORTED","Pyne is retired and cannot run as a continuous strategy")
-        if language not in {"builtin","python","external"}:
+        if language not in {"builtin","python","external","pine"}:
             raise error("FIDELITY_UNSUPPORTED","This strategy language requires its own qualified execution clock")
         initial_snapshot = definition.get("initial_snapshot")
         if initial_snapshot is not None and (not isinstance(initial_snapshot,Mapping) or type(initial_snapshot.get("through_ms")) is not int):
             raise error("CONTINUOUS_INPUT_INVALID","Initial snapshot requires a fixed source boundary")
         config = definition["configuration"]
-        if (any(config.get(key) for key in ("pine_runtime_identity", "pine_bar_path_contract", "pine_process_on_close"))
+        self.pine = language == "pine"
+        pine_contracts = {key for key, value in config.items() if key.startswith("pine_") and value}
+        if (pine_contracts != (PINE_IDENTITIES if self.pine else set())
+                or (self.pine and any(config.get(key) for key in ("signal_chart", "account_rules", "execution_model_revision")))
                 or config.get("account_model") == "LINEAR_PERP_ONE_WAY_V2"
                 or str(config.get("funding_mode") or "OFF") != "OFF"):
             raise error("FIDELITY_UNSUPPORTED", "This continuation host requires its qualified closed-BAR clock and account data")
@@ -92,6 +98,11 @@ class ContinuousBarHost:
             self.kernel = _build_bar_kernel(config, reporter)
             if self.kernel.funding_rate != 0:
                 raise error("FIDELITY_UNSUPPORTED", "This continuation requires funding OFF")
+            if self.pine:
+                # The chart's rules for the V1 account, as a fixed-history Pine run sets them.
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(self.kernel, "execution", self.kernel),
+                    {"account_model": config.get("account_model"), "context": {"metadata": None}})
             self.planner = _new_host_planner(config, execution_reporter=reporter)
             self.planner.bind_kernel(self.kernel)
             self.chart_clock = None
@@ -191,7 +202,8 @@ class ContinuousBarHost:
             watermark_ms=event.event_time_ms,
             phase="WARMUP" if event.sequence <= int(self.config.get("warmup_bars") or 0) else "EVALUATION",
             market=dict(self.definition["market"]), bar=dict(event.payload),
-            features=_strategy_observation_features(self.session.provider,bar=event.payload,trade=None,_names=self.feature_names))
+            features=_strategy_observation_features(self.session.provider,bar=event.payload,trade=None,_names=self.feature_names),
+            account_view=_pine_account_view(self.kernel) if self.pine else None)
         self._check_stopping()
         return self.planner.plan(output, context=None if self.planner.config is None else _planning_context(self.kernel,event))
 

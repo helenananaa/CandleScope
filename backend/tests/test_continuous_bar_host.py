@@ -85,7 +85,8 @@ def test_unqualified_language_rejected_before_starting_provider(tmp_path,monkeyp
     def forbidden(_):
         raise AssertionError("Unqualified language must not start a provider")
     try:
-        with pytest.raises(BacktestError,match="retired|qualified execution clock"):
+        # Pine runs only with its compilation and Host order identities (B-333b).
+        with pytest.raises(BacktestError,match="retired|qualified execution clock|qualified closed-BAR clock"):
             ContinuousBarHost("cs_language",{**definition,"language":language},forbidden)
     finally:store.close();service.shutdown()
 
