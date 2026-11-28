@@ -256,8 +256,8 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     assert rows["external", "pine"]["authority"] == "HOST" and rows["external", "pine"]["reason"] == "ENGINE_UNAVAILABLE"
     assert "BAR_APPROX" in rows["external", "pine"]["fidelities"]
     forward = rows["continuous", "builtin"]
-    assert (forward["clock_policy"], forward["intervals"], forward["starts"], forward["controls"]) == (
-        "FORWARD", ["1m"], ["HISTORY_LIVE", "LIVE_ONLY"], {"cancel": False})
+    assert (forward["clock_policy"], forward["intervals"], forward["fixed_intervals_only"], forward["starts"],
+            forward["controls"]) == ("FORWARD", None, True, ["HISTORY_LIVE", "LIVE_ONLY"], {"cancel": False})
     assert forward["available"] is False and forward["reason"] == "READ_ONLY"
     follow = rows["follow", "builtin"]
     assert (follow["authority"], follow["clock_policy"], follow["intervals"], follow["fixed_intervals_only"]) == (

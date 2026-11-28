@@ -11,10 +11,10 @@ import json
 
 from app.data_engine.storage.prefix_watches import PrefixReceipt
 from .continuous_contracts import CommittedIdentity
+from .continuous_grid import bar_grid
 from .continuous_source_identity import source_owner
 from .continuous_store import MAX_RETAINED_CHECKPOINTS, fail
 
-STEP = 60_000
 
 
 def preview(store, manager, run_id, *, expected, resume_after, now_ms):
@@ -53,7 +53,8 @@ def preview(store, manager, run_id, *, expected, resume_after, now_ms):
                  current["event_time_ms"], MAX_RETAINED_CHECKPOINTS))]
         finally:
             store.db.execute("ROLLBACK")
-    through = (now_ms // STEP) * STEP - 1
+    # The newest closed bar of the run's own interval (B-333).
+    through = bar_grid(point.series[3]).closed_through(now_ms)
     if through < max(point.through_ms, point.from_ms):
         raise fail("LOOKAHEAD_VIOLATION", "Repair cutoff must cover the committed closed BARs")
     observed = manager.bars.prefixes.inspect(point.owner)

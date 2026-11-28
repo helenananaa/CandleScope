@@ -118,7 +118,9 @@ class ContinuousEpochs:
         columns="id,run_id,request_key,phase,target_revision,base_identity_json,progress_json,error_json,updated_at_ms"
         for name in ("plan_id","resume_after","from_ms","through_ms","anchor_sequence","full_reinitialization","expanded_range_reason"):
             columns+=",json_extract(plan_json,'$."+name+"') AS "+name
+        # The run's interval (B-333), so progress can be counted in bars of it.
         return (columns+",json_extract(plan_json,'$.source.from_ms') AS original_from_ms"
+                ",json_extract(plan_json,'$.source.series[3]') AS interval"
                 ",json_type(plan_json,'$.auto_policy_version') IS NOT NULL AS automatic")
 
     @staticmethod

@@ -9,8 +9,8 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 
 MAX_COUNTER=9_007_199_254_740_991
 # What a forward run can be created with; the capability endpoints report these.
+# Intervals: any fixed-length interval of whole minutes (continuous_grid, B-333).
 LANGUAGES=("builtin","python")
-INTERVALS=("1m",)
 ACCOUNT_MODELS=("SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V1")
 
 

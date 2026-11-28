@@ -12,6 +12,7 @@ from app.data_engine.history.expected_bars import session_calendar
 from app.exchanges.roles import BINANCE_USDM_LINEAR_BASE_QUANTITY, CONTRACT_RULES, venue_role_contract
 from app.market_dataset.snapshot import MarketDatasetError
 from app.simulation.execution_realism import parse_execution_realism
+from .continuous_grid import supports as grid_interval
 from .continuous_provider import prepare_provider, _json
 from .errors import BacktestError
 from .models import ENGINE_VERSION
@@ -64,7 +65,8 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     """Own current code and normalized fees/account before acquiring any data.
 
     ``follow`` (ADR-BACKTEST-015 P4b): a FOLLOW run consumes the chart's own closed
-    bars, so any fixed-length chart interval qualifies; forward runs keep 1m.
+    bars, so any fixed-length chart interval qualifies. A forward run does too
+    (B-333): it advances on closed bars of its series' interval, whole minutes long.
     ``calendar`` is the series' trading calendar (ADR-DATA-002 D2c): forward
     runs do not cross market closures yet.
     """
@@ -77,8 +79,9 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, fo
     for name in ("funding_interval_hours","max_active_orders","cooldown_events"):
         if name in execution and type(execution[name]) is not int:
             raise BacktestError("CONTINUOUS_INPUT_INVALID",f"{name} must be an integer")
-    if not isinstance(key,SeriesKey) or (key.interval!="1m" and not (follow and _fixed_interval(key.interval))):
-        raise BacktestError("FIDELITY_UNSUPPORTED","This continuous source requires 1m bars")
+    if not isinstance(key,SeriesKey) or not (_fixed_interval(key.interval) if follow else grid_interval(key.interval)):
+        raise BacktestError("FIDELITY_UNSUPPORTED",
+            "This continuous source requires a fixed-length interval of whole minutes, such as 1m, 5m, 1h or 1d")
     if not follow:
         # A forward run follows live closed bars (ADR-DATA-002 D2c). FOLLOW
         # reads the chart's stored bars and may follow a history-only source.

@@ -13,7 +13,9 @@ export interface ContinuousCreation {
 export interface ContinuousCapabilities {
   execution_enabled: boolean; runtime_mode: string; protocol: "continuous.v1";
   python_editor_authorized: boolean; python_author_contract: string;
-  repair_available: boolean; automatic_repair_available?: boolean; intervals: string[]; languages: string[];
+  repair_available: boolean; automatic_repair_available?: boolean; languages: string[];
+  /** B-333: null with `fixed_intervals_only` — any fixed-length interval of whole minutes. */
+  intervals: string[] | null; fixed_intervals_only?: boolean;
 }
 export interface ContinuousCreate {
   mode: Exclude<ContinuousMode, "HISTORY">;
@@ -68,6 +70,8 @@ export interface ContinuousRepair {
   automatic?: boolean; target_revision: number; base_identity: CommittedIdentity; plan_id: string;
   resume_after: boolean; from_ms: number; through_ms: number; original_from_ms: number;
   anchor_sequence: number; full_reinitialization: boolean; expanded_range_reason: string | null;
+  /** The run's interval (B-333); progress counts its bars. Older backends omit it: 1m. */
+  interval?: string | null;
   progress: { state?: string; sequence?: number; event_time_ms?: number; through_ms?: number;
     waiting?: string; resources_released?: boolean; physical_resources_released?: boolean;
     cleanup_error?: { code: string; message: string } } | null;

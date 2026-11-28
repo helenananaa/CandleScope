@@ -137,9 +137,8 @@
       "fidelities": [
         "BAR_APPROX"
       ],
-      "intervals": [
-        "1m"
-      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
       "language": "builtin",
       "reason": "READ_ONLY",
       "starts": [
@@ -162,9 +161,8 @@
       "fidelities": [
         "BAR_APPROX"
       ],
-      "intervals": [
-        "1m"
-      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
       "language": "python",
       "reason": "READ_ONLY",
       "starts": [

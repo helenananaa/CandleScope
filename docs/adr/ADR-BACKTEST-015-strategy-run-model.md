@@ -126,6 +126,8 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
 - 外部模型不允许 `FOLLOW`，只允许 `FIXED`（逐次决策调用留痕，沿用 `/provider-connections/runs/{id}/trace`）或 `FORWARD`。
   注意命名：`/backtests/external/runs`（`external.py`）是“外部 Pine 引擎 + 宿主撮合反馈”，不是外部模型。
 - 形成中的 K 线：`FOLLOW` 可显示未确认预览，从不提交成交；`FORWARD` 不显示预览。盘中逐 tick 执行不在本 ADR 范围。
+- `FORWARD` 在信号周期的收盘 K 线上推进（B-333）：任意整分钟的固定长度周期（1m、5m、1h、1d、周一对齐的 1w），
+  与同序列、同周期的 `FIXED` 一样消费收盘 K 线，因此同输入结果逐条相同；月周期与带时区的日历周期没有固定长度，不支持。
 - #165 原三模式映射：纯历史 → `FIXED`；历史 + 实时 → 看图用 `FOLLOW`，要持久记录用 `FORWARD(from=历史起点)`；
   纯实时 → `FORWARD(from=now)`。
 

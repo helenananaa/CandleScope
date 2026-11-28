@@ -157,6 +157,7 @@ jobs:
             tests/test_continuous_bar_host.py \
             tests/test_continuous_provider.py \
             tests/test_continuous_definition.py \
+            tests/test_continuous_grid.py \
             tests/test_continuous_creation_journal.py \
             tests/test_continuous_controller.py \
             tests/test_continuous_results.py \
