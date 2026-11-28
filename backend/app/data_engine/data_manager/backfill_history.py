@@ -190,6 +190,51 @@ class BackfillHistoryPlanner:
             calendar_id=availability.calendar_id,
         ), context
 
+    def series_calendar(self, request: RepairRequest) -> TradingCalendar | None:
+        """The series' trading calendar, found the way ``plan`` finds it, without planning.
+
+        A background audit has no range of its own. Planning a placeholder
+        such as 0..0 asked the calendar about 1970, and a calendar with a
+        bounded schedule (Twelve Data's US equities: 2000-2045) refused it, so
+        every audit of a stored stock series failed.
+        """
+        context: Any | None = None
+        if self._history_policy_resolver is not None:
+            try:
+                resolved = self._history_policy_resolver(request)
+            except Exception as exc:
+                logger.warning(
+                    "History policy resolution failed for %s:%s:%s@%s: %s",
+                    request.exchange,
+                    request.market_type,
+                    request.symbol,
+                    request.interval,
+                    exc,
+                )
+                return None
+            if (
+                isinstance(resolved, tuple)
+                and len(resolved) == 2
+                and isinstance(resolved[0], HistoryPlan)
+            ):
+                plan, context = resolved
+                calendar = self.calendar(context, self.availability(context))
+                if calendar is None and self._history_service is not None:
+                    calendar = self._history_service.calendars.get(plan.calendar_id)
+                return calendar
+            context = resolved
+        availability = self.availability(context)
+        if availability is None:
+            if self._history_policy_resolver is not None:
+                return None
+            availability = HistoryAvailability(calendar_id="crypto.24x7.utc")
+        if self._history_service is not None:
+            availability = self._history_service.resolve_availability(
+                self.series_key(request),
+                availability,
+            )
+        return self.calendar(context, availability)
+
     @staticmethod
     def series_key(request: RepairRequest) -> HistorySeriesKey:
         identity = identity_from_metadata(request.exchange, request.metadata)

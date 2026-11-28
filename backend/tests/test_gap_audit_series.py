@@ -223,3 +223,38 @@ async def test_gate_audit_repairs_contract_gap_despite_legacy_cooldown(tmp_path,
         requests[0], coverage_start_ms=300_000, coverage_end_ms=900_000,
     ) == 0
     assert ledger.get_status(legacy)["status"] == "failed"
+
+
+def test_background_audit_of_a_session_series_does_not_plan_a_1970_range() -> None:
+    # The audit used to find a series' calendar by planning 0..0. Twelve Data's
+    # US-equity calendar covers 2000-2045 only, so every audit of a stored
+    # stock series failed with "calendar is available only from 2000-01-01".
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.history import get_history_calendar_registry
+    from app.data_engine.history.models import HistoryAvailability
+    from app.data_engine.history.service import HistoryAvailabilityService
+    from app.exchanges.plugins.twelvedata.adapter import EXCHANGE_DATE_CALENDAR_ID
+    from app.exchanges.plugins.twelvedata.plugin import TwelveDataPlugin
+
+    TwelveDataPlugin()
+    route = ("twelvedata", "stock", "AAPL:NASDAQ", "1m")
+    scans = []
+
+    class Storage:
+        def scan_gaps(self, **kwargs):
+            scans.append(kwargs)
+            return {"gaps": [], "scanned_bars": 390}
+
+    async def noop(*args, **kwargs):
+        pass
+
+    coordinator = BackfillCoordinator(
+        storage=Storage(), bars_backfilled=noop, emit_event=noop,
+        history_service=HistoryAvailabilityService(calendars=get_history_calendar_registry()),
+        history_policy_resolver=lambda request: HistoryAvailability(calendar_id=EXCHANGE_DATE_CALENDAR_ID),
+    )
+
+    report = asyncio.run(coordinator.audit_storage_series([route], max_gaps=1))
+
+    assert (report.failed, report.errors, report.scanned) == (0, [], 1)
+    assert scans[0]["symbol"] == "AAPL:NASDAQ"
