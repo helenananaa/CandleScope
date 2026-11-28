@@ -166,8 +166,13 @@ D5 的拆分（模拟账户）：
   手续费用账户自己的费率，下单面板显示出来；现有来源都不发布按品种的手续费（CCXT 的 maker/taker 是交易所默认档位，
   不代表用户的实际费率），所以 `fee_defaults` 暂不填，不猜。账户币种和品种报价币种不一致时（如 USDT 账户交易 USD 股票），
   下单面板明确提示练习账户按一比一记账、不换算货币。
-- **D5d 期货每手保证金。** `futures_margin`：保证金按 `margin_per_contract` × 手数，盈亏按价格变动 × 合约乘数；
-  来源没给保证金就让用户填，不猜。（计划）
+- **D5d 期货每手保证金。** 练习账户的数量始终是基础资产（期货是标的单位），所以盈亏 = 价格变动 × 数量
+  = 价格变动 × 合约乘数 × 手数。合约品种的数量网格按张数计，换算成基础资产：步长、origin、最小值都乘以
+  `contractMultiplier`（OKX 每手 0.01 张、每张 0.01 BTC，步长就是 0.0001 BTC）；反向合约和没有合约大小的品种不套网格。
+  `futures_margin` 可以做多做空，保证金 = `margin_per_contract` × 手数，与价格和账户杠杆无关。`SymbolInfo.margin_per_contract`
+  由来源填写；来源没给就让用户为这个账户填经纪商的数字（`PUT /trading/accounts/{id}/contract-margins`），不猜，
+  没填之前开仓返回 `TRADING_MARGIN_REQUIRED`。有持仓时可以改，不能清空。没有合约大小的 `futures_margin` 品种不能开仓。
+  现有来源还没有声明 `futures_margin` 的品种，D7、D8 的期货来源会用到；手续费仍按账户费率乘名义价值。
 
 ## 5. 用能力声明替换名字判断
 

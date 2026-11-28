@@ -241,6 +241,9 @@ class PracticeBuyingPower:
     quantities: dict[str | None, Decimal]
     trade_ids: dict[str | None, str]
     committed_ms: int
+    # A per-contract market's margin per base unit, whatever the price
+    # (ADR-DATA-002 D5d); None holds notional over ``leverage``.
+    margin_per_unit: Decimal | None = None
 
     def can_open(self, qty: Decimal, side: Decimal, execution: Decimal, mark: Decimal, fee: Decimal) -> bool:
         if self.capital is None:
@@ -248,7 +251,8 @@ class PracticeBuyingPower:
         net = sum(self.quantities.values(), ZERO)
         gross = sum((abs(value) for value in self.quantities.values()), ZERO)
         equity = self.capital + net * mark + side * qty * (mark - execution) - fee
-        return equity >= (gross + qty) * mark / self.leverage
+        per_unit = self.margin_per_unit if self.margin_per_unit is not None else mark / self.leverage
+        return equity >= (gross + qty) * per_unit
 
 
 class PracticeMatcher:

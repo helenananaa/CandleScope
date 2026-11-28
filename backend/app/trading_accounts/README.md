@@ -36,20 +36,35 @@ Any market type is accepted. The symbol's catalog row declares its
 `accountModel` (ADR-DATA-002 D5b, `account_models.py`): `cash` is fully paid and
 long only; `crypto_linear` gets the account's leverage, shorting and hedge mode
 on any venue (Gate's `swap.linear` as well as Binance `futures`);
-`crypto_inverse` and `futures_margin` open no positions yet
-(`TRADING_ACCOUNT_MODEL_UNSUPPORTED`) but close existing ones. A symbol without
-a declaration, or one the catalog has not loaded, keeps the earlier rule:
-`futures` is linear, anything else is cash. Cash markets also follow the row's
-quantity grid in base units (D5c): its `quantityStep`, `quantityOrigin` and
-`minQuantity`, so Twelve Data stocks and ETFs trade whole shares. An off-grid
-quantity is refused with `TRADING_QUANTITY_RULE`, except an order that closes
-the whole position, which may predate the grid. Contract rows count contracts,
-not base units, so their grid waits for D5d. Practice books every price in the
-account's `quoteCurrency` one for one; it converts no currencies, and the ticket
-says so when a market is priced in another currency. Fees are the account's own
-rates: no source publishes per-symbol fees, so none are guessed.
-`GET /trading/market-rules` gives the order ticket the same answer, with the
-market's `currency`, `quantityStep` and `minQuantity`.
+`crypto_inverse` opens no positions yet (`TRADING_ACCOUNT_MODEL_UNSUPPORTED`)
+but closes existing ones. A symbol without a declaration, or one the catalog
+has not loaded, keeps the earlier rule: `futures` is linear, anything else is
+cash. Markets also follow the row's quantity grid (D5c, D5d): its
+`quantityStep`, `quantityOrigin` and `minQuantity`, so Twelve Data stocks and
+ETFs trade whole shares. An off-grid quantity is refused with
+`TRADING_QUANTITY_RULE`, except an order that closes the whole position, which
+may predate the grid.
+
+Practice quantities are always base units: shares, coins, or a future's
+underlying units, so profit is the price move times the quantity. A contract
+row counts in contracts of `contractMultiplier` base units each, so its grid is
+converted at that size (OKX's lots of 0.01 contracts of 0.01 BTC are steps of
+0.0001 BTC). Coin-settled contracts and contract rows without a size have no
+grid here. `futures_margin` (D5d) is long and short with a fixed margin per
+contract, whatever the price and the account's leverage. The margin is the
+row's `marginPerContract`; when the source publishes none, the user enters the
+broker's figure for the account (`PUT /trading/accounts/{id}/contract-margins`,
+kept in the account settings as `contractMargins`, shown on the account as a
+list). Until then orders that open positions get `TRADING_MARGIN_REQUIRED`. The
+figure can change while a position is open, but it cannot be cleared then
+(`TRADING_POSITION_OPEN`). A per-contract row without a contract size opens
+nothing. Practice books every price in the account's `quoteCurrency` one for
+one; it converts no currencies, and the ticket says so when a market is priced
+in another currency. Fees are the account's own rates on notional: no source
+publishes per-symbol fees, so none are guessed. `GET /trading/market-rules`
+(with `accountId`, the account's margin too) gives the order ticket the same
+answer, with the market's `currency`, `quantityStep`, `minQuantity`,
+`contractSize`, `marginPerContract` and `marginSource`.
 
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).

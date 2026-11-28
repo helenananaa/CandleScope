@@ -22,6 +22,8 @@ export interface TradingAccount {
   name: string;
   quoteCurrency: string;
   settings: Partial<PracticeSettings>;
+  /** Margins per contract the user entered for markets whose source publishes none (D5d). */
+  contractMargins?: ContractMargin[];
   createdAtMs: number;
   archived: boolean;
   capabilities: { placeOrders: boolean; manualFills: boolean; sync: boolean };
@@ -268,9 +270,27 @@ export interface PracticeMarketRules {
   opensPositions: boolean;
   /** What the market's prices are quoted in; practice books them in the account's currency one for one. */
   currency?: string;
-  /** The cash market's quantity grid (ADR-DATA-002 D5c), in base units such as shares. */
+  /** What a quantity counts, from the catalog row (BTC for OKX's BTC-USDT-SWAP). */
+  baseAsset?: string;
+  /**
+   * The market's quantity grid (ADR-DATA-002 D5c, D5d), in base units such as
+   * shares or coins; a contract market's grid is its contract grid times the size.
+   */
   quantityStep?: string;
   minQuantity?: string;
+  /** Base units in one contract, for contract markets that declare it (D5d). */
+  contractSize?: string;
+  /** A per-contract market's margin per contract, in its quote currency (D5d). */
+  marginPerContract?: string;
+  /** "catalog" when the data source publishes the margin, "account" when the user entered it. */
+  marginSource?: "catalog" | "account";
+}
+
+export interface ContractMargin {
+  exchange: string;
+  marketType: string;
+  symbol: string;
+  marginPerContract: string;
 }
 
 export interface TradingChartContext {

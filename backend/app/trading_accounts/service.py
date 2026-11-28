@@ -43,7 +43,6 @@ from app.simulation.practice_account import (
     PracticeSettings,
     WorkingOrder,
     advance_cursor,
-    initial_margin,
     reachable,
 )
 from app.data_engine.series_identity import KlineSeriesIdentity
@@ -209,6 +208,40 @@ def _bar_decimal(bar: dict[str, Any], key: str) -> Decimal:
     return Decimal(repr(value) if isinstance(value, float) else str(value))
 
 
+# Margins per contract the user entered on a practice account, for markets whose
+# source publishes none (ADR-DATA-002 D5d). Kept in the settings JSON, keyed by
+# "exchange|marketType|symbol"; symbols never contain "|".
+CONTRACT_MARGINS = "contractMargins"
+MAX_CONTRACT_MARGIN = Decimal("1000000000")
+
+
+def _margin_key(instrument: Instrument) -> str:
+    return "|".join(instrument)
+
+
+def _contract_margin(settings: dict[str, Any], instrument: Instrument) -> Decimal | None:
+    value = (settings.get(CONTRACT_MARGINS) or {}).get(_margin_key(instrument))
+    return Decimal(value) if value else None
+
+
+def _plain_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in settings.items() if key != CONTRACT_MARGINS}
+
+
+def _kept_contract_margins(settings: dict[str, Any]) -> dict[str, Any]:
+    margins = settings.get(CONTRACT_MARGINS)
+    return {CONTRACT_MARGINS: margins} if margins else {}
+
+
+def _contract_margin_views(settings: dict[str, Any]) -> list[dict[str, str]]:
+    views = []
+    for key, value in sorted((settings.get(CONTRACT_MARGINS) or {}).items()):
+        exchange, market_type, symbol = key.split("|", 2)
+        views.append({"exchange": exchange, "marketType": market_type, "symbol": symbol,
+                      "marginPerContract": value})
+    return views
+
+
 def _ledger_snapshot(method):
     @wraps(method)
     def read(self, *args, **kwargs):
@@ -340,7 +373,9 @@ class TradingAccountService(JournalService):
             if isinstance(raw, dict) and "initialBalance" in raw:
                 raw = {key: value for key, value in raw.items() if key != "initialBalance"}
             values["settings_json"] = json.dumps(
-                self._practice_settings(raw, base=account["settings"]), sort_keys=True,
+                {**self._practice_settings(raw, base=account["settings"]),
+                 **_kept_contract_margins(account["settings"])},
+                sort_keys=True,
             )
         if values:
             with self.store.transaction() as conn:
@@ -381,7 +416,11 @@ class TradingAccountService(JournalService):
             "kind": kind,
             "name": account["name"],
             "quoteCurrency": account["quote_currency"],
-            "settings": {"positionMode": "ONE_WAY", **account["settings"]} if kind == "practice" else account["settings"],
+            "settings": ({"positionMode": "ONE_WAY", **_plain_settings(account["settings"])}
+                         if kind == "practice" else account["settings"]),
+            # Only accounts holding a figure carry the field, so other views stay as they were.
+            **({"contractMargins": margins} if kind == "practice"
+               and (margins := _contract_margin_views(account["settings"])) else {}),
             "createdAtMs": account["created_at_ms"],
             "archived": account["archived"],
             "capabilities": {
@@ -501,7 +540,7 @@ class TradingAccountService(JournalService):
             unrealized += value or ZERO
             price = mark if mark is not None else (trade.avg_entry_price or ZERO)
             instrument = (trade.exchange, trade.market_type, trade.symbol)
-            used_margin += initial_margin(trade.open_qty, price, self._market_leverage(leverage, instrument))
+            used_margin += self._rules(instrument, account).margin(trade.open_qty, price, leverage)
             view = trade.to_dict(mark=mark)
             view["markAtMs"] = mark_ms
             view["markSource"] = mark_source
@@ -766,13 +805,14 @@ class TradingAccountService(JournalService):
     #  Practice orders
     # ══════════════════════════════════════════════════════════
 
-    def _rules(self, instrument: Instrument) -> MarketRules:
-        """The account model the market's catalog row declares (ADR-DATA-002 D5b)."""
-        return market_rules(self.market, instrument)
+    def _rules(self, instrument: Instrument, account: dict[str, Any] | None = None) -> MarketRules:
+        """The account model the market's catalog row declares (ADR-DATA-002 D5b).
 
-    def _market_leverage(self, leverage: Decimal, instrument: Instrument) -> Decimal:
-        """Linear contracts use the account's leverage; cash positions are fully paid."""
-        return leverage if self._rules(instrument).leveraged else Decimal(1)
+        With ``account``, a per-contract market whose source publishes no
+        margin uses the margin the user entered for it there (D5d).
+        """
+        margin = _contract_margin(account["settings"], instrument) if account is not None else None
+        return market_rules(self.market, instrument, account_margin=margin)
 
     def _settings(self, account: dict[str, Any], instrument: Instrument) -> PracticeSettings:
         settings = account["settings"]
@@ -784,10 +824,59 @@ class TradingAccountService(JournalService):
         )
 
     def market_rules(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """The practice rules of one market, for the order ticket."""
+        """The practice rules of one market, for the order ticket.
+
+        With ``accountId``, they include the margin the user entered for the
+        market on that account.
+        """
         instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
+        account = self._account(str(payload["accountId"])) if payload.get("accountId") else None
         return {"exchange": instrument[0], "marketType": instrument[1], "symbol": instrument[2],
-                **self._rules(instrument).to_dict()}
+                **self._rules(instrument, account).to_dict()}
+
+    def set_contract_margin(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Enter or clear the margin per contract of a market whose source publishes none (D5d)."""
+        account = self._account(account_id)
+        if account["kind"] != "practice":
+            raise conflict("Only practice accounts hold margin", code="TRADING_ORDERS_UNSUPPORTED")
+        if account["archived"]:
+            raise conflict("Archived accounts cannot change their markets")
+        instrument = normalize_instrument(payload.get("exchange"), payload.get("marketType"), payload.get("symbol"))
+        rules = self._rules(instrument)
+        if not rules.takes_account_margin:
+            raise conflict(
+                "This market's source publishes its margin" if rules.margin_source == "catalog"
+                else "This market does not hold a fixed margin per contract",
+                code="TRADING_MARGIN_NOT_APPLICABLE",
+            )
+        raw = payload.get("marginPerContract")
+        margin = None if raw in (None, "") else to_decimal(raw, "marginPerContract", positive=True)
+        if margin is not None and margin > MAX_CONTRACT_MARGIN:
+            raise invalid("marginPerContract is too large")
+        with self.store.transaction() as conn:
+            if margin is None and self._holds_market(account_id, instrument):
+                raise conflict("Close the position and its orders before clearing the margin",
+                               code="TRADING_POSITION_OPEN")
+            # Read again under the write lock, so a settings change made meanwhile is kept.
+            account = self._account(account_id)
+            margins = dict(account["settings"].get(CONTRACT_MARGINS) or {})
+            key = _margin_key(instrument)
+            if margin is None:
+                margins.pop(key, None)
+            else:
+                margins[key] = dec_str(margin)
+            settings = {**_plain_settings(account["settings"]), **({CONTRACT_MARGINS: margins} if margins else {})}
+            self.store.update(conn, "accounts", {"settings_json": json.dumps(settings, sort_keys=True)},
+                              "id = ?", (account_id,))
+        return self.market_rules({"exchange": instrument[0], "marketType": instrument[1],
+                                  "symbol": instrument[2], "accountId": account_id})
+
+    def _holds_market(self, account_id: str, instrument: Instrument) -> bool:
+        """Whether the account has an open position or a working order in ``instrument``."""
+        if any(trade.status == "open" and (trade.exchange, trade.market_type, trade.symbol) == instrument
+               for trade in self._trades(account_id)):
+            return True
+        return any(row["account_id"] == account_id for row in self.store.working_orders_for(*instrument))
 
     def _current_bar(self, instrument: Instrument, series: KlineSeriesIdentity | None, at_ms: int, now: int) -> bool:
         """Whether the candle opened at ``at_ms`` still carries the market's price.
@@ -883,7 +972,7 @@ class TradingAccountService(JournalService):
         leg = payload.get("positionSide")
         effect = payload.get("positionEffect")
         reduce_only = bool(payload.get("reduceOnly"))
-        rules = self._rules(instrument)
+        rules = self._rules(instrument, account)
         if account["settings"].get("positionMode") == "HEDGE" and rules.contract:
             if leg not in ("LONG", "SHORT") or effect not in ("open", "close"):
                 raise invalid("Hedge orders require positionSide and positionEffect")
@@ -953,19 +1042,22 @@ class TradingAccountService(JournalService):
         closes_all = not increases and qty == abs(position)
         if not closes_all and (off_grid := rules.quantity_error(qty)):
             raise invalid(off_grid, code="TRADING_QUANTITY_RULE")
+        if increases and rules.takes_account_margin and rules.margin_per_contract is None:
+            raise conflict("Enter this market's margin per contract first: its data source publishes none",
+                           code="TRADING_MARGIN_REQUIRED")
         if increases and not rules.opens_positions:
             # Closing what is already open stays possible.
             raise conflict(
                 "Practice accounts cannot open positions in this market: "
-                + ("coin-settled contracts" if rules.account_model == "crypto_inverse"
-                   else "contracts with a fixed margin per contract") + " are not simulated yet",
+                + ("coin-settled contracts are" if rules.account_model == "crypto_inverse"
+                   else "contracts without a declared size are") + " not simulated yet",
                 code="TRADING_ACCOUNT_MODEL_UNSUPPORTED",
             )
         if increases:
             summary = self.account_summary(account_id)
-            # Cash is fully paid; the account's leverage applies to linear contracts.
-            leverage = self._market_leverage(Decimal(account["settings"]["leverage"]), instrument)
-            required = initial_margin(qty, entry_price, leverage)
+            # Cash is fully paid, linear contracts use the account's leverage and
+            # per-contract markets their margin per contract.
+            required = rules.margin(qty, entry_price, Decimal(account["settings"]["leverage"]))
             available = Decimal(summary["available"])
             if required > available:
                 raise conflict(
@@ -1288,9 +1380,11 @@ class TradingAccountService(JournalService):
                     marks_available = False
                     continue
                 capital += trade.unrealized_pnl(mark)
-                capital -= initial_margin(trade.open_qty, mark, self._market_leverage(leverage, key))
+                capital -= self._rules(key, account).margin(trade.open_qty, mark, leverage)
+        rules = self._rules(instrument, account)
         return PracticeBuyingPower(capital if marks_available else None,
-                                   self._market_leverage(leverage, instrument), quantities, trade_ids, committed_ms)
+                                   leverage if rules.leveraged else Decimal(1), quantities, trade_ids, committed_ms,
+                                   margin_per_unit=rules.margin_per_unit)
 
     def _match_sessions(
         self, instrument: Instrument, rows: list[dict[str, Any]],

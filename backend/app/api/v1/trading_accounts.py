@@ -141,10 +141,22 @@ async def market_rules(
     exchange: str = Query(...),
     market_type: str = Query(..., alias="marketType"),
     symbol: str = Query(...),
+    account_id: str | None = Query(None, alias="accountId"),
 ) -> dict:
-    """How practice accounts hold positions in one market (ADR-DATA-002 D5b)."""
+    """How practice accounts hold positions in one market (ADR-DATA-002 D5b).
+
+    With ``accountId``, the rules include the margin per contract the user
+    entered for the market on that account (D5d).
+    """
     return await _call(_service(request).market_rules,
-                       {"exchange": exchange, "marketType": market_type, "symbol": symbol})
+                       {"exchange": exchange, "marketType": market_type, "symbol": symbol,
+                        **({"accountId": account_id} if account_id else {})})
+
+
+@router.put("/accounts/{account_id}/contract-margins")
+async def set_contract_margin(request: Request, account_id: str, payload: Any = Body(...)) -> dict:
+    """Enter or clear a market's margin per contract when its source publishes none (D5d)."""
+    return await _call(_service(request).set_contract_margin, account_id, _body(payload))
 
 
 @router.get("/accounts/{account_id}/orders")
