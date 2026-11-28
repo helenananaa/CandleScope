@@ -5,11 +5,12 @@ import asyncio
 import json
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.api.v1.stream_utils import send_json_with_timeout
 from app.core.async_cleanup import finish_cleanup
+from app.core.executors import run_preparation
 from app.data_engine.data_manager.models import SeriesKey
 from app.data_engine.synthetic_series.core import SyntheticConfig, SyntheticError
 from app.data_engine.synthetic_series.service import SyntheticDefinition
@@ -152,7 +153,12 @@ async def query_synthetic(request: Request, body: SyntheticRequest):
     lease = None
     try:
         lease = await _service(request).attach(body.definition(), seed_loader=pinned_seed_loader(request, body))
-        return await lease.snapshot(before=body.before, limit=body.limit, generation=body.generation)
+        page = await lease.snapshot(before=body.before, limit=body.limit, generation=body.generation)
+        # Charts page older outputs through this route. FastAPI's default
+        # encoder walks every nested row and took ~2 s per 5,000 Renko rows;
+        # the page is already plain JSON data, so encode it off the event loop.
+        content = await run_preparation(json.dumps, page, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        return Response(content=content, media_type="application/json")
     except SyntheticError as error:
         raise HTTPException(409, detail=str(error)) from error
     finally:

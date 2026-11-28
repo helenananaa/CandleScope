@@ -1,3 +1,4 @@
+import { syntheticPagingMessages } from "./syntheticPagingMessages.js";
 import { unifiedMessages } from "./unifiedMessages.js";
 import { drawingAnnotationMessages } from "./drawingAnnotationMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
@@ -16,6 +17,7 @@ import { chartTimeShortcutMessages } from "./chartTimeShortcutMessages.js";
 
 export const zhMO = {
   ...unifiedMessages["zh-MO"],
+  ...syntheticPagingMessages["zh-MO"],
   ...drawingAnnotationMessages["zh-MO"],
   ...syntheticEnglish,
   ...continuousTraditional,

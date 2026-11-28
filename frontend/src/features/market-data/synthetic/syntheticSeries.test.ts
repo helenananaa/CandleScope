@@ -85,31 +85,107 @@ test("shared transport, independent leases and late-frame fencing", () => {
   manager.closeAll();
 });
 
-test("complete-window chunks publish atomically and keep more than 5000 bricks", () => {
-  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket);
+function page(from: number, to: number, total: number, revision = 1, generation = "generation") {
+  return { ...snapshot(revision, generation), from_index: from, total,
+    rows: Array.from({ length: to - from }, (_, index) => row(from + index, generation)),
+    before: from || null };
+}
+/** Answers POST /synthetic/query from `pages` (keyed by `before`) and records each body. */
+function pager(pages: (body: { before: number; generation: string }) => unknown) {
+  const bodies: Array<{ before: number; generation: string; limit: number; complete_window: boolean }> = [];
+  const fetcher: typeof fetch = async (url, options) => {
+    assert.match(String(url), /\/synthetic\/query$/);
+    const body = JSON.parse(String(options?.body)) as typeof bodies[number];
+    bodies.push(body);
+    const answer = pages(body);
+    return answer instanceof Response ? answer : new Response(JSON.stringify(answer));
+  };
+  return { bodies, fetcher };
+}
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+test("the stream carries the newest page and older outputs join by ordinal cursor", async () => {
+  assert.equal(request.limit, 2000);
+  assert.equal(request.complete_window, false);
+  const { bodies, fetcher } = pager(body => page(Math.max(0, body.before - 2), body.before, 6));
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket, fetcher);
   const view = manager.acquire(request);
-  const rows = Array.from({ length: 6000 }, (_, index) => row(index));
-  socket.receive({ ...snapshot(), type: "snapshot_chunk", rows: rows.slice(0, 3000), total: 6000, complete: false });
-  assert.equal(view.getSnapshot().rows.length, 0);
-  assert.equal(view.getSnapshot().status, "preparing");
-  socket.receive({ ...snapshot(), type: "snapshot_chunk", from_index: 3000, rows: rows.slice(3000), total: 6000, complete: true });
-  assert.equal(view.getSnapshot().rows.length, 6000);
-  assert.equal(view.getSnapshot().from, 0);
-  socket.receive({ ...snapshot(2), type: "patch", from_index: 6000, delete_count: 0, total: 6001, rows: [row(6000)] });
-  assert.equal(view.getSnapshot().rows.length, 6001);
-  assert.equal(view.getSnapshot().rows[0]?.ordinal, 0);
+  socket.receive(page(3, 6, 6));
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [3, 4, 5]);
+  view.loadOlder(); view.loadOlder();
+  await settle();
+  assert.equal(bodies.length, 1, "one page at a time");
+  assert.equal(bodies[0]!.before, 3); assert.equal(bodies[0]!.generation, "generation");
+  // Every brick shares source time 120: the seam is the ordinal, so none is lost or repeated.
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [1, 2, 3, 4, 5]);
+  assert.equal(view.getSnapshot().from, 1);
+  socket.receive({ ...snapshot(2), type: "patch", from_index: 5, delete_count: 1, total: 7, rows: [row(5), row(6)] });
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [1, 2, 3, 4, 5, 6]);
+  view.loadOlder(); await settle();
+  assert.equal(bodies.at(-1)!.before, 1);
+  assert.equal(view.getSnapshot().from, 1, "a page cut at revision 1 never joins revision 2");
+  assert.equal(manager.diagnostics().pagedSeries, 1);
   view.release(); manager.closeAll();
 });
 
-test("mixed-generation chunks fail closed without publishing a partial series", () => {
-  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket);
+test("a page from a newer revision waits for the stream; a new generation restarts at its newest page", async () => {
+  let revision = 2;
+  const { bodies, fetcher } = pager(body => page(body.before - 1, body.before, 4, revision, body.generation));
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket, fetcher);
   const view = manager.acquire(request);
-  socket.receive({ ...snapshot(), type: "snapshot_chunk", rows: [row(0)], complete: false });
-  socket.receive({ ...snapshot(2, "changed"), type: "snapshot_chunk", from_index: 1,
-    rows: [row(1, "changed"), row(2, "changed")], complete: true });
-  assert.equal(view.getSnapshot().rows.length, 0);
-  assert.equal(view.getSnapshot().status, "stale");
-  assert.equal(socket.closed, true);
+  socket.receive(page(2, 4, 4));
+  view.loadOlder(); await settle();
+  assert.equal(view.getSnapshot().from, 2, "the backend is ahead of this stream");
+  socket.receive({ ...snapshot(2), type: "patch", from_index: 3, delete_count: 1, total: 4, rows: [row(3)] });
+  await settle();
+  assert.equal(bodies.length, 2, "the page is fetched again once the patch lands");
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [1, 2, 3]);
+  revision = 3;
+  socket.receive(page(3, 4, 4, 3, "next"));
+  assert.equal(view.getSnapshot().generation, "generation");
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [1, 2, 3],
+    "a resync keeps showing the loaded range until the new generation covers it");
+  for (let index = 0; index < 4; index++) await settle();
+  assert.equal(view.getSnapshot().generation, "next");
+  assert.equal(bodies.at(-1)!.generation, "next");
+  // Equal-time bricks: the whole group at the shown source time comes back.
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [0, 1, 2, 3]);
+  view.release(); manager.closeAll();
+});
+
+test("a new definition pages back to the chart's source time before it paints", async () => {
+  const rowAt = (ordinal: number, sourceTime: number) => {
+    const value = row(ordinal);
+    return { ...value, time: { ...value.time, sourceTime } };
+  };
+  const timed = (from: number, to: number) => ({ ...snapshot(), from_index: from, total: 6,
+    rows: Array.from({ length: to - from }, (_, index) => rowAt(from + index, 60 + from + index)) });
+  const { bodies, fetcher } = pager(body => timed(Math.max(0, body.before - 2), body.before));
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket, fetcher);
+  const view = manager.acquire(request, { cover: 61 });
+  socket.receive(timed(4, 6));
+  assert.equal(view.getSnapshot().status, "preparing", "the newest page alone would move the chart");
+  await settle(); await settle();
+  assert.deepEqual(bodies.map(body => body.before), [4, 2]);
+  assert.deepEqual(view.getSnapshot().rows.map(item => item.ordinal), [0, 1, 2, 3, 4, 5]);
+  view.release(); manager.closeAll();
+});
+
+test("a refused page stops paging with its reason instead of retrying", async () => {
+  const { bodies, fetcher } = pager(() => new Response(JSON.stringify({ detail: "synthetic consumer budget exceeded" }), { status: 409 }));
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket, fetcher);
+  const view = manager.acquire(request);
+  socket.receive(page(2, 4, 4));
+  view.loadOlder(); await settle(); await settle();
+  view.loadOlder(); await settle();
+  assert.equal(bodies.length, 1);
+  assert.equal(view.getSnapshot().pageLimit, "synthetic consumer budget exceeded");
+  assert.equal(view.getSnapshot().status, "ready");
+  socket.receive(page(2, 4, 4, 2));
+  await settle(); await settle();
+  assert.equal(bodies.length, 2, "a new snapshot may page again");
+  assert.equal(view.getSnapshot().revision, 2, "and publishes what it has when the page is refused again");
+  assert.equal(view.getSnapshot().pageLimit, "synthetic consumer budget exceeded");
   view.release(); manager.closeAll();
 });
 

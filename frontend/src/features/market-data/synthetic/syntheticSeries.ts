@@ -22,6 +22,11 @@ export type BackendSyntheticSource = MarketSeries & {
   syntheticSeriesKey?: string;
   syntheticCapture?: { scope: string; cutoff_ms: number };
 };
+/** Outputs per transfer: the live tail page and each older page. */
+export const SYNTHETIC_PAGE_ROWS = 2000;
+/** A definition never has more outputs than the backend's output budget. */
+export const SYNTHETIC_RETAINED_OUTPUTS = 50_000;
+
 export interface SyntheticRequest {
   source: Record<string, string>;
   config: { transform: SyntheticTransform; semantics: "display-window/1";
@@ -48,6 +53,8 @@ export interface SyntheticSnapshot {
   readonly from: number;
   readonly total: number;
   readonly rows: readonly SyntheticRow[];
+  /** Why older outputs stopped paging in (budget, failed page); null while they can. */
+  readonly pageLimit?: string | null;
 }
 
 export const EMPTY_SYNTHETIC: SyntheticSnapshot = Object.freeze({
@@ -78,7 +85,9 @@ export function syntheticRequest(source: BackendSyntheticSource, transform: Synt
       reversal_amount: transform === "kagi" ? positiveSetting(settings.reversalAmount, 1)
         : boundedInteger(settings.reversalAmount, 3, 1, 100),
       number_of_lines: boundedInteger(settings.numberOfLines, 3, 1, 50) },
-    anchor, through, limit: 5000, complete_window: true,
+    // The stream carries the newest page and live patches; older outputs of
+    // the same definition are paged on demand by ordinal cursor (#381).
+    anchor, through, limit: SYNTHETIC_PAGE_ROWS, complete_window: false,
     ...(source.syntheticOrigin ? { origin: source.syntheticOrigin } : {}),
   };
 }
@@ -168,7 +177,8 @@ export function adoptSynthetic(previous: SyntheticSnapshot, raw: unknown, reques
     throw new Error("Synthetic stream requires a new snapshot");
   }
   const from = integer(message["from_index"]), total = integer(message["total"]);
-  if (!Array.isArray(message["rows"]) || message["rows"].length > 50_000 || total > 50_000) throw new Error("Synthetic output budget exceeded");
+  if (!Array.isArray(message["rows"]) || message["rows"].length > SYNTHETIC_RETAINED_OUTPUTS
+    || total > SYNTHETIC_RETAINED_OUTPUTS) throw new Error("Synthetic output budget exceeded");
   const rows = message["rows"].map((rawRow, index): SyntheticRow => {
     const row = record(rawRow), ordinal = integer(row["ordinal"]), id = text(row["id"]);
     if (ordinal !== from + index || id !== `${seriesId}:${generation}:${ordinal}`) throw new Error("Invalid synthetic output order");
@@ -206,12 +216,45 @@ export function adoptSynthetic(previous: SyntheticSnapshot, raw: unknown, reques
     nextRows = from < previous.from ? rows : [...previous.rows.slice(0, from - previous.from), ...rows];
     start = Math.min(from, previous.from);
   }
-  const retention = request.complete_window ? 50_000 : request.limit;
-  if (nextRows.length > retention) {
-    start += nextRows.length - retention;
-    nextRows = nextRows.slice(-retention);
+  if (nextRows.length > SYNTHETIC_RETAINED_OUTPUTS) {
+    start += nextRows.length - SYNTHETIC_RETAINED_OUTPUTS;
+    nextRows = nextRows.slice(-SYNTHETIC_RETAINED_OUTPUTS);
   }
   return Object.freeze({ seriesId, generation, revision, status,
     reason: message["reason"] == null ? null : String(message["reason"]),
     from: start, total, rows: Object.freeze(nextRows) });
+}
+
+export type SyntheticPageResult =
+  | { readonly kind: "merged"; readonly state: SyntheticSnapshot }
+  /** The page was cut at another revision: fetch it again once the stream catches up. */
+  | { readonly kind: "revision"; readonly ahead: boolean }
+  /** The page no longer joins this replica (new generation, moved cursor). */
+  | { readonly kind: "stale" };
+
+/** Joins one older page (POST /synthetic/query, `before` = current first
+ * ordinal) in front of the retained outputs. Rows are validated exactly like
+ * stream rows; a page from another generation, revision or cursor never
+ * joins, so equal-time bricks cannot be lost or duplicated at the seam. */
+export function prependSyntheticPage(current: SyntheticSnapshot, raw: unknown, request: SyntheticRequest): SyntheticPageResult {
+  const message = record(raw);
+  const from = integer(message["from_index"]), total = integer(message["total"]);
+  if (!Array.isArray(message["rows"])) throw new Error("Invalid synthetic page");
+  const page = adoptSynthetic(EMPTY_SYNTHETIC, { ...message, type: "snapshot", total: from + message["rows"].length }, request);
+  if (page.seriesId !== current.seriesId || page.generation !== current.generation) return { kind: "stale" };
+  if (page.revision !== current.revision) return { kind: "revision", ahead: page.revision > current.revision };
+  if (total !== current.total || from + page.rows.length !== current.from || !page.rows.length) return { kind: "stale" };
+  if (page.rows.length + current.rows.length > SYNTHETIC_RETAINED_OUTPUTS) throw new Error("Synthetic output budget exceeded");
+  return { kind: "merged", state: Object.freeze({ ...current, from,
+    rows: Object.freeze([...page.rows, ...current.rows]) }) };
+}
+
+/** Source time (seconds) of the first retained output, for coverage checks. */
+export function firstSyntheticSourceTime(state: SyntheticSnapshot): number | null {
+  const first = state.rows[0];
+  if (!first) return null;
+  const time = first.time as unknown;
+  if (typeof time === "number") return time;
+  const sourceTime = time && typeof time === "object" ? (time as { sourceTime?: unknown }).sourceTime : null;
+  return typeof sourceTime === "number" ? sourceTime : null;
 }
