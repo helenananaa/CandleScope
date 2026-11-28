@@ -125,6 +125,19 @@ def test_only_single_base_chart_reads_go_to_the_planner():
     asyncio.run(run())
 
 
+def test_a_target_gap_maps_to_the_base_slots_of_its_buckets():
+    async def run():
+        router = make_router(FakeCoordinator(), asyncio.get_running_loop())
+        first, last = 100 * TARGET, 120 * TARGET
+        assert router.base_range_of(exchange="binance", market_type="futures", target_interval="89m",
+                                    start_ms=first, end_ms=last) == ("1m", first, last + TARGET - MINUTE)
+        assert router.base_range_of(exchange="binance", market_type="futures", target_interval="89m",
+                                    start_ms=first + MINUTE, end_ms=last) is None  # not a bucket open
+        assert router.base_range_of(exchange="binance", market_type="futures", target_interval="1h",
+                                    start_ms=0, end_ms=3_600_000) is None  # native
+    asyncio.run(run())
+
+
 def test_a_read_is_served_by_source_pieces_and_a_poll_adds_nothing():
     async def run():
         coordinator = FakeCoordinator()
@@ -294,6 +307,9 @@ class StubRouter:
         self.registered.append(kwargs)
         return self.ids
 
+    def base_range_of(self, *, exchange, market_type, target_interval, start_ms, end_ms):
+        return ("15m", start_ms, end_ms + 1_800_000) if target_interval == "45m" else None
+
 
 def derived_result():
     return QueryResult(
@@ -328,6 +344,42 @@ def test_data_manager_returns_planner_piece_ids_or_keeps_the_existing_path(ids, 
     else:
         assert result.metadata["backfill_request_ids"] == ["rq-piece-1", "rq-piece-2"]
         assert calls == []
+
+
+def mixed_target_result(*, mixed_target_repair=True):
+    # mixed_query on a cold store: the closed target buckets themselves, on the target interval.
+    return QueryResult(
+        bars=[], symbol="BTCUSDT", interval="45m", exchange="binance", market_type="spot",
+        source=QuerySource.EMPTY,
+        missing_ranges=[MissingRange(symbol="BTCUSDT", interval="45m", start_ms=2_700_000, end_ms=8_100_000,
+                                     exchange="binance", market_type="spot", reason="query_empty")],
+        metadata={"derived_from": "mixed", **({"mixed_target_repair": True} if mixed_target_repair else {})},
+    )
+
+
+@pytest.mark.parametrize("mixed_target_repair", [True, False])
+def test_data_manager_plans_a_cold_mixed_read_s_target_gap_as_its_base_slots(mixed_target_repair):
+    calls: list[tuple] = []
+    dm = DataManager()
+    dm.set_backfill_trigger(lambda *args, **kwargs: calls.append((args, kwargs)) or "rq-target")
+    dm.set_backfill_suppression_lookup(lambda *args: None)
+    router = StubRouter(["rq-piece-1"])
+    dm.set_history_router(router)
+
+    result = dm._submit_missing_ranges(mixed_target_result(mixed_target_repair=mixed_target_repair),
+                                       reason="visible_range_gap", requester="klines_history",
+                                       backfill_metadata={"demand_owner_id": "pane-1"})
+
+    if not mixed_target_repair:  # any other target-interval gap keeps its own repair
+        assert router.registered == [] and calls[0][0][1:4] == ("45m", 2_700_000, 8_100_000)
+        return
+    # The existing repair would fetch the 15m base of these 45m buckets itself; the planner
+    # fetches it as pieces instead, through the last 15m slot of the last bucket.
+    [registered] = router.registered
+    assert (registered["target_interval"], registered["base_interval"]) == ("45m", "15m")
+    assert (registered["start_ms"], registered["end_ms"]) == (2_700_000, 9_900_000)
+    assert registered["metadata"] == {"demand_owner_id": "pane-1", "query_reason": "query_empty"}
+    assert calls == [] and result.metadata["backfill_request_ids"] == ["rq-piece-1"]
 
 
 def test_data_manager_keeps_other_requesters_on_the_existing_path():

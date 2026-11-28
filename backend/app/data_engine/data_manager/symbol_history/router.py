@@ -2,7 +2,8 @@
 
 With ``HISTORY_SYMBOL_PLANNER_ENABLED``, base history for a single-base derived
 interval on a 1m-or-wider base (89m on 1m) becomes planner demand instead of its
-own repair: a chart read's missing range (S5a), the forming bucket's closed
+own repair: a chart read's missing base range (S5a) or, for a cold mixed read
+that reports its closed target buckets instead, their base slots (S5c), the forming bucket's closed
 components a warm-start seed lacks (``forming``) and the warm-start tail rebuild
 (``tail``, S5b). Pieces run as source-interval repairs (``CoordinatorPieceExecutor``),
 so the source table has one writer lane and overlapping demand is fetched once;
@@ -115,6 +116,19 @@ class HistoryDemandRouter:
                     or spec.nominal_ms < min_ms):
                 return False
         return True
+
+    def base_range_of(self, *, exchange: str, market_type: str, target_interval: str,
+                      start_ms: int, end_ms: int) -> tuple[str, int, int] | None:
+        """The base slots ``(base, first open, last open)`` of target buckets ``[start_ms, end_ms]`` (opens).
+
+        For a gap reported on the target itself (a cold mixed read), which the
+        existing target repair would fill by fetching this same base.
+        """
+        base = self.base_for(exchange, market_type, target_interval)
+        target_ms, base_ms = parse_interval_ms(target_interval), parse_interval_ms(base) if base else 0
+        if not base or not target_ms or not base_ms or start_ms % target_ms or end_ms % target_ms:
+            return None
+        return base, int(start_ms), int(end_ms) + target_ms - base_ms
 
     def base_for(self, exchange: str, market_type: str, interval: str) -> str | None:
         """The history base of a derived interval, or None (native or unknown)."""

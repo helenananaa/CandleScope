@@ -1536,15 +1536,32 @@ class DataManager(DataManagerCore):
                 continue
             demand_reason = reason or self._semantic_reason_for_missing(missing.reason)
             router = self._history_router
+            # The base slots this gap needs, for the planner: a derived read's
+            # base gap as it is; a cold mixed read reports closed target
+            # buckets instead (mixed_query), whose repair fetches the single
+            # base anyway, so plan their base slots.
+            planned_base = None
+            if router is not None and result_identity.is_legacy_default_for(result.exchange):
+                if derived_target is not None:
+                    planned_base = (missing.interval, missing.start_ms, missing.end_ms)
+                elif (
+                    missing.interval == result.interval
+                    and result.metadata.get("mixed_target_repair") is True
+                ):
+                    planned_base = router.base_range_of(
+                        exchange=missing.exchange,
+                        market_type=missing.market_type,
+                        target_interval=result.interval,
+                        start_ms=missing.start_ms,
+                        end_ms=missing.end_ms,
+                    )
             if (
-                router is not None
-                and derived_target is not None
-                and result_identity.is_legacy_default_for(result.exchange)
+                planned_base is not None
                 and router.takes(
                     exchange=missing.exchange,
                     market_type=missing.market_type,
                     target_interval=result.interval,
-                    base_interval=missing.interval,
+                    base_interval=planned_base[0],
                     requester=requester,
                     metadata=backfill_metadata,
                 )
@@ -1554,9 +1571,9 @@ class DataManager(DataManagerCore):
                     exchange=missing.exchange,
                     market_type=missing.market_type,
                     target_interval=result.interval,
-                    base_interval=missing.interval,
-                    start_ms=missing.start_ms,
-                    end_ms=missing.end_ms,
+                    base_interval=planned_base[0],
+                    start_ms=planned_base[1],
+                    end_ms=planned_base[2],
                     reason=demand_reason,
                     requester=requester,
                     metadata={
